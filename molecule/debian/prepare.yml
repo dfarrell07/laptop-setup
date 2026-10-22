@@ -16,10 +16,9 @@
 #
 # NOTE: openssh-server is NOT pre-installed here — apt postinst triggers
 # pam-auth-update which restarts systemd-logind, which crashes PID 1 in
-# privileged Podman containers. The converge skips the openssh-server apt
-# task (when: not system_is_container) to avoid the crash.
+# privileged Podman containers. No role or converge task installs it here.
 # CI gap: sshd hardening block is not exercised in Debian container CI;
-# make test-vm exercises full sshd hardening on Debian.
+# no Debian VM scenario exists (make test-vm is Fedora 44), so this stays untested.
 - name: Prepare — wait for systemd to stabilize
   hosts: all
   gather_facts: false
@@ -40,7 +39,7 @@
       # binfmt_misc/configfs/debugfs/tracefs fail in containers (restricted kernel namespaces).
       # Each unit retries up to StartLimitBurst=5 times, cycling independently.
       # After ~45-60s all loops exhaust permanently — no more retries, container stable.
-      # 60s provides a 15s safety margin over the worst-case exhaustion window.
+      # 90s provides a 30s safety margin over the worst-case exhaustion window.
       # No systemctl operations during this wait: any systemd interaction (mask, stop, reset-failed)
       # in a fragile post-boot degraded state can trigger daemon-reload → PID 1 crash.
       ansible.builtin.pause:

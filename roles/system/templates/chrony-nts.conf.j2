@@ -4,12 +4,13 @@
 server {{ server | regex_replace("[\n\r].*","") }} iburst nts
 {% endfor %}
 
-# Unauthenticated fallback — used by authselectmode prefer when NTS sources are unreachable (port 4460 blocked, NTS-KE fails). minsources={{ system_chrony_minsources | regex_replace("[\n\r].*","") }} is the minimum sources before clock adjustment, a separate concern.
+# Unauthenticated fallback pool (emitted unless authselectmode is require): selected only while no NTS source
+# is usable, e.g. TCP 4460 blocked or NTS-KE failing.
 {% if system_chrony_authselectmode != 'require' %}
 pool {{ system_chrony_fallback_pool | regex_replace('[\\n\\r].*','') }} iburst
 {% endif %}
 
-# prefer: use NTS when available; accept unauthenticated pool and DHCP-sourced NTP as supplements when NTS is unreachable
+# prefer: unauthenticated sources (pool{% if system_chrony_dhcp_sourcedir %}, DHCP{% endif %}) are selectable only when no NTS source is usable
 # require: reject all unauthenticated sources; time sync fails if NTS-KE (TCP 4460) is blocked (no fallback)
 authselectmode {{ system_chrony_authselectmode | regex_replace("[\n\r].*","") }}
 

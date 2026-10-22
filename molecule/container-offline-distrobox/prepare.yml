@@ -18,11 +18,22 @@
         mode: "0755"
       become: true
 
-    - name: Create stub distrobox-export (allows golangci-lint export task to run gracefully)
+    - name: Remove stale rescue sentinel from a previous run
+      ansible.builtin.file:
+        path: /tmp/oc_rescue_fired
+        state: absent
+
+    - name: Remove stale distrobox-export invocation log
+      ansible.builtin.file:
+        path: /tmp/distrobox-export.log
+        state: absent
+
+    - name: Create stub distrobox-export (logs each call; allows golangci-lint export task to run gracefully)
       ansible.builtin.copy:
         dest: /usr/bin/distrobox-export
         content: |
           #!/bin/sh
+          echo "$*" >> /tmp/distrobox-export.log
           exit 0
         mode: "0755"
       become: true

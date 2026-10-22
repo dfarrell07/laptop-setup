@@ -36,7 +36,6 @@ scenario:
     - create
     - prepare
     - converge
-    # Idempotence excluded: dnf install runs twice and dominates runtime;
-    # provisioning logic is tested by converge+verify.
+    # Idempotence is not run for this scenario; provisioning logic is tested by converge+verify.
     - verify
     - destroy

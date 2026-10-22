@@ -97,17 +97,18 @@
       and approve LuLu to activate the application firewall.
   when: is_macos and packages_brew_cask_lulu_enabled | bool and _packages_brew_casks.changed | default(false)
 
-- name: AeroSpace window manager present (work profile) at {{ packages_aerospace_version }}
+- name: AeroSpace window manager present at {{ packages_aerospace_version }}
   # Downloads the upstream GitHub Release zip and verifies against packages_aerospace_sha256,
   # an independent integrity anchor in our own repo. This eliminates the supply chain risk
   # on fresh provisioning that existed when the nikitabobko/tap cask was used: a tap owner
   # compromise can update both the binary URL and the formula SHA256 simultaneously, making
   # Homebrew's checksum pass while delivering a malicious binary. Direct download with our
   # own pinned hash breaks that attack for fresh machines.
+  # Every macOS profile gets the AeroSpace config (desktop role), so the app is installed for all.
   when:
     - is_macos
-    - profile == 'work'
     - packages_install_binaries | bool
+    - not ansible_check_mode  # the download uses a tempfile path check mode never creates
   block:
     - name: Version check — aerospace
       ansible.builtin.command:
@@ -163,6 +164,14 @@
           tags: [become]
           changed_when: true
 
+        - name: Ensure /usr/local/bin exists (absent on a clean Apple Silicon Mac)
+          ansible.builtin.file:
+            path: /usr/local/bin
+            state: directory
+            mode: "0755"
+          become: true
+          tags: [become]
+
         - name: Install aerospace binary to /usr/local/bin
           ansible.builtin.copy:
             src: "{{ _aerospace_tmpdir.path }}/AeroSpace-v{{ packages_aerospace_version }}/bin/aerospace"
@@ -214,6 +223,7 @@
         argv: [brew, --prefix]
       register: _packages_brew_prefix
       changed_when: false
+      check_mode: false
 
     - name: Validate native Homebrew update configuration
       ansible.builtin.assert:
@@ -227,6 +237,7 @@
         argv: [launchctl, print, "gui/{{ ansible_facts['user_uid'] }}"]
       register: _packages_brew_gui_domain
       changed_when: false
+      check_mode: false
       failed_when: false
 
     - name: Select the current user's launchd domain
@@ -243,6 +254,7 @@
             }}/com.laptop-setup.homebrew-update
       register: _packages_brew_previous_domain_job
       changed_when: false
+      check_mode: false
       failed_when: false
 
     - name: Unload the managed update job from the previous login domain
@@ -261,6 +273,7 @@
         argv: [launchctl, print, "{{ _packages_brew_launchd_domain }}/com.laptop-setup.homebrew-update"]
       register: _packages_brew_update_job
       changed_when: false
+      check_mode: false
       failed_when: false
 
     - name: Ensure Homebrew update support directories exist

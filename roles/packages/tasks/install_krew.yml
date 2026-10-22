@@ -31,11 +31,23 @@
           {{ ((_krew_self_receipt.content | b64decode | from_yaml).spec.version | default(''))
              if _krew_self_receipt_stat.stat.exists else '' }}
 
+    - name: Report krew install not simulated in check mode
+      ansible.builtin.debug:
+        msg: "CHECK MODE: krew v{{ packages_krew_bootstrap_version }} would be downloaded, verified and installed; not simulated."
+      when:
+        - ansible_check_mode
+        - >-
+          (packages_krew_check.stat.checksum | default('')) != packages_krew_binary_sha256 or
+          (packages_krew_check.stat.mode | default('')) != '0755' or
+          _krew_self_version != 'v' ~ packages_krew_bootstrap_version
+
     - name: Install or repair the verified krew executable
-      when: >-
-        (packages_krew_check.stat.checksum | default('')) != packages_krew_binary_sha256 or
-        (packages_krew_check.stat.mode | default('')) != '0755' or
-        _krew_self_version != 'v' ~ packages_krew_bootstrap_version
+      when:
+        - not ansible_check_mode  # downloads into a temp dir that check mode never creates
+        - >-
+          (packages_krew_check.stat.checksum | default('')) != packages_krew_binary_sha256 or
+          (packages_krew_check.stat.mode | default('')) != '0755' or
+          _krew_self_version != 'v' ~ packages_krew_bootstrap_version
       block:
         - name: Create private krew bootstrap directory
           ansible.builtin.tempfile:
@@ -141,7 +153,10 @@
         _csb_ticket_body: The pinned krew release archive or executable could not be installed.
       when: csb_rhel
 
-    - name: Fail after non-CSB krew installation failure
-      ansible.builtin.fail:
-        msg: "krew installation failed: {{ ansible_failed_result.msg | default('unknown error') }}"
+    - name: Warn after non-CSB krew installation failure
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: krew installation failed (optional tooling; continuing):
+          {{ ansible_failed_result.msg | default('unknown error') }}.
+          Re-run `make packages` when online.
       when: not csb_rhel

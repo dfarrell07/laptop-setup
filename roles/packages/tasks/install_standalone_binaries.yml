@@ -1,5 +1,5 @@
 ---
-# Standalone binary/script downloads for work-profile tools.
+# Standalone binary/script downloads (most are work-profile only; transcrypt installs on both profiles).
 #
 # To add a new binary:
 #   1. Add packages_BINARY_version and packages_BINARY_sha256 to defaults/main.yml
@@ -9,9 +9,10 @@
 #   5. Handle CSB restriction: set csb_action/csb_ticket_* vars for fapolicyd environments
 
 - name: Install transcrypt
+  # Both profiles: the notes role (transcrypt-encrypted repo) works on any profile, and
+  # notes_enabled (roles/notes/defaults) is not visible to this role, so install unconditionally.
   when:
     - is_linux
-    - profile == 'work'
   ansible.builtin.include_tasks: install_binary.yml
   vars:
     binary_name: transcrypt
@@ -27,6 +28,18 @@
       transcrypt script could not be downloaded from github.com/elasticdog/transcrypt.
       Install manually from https://github.com/elasticdog/transcrypt
 
+- name: Pre-check installed sops version (gates provenance verification)
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+  ansible.builtin.command:
+    cmd: "timeout 10 /usr/local/bin/sops --disable-version-check --version"
+  register: _sops_precheck
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
 - name: Install SOPS
   when:
     - is_linux
@@ -40,7 +53,7 @@
       }}/sops-v{{ packages_sops_version }}.linux.{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}
     dest: /usr/local/bin/sops
     checksum: "sha256:{{ packages_sops_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_sops_sha256 }}"
-    version_check_cmd: /usr/local/bin/sops --version
+    version_check_cmd: /usr/local/bin/sops --disable-version-check --version  # no GitHub API call
     version_string: "{{ packages_sops_version }}"
     csb_action: >-
       Install sops manually from https://github.com/getsops/sops/releases
@@ -92,8 +105,7 @@
     attest_workflow: rhysd/actionlint/.github/workflows/release.yaml
     url: >-
       https://github.com/rhysd/actionlint/releases/download/v{{ packages_actionlint_version
-      }}/actionlint_{{ packages_actionlint_version }}_linux_{{
-      'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}.tar.gz
+      }}/actionlint_{{ packages_actionlint_version }}_linux_amd64.tar.gz
     dest: /usr/local/bin/actionlint
     checksum: "sha256:{{ packages_actionlint_sha256 }}"
     version_check_cmd: /usr/local/bin/actionlint --version
@@ -136,6 +148,18 @@
       zizmor binary could not be downloaded from github.com/zizmorcore/zizmor.
       Install manually from https://github.com/zizmorcore/zizmor/releases
 
+- name: Pre-check installed operator-sdk version (gates provenance verification)
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+  ansible.builtin.command:
+    cmd: "timeout 10 /usr/local/bin/operator-sdk version"
+  register: _operator_sdk_precheck
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
 - name: Install operator-sdk
   # operator-sdk releases are GPG/PGP signed (checksums.txt.asc) — not cosign/Sigstore.
   # No .bundle files are published; cosign verify-blob cannot be used here.
@@ -174,117 +198,124 @@
 # binary's SHA256 is checked against the GPG-verified checksums.txt to confirm the
 # binary matches the attested checksum.
 
-- name: Create secure temp directory for operator-sdk GPG verification
+- name: Verify operator-sdk checksums via GPG (install or upgrade only)
+  # Downloads into a temp dir that check mode never creates; nothing to verify there.
+  # Runs only when the pre-install version did not match the pin. Network/keyserver errors
+  # only warn (rescue); a real SHA256 mismatch fails closed in the task after the block.
   when:
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
-  ansible.builtin.tempfile:
-    state: directory
-    suffix: _operator_sdk_gpg
-  register: _operator_sdk_tmpdir
+    - not ansible_check_mode
+    - packages_operator_sdk_version not in (_operator_sdk_precheck.stdout | default('')) ~ (_operator_sdk_precheck.stderr | default(''))
+  block:
+    - name: Create secure temp directory for operator-sdk GPG verification
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: _operator_sdk_gpg
+      register: _operator_sdk_tmpdir
 
-- name: Download operator-sdk checksums file for GPG verification
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-  ansible.builtin.get_url:
-    url: >-
-      https://github.com/operator-framework/operator-sdk/releases/download/v{{ packages_operator_sdk_version
-      }}/checksums.txt
-    dest: "{{ _operator_sdk_tmpdir.path }}/checksums.txt"
-    mode: "0600"
+    - name: Download operator-sdk checksums file for GPG verification
+      retries: 3  # transient GitHub/CDN errors
+      delay: 10
+      ansible.builtin.get_url:
+        url: >-
+          https://github.com/operator-framework/operator-sdk/releases/download/v{{ packages_operator_sdk_version
+          }}/checksums.txt
+        dest: "{{ _operator_sdk_tmpdir.path }}/checksums.txt"
+        mode: "0600"
 
-- name: Download operator-sdk checksums GPG signature
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-  ansible.builtin.get_url:
-    url: >-
-      https://github.com/operator-framework/operator-sdk/releases/download/v{{ packages_operator_sdk_version
-      }}/checksums.txt.asc
-    dest: "{{ _operator_sdk_tmpdir.path }}/checksums.txt.asc"
-    mode: "0600"
+    - name: Download operator-sdk checksums GPG signature
+      retries: 3  # transient GitHub/CDN errors
+      delay: 10
+      ansible.builtin.get_url:
+        url: >-
+          https://github.com/operator-framework/operator-sdk/releases/download/v{{ packages_operator_sdk_version
+          }}/checksums.txt.asc
+        dest: "{{ _operator_sdk_tmpdir.path }}/checksums.txt.asc"
+        mode: "0600"
 
-- name: Import operator-framework GPG key
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-  ansible.builtin.command:
-    argv:
-      - gpg
-      - --keyserver
-      - keyserver.ubuntu.com
-      - --recv-keys
-      - "{{ packages_operator_sdk_gpg_key_id }}"
-  changed_when: false
-  # Soft-fail only on CSB networks where keyserver.ubuntu.com (port 11371/443) may be
-  # filtered; the Warn task below emits an advisory. On non-CSB machines a keyserver
-  # failure is unexpected and should be surfaced. operator-sdk is installed via pinned
-  # SHA256 (packages_operator_sdk_sha256), but GPG provides the independent trust root
-  # confirming that hardcoded hash matches the operator-framework release team's signature.
-  failed_when: _operator_sdk_gpg_import.rc != 0 and not csb_detected
-  register: _operator_sdk_gpg_import
+    - name: Import operator-framework GPG key
+      ansible.builtin.command:
+        argv:
+          - gpg
+          - --keyserver
+          - keyserver.ubuntu.com
+          - --recv-keys
+          - "{{ packages_operator_sdk_gpg_key_id }}"
+      changed_when: false
+      # A keyserver failure aborts the block; the rescue emits a warning (never fails the play).
+      # operator-sdk is installed via pinned SHA256 (packages_operator_sdk_sha256), but GPG
+      # provides the independent trust root confirming that hardcoded hash matches the
+      # operator-framework release team's signature.
+      register: _operator_sdk_gpg_import
 
-- name: Verify operator-sdk checksums file GPG signature
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-  ansible.builtin.command:
-    argv:
-      - gpg
-      - --verify
-      - "{{ _operator_sdk_tmpdir.path }}/checksums.txt.asc"
-      - "{{ _operator_sdk_tmpdir.path }}/checksums.txt"
-  changed_when: false
-  failed_when: false
-  register: _operator_sdk_gpg_verify
+    - name: Verify operator-sdk checksums file GPG signature
+      ansible.builtin.command:
+        argv:
+          - gpg
+          - --verify
+          - "{{ _operator_sdk_tmpdir.path }}/checksums.txt.asc"
+          - "{{ _operator_sdk_tmpdir.path }}/checksums.txt"
+      changed_when: false
+      failed_when: false
+      register: _operator_sdk_gpg_verify
 
-- name: Warn if operator-sdk GPG verification failed
+    - name: Warn if operator-sdk GPG verification failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: operator-sdk checksums file GPG verification failed (rc={{ _operator_sdk_gpg_verify.rc }}).
+          Proceeding without GPG verification. operator-sdk binary was verified via SHA256 checksum at
+          download time. If this is unexpected, verify manually:
+          gpg --verify checksums.txt.asc checksums.txt
+      when:
+        - _operator_sdk_gpg_verify.rc != 0
+
+    - name: Compare installed operator-sdk binary SHA256 against GPG-verified checksums
+      ansible.builtin.shell: |
+        set -euo pipefail
+        # A failed download was already reported (rescued); nothing to compare then.
+        [ -f /usr/local/bin/operator-sdk ] || { echo "operator-sdk not installed; checksum comparison skipped"; exit 0; }
+        # Installed binary is not the pinned version (download failed); nothing to compare.
+        /usr/local/bin/operator-sdk version 2>&1 | grep -qF "{{ packages_operator_sdk_version }}" \
+          || { echo "operator-sdk is not the pinned version; checksum comparison skipped"; exit 0; }
+        arch="{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
+        expected=$(grep "operator-sdk_linux_${arch}" \
+          {{ _operator_sdk_tmpdir.path }}/checksums.txt | awk '{print $1}')
+        actual=$(sha256sum /usr/local/bin/operator-sdk | awk '{print $1}')
+        [ "$expected" = "$actual" ]
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
+      register: _operator_sdk_sha256_verify
+      when:
+        - _operator_sdk_gpg_verify.rc == 0
+
+  rescue:
+    - name: Warn that operator-sdk GPG verification was skipped (error, not a mismatch)
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: operator-sdk GPG provenance verification could not complete and was skipped:
+          {{ ansible_failed_result.msg | default('unknown error') }}. This can occur offline or where
+          keyserver.ubuntu.com is filtered. The binary was still verified via its pinned SHA256
+          at download time. Re-run 'make packages' when the network is available.
+
+  always:
+    - name: Clean up operator-sdk GPG verification temporary directory
+      ansible.builtin.file:
+        path: "{{ _operator_sdk_tmpdir.path }}"
+        state: absent
+      when: _operator_sdk_tmpdir.path is defined
+
+- name: Fail closed if installed operator-sdk does not match the GPG-verified checksums
   when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-    - _operator_sdk_gpg_verify.rc != 0
-  ansible.builtin.debug:
+    - _operator_sdk_sha256_verify is defined
+    - _operator_sdk_sha256_verify.rc | default(0) != 0
+  ansible.builtin.fail:
     msg: >-
-      WARNING: operator-sdk checksums file GPG verification failed (rc={{ _operator_sdk_gpg_verify.rc }}).
-      This can occur in offline environments or networks where GPG keyserver access is unavailable.
-      Proceeding without GPG verification. operator-sdk binary was verified via SHA256 checksum at
-      download time. If this is unexpected, verify manually:
-      gpg --verify checksums.txt.asc checksums.txt
-
-- name: Verify installed operator-sdk binary SHA256 against GPG-verified checksums
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-    - _operator_sdk_gpg_verify.rc == 0
-  ansible.builtin.shell: |
-    set -euo pipefail
-    arch="{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
-    expected=$(grep "operator-sdk_linux_${arch}" \
-      {{ _operator_sdk_tmpdir.path }}/checksums.txt | awk '{print $1}')
-    actual=$(sha256sum /usr/local/bin/operator-sdk | awk '{print $1}')
-    [ "$expected" = "$actual" ]
-  args:
-    executable: /bin/bash
-  changed_when: false
-  failed_when: _operator_sdk_sha256_verify.rc != 0
-  register: _operator_sdk_sha256_verify
-
-- name: Clean up operator-sdk GPG verification temporary directory
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-  ansible.builtin.file:
-    path: "{{ _operator_sdk_tmpdir.path }}"
-    state: absent
+      installed /usr/local/bin/operator-sdk SHA256 does not match the GPG-verified checksums.txt
+      for v{{ packages_operator_sdk_version }}: {{ _operator_sdk_sha256_verify.stderr | default('') }}
 
 # --- Cosign pre-install self-verification (second trust root on re-provisioning) ---
 # TRUST MODEL: cosign uses Sigstore (Google OIDC keyless signing). The verification below
@@ -316,49 +347,7 @@
     path: /usr/local/bin/cosign
   register: _cosign_pre_stat
 
-- name: Create atomic temporary directory for cosign bundle verification (TOCTOU mitigation)
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-    - packages_cosign_install_enabled
-    - _cosign_pre_stat.stat.exists
-  ansible.builtin.tempfile:
-    state: directory
-    prefix: "ansible_cosign_"
-  register: _cosign_tmpdir
-
-- name: Download cosign binary to atomic temp path for bundle verification (re-provision only)
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-    - packages_cosign_install_enabled
-    - _cosign_pre_stat.stat.exists
-  ansible.builtin.get_url:
-    url: >-
-      https://github.com/sigstore/cosign/releases/download/v{{ packages_cosign_version
-      }}/cosign-linux-{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}
-    dest: "{{ _cosign_tmpdir.path }}/cosign-new"
-    checksum: "sha256:{{ packages_cosign_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_cosign_sha256 }}"
-    mode: "0755"
-    timeout: 300
-
-- name: Download cosign sigstore bundle for self-verification (re-provision only)
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-    - packages_cosign_install_enabled
-    - _cosign_pre_stat.stat.exists
-  ansible.builtin.get_url:
-    url: >-
-      https://github.com/sigstore/cosign/releases/download/v{{ packages_cosign_version
-      }}/cosign-linux-{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}.sigstore.json
-    dest: "{{ _cosign_tmpdir.path }}/cosign.sigstore.json"
-    mode: "0600"
-
-- name: Verify new cosign binary via Sigstore bundle (existing cosign as second trust root)
+- name: Check installed cosign version (pre-install; upgrade gating)
   when:
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
@@ -366,71 +355,112 @@
     - packages_cosign_install_enabled
     - _cosign_pre_stat.stat.exists
   ansible.builtin.command:
-    argv:
-      - /usr/local/bin/cosign
-      - verify-blob
-      - "{{ _cosign_tmpdir.path }}/cosign-new"
-      - --bundle
-      - "{{ _cosign_tmpdir.path }}/cosign.sigstore.json"
-      - --certificate-identity
-      - keyless@projectsigstore.iam.gserviceaccount.com
-      - --certificate-oidc-issuer
-      - https://accounts.google.com
-      - --certificate-oidc-issuer-regexp
-      - "^https://accounts\\.google\\.com$"
-  environment:
-    SIGSTORE_NO_VERIFY: "0"
-    SIGSTORE_ROOT_FILE: ""
-    SIGSTORE_REKOR_PUBLIC_KEY: ""
-    COSIGN_EXPERIMENTAL: "0"
+    cmd: "timeout 10 /usr/local/bin/cosign version"
+  register: _cosign_pre_version
   changed_when: false
   failed_when: false
-  register: _cosign_verify_result
+  check_mode: false
 
-
-- name: Warn if cosign self-verification failed (offline/restricted environment)
+# Runs only when an older cosign is installed and the pin differs. Any failure (network,
+# SHA256, Sigstore) keeps the installed cosign and emits a warning; the play is not failed.
+- name: Upgrade cosign with Sigstore bundle verification (existing cosign as second trust root)
   when:
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
     - packages_cosign_install_enabled
+    - not ansible_check_mode
     - _cosign_pre_stat.stat.exists
-    - _cosign_verify_result.rc != 0
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: cosign binary verification via Sigstore bundle failed (rc={{ _cosign_verify_result.rc }}).
-      This can occur in offline environments or networks where cosign/Sigstore verification infrastructure
-      is unavailable. Proceeding without Sigstore verification. cosign will be updated from the downloaded
-      binary, which was verified via SHA256 checksum at download time. If this is unexpected, review network
-      connectivity to accounts.google.com and api.sigstore.dev, and check cosign availability.
-
-- name: Install verified cosign binary from bundle verification (re-provision only)
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-    - packages_cosign_install_enabled
-    - _cosign_pre_stat.stat.exists
-    - _cosign_verify_result.rc == 0
-  ansible.builtin.copy:
-    src: "{{ _cosign_tmpdir.path }}/cosign-new"
-    dest: /usr/local/bin/cosign
-    remote_src: true
-    mode: "0755"
-    follow_symlinks: false
+    - packages_cosign_version not in (_cosign_pre_version.stdout | default('')) ~ (_cosign_pre_version.stderr | default(''))
+  # Root-owned 0700 temp dir: a same-UID process cannot swap the verified binary before the root copy.
   become: true
   tags: [become]
+  block:
+    - name: Create atomic temporary directory for cosign bundle verification (TOCTOU mitigation)
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: "ansible_cosign_"
+      register: _cosign_tmpdir
 
-- name: Clean up atomic cosign temporary directory
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-    - packages_cosign_install_enabled
-    - _cosign_pre_stat.stat.exists
-  ansible.builtin.file:
-    path: "{{ _cosign_tmpdir.path }}"
-    state: absent
+    - name: Download cosign binary to atomic temp path for bundle verification
+      retries: 3  # transient GitHub/CDN errors
+      delay: 10
+      ansible.builtin.get_url:
+        url: >-
+          https://github.com/sigstore/cosign/releases/download/v{{ packages_cosign_version
+          }}/cosign-linux-{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}
+        dest: "{{ _cosign_tmpdir.path }}/cosign-new"
+        checksum: "sha256:{{ packages_cosign_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_cosign_sha256 }}"
+        mode: "0755"
+        timeout: 300
+
+    - name: Download cosign sigstore bundle for self-verification
+      retries: 3  # transient GitHub/CDN errors
+      delay: 10
+      ansible.builtin.get_url:
+        url: >-
+          https://github.com/sigstore/cosign/releases/download/v{{ packages_cosign_version
+          }}/cosign-linux-{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}.sigstore.json
+        dest: "{{ _cosign_tmpdir.path }}/cosign.sigstore.json"
+        mode: "0600"
+
+    - name: Verify new cosign binary via Sigstore bundle (existing cosign as second trust root)
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/cosign
+          - verify-blob
+          - "{{ _cosign_tmpdir.path }}/cosign-new"
+          - --bundle
+          - "{{ _cosign_tmpdir.path }}/cosign.sigstore.json"
+          - --certificate-identity
+          - keyless@projectsigstore.iam.gserviceaccount.com
+          - --certificate-oidc-issuer
+          - https://accounts.google.com
+          - --certificate-oidc-issuer-regexp
+          - "^https://accounts\\.google\\.com$"
+      environment:
+        SIGSTORE_NO_VERIFY: "0"
+        SIGSTORE_ROOT_FILE: ""
+        SIGSTORE_REKOR_PUBLIC_KEY: ""
+        COSIGN_EXPERIMENTAL: "0"
+      changed_when: false
+      failed_when: false
+      register: _cosign_verify_result
+
+    - name: Warn if cosign upgrade verification failed (installed cosign kept)
+      when: _cosign_verify_result.rc != 0
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: cosign upgrade to v{{ packages_cosign_version }} NOT applied: Sigstore bundle
+          verification failed (rc={{ _cosign_verify_result.rc }}). The installed cosign is kept.
+          This can occur offline or where accounts.google.com / api.sigstore.dev are unreachable.
+          Re-run 'make packages' when the network is available.
+
+    - name: Install verified cosign binary from bundle verification
+      when: _cosign_verify_result.rc == 0
+      ansible.builtin.copy:
+        src: "{{ _cosign_tmpdir.path }}/cosign-new"
+        dest: /usr/local/bin/cosign
+        remote_src: true
+        mode: "0755"
+        follow: false  # do not write through a symlink at dest
+      become: true
+      tags: [become]
+
+  rescue:
+    - name: Warn that cosign upgrade was skipped (installed cosign kept)
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: cosign upgrade to v{{ packages_cosign_version }} NOT applied; the installed
+          cosign is kept. Error: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Re-run 'make packages' when the network is available.
+
+  always:
+    - name: Clean up atomic cosign temporary directory
+      ansible.builtin.file:
+        path: "{{ _cosign_tmpdir.path }}"
+        state: absent
+      when: _cosign_tmpdir.path is defined
 
 # Bootstrap trust limitation: the SHA256 checksum and the cosign binary are both served from
 # the GitHub releases CDN — they share the same trust domain. A CDN compromise or GitHub
@@ -493,6 +523,8 @@
     - profile == 'work'
     - packages_cosign_install_enabled
     - not _cosign_pre_stat.stat.exists
+  retries: 3  # transient GitHub/CDN errors
+  delay: 10
   ansible.builtin.get_url:
     url: >-
       https://github.com/sigstore/cosign/releases/download/v{{ packages_cosign_version
@@ -575,145 +607,139 @@
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
     - packages_cosign_install_enabled
+    - not ansible_check_mode
+    - packages_sops_version not in (_sops_precheck.stdout | default('')) ~ (_sops_precheck.stderr | default(''))
   ansible.builtin.stat:
     path: /usr/local/bin/cosign
   register: _cosign_for_sops_stat
 
-- name: Create secure temp directory for sops verification
+# Runs only when sops is being installed or upgraded (pre-install version did not match the
+# pin). A network/keyserver/Sigstore error only warns (rescue). A real SHA256 mismatch of the
+# installed binary against the attested checksums file fails closed in the task after the block.
+- name: Verify sops checksums via Sigstore (install or upgrade only)
   when:
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
     - packages_cosign_install_enabled
-    - _cosign_for_sops_stat.stat.exists
-  ansible.builtin.tempfile:
-    state: directory
-    suffix: _sops_verify
-  register: _sops_tmpdir
+    - not ansible_check_mode
+    - packages_sops_version not in (_sops_precheck.stdout | default('')) ~ (_sops_precheck.stderr | default(''))
+    - _cosign_for_sops_stat.stat.exists | default(false)
+  block:
+    - name: Create secure temp directory for sops verification
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: _sops_verify
+      register: _sops_tmpdir
 
-- name: Download sops checksums file for cosign verification
-  # sops v3.13.0+ signs only the checksums file (not per-arch binaries).
-  # Verifying this file proves the SHA256 pins in packages_sops_sha256 originate from the
-  # legitimate release workflow; the binary's own SHA256 (checked by install_binary.yml)
-  # is then confirmed against this attested checksums file below.
+    - name: Download sops checksums file for cosign verification
+      # sops v3.13.0+ signs only the checksums file (not per-arch binaries).
+      # Verifying this file proves the SHA256 pins in packages_sops_sha256 originate from the
+      # legitimate release workflow; the binary's own SHA256 (checked by install_binary.yml)
+      # is then confirmed against this attested checksums file below.
+      retries: 3  # transient GitHub/CDN errors
+      delay: 10
+      ansible.builtin.get_url:
+        url: >-
+          https://github.com/getsops/sops/releases/download/v{{ packages_sops_version
+          }}/sops-v{{ packages_sops_version }}.checksums.txt
+        dest: "{{ _sops_tmpdir.path }}/sops-checksums.txt"
+        checksum: "sha256:{{ packages_sops_checksums_txt_sha256 }}"
+        mode: "0600"
+
+    - name: Download sops checksums cosign bundle
+      retries: 3  # transient GitHub/CDN errors
+      delay: 10
+      ansible.builtin.get_url:
+        url: >-
+          https://github.com/getsops/sops/releases/download/v{{ packages_sops_version
+          }}/sops-v{{ packages_sops_version }}.checksums.sigstore.json
+        dest: "{{ _sops_tmpdir.path }}/sops-cosign.bundle"
+        checksum: "sha256:{{ packages_sops_bundle_sha256 }}"
+        mode: "0600"
+
+    - name: Verify sops checksums file via cosign bundle
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/cosign
+          - verify-blob
+          - "{{ _sops_tmpdir.path }}/sops-checksums.txt"
+          - --bundle
+          - "{{ _sops_tmpdir.path }}/sops-cosign.bundle"
+          - --certificate-identity
+          - "https://github.com/getsops/sops/.github/workflows/release.yml@refs/tags/v{{ packages_sops_version }}"
+          - --certificate-oidc-issuer
+          - https://token.actions.githubusercontent.com
+          - --certificate-oidc-issuer-regexp
+          - "^https://token\\.actions\\.githubusercontent\\.com$"
+      environment:
+        SIGSTORE_NO_VERIFY: "0"
+        SIGSTORE_ROOT_FILE: ""
+        SIGSTORE_REKOR_PUBLIC_KEY: ""
+        COSIGN_EXPERIMENTAL: "0"
+      changed_when: false
+      failed_when: false
+      register: _sops_checksums_verify_result
+
+    - name: Warn if sops checksums verification failed (offline/restricted environment)
+      when: _sops_checksums_verify_result.rc != 0
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: sops checksums file verification via Sigstore bundle failed
+          (rc={{ _sops_checksums_verify_result.rc }}).
+          This can occur in offline environments or networks where Sigstore verification
+          infrastructure is unavailable. Proceeding without Sigstore verification. sops binary was
+          verified via SHA256 checksum at download time. If this is unexpected, review network
+          connectivity to token.actions.githubusercontent.com and api.sigstore.dev.
+
+    - name: Record sops Sigstore verification status (queryable by smoke-test)
+      ansible.builtin.set_fact:
+        _packages_sops_sigstore_verified: "{{ _sops_checksums_verify_result.rc == 0 }}"
+
+    - name: Compare installed sops binary SHA256 against attested checksums file
+      when: _sops_checksums_verify_result.rc == 0
+      ansible.builtin.shell: |
+        set -euo pipefail
+        # A failed download was already reported (rescued); nothing to compare then.
+        [ -f /usr/local/bin/sops ] || { echo "sops not installed; checksum comparison skipped"; exit 0; }
+        # Installed binary is not the pinned version (download failed); nothing to compare.
+        /usr/local/bin/sops --disable-version-check --version 2>&1 | grep -qF "{{ packages_sops_version }}" \
+          || { echo "sops is not the pinned version; checksum comparison skipped"; exit 0; }
+        arch="{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
+        expected=$(grep "sops-v{{ packages_sops_version }}.linux.${arch}" \
+          {{ _sops_tmpdir.path }}/sops-checksums.txt | awk '{print $1}')
+        actual=$(sha256sum /usr/local/bin/sops | awk '{print $1}')
+        [ "$expected" = "$actual" ]
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
+      register: _sops_sha256_verify_result
+
+  rescue:
+    - name: Warn that sops provenance verification was skipped (error, not a mismatch)
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: sops Sigstore provenance verification could not complete and was skipped:
+          {{ ansible_failed_result.msg | default('unknown error') }}. The sops binary was still
+          verified via its pinned SHA256 at download time. Re-run 'make packages' when the
+          network is available.
+
+  always:
+    - name: Clean up secure sops verification temporary directory
+      ansible.builtin.file:
+        path: "{{ _sops_tmpdir.path }}"
+        state: absent
+      when: _sops_tmpdir.path is defined
+
+- name: Fail closed if installed sops does not match the attested checksums file
   when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-    - packages_cosign_install_enabled
-    - _cosign_for_sops_stat.stat.exists
-  ansible.builtin.get_url:
-    url: >-
-      https://github.com/getsops/sops/releases/download/v{{ packages_sops_version
-      }}/sops-v{{ packages_sops_version }}.checksums.txt
-    dest: "{{ _sops_tmpdir.path }}/sops-checksums.txt"
-    checksum: "sha256:{{ packages_sops_checksums_txt_sha256 }}"
-    mode: "0600"
-
-- name: Download sops checksums cosign bundle
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-    - packages_cosign_install_enabled
-    - _cosign_for_sops_stat.stat.exists
-  ansible.builtin.get_url:
-    url: >-
-      https://github.com/getsops/sops/releases/download/v{{ packages_sops_version
-      }}/sops-v{{ packages_sops_version }}.checksums.sigstore.json
-    dest: "{{ _sops_tmpdir.path }}/sops-cosign.bundle"
-    checksum: "sha256:{{ packages_sops_bundle_sha256 }}"
-    mode: "0600"
-
-- name: Verify sops checksums file via cosign bundle
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-    - packages_cosign_install_enabled
-    - _cosign_for_sops_stat.stat.exists
-  ansible.builtin.command:
-    argv:
-      - /usr/local/bin/cosign
-      - verify-blob
-      - "{{ _sops_tmpdir.path }}/sops-checksums.txt"
-      - --bundle
-      - "{{ _sops_tmpdir.path }}/sops-cosign.bundle"
-      - --certificate-identity
-      - "https://github.com/getsops/sops/.github/workflows/release.yml@refs/tags/v{{ packages_sops_version }}"
-      - --certificate-oidc-issuer
-      - https://token.actions.githubusercontent.com
-      - --certificate-oidc-issuer-regexp
-      - "^https://token\\.actions\\.githubusercontent\\.com$"
-  environment:
-    SIGSTORE_NO_VERIFY: "0"
-    SIGSTORE_ROOT_FILE: ""
-    SIGSTORE_REKOR_PUBLIC_KEY: ""
-    COSIGN_EXPERIMENTAL: "0"
-  changed_when: false
-  failed_when: false
-  register: _sops_checksums_verify_result
-
-
-- name: Warn if sops checksums verification failed (offline/restricted environment)
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-    - packages_cosign_install_enabled
-    - not _cosign_for_sops_stat.stat.exists or _sops_checksums_verify_result.rc | default(-1) != 0
-  ansible.builtin.debug:
+    - _sops_sha256_verify_result is defined
+    - _sops_sha256_verify_result.rc | default(0) != 0
+  ansible.builtin.fail:
     msg: >-
-      WARNING: sops checksums file verification via Sigstore bundle failed
-      (rc={{ _sops_checksums_verify_result.rc | default('N/A — cosign binary absent') }}).
-      This can occur in offline environments, networks where cosign/Sigstore verification infrastructure
-      is unavailable, or if cosign was not installed (e.g. download blocked by network policy).
-      Proceeding without Sigstore verification. sops binary was verified via SHA256 checksum at
-      download time. If this is unexpected, confirm cosign exists at /usr/local/bin/cosign, then
-      review network connectivity to token.actions.githubusercontent.com and api.sigstore.dev.
-
-- name: Record sops Sigstore verification status (queryable by smoke-test)
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-    - packages_cosign_install_enabled
-    - _cosign_for_sops_stat.stat.exists
-  ansible.builtin.set_fact:
-    _packages_sops_sigstore_verified: "{{ _sops_checksums_verify_result.rc == 0 }}"
-
-- name: Verify installed sops binary SHA256 against attested checksums file
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-    - packages_cosign_install_enabled
-    - _cosign_for_sops_stat.stat.exists
-    - _sops_checksums_verify_result.rc | default(-1) == 0
-  ansible.builtin.shell: |
-    set -euo pipefail
-    arch="{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
-    expected=$(grep "sops-v{{ packages_sops_version }}.linux.${arch}" \
-      {{ _sops_tmpdir.path }}/sops-checksums.txt | awk '{print $1}')
-    actual=$(sha256sum /usr/local/bin/sops | awk '{print $1}')
-    [ "$expected" = "$actual" ]
-  args:
-    executable: /bin/bash
-  changed_when: false
-  failed_when: _sops_sha256_verify_result.rc != 0
-  register: _sops_sha256_verify_result
-
-
-- name: Clean up secure sops verification temporary directory
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-    - packages_cosign_install_enabled
-    - _cosign_for_sops_stat.stat.exists
-  ansible.builtin.file:
-    path: "{{ _sops_tmpdir.path }}"
-    state: absent
+      installed /usr/local/bin/sops SHA256 does not match the Sigstore-attested checksums file
+      for v{{ packages_sops_version }}: {{ _sops_sha256_verify_result.stderr | default('') }}
 
 - name: Install tkn (Tekton CLI for Konflux pipeline inspection)
   # VERIFICATION: NOT IMPLEMENTED. tektoncd/cli releases provide only checksums.txt

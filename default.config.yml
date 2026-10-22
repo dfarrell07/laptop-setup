@@ -21,7 +21,7 @@ desktop_environment: CHANGE_ME  # Linux: sway/i3/gnome; macOS: aerospace; set ex
 # that reference your GitHub username, and the notes repo clone URL.
 # Without overriding them, you will get commits attributed to
 # the config owner's full name, aliases pointing to dotfiles_github_user's repos, and a
-# notes clone that fails (private repo).
+# notes clone that fails (private repo; the role tries SSH, then an HTTPS fallback).
 #
 # !unsafe: Ansible include_vars loads config.yml with trusted_as_template=True, so any
 # Jinja2 expression ({{ ... }}) in a string value executes as a template (SSTI risk).
@@ -52,10 +52,9 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   repo_google_cloud_sdk: false       (group_vars/all/vars.yml) — opt in when gcloud needed; GCP repo adds dnf metadata overhead
 #   repo_rpmfusion_free: true          (group_vars/all/vars.yml) — Fedora-only; multimedia codecs (H.264/AAC), ffmpeg, VLC
 #   repo_rpmfusion_nonfree: false      (group_vars/all/vars.yml) — Fedora-only; NVIDIA drivers, non-free firmware; opt in explicitly
-#   # repo_slack removed — packagecloud repo had gpgcheck=false (no RPM signing); use Flatpak: flatpak install flathub com.slack.Slack
 #   repo_tailscale: true               (group_vars/all/vars.yml) — VPN mesh; skip on air-gapped machines or when using a different VPN
 #   repo_docker_ce: false              (group_vars/all/vars.yml) — prefer Podman; also set install_docker: true to unmask docker.socket
-#   repo_mullvad: true                 (group_vars/all/vars.yml) — Fedora-only, skipped on RHEL/Rocky and CSB
+#   repo_mullvad: true                 (group_vars/all/vars.yml) — personal profile, non-CSB Fedora only (skipped on work, RHEL/Rocky, CSB)
 #   repo_redhat: true                  (group_vars/all/vars.yml) — internal Red Hat RPM mirror; needs repos_dnf_redhat_baseurl set
 #   system_install_usbguard: true      (group_vars/all/vars.yml) — USBGuard USB device authorization; set false on VM/USB-less machines
 #   system_bolt_enabled: true/false    (group_vars/all/vars.yml) — auto-detected on VMs/containers; override only if misidentified
@@ -69,7 +68,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #                                        csb_detected=true (auditd.conf deploy skipped; IT owns the file)
 #   system_auditd_num_logs: 5          (group_vars/all/vars.yml) — rotated files to keep; total = max_log_file *
 #                                        num_logs (40 MB default). Same CSB caveat as system_auditd_max_log_file.
-#   system_aide_check_calendar: '*-*-* 05:00:00'  (roles/system/defaults) — OnCalendar for aide-check.timer
+#   system_aide_check_calendar: 'daily'  (roles/system/defaults) — OnCalendar for aide-check.timer
 #   system_usbguard_extra_rules: []    (roles/system/defaults) — append per-machine USB rules
 #   system_usbguard_whitelist: [...]  (roles/system/defaults) — base USB allow-rules (YubiKey,
 #                                        Moonlander, hardwired ports); REPLACES the entire base list
@@ -84,17 +83,18 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   packages_cosign_install_enabled: true  (roles/packages/defaults) — set false to skip cosign installation
 #     (requires manual installation with alternative verification method, e.g. GPG signature verification from GitHub releases)
 #   packages_brew_update: false        (roles/packages/defaults) — set true to refresh Homebrew package index before install (macOS only)
-#   packages_brew: [ansible, git, git-lfs, openssh, tmux, mosh, jq, yq, direnv, fzf, zoxide, ...]  (roles/packages/defaults) —
+#   packages_brew: [bash, python3, coreutils, node, git, git-lfs, openssh, tmux, jq, ...]  (roles/packages/defaults) —
 #     universal Homebrew packages (all profiles on macOS); override in config.yml to add/remove packages
-#   packages_brew_cask: [ghostty, google-chrome, bitwarden, keepassxc, slack, lulu, nikitabobko/tap/aerospace] (roles/packages/defaults) —
-#     GUI Homebrew Cask apps (all profiles on macOS); override in config.yml to add/remove
-#   packages_brew_taps: [nikitabobko/tap]  (roles/packages/defaults) —
-#     Homebrew third-party taps (required by aerospace cask); override in config.yml to add/remove
+#   packages_brew_cask: [ghostty]  (roles/packages/defaults) — GUI Homebrew Cask apps common to all profiles on macOS
+#     (ghostty when desktop_terminal is ghostty; profile-specific casks live in packages_brew_cask_work/_personal);
+#     override in config.yml to add/remove
+#   packages_brew_taps: []  (roles/packages/defaults) — Homebrew third-party taps; AeroSpace is installed via a
+#     SHA256-verified download, not a tap; override in config.yml to add taps
 #   packages_brew_work: [golang, kubectl, kind, helm, kustomize, socat, nmap, transcrypt, sops, iperf3, wireshark, k9s, krew]
 #     (roles/packages/defaults) — work Homebrew pkgs
 #   packages_containers_work: [buildah, skopeo]  (roles/packages/defaults) — work-profile-only OCI build tools;
 #     personal profile gets podman/distrobox only
-#   packages_apt_work: [golang, gcc, nmap, socat, iperf3, tshark, conntrack-tools, buildah, skopeo]
+#   packages_apt_work: [golang, gcc, nmap, socat, iperf3, tshark, conntrack, buildah, skopeo, awscli]
 #     (roles/packages/defaults) — work-profile-only apt packages (Debian/Ubuntu);
 #   packages_security_rhel: [libfido2]  (roles/packages/defaults) — RHEL/Rocky-only: libssh on Fedora
 #     pulls libfido2.so.1 as a cap dep; RHEL/Rocky does not, so explicit install required; set [] to skip
@@ -106,9 +106,10 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     wireshark-cli, conntrack-tools, iperf3, socat, nmap]  (roles/packages/defaults) — work-profile-only networking tools
 #     (OVN-K dev); override in config.yml to add/remove packages for this profile.
 #     WARNING: nmap is installed for local/test network debugging only (kind clusters, home lab).
-#     DO NOT scan production Red Hat infrastructure (gitlab.cee, code.engineering, etc.) — triggers IT IDS/IPS alerts and SOC investigation.
-#   packages_support_work: [sos, strace, gdb, perf, bpfman, bpftrace, bpftool]  (roles/packages/defaults)
+#     DO NOT scan production Red Hat infrastructure (internal Git hosts, etc.) — triggers IT IDS/IPS alerts and SOC investigation.
+#   packages_support_work: [sos, strace, gdb, perf, bpftrace, bpftool]  (roles/packages/defaults)
 #     — work-profile-only diagnostic/debugging tools; override in config.yml to add/remove
+#     bpfman is not in this list; it is controlled by packages_bpfman_enabled (default false, see above)
 #   packages_networking: [tailscale]  (roles/packages/defaults) — universal networking tools
 #     (VPN daemon only; network dev tools are work-profile-only in packages_networking_work)
 #   packages_go_install: []               (roles/packages/defaults) — universal Go tools installed on all profiles;
@@ -204,12 +205,15 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #                                        wear-pattern fingerprinting attacks on sensitive systems
 #   system_kernel_lockdown: integrity   (roles/system/defaults) — kernel lockdown mode; set "" to disable for
 #                                        kdump/kgdb/KASAN/UBSAN debugging; "confidentiality" for strict
+#   system_modules_disabled: 0  (roles/system/defaults) — 1 locks kernel module loading after boot until reboot
+#                                        (breaks USB storage, Bluetooth, docks, container networking for modules not yet loaded)
 #   system_grub_password_enabled: false  (roles/system/defaults) — set true to enforce CIS 1.4.2 bootloader
 #                                        password; prevents kernel parameter tampering (lockdown=integrity removal)
-#                                        with physical console access; requires system_grub_password_hash
+#                                        with physical console access; requires vault_grub_password_hash
 #   system_grub_password_hash: ""        (roles/system/defaults) — password hash generated by grub2-mkpasswd-pbkdf2
-#                                        (Fedora) or grub-mkpasswd-pbkdf2 (Debian); user must set in config.yml;
-#                                        recommend vault encryption or .gitignored config storage
+#                                        (Fedora) or grub-mkpasswd-pbkdf2 (Debian). Vault-backed: set
+#                                        vault_grub_password_hash in group_vars/all/vault.yml; do NOT set
+#                                        system_grub_password_hash in config.yml
 #   system_ptrace_scope: 1             (group_vars/all/vars.yml) — CIS-compliant default (parent-only YAMA);
 #                                        set 0 in config.yml for unrestricted ptrace (dev workstation default)
 #   system_perf_event_paranoid: 2      (roles/system/defaults) — CIS-compliant (>=2) and Fedora 44 default;
@@ -292,12 +296,12 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   system_remove_luks_key: false      (roles/system/defaults) — set true ONLY if this machine does NOT use rd.luks.key
 #                                        for LUKS auto-unlock (e.g. no keyfile partition). WARNING: setting true when
 #                                        rd.luks.key is active will require manual LUKS passphrase on every reboot.
-#   system_coredump_storage: external  (roles/system/defaults) — where systemd-coredump stores cores; 'external' writes
+#   system_coredump_storage: none  (roles/system/defaults) — where systemd-coredump stores cores; 'external' writes
 #                                        compressed files to /var/lib/systemd/coredump/ (Fedora default, pass directly to
 #                                        gdb/dlv or use coredumpctl debug); 'none' disables; 'journal' embeds in journald
 #                                        NOTE: SUID process crashes are always suppressed by fs.suid_dumpable=0 (set in
-#                                        system_sysctl_hardening). To capture SUID crashes, add fs.suid_dumpable: 2 to
-#                                        system_sysctl_extra in config.yml.
+#                                        system_sysctl_hardening); it is hardening-critical and cannot be overridden
+#                                        via system_sysctl_extra or system_sysctl_extra_additional.
 #   system_coredump_process_size_max: 2G  (roles/system/defaults) — max core dump size; 0 disables collection;
 #                                           2G matches systemd upstream default
 #   system_core_pattern: "|/usr/lib/systemd/systemd-coredump ..."  (roles/system/defaults) — kernel core_pattern sysctl;
@@ -322,24 +326,25 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   system_gid0_allowed_accounts: [root, sync, shutdown, halt, operator]  (roles/system/defaults) — accounts exempt from
 #                                           the CIS 6.2.x GID-0 primary-group assert; add custom service accounts here
 #                                           if they legitimately use GID 0
-#   system_logind_idle_sec: 600           (roles/system/defaults) — seconds idle before logind locks screen
+#   system_logind_idle_sec: 900           (roles/system/defaults) — seconds idle before logind locks screen
 #   containers_log_driver: k8s-file  (roles/containers/defaults) — log driver (global; set for kind compatibility)
 #   containers_pids_limit: 65536  (roles/containers/defaults) — global pids limit (required by kind nodes)
 #   containers_nofile_limit: 65536  (roles/containers/defaults) — global soft open-file limit
 #   containers_nofile_hard_limit: '{{ containers_nofile_limit | int * 8 }}'  (roles/containers/defaults) — hard-limit override;
 #                                        change only when the 8x ratio is wrong
-#   containers_prune_enabled: false  (roles/containers/defaults) — enable periodic podman image/volume/container prune timer;
-#                                        set true to remove stopped non-distrobox containers and unused images/volumes weekly
+#   containers_prune_enabled: false  (roles/containers/defaults) — enable periodic podman container/image prune timer;
+#                                        set true to remove stopped non-distrobox containers and dangling images (volumes are kept)
 #   containers_prune_schedule: weekly  (roles/containers/defaults) — OnCalendar for podman-prune.timer; any systemd calendar expression
 #                                        e.g. "daily", "*-*-* 03:00:00", "Mon *-*-* 04:00:00"
 #   DO NOT override containers_registries directly — use containers_registries_extra to append
 #                                        without replacing the computed default. Overriding
-#                                        containers_registries in config.yml (include_vars precedence 17)
+#                                        containers_registries in config.yml (include_vars precedence 18)
 #                                        silently replaces the entire computed list, dropping the
 #                                        work-profile registry.redhat.io entry.
 #   containers_registries_extra: []  (roles/containers/defaults) — append registries to the default
 #                                        list without replacing the default; use this instead of
 #                                        overriding containers_registries
+#                                        (login-status check only; pulls need containers_policy_unsigned_registries)
 #   containers_enforce_fqin_override: false  (roles/containers/defaults) — set true to deploy user-level
 #                                        registries.conf (unqualified-search-registries=[]) even when
 #                                        /etc/containers/registries.conf already exists. By default the
@@ -356,17 +361,17 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   desktop_sway_libva_driver: ""       (roles/desktop/defaults) — VA-API driver; "" = auto-detect; radeonsi (AMD) or iHD (Intel)
 #   desktop_sway_vdpau_driver: ""       (roles/desktop/defaults) — VDPAU driver; "" = auto-detect; radeonsi (AMD) or va_gl/nvidia
 #   desktop_sway_xwayland: ''           (roles/desktop/defaults) — '' = on (default); "disable" = pure-Wayland (breaks XWayland apps)
-#   desktop_wm_idle_lock_timeout: 300  (roles/desktop/defaults) — idle before screen lock; swaylock (Sway)/i3lock (i3); 0 to disable
+#   desktop_wm_idle_lock_timeout: 300  (roles/desktop/defaults) — idle seconds before lock; avoid 0 (GNOME: off; Sway: at once; i3: 1 min)
 #   desktop_wm_idle_display_timeout: 600  (roles/desktop/defaults) — seconds idle before display off
 #   desktop_wm_lock_color: "000000"  (roles/desktop/defaults) — screen lock background hex color (no #) — swaylock (Sway) and i3lock (i3)
-#   desktop_sway_keyboard_layout: ''   (roles/desktop/defaults) — XKB layout; empty = inherit system locale (e.g. us, de, fr)
+#   desktop_sway_keyboard_layout: ''   (roles/desktop/defaults) — XKB layout; empty = sway/XKB default (e.g. us, de, fr)
 #   desktop_sway_keyboard_variant: ''   (roles/desktop/defaults) — XKB variant (e.g. 'intl', 'altgr-intl'); empty = none
 #   desktop_sway_keyboard_options: ''   (roles/desktop/defaults) — XKB options (e.g. 'caps:escape', 'ctrl:nocaps'); empty = none
 #   desktop_wm_repeat_delay: 200     (roles/desktop/defaults) — ms before key repeat starts
 #   desktop_wm_repeat_rate: 50       (roles/desktop/defaults) — key repeats per second
 #   desktop_wm_browser: firefox      (roles/desktop/defaults) — browser for $mod+Shift+b (firefox ships in Fedora)
-#   desktop_i3status_battery_num: 0   (roles/desktop/defaults) — battery device number in i3status; most laptops use 0 (BAT0)
-#   desktop_i3status_show_battery: false  (roles/desktop/defaults) — set true on laptops with a battery
+#   desktop_i3status_battery_num: ''  (roles/desktop/defaults) — battery device number; empty disables
+#                                        the battery block; set '0' on ThinkPads (BAT0)
 #   desktop_i3status_cpu_temp_path: ""  (roles/desktop/defaults) — empty disables the CPU temp block; set correct
 #     hwmon sysfs path in config.yml, e.g. /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon8/temp1_input on ThinkPad P16v AMD.
 #     hwmon index varies by machine/kernel. Verify: ls /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon*/temp1_input
@@ -383,17 +388,19 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   desktop_sway_trackpoint_accel_profile: flat   (roles/desktop/defaults) — flat avoids adaptive curve (default: flat)
 #   desktop_sway_trackpoint_pointer_accel: "-0.5" (roles/desktop/defaults) — cursor speed; tune -0.4 to -0.6 (default: -0.5)
 #   desktop_sway_trackpoint_scroll_factor: 0.5    (roles/desktop/defaults) — TrackPoint scroll speed; lower = slower
-#   desktop_sway_touchpad_tap: enabled            (roles/desktop/defaults) — tap-to-click; set disabled to require physical click
-#   desktop_sway_touchpad_natural_scroll: enabled (roles/desktop/defaults) — natural (reverse) scroll direction
+#   desktop_sway_touchpad_tap: ''                 (roles/desktop/defaults) — tap-to-click; empty = omit
+#                                        (libinput default: tap disabled); set enabled to turn on
+#   desktop_sway_touchpad_natural_scroll: ''  (roles/desktop/defaults) — natural (reverse) scroll; enabled|disabled, empty = omit
 #   desktop_sway_touchpad_dwt: ''  # empty = omit; libinput default is enabled  (roles/desktop/defaults) — disable-while-typing
-#   desktop_sway_touchpad_middle_emulation: enabled (roles/desktop/defaults) — three-finger tap as middle click
+#   desktop_sway_touchpad_middle_emulation: ''  (roles/desktop/defaults) — middle-click emulation; empty = omit (libinput default: disabled)
 #   desktop_sway_gaps_inner: 0                    (roles/desktop/defaults) — inner gap between windows (pixels)
 #   desktop_sway_gaps_outer: 0                    (roles/desktop/defaults) — outer gap between windows and screen edge
 #   desktop_wm_border_width: 1                  (roles/desktop/defaults) — window border width (pixels)
 #   desktop_wm_floating_border_width: 1         (roles/desktop/defaults) — floating window border width (pixels)
-#   desktop_wm_hide_edge_borders: none     (roles/desktop/defaults) — hide edge borders; none/smart/both/vertical/horizontal
-#   desktop_sway_focus_follows_mouse: ''  (roles/desktop/defaults) — empty omits directive, set yes/no/workspace to override
-#   desktop_terminal: alacritty          (roles/desktop/defaults) — Linux terminal; macOS defaults to ghostty (or terminal)
+#   desktop_wm_hide_edge_borders: ''       (roles/desktop/defaults) — hide edge borders; empty = omit
+#                                        (sway/i3 default: none); both/vertical/horizontal/smart/smart_no_gaps
+#   desktop_sway_focus_follows_mouse: ''  (roles/desktop/defaults) — empty omits directive, set yes/no/always to override
+#   desktop_terminal: per-OS             (roles/desktop/defaults) — default: ghostty on macOS, alacritty on Linux
 #   desktop_gtk_theme: Adwaita-dark    (roles/desktop/defaults) — GTK theme for Sway (written to gtk-3.0/4.0 settings.ini)
 #   desktop_gtk_icon_theme: Adwaita    (roles/desktop/defaults) — GTK icon theme
 #   desktop_alacritty_font_family: "DejaVu Sans Mono"  (roles/desktop/defaults) — Alacritty font family
@@ -414,23 +421,24 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   git_repos_vpn_check_host: ''  (roles/git_repos/defaults) — set to internal GitLab FQDN to enable
 #     VPN pre-check before cloning downstream/konflux repos
 #   notes_enabled: false               (roles/notes/defaults) — opt-in: set true in config.yml
-#     opt-in: requires a GitHub repo named 'notes' under dotfiles_github_user (or override notes_remote_url) with SSH access
+#     opt-in: requires a GitHub repo named notes_repo_name (default 'notes') under dotfiles_github_user (or override
+#     notes_remote_url / notes_remote_url_https); cloned over SSH, then HTTPS fallback (private repos need gh auth)
 #   claude_install_method: native      (roles/claude/defaults) — native (default) or skip
 #     (bypasses install; useful for CI/testing or machines where Claude should not be installed)
-#   claude_pinned_version: ""           (roles/claude/defaults) — pin a specific Claude version (e.g. "1.0.3"); empty = latest
+#   claude_pinned_version: ""           (roles/claude/defaults) — minimum Claude version (e.g. "1.0.3"); empty = latest
 #   claude_install_sha256: ""           (roles/claude/defaults) — REQUIRED for fresh installs; SHA256 of the installer script.
 #     Provisioning hard-fails when unset and Claude is not yet installed. Fetch with:
 #       curl -fsSL https://claude.ai/install.sh -o /tmp/claude-install.sh && sha256sum /tmp/claude-install.sh
 #     Update this hash after each upstream Claude Code release.
 #   claude_queue_enabled: false        (roles/claude/defaults) — enable Claude queue poller
-#     (test-queue-poller.sh systemd user service)
+#     (claude-queue-poller.sh via a systemd user timer; launchd on macOS)
 #   claude_queue_repo: ""              (roles/claude/defaults) — REQUIRED when claude_queue_enabled: true;
 #     GitHub repo to poll for task issues (e.g. "myuser/claude-tasks"); role asserts non-empty when enabled
 #   claude_queue_host_label: ""        (roles/claude/defaults) — optional label posted in issue comments to
 #     identify which host handled the task; empty = no label posted
 #   claude_queue_poll_interval_sec: 120  (roles/claude/defaults) — seconds between queue polls
 #   claude_queue_boot_delay_sec: 60    (roles/claude/defaults) — delay after boot before first poll
-#   claude_cleanup_period_days: 7      (roles/claude/defaults) — cleanupPeriodDays written to settings.local.json
+#   claude_cleanup_period_days: 7      (roles/claude/defaults) — cleanupPeriodDays written to settings.json
 #   claude_queue_memory_max: '4G'      (roles/claude/defaults) — MemoryMax for queue poller unit; lower on 8 GiB machines
 #   claude_queue_cpu_quota: '80%'      (roles/claude/defaults) — CPUQuota for queue poller unit; lower when running kind clusters
 #   claude_queue_max_turns: 50  (roles/claude/defaults) — --max-turns cap passed to claude per session; limits runaway sessions
@@ -440,6 +448,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   claude_enable_all_project_mcp_servers: false  (roles/claude/defaults) — set true to auto-trust
 #     all project-local MCP servers; false = prompt per server (more secure)
 #   distrobox_enabled: true               (roles/distrobox/defaults) — set false to skip
+#   distrobox_use_host_network: false     (roles/distrobox/defaults) — true shares the host network + CAP_NET_ADMIN (OVN-K/bpfman only)
 #     container creation and Play 3 entirely (Linux users who do not want a dev container)
 #   Dotfiles / shell preferences (roles/dotfiles/defaults) — override in config.yml:
 #   dotfiles_oh_my_zsh_theme: gallois     — oh-my-zsh theme name
@@ -453,17 +462,20 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   dotfiles_internal_git_host: ""        — internal HTTPS git hostname (e.g. git.internal.corp); when set,
 #     gitconfig.j2 adds [http "https://<host>"] sslCAInfo pointing to dotfiles_internal_ca_path and
 #     ssh_config.j2 adds a Host stanza using id_rsa_redhat for SSH access.
+#   dotfiles_ssh_work_hosts: []  — work-profile internal git SSH Host stanzas, e.g.
+#     [{host: git.example.internal, user: git}] (user defaults to login name); pair with ssh_work_keyscan_hosts.
 #   dotfiles_internal_ca_path: (conditional: /etc/ssl/certs/ca-certificates.crt on apt,
 #     /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem on rpm)  — CA cert for internal HTTPS hosts;
 #     do not set this in config.yml to restore the default — simply remove any override;
 #     override only to pin a specific anchor, e.g. /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem
-#   dotfiles_homebrew_prefix: /opt/homebrew  — macOS Homebrew prefix; Intel Macs use /usr/local
+#   dotfiles_homebrew_prefix: per-arch   — macOS Homebrew prefix: /usr/local on x86_64, /opt/homebrew on arm64 (group_vars/all/vars.yml)
 #   ssh_work_keyscan_hosts: []  (roles/ssh/defaults) — work-profile internal git hosts to pre-seed in known_hosts;
 #     set in config.yml as dicts with optional fingerprint pinning, e.g.:
 #       [{host: gitlab.example.com, fingerprint: "SHA256:..."}, {host: code.example.com}]
 #     plain strings also accepted (TOFU, no pinning): [gitlab.example.com, code.example.com]
 #     empty = no work host keyscan
-#   ssh_pubkey_accepted_algorithms: [sk-ssh-ed25519@openssh.com, sk-ssh-ed25519-cert-v01@openssh.com, ssh-ed25519]
+#   ssh_pubkey_accepted_algorithms: [ssh-ed25519, ssh-ed25519-cert-v01@openssh.com, sk-ssh-ed25519@openssh.com,
+#     sk-ssh-ed25519-cert-v01@openssh.com]
 #     (group_vars/all/vars.yml) — key types accepted for SSH auth and SSHD PubkeyAcceptedAlgorithms;
 #     add ssh-rsa or ecdsa-sha2-nistp256 to support legacy or non-FIDO2 keys
 #   ssh_ciphers: 'aes256-gcm@openssh.com,...'  (group_vars/all/vars.yml) — cipher list for both ssh client and sshd
@@ -475,9 +487,11 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   ssh_signing_key_basename: id_ed25519_sk_signing  — basename of the SSH signing key files (no extension)
 #   dotfiles_ssh_hardware_key_basename: id_ed25519_sk  — YubiKey auth key stub basename (no extension)
 #   dotfiles_ssh_redhat_key_basename: id_rsa_redhat    — Red Hat internal git key basename (no extension)
-#   dotfiles_gonosumdb: ""   — GONOSUMDB for internal Go modules (default: ""; e.g. "*.redhat.com,*.engineering.redhat.com")
+#   dotfiles_gonosumdb: ""   — GONOSUMDB for internal Go modules (default: ""; e.g. "*.example.internal")
 #     Checksum exceptions support literals and '*' globs; broad public hosts/owners and managed public tools are rejected.
-#   dotfiles_goprivate: ""   — GOPRIVATE for internal Go repos (default: ""; e.g. "gitlab.cee.redhat.com,pkgs.devel.redhat.com")
+#   dotfiles_goprivate: ""   — GOPRIVATE for internal Go repos (default: ""; e.g. "git.example.internal")
+#   git_repos_local — repos on internal Git hosts: define in gitignored group_vars/all/local_repos.yml
+#     (copy local_repos.yml.example); concatenated onto the public list in group_vars/all/repos.yml
 #   dotfiles_claude_queue_repo: "{{ dotfiles_github_user }}/claude-tasks"  — GitHub repo for cq() alias
 #   dotfiles_work_src_dirs: []  # set in config.yml: e.g. [my-org, my-other-org]; routes those dirs to work git identity
 #     (gitconfig.j2 includeIf) and Claude personal guard (zshrc.j2);
@@ -488,12 +502,9 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     in .envrc; upstream default false; set false if .envrc uses unset vars
 #   dotfiles_direnv_disable_stdin: true  (roles/dotfiles/defaults) — block stdin
 #     in .envrc; upstream default false; set false if .envrc needs stdin
-#   ssh_git_signing_pubkey: ""            (group_vars/all/vars.yml) — SSH public key for
-#     git commit signing; set in config.yml to the literal pubkey or
-#     a lookup('file', ...) expression until vault.yml is populated with vault_ssh_signing_key_pub and encrypted.
-#     IMPORTANT: remove ssh_git_signing_pubkey from config.yml after vault.yml is populated with vault_ssh_signing_key_pub
-#     and encrypted — config.yml (include_vars precedence 17) silently overrides group_vars (precedence 4-5), so a stale
-#     entry here will shadow the vault-backed value without any warning.
+#   ssh_git_signing_pubkey: ""            (group_vars/all/vars.yml) — SSH public key for git commit signing.
+#     Vault-backed: set vault_ssh_signing_key_pub in group_vars/all/vault.yml; do NOT set
+#     ssh_git_signing_pubkey in config.yml (include_vars precedence 18 would shadow the vault value).
 #   Binary version pins (roles/packages/defaults and roles/distrobox/defaults) — override in config.yml:
 #     packages_kind_version, packages_helm_version, packages_kustomize_version, packages_oc_version,
 #     packages_k9s_version, packages_transcrypt_version, packages_sops_version, packages_gitleaks_version,
@@ -513,9 +524,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     https://kind.sigs.k8s.io/dl/v0.32.0/../../evil/...). Pre-flight checks validate all
 #     version variables match the pattern ^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$ and reject invalid
 #     formats. Use semantic version strings only (major.minor.patch with optional prerelease suffix).
-#     NOTE: packages_oc_version: 'stable' uses a co-located sha256sum.txt (no GPG verification);
-#     a compromised mirror.openshift.com can serve a matching malicious binary+hash pair.
-#     Prefer a pinned version with a hardcoded packages_oc_sha256 in defaults/main.yml.
+#     packages_oc_version must be a pinned version with packages_oc_sha256 (the 'stable' track is rejected).
 #     packages_subctl_version: "<see roles/packages/defaults/main.yml>"  (single source of truth; governs distrobox container)
 #     packages_subctl_versioned: [{version, suffix}]  (go install older versions as subctlXX)
 #     packages_subctl_rh_versions: [{tag, image, suffix}]  (RH downstream via oc image extract)
@@ -525,6 +534,9 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   repos_dnf_acli_baseurl: "https://..."        # acli/rosa CLI internal mirror
 #   repos_dnf_redhat_baseurl: "https://..."      # Red Hat internal RPM repo
 #   repos_dnf_redhat_gpgkey: "https://..."       # GPG key URL for the above repo
+#   repos_dnf_redhat_gpg_fingerprint: "<40 hex>" # full fingerprint of that key (required when repos_dnf_redhat_gpgkey is set)
+#   repos_dnf_internal_hosts: [pkgs.example.internal]  # exact hosts those URLs may target (empty: only
+#     public repo.redhat.com/keys.redhat.com are accepted; acli needs an entry here)
 # Without them the tasks are silently skipped (guarded by `is defined`).
 
 # Container settings

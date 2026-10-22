@@ -1,0 +1,22 @@
+---
+# Authenticate sudo once before any privileged task, so a mistyped --ask-become-pass
+# password stops the run with a plain message instead of failing mid-role (where rescue
+# blocks would otherwise treat the auth error as a task-specific failure).
+- name: Verify sudo authentication before privileged tasks
+  ansible.builtin.command: /bin/true
+  become: true
+  changed_when: false
+  check_mode: false  # authentication must be proven in dry runs too
+  register: _become_probe
+  ignore_errors: true
+  ignore_unreachable: true
+
+- name: Stop on sudo authentication failure
+  ansible.builtin.fail:
+    msg: >-
+      sudo authentication failed — the password entered at the BECOME password prompt was
+      wrong or missing. Nothing privileged has run yet; re-run the same make target and
+      retype it. Repeated failures count toward pam_faillock lockout
+      (check with: sudo faillock --user "$USER"; the tally file is root-only).
+      Detail: {{ (_become_probe.msg | default('')) | regex_replace('\[sudo via ansible, key=\w+\] ', '') | truncate(200) }}
+  when: _become_probe is failed or _become_probe is unreachable

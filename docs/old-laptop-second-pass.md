@@ -1,6 +1,6 @@
 # Wider workstation audit decisions
 
-Second pass: 2026-10-13, `feat/old-laptop-migration`. Implementation is complete;
+Second pass: 2026-10-13. Implementation is complete;
 source packages/services were untouched. Overall validation and remaining gates
 are recorded in [the migration plan](old-laptop-migration-plan.md); transfer
 instructions live in [the checklist](migration-checklist.md).
@@ -66,7 +66,7 @@ remain destination/VM gates; this document does not certify those transactions.
 It collects native package metadata, selected npm/pipx/user-Python inventories,
 PATH alternatives, enabled/masked unit names, mount targets/types, allowlisted
 GNOME preferences and selected config paths/system-file owners. It does not
-execute discovered alternative binaries. It is not a complete service-state,
+execute shadowed PATH alternatives; each probed tool runs once from its first absolute PATH entry. It is not a complete service-state,
 storage, package-source or configuration backup. See the plan for dated snapshots.
 
 Design references: [TLP Fedora installation](https://linrunner.de/tlp/installation/fedora.html),

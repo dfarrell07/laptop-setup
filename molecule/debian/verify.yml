@@ -13,11 +13,12 @@
     - name: Override profile and identity vars to match converge
       ansible.builtin.set_fact:
         system_is_container: true  # converge forces true; verify must match or not-system_is_container guards run against absent files
-        system_ssh_unused_connection_timeout: 600  # role default; absent here silences verify trim_blocks guard
+        system_ssh_unused_connection_timeout: 600  # placeholder value (role default is 3600); absent here silences verify trim_blocks guard
         profile: personal
-        dotfiles_user_email_personal: "molecule-test@ci.invalid"  # matches ci-default-vars.yml value; not re-loaded in verify phase
+        dotfiles_user_email_personal: "molecule-test-personal@ci.invalid"  # matches ci-default-vars.yml (not re-loaded in verify)
+        system_tmout: 300  # system-container-overrides.yml sets this in converge; enables TMOUT assertions
         real_user_id: molecule  # ansible_user_id=root in container; subuid/subgid provisioned for molecule
-        claude_queue_enabled: true  # converge sets this; re-state so verify-claude-queue.yml assertions execute
+        claude_queue_enabled: true  # set by shared/ci-default-vars.yml in converge; re-state so verify-claude-queue.yml assertions execute
 
   tasks:
     # --- Shared assertions (all platforms) ---
@@ -101,7 +102,7 @@
     # faillock.conf (deny=N) and pwquality.conf are written by ini_file tasks guarded by
     # not system_is_container — those writes are unsafe in Podman CI (crash risk documented in
     # pam.yml). The /etc/pam.d/ assertions above cover the critical stack-ordering checks.
-    # faillock.conf and pwquality.conf value assertions remain in the VM-gated block below.
+    # faillock.conf and pwquality.conf value assertions are not covered by this container scenario.
 
     - name: Slurp /etc/pam.d/common-password for content assertions (Debian)
       ansible.builtin.slurp:
@@ -111,72 +112,10 @@
 
     - name: Assert pam_pwhistory.so present in common-password (Debian)
       ansible.builtin.assert:
-        that: verify_pam_common_password['content'] | b64decode is search('(?m)^password\s+required\s+pam_pwhistory\.so.*remember=[0-9]+')
-        fail_msg: "pam_pwhistory.so line missing in /etc/pam.d/common-password"
-
-    # --- PAM faillock (Debian, live-stack checks; skipped in Podman CI where system_is_container=true) ---
-    - name: Check pam_faillock.so preauth line in common-auth (Debian)
-      ansible.builtin.command:
-        cmd: grep -qE '^auth\s+required\s+pam_faillock\.so\s+preauth' /etc/pam.d/common-auth
-      changed_when: false
-      become: true
-      when:
-        - not (system_is_container | default(false))
-
-    - name: Check pam_faillock.so authfail line in common-auth (Debian)
-      ansible.builtin.command:
-        cmd: grep -qE '^auth\s+\[default=die\]\s+pam_faillock\.so\s+authfail' /etc/pam.d/common-auth
-      changed_when: false
-      become: true
-      when:
-        - not (system_is_container | default(false))
-
-    - name: Check pam_faillock.so ordering in common-auth (Debian)
-      ansible.builtin.shell:
-        cmd: >-
-          awk '/pam_faillock\.so preauth/{pre=NR} /pam_unix\.so/{unix=NR} /pam_faillock\.so authfail/{fail=NR}
-               END{exit !(pre>0 && unix>0 && fail>0 && pre<unix && unix<fail)}' /etc/pam.d/common-auth
-      changed_when: false
-      become: true
-      when:
-        - not (system_is_container | default(false))
-
-    - name: Check pam_faillock.so account line in common-account (Debian)
-      ansible.builtin.command:
-        cmd: grep -qE '^account\s+required\s+pam_faillock\.so$' /etc/pam.d/common-account
-      changed_when: false
-      become: true
-      when:
-        - not (system_is_container | default(false))
-
-    - name: Check faillock.conf deny setting (Debian) = {{ system_faillock_deny }}
-      ansible.builtin.command:
-        cmd: grep -q '^deny = {{ system_faillock_deny }}' /etc/security/faillock.conf
-      changed_when: false
-      when:
-        - not (system_is_container | default(false))
-
-    - name: Check pam_pwhistory.so line in common-password (Debian)
-      ansible.builtin.command:
-        cmd: grep -qE '^password\s+required\s+pam_pwhistory\.so.*remember=[0-9]+' /etc/pam.d/common-password
-      changed_when: false
-      become: true
-      when:
-        - not (system_is_container | default(false))
-
-    - name: Check pwquality.conf minlen (Debian)
-      ansible.builtin.command:
-        cmd: grep -q '^minlen = {{ system_pwquality_minlen }}' /etc/security/pwquality.conf
-      changed_when: false
-      when:
-        - not (system_is_container | default(false))
-
-    - name: Check pwquality.conf enforce_for_root (Debian)
-      ansible.builtin.command:
-        cmd: grep -qE '^enforce_for_root' /etc/security/pwquality.conf
-      changed_when: false
-      when:
-        - not (system_is_container | default(false))
+        that: >-
+          verify_pam_common_password['content'] | b64decode is
+          search('(?m)^password\s+required\s+pam_pwhistory\.so.*remember=[0-9]+.*enforce_for_root')
+        fail_msg: "pam_pwhistory.so line (remember=N, enforce_for_root) missing in /etc/pam.d/common-password"
 
     - name: Check git user.email is personal email
       ansible.builtin.command: git config --global user.email  # noqa: command-instead-of-module

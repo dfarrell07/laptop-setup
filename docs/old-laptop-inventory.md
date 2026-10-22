@@ -16,7 +16,7 @@ The EVPN context companion stays in the work category despite its personal owner
 
 | Old path | Origin | Disposition |
 | --- | --- | --- |
-| `evpn/evpn-on-cloud` | `git@gitlab.cee.redhat.com:datucker/evpn-on-cloud.git` | Added to work defaults |
+| `evpn/evpn-on-cloud` | `git@git.example.internal:datucker/evpn-on-cloud.git` | Added to work defaults |
 | `evpn/bootc-image-builder` | `https://github.com/osbuild/bootc-image-builder.git` | Added to work defaults |
 | `evpn/bootc` | `https://github.com/containers/bootc.git` | Added to work defaults |
 | `evpn/aap-konflux-pipelines` | `https://github.com/ansible-automation-platform/aap-konflux-pipelines.git` | Added to work defaults |
@@ -44,43 +44,43 @@ The EVPN context companion stays in the work category despite its personal owner
 | `evpn/src/aipcc-konflux-data` | `https://github.com/red-hat-data-services/aipcc-konflux-data` | Added to work defaults |
 | `evpn/src/cs-bootc` | `https://gitlab.com/redhat/centos-stream/containers/bootc.git` | Added to work defaults |
 | `evpn/src/prow` | `https://github.com/kubernetes-sigs/prow` | Added to work defaults |
-| `repos/app-interface` | `git@gitlab.cee.redhat.com:service/app-interface.git` | Added to work defaults |
-| `repos/wg-agentic-sdlc` | `git@gitlab.cee.redhat.com:global-engineering/wg-agentic-sdlc.git` | Added to work defaults |
-| `repos/components` | `git@gitlab.cee.redhat.com:bugzilla-data/components.git` | Added to work defaults |
-| `repos/developer-guide` | `git@gitlab.cee.redhat.com:developer-guide/developer-guide.git` | Added to work defaults |
-| `repos/catalog` | `git@gitlab.cee.redhat.com:catalog/catalog.git` | Added to work defaults |
-| `repos/support-scripts` | `git@gitlab.cee.redhat.com:tools.gss.redhat.com/support-scripts.git` | Added to work defaults |
-| `repos/jenkins-csb` | `git@gitlab.cee.redhat.com:ccit/jenkins-csb.git` | Added to work defaults |
-| `repos/user-documentation` | `git@gitlab.cee.redhat.com:models-corp/user-documentation.git` | Added to work defaults |
-| `repos/product-configs` | `git@gitlab.cee.redhat.com:cpaas-products/product-configs.git` | Added to work defaults |
-| `repos/skills-hub` | `git@gitlab.cee.redhat.com:dataverse/agentic-engineering/skills-hub.git` | Added to work defaults |
-| `repos/managerkit` | `git@gitlab.cee.redhat.com:ncredi/managerkit.git` | Added to work defaults |
-| `repos/gobot-slack` | `git@gitlab.cee.redhat.com:tme/gobot-mpp/gobot-slack.git` | Added to work defaults |
-| `repos/kernel` | `git@gitlab.cee.redhat.com:kernel-qe/kernel.git` | Added to work defaults |
-| `repos/ccx-rules-ocp` | `git@gitlab.cee.redhat.com:ccx/ccx-rules-ocp.git` | Added to work defaults |
-| `repos/tailwind` | `git@gitlab.cee.redhat.com:tailwind/tailwind.git` | Added to work defaults |
-| `repos/sdlc-starter` | `git@gitlab.cee.redhat.com:mmcgrath/sdlc-starter.git` | Added to work defaults |
-| `repos/bragai` | `git@gitlab.cee.redhat.com:bragaitools/bragai.git` | Added to work defaults |
-| `repos/ocm-resources` | `git@gitlab.cee.redhat.com:service/ocm-resources.git` | Added to work defaults |
-| `repos/dataproduct-config` | `git@gitlab.cee.redhat.com:dataverse/dataverse-config/dataproduct-config.git` | Added to work defaults |
-| `repos/advisories` | `git@gitlab.cee.redhat.com:releng/advisories.git` | Reused manifest entry |
-| `repos/ai-skills-workshop` | `git@gitlab.cee.redhat.com:redhat-ai-analysis/ai-skills-workshop.git` | Added to work defaults |
-| `repos/aap-containerized-installer` | `git@gitlab.cee.redhat.com:ansible/aap-containerized-installer.git` | Added to work defaults |
-| `repos/gss-rules` | `git@gitlab.cee.redhat.com:support-insights/gss-rules.git` | Added to work defaults |
-| `repos/sushe-agent-tools` | `git@gitlab.cee.redhat.com:cee-data-engineering/sushe-agent-tools.git` | Added to work defaults |
-| `repos/sop` | `git@gitlab.cee.redhat.com:konflux/docs/sop.git` | Added to work defaults |
-| `repos/uhc-clusters-service` | `git@gitlab.cee.redhat.com:service/uhc-clusters-service.git` | Added to work defaults |
-| `repos/users` | `git@gitlab.cee.redhat.com:konflux/docs/users.git` | Reused manifest entry |
-| `repos/product-definitions` | `git@gitlab.cee.redhat.com:prodsec/product-definitions.git` | Added to work defaults |
-| `repos/ocp-edge` | `git@gitlab.cee.redhat.com:ocp-edge-qe/ocp-edge.git` | Added to work defaults |
-| `repos/org` | `git@gitlab.cee.redhat.com:hybrid-platforms/org.git` | Added to work defaults |
-| `repos/scripts` | `git@gitlab.cee.redhat.com:pmyers/scripts.git` | Added to work defaults |
-| `repos/service` | `git@gitlab.cee.redhat.com:cpaas/service.git` | Added to work defaults |
-| `repos/fedora-config` | `git@gitlab.cee.redhat.com:jscarbor/fedora-config.git` | Added to work defaults |
-| `repos/matrix.osci.redhat.com` | `git@gitlab.cee.redhat.com:vrutkovs/matrix.osci.redhat.com.git` | Added to work defaults |
-| `repos/documentation` | `git@gitlab.cee.redhat.com:cpaas/documentation.git` | Added to work defaults |
-| `repos/kab` | `git@gitlab.cee.redhat.com:kab/kab.git` | Added to work defaults |
-| `repos/ccs-ai-agentic-workflow` | `git@gitlab.cee.redhat.com:ccs-ai/ccs-ai-agentic-workflow.git` | Added to work defaults |
+| `repos/app-interface` | `git@git.example.internal:service/app-interface.git` | Added to work defaults |
+| `repos/wg-agentic-sdlc` | `git@git.example.internal:global-engineering/wg-agentic-sdlc.git` | Added to work defaults |
+| `repos/components` | `git@git.example.internal:bugzilla-data/components.git` | Added to work defaults |
+| `repos/developer-guide` | `git@git.example.internal:developer-guide/developer-guide.git` | Added to work defaults |
+| `repos/catalog` | `git@git.example.internal:catalog/catalog.git` | Added to work defaults |
+| `repos/support-scripts` | `git@git.example.internal:tools.gss.redhat.com/support-scripts.git` | Added to work defaults |
+| `repos/jenkins-csb` | `git@git.example.internal:ccit/jenkins-csb.git` | Added to work defaults |
+| `repos/user-documentation` | `git@git.example.internal:models-corp/user-documentation.git` | Added to work defaults |
+| `repos/product-configs` | `git@git.example.internal:cpaas-products/product-configs.git` | Added to work defaults |
+| `repos/skills-hub` | `git@git.example.internal:dataverse/agentic-engineering/skills-hub.git` | Added to work defaults |
+| `repos/managerkit` | `git@git.example.internal:ncredi/managerkit.git` | Added to work defaults |
+| `repos/gobot-slack` | `git@git.example.internal:tme/gobot-mpp/gobot-slack.git` | Added to work defaults |
+| `repos/kernel` | `git@git.example.internal:kernel-qe/kernel.git` | Added to work defaults |
+| `repos/ccx-rules-ocp` | `git@git.example.internal:ccx/ccx-rules-ocp.git` | Added to work defaults |
+| `repos/tailwind` | `git@git.example.internal:tailwind/tailwind.git` | Added to work defaults |
+| `repos/sdlc-starter` | `git@git.example.internal:mmcgrath/sdlc-starter.git` | Added to work defaults |
+| `repos/bragai` | `git@git.example.internal:bragaitools/bragai.git` | Added to work defaults |
+| `repos/ocm-resources` | `git@git.example.internal:service/ocm-resources.git` | Added to work defaults |
+| `repos/dataproduct-config` | `git@git.example.internal:dataverse/dataverse-config/dataproduct-config.git` | Added to work defaults |
+| `repos/advisories` | `git@git.example.internal:releng/advisories.git` | Reused manifest entry |
+| `repos/ai-skills-workshop` | `git@git.example.internal:redhat-ai-analysis/ai-skills-workshop.git` | Added to work defaults |
+| `repos/aap-containerized-installer` | `git@git.example.internal:ansible/aap-containerized-installer.git` | Added to work defaults |
+| `repos/gss-rules` | `git@git.example.internal:support-insights/gss-rules.git` | Added to work defaults |
+| `repos/sushe-agent-tools` | `git@git.example.internal:cee-data-engineering/sushe-agent-tools.git` | Added to work defaults |
+| `repos/sop` | `git@git.example.internal:konflux/docs/sop.git` | Added to work defaults |
+| `repos/uhc-clusters-service` | `git@git.example.internal:service/uhc-clusters-service.git` | Added to work defaults |
+| `repos/users` | `git@git.example.internal:konflux/docs/users.git` | Reused manifest entry |
+| `repos/product-definitions` | `git@git.example.internal:prodsec/product-definitions.git` | Added to work defaults |
+| `repos/ocp-edge` | `git@git.example.internal:ocp-edge-qe/ocp-edge.git` | Added to work defaults |
+| `repos/org` | `git@git.example.internal:hybrid-platforms/org.git` | Added to work defaults |
+| `repos/scripts` | `git@git.example.internal:pmyers/scripts.git` | Added to work defaults |
+| `repos/service` | `git@git.example.internal:cpaas/service.git` | Added to work defaults |
+| `repos/fedora-config` | `git@git.example.internal:jscarbor/fedora-config.git` | Added to work defaults |
+| `repos/matrix.osci.redhat.com` | `git@git.example.internal:vrutkovs/matrix.osci.redhat.com.git` | Added to work defaults |
+| `repos/documentation` | `git@git.example.internal:cpaas/documentation.git` | Added to work defaults |
+| `repos/kab` | `git@git.example.internal:kab/kab.git` | Added to work defaults |
+| `repos/ccs-ai-agentic-workflow` | `git@git.example.internal:ccs-ai/ccs-ai-agentic-workflow.git` | Added to work defaults |
 | `repos/evpn-gateway-appliance-context` | `https://github.com/dfarrell07/evpn-gateway-appliance-context.git` | Added to work defaults |
 | `repos/evpn-gateway-appliance` | `https://github.com/openshift/evpn-gateway-appliance.git` | Added to work defaults |
 
@@ -150,7 +150,7 @@ discarding it; the scan did not read diffs or untracked file contents.
 | Homebrew Linux node/python/GCC/Gemini and their dependencies | Prefer managed distro packages; do not copy Cellar |
 | go/bin generators and Prow commands | Rebuild from the owning repos; do not copy old toolchains |
 | /usr/local grype, doctoc, markdown-link-check | Optional tool gap; project locks or vendor install |
-| RPM chatgpt desktop, browser variants, Slack, ExpressVPN | Vendor desktop reinstall; existing Chrome toggle, Slack Flatpak policy |
+| RPM chatgpt desktop, browser variants, Slack, ExpressVPN | Vendor reinstall; Chrome toggle; Slack manual on Linux, cask on macOS |
 | Ledger/Trezor/Daedalus user apps, browser PWAs | Manual reinstall and independent recovery material |
 | RH VPN/Wi-Fi NetworkManager profiles | Protected out-of-band export; machine-specific secrets |
 | user services and cron | No user crontab or custom enabled user daemon found |
@@ -216,5 +216,5 @@ A final AI-home root check found `~/.claude` is itself a local Git repository
 `k8s-rebase-autofix.sh`. The inventory tool now includes config Git roots while
 excluding their cache/plugin children; the script and saved Claude plans are
 included in protected backup. Preserve `.claude` local Git refs separately. Codex
-memory lives in `memories_1.sqlite`; this rollout excludes that database and the
-session index from transfer, keeping reusable lessons in the tracked baseline.
+memory lives in `memories_1.sqlite`; the default backup excludes that database and the
+session index (only `scripts/backup.sh --ai-history` copies them), keeping reusable lessons in the tracked baseline.

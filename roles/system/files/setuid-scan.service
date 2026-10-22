@@ -6,12 +6,14 @@ After=local-fs.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/lib/setuid-scan.sh
+# Run through bash (bin_t -> unconfined_service_t): the script itself is lib_t under
+# /usr/local/lib, which would keep it in init_t, and init_t cannot write its temp files.
+ExecStart=/usr/bin/bash /usr/local/lib/setuid-scan.sh
 Nice=15
 IOSchedulingClass=idle
 SyslogIdentifier=setuid-scan
 
-# Hardening: script runs as root but needs no privileges beyond file reads
+# Hardening: script runs as root but needs no privileges beyond file reads and its state directory
 NoNewPrivileges=false
 PrivateTmp=true
 PrivateDevices=true
@@ -24,7 +26,10 @@ ProtectClock=true
 ProtectHostname=true
 SystemCallArchitectures=native
 ProtectKernelLogs=true
-# Scan writes only to /var/lib/setuid-scan (baseline file)
-ReadWritePaths=/var/lib/setuid-scan
+# Scan writes only to /var/lib/setuid-scan (baseline file) plus a private-/tmp scratch file. StateDirectory creates it and
+# keeps it writable under ProtectSystem=strict; ReadWritePaths= on a missing path fails
+# the unit at namespace setup (226/NAMESPACE) before the script can create it.
+StateDirectory=setuid-scan
+StateDirectoryMode=0700
 ProtectSystem=strict
 UMask=0077

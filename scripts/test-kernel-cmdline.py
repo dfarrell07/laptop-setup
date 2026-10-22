@@ -14,7 +14,8 @@ spec.loader.exec_module(compiler)
 class KernelCmdlineTests(unittest.TestCase):
     def settings(self, mode='integrity', processor='amd', free=True, passthrough=False):
         return {'lockdown': mode, 'amd': processor == 'amd', 'intel': processor == 'intel',
-                'init_on_free': free, 'passthrough': passthrough, 'remove_luks_key': False}
+                'init_on_free': free, 'passthrough': passthrough, 'remove_luks_key': False,
+                'luks_discards': False}
 
     def test_both_boot_sources_and_repeat(self):
         for mode, processor, free, passthrough in [('integrity', 'amd', True, False),
@@ -35,6 +36,8 @@ class KernelCmdlineTests(unittest.TestCase):
                 self.assertIn(processor + '_iommu=on', arguments)
                 self.assertEqual('iommu=pt' in arguments, passthrough)
                 self.assertEqual('init_on_free=1' in arguments, free)
+                if free:
+                    self.assertNotIn('init_on_free=0', arguments)
                 self.assertEqual(compiler.merge_arguments(merged, settings), merged)
                 grub = '# retain site settings\nGRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX="' + original + '"\n'
                 result = compiler.merge_grub(grub, settings)
@@ -48,7 +51,9 @@ class KernelCmdlineTests(unittest.TestCase):
                 'no_timer_check console=tty1 console=ttyS0,115200n8 rootflags=subvol=root')
         self.assertEqual(compiler.merge_arguments(text, self.settings()), text)
         changed = text.replace('lockdown=integrity', 'lockdown=none')
-        self.assertNotEqual(compiler.merge_arguments(changed, self.settings()), changed)
+        restored = shlex.split(compiler.merge_arguments(changed, self.settings()))
+        self.assertIn('lockdown=integrity', restored)
+        self.assertNotIn('lockdown=none', restored)
         duplicate = text + ' lockdown=none'
         self.assertNotIn('lockdown=none', compiler.merge_arguments(duplicate, self.settings()))
 
@@ -65,7 +70,44 @@ class KernelCmdlineTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 compiler.merge_arguments(malformed, settings)
 
-    def test_reject_ambiguous_grub_sources(self):
+    def test_luks_discards_follow_policy(self):
+        text = 'root=UUID=fixture rd.luks.allow-discards rd.luks.options=discard rd.luks.options=tpm2-device=auto'
+        settings = self.settings()
+        merged = shlex.split(compiler.merge_arguments(text, settings))
+        self.assertNotIn('rd.luks.allow-discards', merged)
+        self.assertNotIn('rd.luks.options=discard', merged)
+        self.assertIn('rd.luks.options=tpm2-device=auto', merged)
+        settings['luks_discards'] = True
+        kept = shlex.split(compiler.merge_arguments(text, settings))
+        self.assertIn('rd.luks.allow-discards', kept)
+        self.assertIn('rd.luks.options=discard', kept)
+
+    def test_luks_discard_removed_from_option_lists(self):
+        settings = self.settings()
+        merged = shlex.split(compiler.merge_arguments(
+            'root=UUID=fixture rd.luks.options=discard,tpm2-device=auto', settings))
+        self.assertIn('rd.luks.options=tpm2-device=auto', merged)
+        merged = shlex.split(compiler.merge_arguments(
+            'root=UUID=fixture rd.luks.options=tpm2-device=auto,discard,x', settings))
+        self.assertIn('rd.luks.options=tpm2-device=auto,x', merged)
+        merged = shlex.split(compiler.merge_arguments(
+            'root=UUID=fixture rd.luks.options=discard,discard', settings))
+        self.assertFalse([t for t in merged if t.startswith('rd.luks.options')])
+        settings['luks_discards'] = True
+        kept = shlex.split(compiler.merge_arguments(
+            'root=UUID=fixture rd.luks.options=discard,tpm2-device=auto', settings))
+        self.assertIn('rd.luks.options=discard,tpm2-device=auto', kept)
+
+    def test_summary_redacts_key_references(self):
+        before = 'root=UUID=fixture rd.luks.key=uuid=/keyfile:UUID=other rd.luks.allow-discards'
+        after = compiler.merge_arguments(before, dict(self.settings(), remove_luks_key=True))
+        summary = compiler.summarize(before, after)
+        self.assertIn('rd.luks.key=<redacted>', summary['removed'])
+        self.assertIn('rd.luks.allow-discards', summary['removed'])
+        self.assertIn('lockdown=integrity', summary['added'])
+        self.assertNotIn('keyfile', ' '.join(summary['added'] + summary['removed']))
+
+    def test_reject_unquoted_or_duplicate_grub_sources(self):
         for value in ['GRUB_CMDLINE_LINUX=bare\n', 'GRUB_CMDLINE_LINUX="a"\nGRUB_CMDLINE_LINUX="b"\n']:
             with self.assertRaises(ValueError):
                 compiler.merge_grub(value, self.settings())

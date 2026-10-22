@@ -51,12 +51,24 @@
         that: "'--replace' in (verify_pass1_log.content | b64decode)"
         fail_msg: "pass-1 distrobox log missing '--replace' — assemble create --replace was not called"
 
+    - name: Assert stub logging works — pass-1 log records the assemble create call
+      ansible.builtin.assert:
+        that: "'assemble create' in (verify_pass1_log.content | b64decode)"
+        fail_msg: >-
+          pass-1 distrobox log lacks 'assemble create' — the stub is not recording calls,
+          so the pass-2 negative 'assemble create' check below would pass vacuously
+          (pass 2 still logs the start-container call, but must log no 'assemble create')
+
     - name: Read pass-2 distrobox call log
       ansible.builtin.slurp:
         src: /tmp/distrobox-calls.log
       register: verify_pass2_log
 
-    - name: Assert pass-2 log does not contain --replace
+    - name: Assert pass-2 log has no assemble create
       ansible.builtin.assert:
-        that: "'--replace' not in (verify_pass2_log.content | b64decode)"
-        fail_msg: "pass-2 distrobox log contains '--replace' — skip-create path was not taken"
+        that:
+          - "'assemble create' not in (verify_pass2_log.content | b64decode)"
+          - "'enter --name' in (verify_pass2_log.content | b64decode)"
+        fail_msg: >-
+          pass-2 distrobox log contains 'assemble create' (skip-create path not taken) or lacks the
+          start-container 'enter --name' call (the log is not recording, so the negative check proves nothing)

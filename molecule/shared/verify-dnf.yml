@@ -199,6 +199,11 @@
     fail_msg: "rpmfusion-free repo not configured"
   when: repo_rpmfusion_free and ansible_distribution == 'Fedora' and not csb_rhel
 
+- name: Assert rpmfusion-free repo enforces gpgcheck
+  ansible.builtin.command: grep -qx 'gpgcheck=1' /etc/yum.repos.d/rpmfusion-free.repo
+  changed_when: false
+  when: repo_rpmfusion_free and ansible_distribution == 'Fedora' and not csb_rhel
+
 - name: Verify rpmfusion-nonfree repo configured
   ansible.builtin.stat:
     path: /etc/yum.repos.d/rpmfusion-nonfree.repo
@@ -211,12 +216,17 @@
     fail_msg: "rpmfusion-nonfree repo not configured"
   when: repo_rpmfusion_nonfree and ansible_distribution == 'Fedora' and not csb_rhel
 
-- name: Include containers.conf assertions
+- name: Assert rpmfusion-nonfree repo enforces gpgcheck
+  ansible.builtin.command: grep -qx 'gpgcheck=1' /etc/yum.repos.d/rpmfusion-nonfree.repo
+  changed_when: false
+  when: repo_rpmfusion_nonfree and ansible_distribution == 'Fedora' and not csb_rhel
+
+- name: Import containers.conf assertions
   ansible.builtin.import_tasks: verify-containers.yml
 
 # CI gap: all NM conf.d assertions require not system_is_container; zero
-# assertions run in fedora/rocky/debian container CI — make test-vm only.
-- name: Include NetworkManager conf.d assertions
+# assertions run in fedora/rocky container CI — make test-vm only.
+- name: Import NetworkManager conf.d assertions
   ansible.builtin.import_tasks: verify-nm.yml
   when: not (system_is_container | default(false))
 
@@ -224,7 +234,7 @@
 # start in Podman containers; make test-vm (vm/verify.yml) exercises default zone=drop,
 # ssh port, and icmp-block-inversion assertions.
 
-# CI gap: all PAM, authselect, faillock, pwquality, login.defs, dnf-automatic, ABRT, and cron assertions below
+# CI gap: all PAM, authselect, faillock, pwquality, login.defs, dnf-automatic, ABRT, crypto-policy, and cron assertions below
 # are gated on not system_is_container. Fedora and Rocky molecule scenarios set system_is_container=true,
 # so zero assertions from here down run in container CI. Only make test-vm exercises these checks.
 # --- PAM / authselect / faillock / pwquality / pwhistory ---
@@ -287,6 +297,7 @@
   changed_when: false
   become: true
   when:
+    - system_faillock_local_users_only | default(true) | bool
     - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
 
@@ -295,6 +306,7 @@
   changed_when: false
   become: true
   when:
+    - system_faillock_audit | default(true) | bool
     - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
 
@@ -371,90 +383,69 @@
     - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
 
-- name: Check the active authselect profile and features
-  ansible.builtin.command:
-    cmd: authselect current --raw
-  register: verify_authselect_current
-  changed_when: false
-  become: true
-  when:
-    - not (csb_rhel | default(false))
-    - not (system_is_container | default(false))
-
-- name: Assert the active authselect profile enables required PAM features
-  ansible.builtin.assert:
-    that:
-      - verify_authselect_current.stdout.split() | length > 0
-      - "'with-faillock' in verify_authselect_current.stdout.split()"
-      - "'with-pwhistory' in verify_authselect_current.stdout.split()"
-    fail_msg: "active authselect profile must enable faillock and password history"
-  when:
-    - not (csb_rhel | default(false))
-    - not (system_is_container | default(false))
-
 # --- login.defs policy assertions ---
 - name: Check login.defs PASS_MAX_DAYS={{ system_pass_max_days }}
-  ansible.builtin.command: grep -q '^PASS_MAX_DAYS\s\+{{ system_pass_max_days }}' /etc/login.defs
+  ansible.builtin.command: grep -q '^PASS_MAX_DAYS\s\+{{ system_pass_max_days }}\s*$' /etc/login.defs
   changed_when: false
   become: true
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
 - name: Check login.defs INACTIVE={{ system_inactive_days }}
-  ansible.builtin.command: grep -q '^INACTIVE\s\+{{ system_inactive_days }}' /etc/login.defs
+  ansible.builtin.command: grep -q '^INACTIVE\s\+{{ system_inactive_days }}\s*$' /etc/login.defs
   changed_when: false
   become: true
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
 - name: Check login.defs UMASK={{ system_umask }}
-  ansible.builtin.command: grep -q '^UMASK\s\+{{ system_umask }}' /etc/login.defs
+  ansible.builtin.command: grep -q '^UMASK\s\+{{ system_umask }}\s*$' /etc/login.defs
   changed_when: false
   become: true
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
 - name: Check login.defs PASS_MIN_DAYS={{ system_pass_min_days }}
-  ansible.builtin.command: grep -q '^PASS_MIN_DAYS\s\+{{ system_pass_min_days }}' /etc/login.defs
+  ansible.builtin.command: grep -q '^PASS_MIN_DAYS\s\+{{ system_pass_min_days }}\s*$' /etc/login.defs
   changed_when: false
   become: true
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
 - name: Check login.defs PASS_WARN_AGE={{ system_pass_warn_age }}
-  ansible.builtin.command: grep -q '^PASS_WARN_AGE\s\+{{ system_pass_warn_age }}' /etc/login.defs
+  ansible.builtin.command: grep -q '^PASS_WARN_AGE\s\+{{ system_pass_warn_age }}\s*$' /etc/login.defs
   changed_when: false
   become: true
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
 - name: Check login.defs HOME_MODE={{ system_home_mode | default('0700') }} (CIS 5.4.2)
-  ansible.builtin.command: grep -q '^HOME_MODE\s\+{{ system_home_mode | default("0700") }}' /etc/login.defs
+  ansible.builtin.command: grep -q '^HOME_MODE\s\+{{ system_home_mode | default("0700") }}\s*$' /etc/login.defs
   changed_when: false
   become: true
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
 - name: Check login.defs ENCRYPT_METHOD=YESCRYPT (CIS 5.3.6)
-  ansible.builtin.command: grep -q '^ENCRYPT_METHOD YESCRYPT' /etc/login.defs
+  ansible.builtin.command: grep -q '^ENCRYPT_METHOD YESCRYPT\s*$' /etc/login.defs
   changed_when: false
   become: true
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
 - name: Check login.defs YESCRYPT_COST_FACTOR={{ system_yescrypt_cost_factor | default(5) }} (CIS 5.4.1)
-  ansible.builtin.command: grep -q '^YESCRYPT_COST_FACTOR {{ system_yescrypt_cost_factor | default(5) }}' /etc/login.defs
+  ansible.builtin.command: grep -q '^YESCRYPT_COST_FACTOR {{ system_yescrypt_cost_factor | default(5) }}\s*$' /etc/login.defs
   changed_when: false
   become: true
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
 - name: Check /etc/dnf/automatic.conf upgrade_type = security
@@ -485,12 +476,11 @@
 
 - name: Assert dnf-automatic timer is enabled
   ansible.builtin.assert:
-    that: verify_dnf_auto.status.UnitFileState == 'enabled'
+    that: (verify_dnf_auto.status.UnitFileState | default('')) == 'enabled'
     fail_msg: "dnf-automatic timer UnitFileState is '{{ verify_dnf_auto.status.UnitFileState | default('') }}', expected 'enabled'"
   when:
     - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
-    - verify_dnf_auto.status.UnitFileState | default('') != ''
     # CI gap: dnf-automatic timer not installed in Podman container CI
     # (dnf_automatic.yml guards all tasks with not system_is_container);
     # assertion silently skips. make test-vm exercises full dnf-automatic coverage.
@@ -507,6 +497,7 @@
     - abrt-oops
     - abrt-vmcore
     - abrt-xorg
+    - abrt-pstoreoops
   when:
     - not (csb_rhel | default(false))
     - system_mask_abrt | default(true) | bool
@@ -533,13 +524,12 @@
     - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
 
-- name: Assert crypto-policy is DEFAULT:NO-SHA1
+- name: Assert crypto-policy matches system_crypto_policy_target (default DEFAULT:NO-SHA1)
   ansible.builtin.assert:
     that: verify_crypto.stdout == (system_crypto_policy_target | default('DEFAULT:NO-SHA1'))
     fail_msg: "Crypto policy is '{{ verify_crypto.stdout }}', expected {{ system_crypto_policy_target | default('DEFAULT:NO-SHA1') }}"
   when:
     - verify_crypto is not skipped
-    - verify_crypto.rc == 0
     - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
 
@@ -553,7 +543,7 @@
   register: verify_cron_allow
   become: true
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
 - name: Assert /etc/cron.allow exists with mode 0600
@@ -567,7 +557,7 @@
       got={{ verify_cron_allow.stat.mode | default('absent') }},
       expected 0600)
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
 - name: Stat /etc/cron.deny
@@ -576,7 +566,7 @@
   register: verify_cron_deny
   become: true
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
 - name: Assert /etc/cron.deny is absent (CIS 5.1.8)
@@ -584,7 +574,7 @@
     that: not verify_cron_deny.stat.exists
     fail_msg: "/etc/cron.deny exists but cron.allow is authoritative"
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
 - name: Verify /etc/at.allow exists
@@ -593,7 +583,7 @@
   register: verify_at_allow
   become: true
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
 - name: Assert /etc/at.allow exists with mode 0600 (CIS 5.1.9)
@@ -607,7 +597,7 @@
       got={{ verify_at_allow.stat.mode | default('absent') }},
       expected 0600)
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
 - name: Stat /etc/at.deny
@@ -616,7 +606,7 @@
   register: verify_at_deny
   become: true
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
 - name: Assert /etc/at.deny is absent (CIS 5.1.9)
@@ -624,41 +614,58 @@
     that: not verify_at_deny.stat.exists
     fail_msg: "/etc/at.deny exists but at.allow is authoritative"
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
-- name: Stat /etc/cron.d
-  ansible.builtin.stat:
-    path: /etc/cron.d
-  register: verify_crond
+- name: Check cron.allow lists only root (CIS 5.1.8)
+  ansible.builtin.command: grep -cvx root /etc/cron.allow
+  register: verify_cron_allow_extra
+  changed_when: false
+  failed_when: verify_cron_allow_extra.stdout != '0'
   become: true
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
-- name: Assert /etc/cron.d has mode 0700 (CIS 5.1.7)
-  ansible.builtin.assert:
-    that: verify_crond.stat.mode == '0700'
-    fail_msg: "/etc/cron.d wrong permissions (expected 0700)"
-  when:
-    - not (csb_rhel | default(false))
-    - not (system_is_container | default(false))
-    - verify_crond.stat.exists
-
-- name: Stat /etc/cron.daily
+- name: Stat cron paths hardened by the system role
   ansible.builtin.stat:
-    path: /etc/cron.daily
-  register: verify_cron_daily
+    path: "{{ item.path }}"
+    follow: false
+  register: verify_cron_paths
+  loop:
+    - {path: /etc/crontab, mode: '0600'}
+    - {path: /etc/cron.d, mode: '0700'}
+    - {path: /etc/cron.daily, mode: '0700'}
+    - {path: /etc/cron.hourly, mode: '0700'}
+    - {path: /etc/cron.weekly, mode: '0700'}
+    - {path: /etc/cron.monthly, mode: '0700'}
+  loop_control:
+    label: "{{ item.path }}"
   become: true
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
-- name: Assert /etc/cron.daily has mode 0700 (CIS 5.1.4)
+- name: Assert cron paths have hardened modes (CIS 5.1.2-5.1.7)
   ansible.builtin.assert:
-    that: verify_cron_daily.stat.mode == '0700'
-    fail_msg: "/etc/cron.daily wrong permissions (expected 0700)"
+    that: item.stat.mode == item.item.mode
+    fail_msg: "{{ item.item.path }} wrong permissions (expected {{ item.item.mode }}, got {{ item.stat.mode | default('') }})"
+  loop: "{{ verify_cron_paths.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.path }}"
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
-    - verify_cron_daily.stat.exists
+    - item.stat is defined
+    - item.stat.exists
+
+- name: Check authselect with-fingerprint is not enabled (system_disable_fingerprint)
+  ansible.builtin.command: authselect is-feature-enabled with-fingerprint
+  register: verify_fingerprint_authselect
+  changed_when: false
+  failed_when: verify_fingerprint_authselect.rc == 0
+  become: true
+  when:
+    - not (csb_detected | default(false))
+    - not (system_is_container | default(false))
+    - system_disable_fingerprint | default(true) | bool

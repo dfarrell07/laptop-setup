@@ -3,10 +3,28 @@
 # Install yamllint and ansible-lint via pipx (version-pinned).
 # Called from main.yml when is_dnf or is_apt or is_macos, and packages_install_binaries.
 
+- name: Check for pipx
+  ansible.builtin.command: sh -c 'command -v pipx'
+  register: _packages_pipx_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - is_dnf or is_apt or is_macos
+    - packages_install_binaries | bool
+
+- name: Report pipx packages not simulated in check mode
+  ansible.builtin.debug:
+    msg: "CHECK MODE: pipx is not installed yet (its package install was only simulated); yamllint and ansible-lint not simulated."
+  when:
+    - ansible_check_mode
+    - _packages_pipx_probe.rc | default(0) != 0
+
 - name: Install pipx packages (yamllint, ansible-lint)
   when:
     - is_dnf or is_apt or is_macos
     - packages_install_binaries | bool
+    - not ansible_check_mode or _packages_pipx_probe.rc | default(0) == 0
   block:
     - name: Yamllint present at {{ packages_yamllint_version }}
       community.general.pipx:
@@ -36,12 +54,12 @@
           This may be due to fapolicyd policy blocking pip/pipx or missing network access.
           Install manually via pipx or an alternative method.
       when: csb_rhel
-    - name: Fail on pipx install errors (non-CSB)
-      ansible.builtin.fail:
+    - name: Warn on pipx install errors (non-CSB)
+      ansible.builtin.debug:
         msg: >-
-          PACKAGE INSTALL FAILED: Install pipx packages in role packages.
+          WARNING: pipx packages (yamllint/ansible-lint) not installed (optional tooling; continuing).
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
-          This may be a transient network error or missing pipx/pip access.
+          Re-run `make packages` when online.
       when: not csb_rhel
 
 - name: Validate optional pipx package pins
@@ -55,3 +73,16 @@
     name: "{{ item }}"
     state: install
   loop: "{{ packages_extra_pipx }}"
+  register: _packages_extra_pipx_results
+  ignore_errors: true  # noqa: ignore-errors — optional tooling; failures are reported by the warning below
+
+- name: Warn about optional pipx tools that failed to install
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: optional pipx tools failed to install (continuing):
+      {{ _packages_extra_pipx_results.results | selectattr('failed', 'defined')
+         | selectattr('failed') | map(attribute='item') | join(', ') }}.
+      Re-run `make packages` when online.
+  when: >-
+    _packages_extra_pipx_results.results | default([]) | selectattr('failed', 'defined')
+    | selectattr('failed') | list | length > 0

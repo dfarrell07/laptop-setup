@@ -30,6 +30,19 @@ class AuditPolicyTests(unittest.TestCase):
             changed, _ = POLICY.select_policy(source.replace('-p wa', '-p rwa'), compiled, receipt)
             self.assertIn('-a never', changed)
 
+    def test_mutable_policy_recompiled_when_omitted_executable_appears(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / 'optional-tool'
+            source = f'-a never,exit -F exe={executable} -k optional\n-e 1\n'
+            compiled, receipt = POLICY.select_policy(source, '', None)
+            self.assertNotIn('-a never', compiled)
+            again, same = POLICY.select_policy(source, compiled, receipt)
+            self.assertEqual((again, same), (compiled, receipt))
+            executable.write_bytes(b'fixture')
+            recompiled, new_receipt = POLICY.select_policy(source, compiled, receipt)
+            self.assertIn('-a never', recompiled)
+            self.assertEqual(new_receipt['omitted_executables'], [])
+
     def test_private_directories_without_empty_credential_files(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)

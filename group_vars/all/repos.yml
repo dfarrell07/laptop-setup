@@ -6,7 +6,7 @@
 # Work defaults: all categories. Personal defaults: personal + ovnk; explicit category filters override the profile.
 # Repos without an enabled field are included by default (enabled is opt-in only for overrides).
 
-git_repos_list:
+git_repos_public:
   # --- personal ---
   - url: git@github.com:{{ dotfiles_github_user }}/notes-ai.git
     dest: "{{ dotfiles_github_user }}/notes-ai"
@@ -132,13 +132,6 @@ git_repos_list:
 
   - url: https://github.com/stolostron/rhacm-docs
     dest: stolostron/rhacm-docs
-    depth: 1
-    category: downstream
-
-
-  # --- acm midstream (VPN required) ---
-  - url: "git@gitlab.cee.redhat.com:acm-cpaas-midstream/submariner-operator-midstream.git"
-    dest: ds/submariner-operator-midstream
     depth: 1
     category: downstream
 
@@ -398,7 +391,6 @@ git_repos_list:
     category: konflux
 
   # operator-manifest removed: repo archived Jan 2024 (containerbuildsystem org), superseded by conforma/policy
-
   - url: https://github.com/conforma/policy
     dest: konflux/conforma/policy
     depth: 1
@@ -413,38 +405,6 @@ git_repos_list:
     dest: konflux/stolostron/volsync-operator-product-fbc
     depth: 1
     category: konflux
-
-  # --- konflux internal (VPN required) ---
-  - url: "git@gitlab.cee.redhat.com:releng/advisories.git"
-    dest: konflux/releng/advisories
-    depth: 1
-    category: konflux
-
-  - url: "git@gitlab.cee.redhat.com:rhtap-release/advisories.git"
-    dest: konflux/rhtap-release/advisories
-    depth: 1
-    category: konflux
-
-  - url: "git@gitlab.cee.redhat.com:releng/konflux-release-data.git"
-    dest: konflux/releng/konflux-release-data
-    depth: 1
-    category: konflux
-
-  - url: "git@gitlab.cee.redhat.com:releng/pyxis-repo-configs.git"
-    dest: konflux/releng/pyxis-repo-configs
-    depth: 1
-    category: konflux
-
-  - url: "git@gitlab.cee.redhat.com:konflux/docs/users.git"
-    dest: konflux/docs/users
-    depth: 1
-    category: konflux
-
-  # --- evpn (old laptop inventory) ---
-  - url: "git@gitlab.cee.redhat.com:datucker/evpn-on-cloud.git"
-    dest: "evpn/datucker/evpn-on-cloud"
-    category: evpn
-    depth: 1
 
   - url: "https://github.com/osbuild/bootc-image-builder.git"
     dest: "evpn/osbuild/bootc-image-builder"
@@ -549,183 +509,6 @@ git_repos_list:
     category: evpn
     depth: 1
 
-
-  # --- rh-context (old laptop inventory) ---
-  - url: "git@gitlab.cee.redhat.com:service/app-interface.git"
-    dest: "rh-context/service/app-interface"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:global-engineering/wg-agentic-sdlc.git"
-    dest: "rh-context/global-engineering/wg-agentic-sdlc"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:bugzilla-data/components.git"
-    dest: "rh-context/bugzilla-data/components"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:developer-guide/developer-guide.git"
-    dest: "rh-context/developer-guide/developer-guide"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:catalog/catalog.git"
-    dest: "rh-context/catalog/catalog"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:tools.gss.redhat.com/support-scripts.git"
-    dest: "rh-context/tools.gss.redhat.com/support-scripts"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:ccit/jenkins-csb.git"
-    dest: "rh-context/ccit/jenkins-csb"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:models-corp/user-documentation.git"
-    dest: "rh-context/models-corp/user-documentation"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:cpaas-products/product-configs.git"
-    dest: "rh-context/cpaas-products/product-configs"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:dataverse/agentic-engineering/skills-hub.git"
-    dest: "rh-context/dataverse/agentic-engineering/skills-hub"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:ncredi/managerkit.git"
-    dest: "rh-context/ncredi/managerkit"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:tme/gobot-mpp/gobot-slack.git"
-    dest: "rh-context/tme/gobot-mpp/gobot-slack"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:kernel-qe/kernel.git"
-    dest: "rh-context/kernel-qe/kernel"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:ccx/ccx-rules-ocp.git"
-    dest: "rh-context/ccx/ccx-rules-ocp"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:tailwind/tailwind.git"
-    dest: "rh-context/tailwind/tailwind"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:mmcgrath/sdlc-starter.git"
-    dest: "rh-context/mmcgrath/sdlc-starter"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:bragaitools/bragai.git"
-    dest: "rh-context/bragaitools/bragai"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:service/ocm-resources.git"
-    dest: "rh-context/service/ocm-resources"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:dataverse/dataverse-config/dataproduct-config.git"
-    dest: "rh-context/dataverse/dataverse-config/dataproduct-config"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:redhat-ai-analysis/ai-skills-workshop.git"
-    dest: "rh-context/redhat-ai-analysis/ai-skills-workshop"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:ansible/aap-containerized-installer.git"
-    dest: "rh-context/ansible/aap-containerized-installer"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:support-insights/gss-rules.git"
-    dest: "rh-context/support-insights/gss-rules"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:cee-data-engineering/sushe-agent-tools.git"
-    dest: "rh-context/cee-data-engineering/sushe-agent-tools"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:konflux/docs/sop.git"
-    dest: "rh-context/konflux/docs/sop"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:service/uhc-clusters-service.git"
-    dest: "rh-context/service/uhc-clusters-service"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:prodsec/product-definitions.git"
-    dest: "rh-context/prodsec/product-definitions"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:ocp-edge-qe/ocp-edge.git"
-    dest: "rh-context/ocp-edge-qe/ocp-edge"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:hybrid-platforms/org.git"
-    dest: "rh-context/hybrid-platforms/org"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:pmyers/scripts.git"
-    dest: "rh-context/pmyers/scripts"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:cpaas/service.git"
-    dest: "rh-context/cpaas/service"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:jscarbor/fedora-config.git"
-    dest: "rh-context/jscarbor/fedora-config"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:vrutkovs/matrix.osci.redhat.com.git"
-    dest: "rh-context/vrutkovs/matrix.osci.redhat.com"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:cpaas/documentation.git"
-    dest: "rh-context/cpaas/documentation"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:kab/kab.git"
-    dest: "rh-context/kab/kab"
-    category: rh-context
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:ccs-ai/ccs-ai-agentic-workflow.git"
-    dest: "rh-context/ccs-ai/ccs-ai-agentic-workflow"
-    category: rh-context
-    depth: 1
-
   - url: "https://github.com/{{ dotfiles_github_user }}/evpn-gateway-appliance-context.git"
     dest: "evpn/{{ dotfiles_github_user }}/evpn-gateway-appliance-context"
     category: evpn
@@ -737,15 +520,9 @@ git_repos_list:
       - name: fork
         url: "git@github.com:{{ dotfiles_github_user }}/evpn-gateway-appliance.git"
 
-
   # --- konflux (old laptop inventory) ---
   - url: "https://github.com/enterprise-contract/ec-policies.git"
     dest: "konflux/enterprise-contract/ec-policies"
-    category: konflux
-    depth: 1
-
-  - url: "git@gitlab.cee.redhat.com:documentation-red-hat-openshift-data-science-documentation/rhel-ai.git"
-    dest: "konflux/documentation-red-hat-openshift-data-science-documentation/rhel-ai"
     category: konflux
     depth: 1
 
@@ -763,7 +540,6 @@ git_repos_list:
     dest: "konflux/redhat-appstudio/release-service-catalog"
     category: konflux
     depth: 1
-
 
   # --- additional durable personal workspaces ---
   - url: "git@github.com:{{ dotfiles_github_user }}/patents.git"
@@ -792,3 +568,7 @@ git_repos_list:
     extra_remotes:
       - name: "{{ dotfiles_github_user }}_diag"
         url: "git@github.com:{{ dotfiles_github_user }}/submariner-diagnostics.git"
+
+# Internal-host repos live in the gitignored group_vars/all/local_repos.yml
+# (see local_repos.yml.example); concatenated here. Falls back to public only.
+git_repos_list: "{{ git_repos_public + (git_repos_local | default([])) }}"

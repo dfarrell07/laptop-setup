@@ -16,16 +16,17 @@ export EDITOR=vim
 export VISUAL=vim
 {% if profile == 'work' %}
 {% if dotfiles_aws_profile %}
-export AWS_PROFILE='{{ dotfiles_aws_profile | replace("'", "'\''" ) }}'
+export AWS_PROFILE='{{ dotfiles_aws_profile | replace("'", "'\\''" ) }}'
 {% endif %}
 # Go ignores empty environment values; explicit patterns override stale GoENV entries.
-export GONOSUMDB='{{ (dotfiles_gonosumdb or dotfiles_goprivate or 'none') | replace("'", "'\''" ) }}'
-export GOPRIVATE='{{ (dotfiles_goprivate or 'none') | replace("'", "'\''" ) }}'
+export GONOSUMDB='{{ (dotfiles_gonosumdb or dotfiles_goprivate or 'none') | replace("'", "'\\''" ) }}'
+export GOPRIVATE='{{ (dotfiles_goprivate or 'none') | replace("'", "'\\''" ) }}'
 {% endif %}
 {% if _system == 'Darwin' %}
 export PATH="{{ dotfiles_homebrew_prefix | trim }}/bin:$PATH"
 {% endif %}
 export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/go/bin:$HOME/bin:$HOME/.cargo/bin:$HOME/.krew/bin:$PATH"
+typeset -U path PATH  # nested shells and tmux panes re-run this; keep each entry once
 export GOPATH="$HOME/go"
 export GOTMPDIR="$HOME/tmp"  # go test compiles to TempDir then exec()s — /tmp may be noexec (nosuid mount on CSB/hardened hosts)
 export GOTOOLCHAIN='{{ packages_gotoolchain }}'  # 'local' prevents runtime toolchain downloads; 'auto' allows self-replacement on demand
@@ -61,7 +62,13 @@ export KIND_EXPERIMENTAL_PROVIDER=podman  # use rootless Podman provider (not do
 command -v direnv &>/dev/null && eval "$(direnv hook zsh)"
 command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
 {% if _system == 'Linux' %}
-command -v fzf &>/dev/null && [[ -f /usr/share/fzf/shell/key-bindings.zsh ]] && source /usr/share/fzf/shell/key-bindings.zsh
+if command -v fzf &>/dev/null; then
+  if fzf --zsh &>/dev/null; then source <(fzf --zsh)  # fzf >= 0.48 (Fedora, Debian 13)
+  elif [[ -f /usr/share/fzf/shell/key-bindings.zsh ]]; then source /usr/share/fzf/shell/key-bindings.zsh; fi
+fi
+# Debian installs bat/fd as batcat/fdfind
+command -v bat &>/dev/null || { command -v batcat &>/dev/null && alias bat=batcat; }
+command -v fd &>/dev/null || { command -v fdfind &>/dev/null && alias fd=fdfind; }
 # Fedora rpm ships completion via /usr/share/zsh/site-functions/_fzf (picked up by compinit);
 # completion.zsh does not exist in the Fedora package. No explicit source needed for rpm installs.
 {% elif _system == 'Darwin' %}
@@ -368,7 +375,6 @@ alias gi="grep -rniI --color=always --exclude-dir=vendor"
 {% endif %}
 alias gri="grep -rniI --color=always --exclude-dir=vendor"  # gi is reserved for forgit::ignore
 {% if _system == 'Linux' %}
-alias ping="ping -i .2"
 {% endif %}
 alias pingg="ping www.google.com"
 alias ping8="ping 8.8.8.8"

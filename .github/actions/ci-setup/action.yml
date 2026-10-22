@@ -15,7 +15,11 @@ runs:
     - name: Install CI dependencies
       run: |
         test -z "${PIP_INDEX_URL:-}" || (echo 'PIP_INDEX_URL must not be set in CI' && exit 1)
-        pip install --require-hashes -r requirements-test.lock
+        for attempt in 1 2 3; do
+          pip install --require-hashes -r requirements-test.lock && exit 0
+          echo "pip install failed (attempt ${attempt}/3)"; sleep $((attempt * 5))
+        done
+        exit 1
       shell: bash
 
     - name: Audit installed dependencies for known CVEs
@@ -34,11 +38,15 @@ runs:
       run: |
         cd collections-dist
         sha256sum -c SHA256SUMS
-        ansible-galaxy collection install -p ../collections \
-          ansible-posix-2.2.2.tar.gz \
-          community-general-13.5.0.tar.gz \
-          community-library_inventory_filtering_v1-1.1.5.tar.gz \
-          containers-podman-1.21.1.tar.gz
+        for attempt in 1 2 3; do
+          ansible-galaxy collection install -p ../collections \
+            ansible-posix-2.2.2.tar.gz \
+            community-general-13.5.0.tar.gz \
+            community-library_inventory_filtering_v1-1.1.5.tar.gz \
+            containers-podman-1.21.2.tar.gz && exit 0
+          echo "ansible-galaxy install failed (attempt ${attempt}/3)"; sleep $((attempt * 5))
+        done
+        exit 1
       shell: bash
 
     - name: Verify installed collection code against archives and committed baseline

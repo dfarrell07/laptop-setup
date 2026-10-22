@@ -33,6 +33,7 @@
       - /etc/NetworkManager/dispatcher.d/90-console-login-helper-messages-gensnippet_if
   register: _nm_vendor_owner
   changed_when: false
+  check_mode: false
   failed_when: false
   when:
     - not system_is_container
@@ -46,6 +47,7 @@
     argv: [rpm, --verify, console-login-helper-messages-issuegen]
   register: _nm_vendor_integrity
   changed_when: false
+  check_mode: false
   failed_when: false
   when:
     - _nm_vendor_owner is not skipped
@@ -117,9 +119,10 @@
   block:
     - name: Configure NetworkManager to ignore Tailscale and kind interfaces
       ansible.builtin.copy:
-        content: >-
-          {{ '# ' ~ ansible_managed ~ '\n[keyfile]\n' ~ _nm_unmanaged_devices ~ '\n' }}
-
+        content: |
+          # {{ ansible_managed }}
+          [keyfile]
+          {{ _nm_unmanaged_devices }}
         dest: /etc/NetworkManager/conf.d/tailscale.conf
         mode: "0644"
       vars:
@@ -153,7 +156,9 @@
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
-      [connection]
+      # Own section name: same-named [connection] sections from all conf.d files are merged,
+      # so match-device here would also narrow the DHCP-hostname settings to Wi-Fi only.
+      [connection.wifi-powersave]
       match-device=type:wifi
       wifi.powersave=2
     dest: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
@@ -171,13 +176,6 @@
   when:
     - csb_rhel or not (system_wifi_powersave_disabled | bool)
     - not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
-  notify: Restart NetworkManager
-
-- name: Remove stale 99-dhcp-no-hostname.conf (renamed to 99-dhcp-privacy.conf)
-  ansible.builtin.file:
-    path: /etc/NetworkManager/conf.d/99-dhcp-no-hostname.conf
-    state: absent
-  when: not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
 
 - name: Suppress DHCP hostname advertisement (privacy — prevents hostname leakage to DHCP servers)
@@ -251,6 +249,29 @@
     - not system_is_container
     - not system_firewalld_running | bool
 
+# On hybrid CSB, IT's redhat_csb.firewall template binds wt0 to the 'redhat' zone and
+# rewrites that zone hourly. Moving wt0 to trusted would put one interface in two zones
+# (firewalld ZONE_CONFLICT after IT's next run) and open every port to NetBird peers.
+- name: Probe permanent zone of wt0
+  ansible.builtin.command: firewall-cmd --permanent --get-zone-of-interface=wt0
+  register: _system_wt0_zone
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe; the assign task below depends on it
+  when:
+    - not system_is_container
+    - system_firewalld_running | bool
+    - csb_detected | bool
+
+- name: Note IT-managed wt0 zone (hybrid CSB)
+  ansible.builtin.debug:
+    msg: >-
+      wt0 (NetBird) stays in IT's 'redhat' zone, which IT's CSB firewall role manages;
+      it is not moved to the trusted zone.
+  when:
+    - csb_detected | bool
+    - (_system_wt0_zone.stdout | default('')) == 'redhat'
+
 - name: Assign wt0 (NetBird) to firewall trusted zone
   ansible.posix.firewalld:
     zone: trusted
@@ -261,6 +282,9 @@
   when:
     - not system_is_container  # firewalld module crashes privileged Podman containers
     - system_firewalld_running | bool
+    # IT's CSB firewall role owns wt0 on every CSB tier; the probe can come back empty before
+    # IT binds it (or on a query error), and moving it to trusted would conflict on IT's next run
+    - not (csb_detected | bool)
   notify:
     - Apply firewall rules
 

@@ -14,7 +14,7 @@
           ansible.builtin.git:  # noqa: latest[git]
             repo: "{{ notes_remote_url }}"
             dest: "{{ notes_repo_path }}"
-            accept_hostkey: true
+            # no accept_hostkey: trust only known_hosts seeded (and pinned) by the ssh role; else HTTPS fallback
             update: false  # Never auto-pull: transcrypt init required first; do not overwrite plaintext working tree
             depth: 1
           environment:
@@ -62,6 +62,15 @@
         - name: Set up git-lfs smudge/clean filter drivers
           ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/git-lfs-setup.yml"
 
+        - name: Restrict notes repo directory and .git/config permissions (before transcrypt stores its password)
+          ansible.builtin.file:
+            path: "{{ item.path }}"
+            mode: "{{ item.mode }}"
+            state: "{{ item.state }}"
+          loop:
+            - {path: "{{ notes_repo_path }}", mode: '0700', state: directory}
+            - {path: "{{ notes_repo_path }}/.git/config", mode: '0600', state: file}
+
         - name: Detect transcrypt binary
           block:
             - name: Gather transcrypt binary stat
@@ -73,28 +82,6 @@
             - name: Set transcrypt availability fact
               ansible.builtin.set_fact:
                 notes_transcrypt_available: "{{ notes_transcrypt_bin.stat.exists }}"
-
-        - name: Deploy gitleaks repo protection
-          block:
-            - name: Deploy gitleaks allowlist for notes repo
-              ansible.builtin.copy:
-                dest: "{{ notes_repo_path }}/.gitleaks.toml"
-                mode: "0644"
-                force: false  # create-once: do not overwrite a committed custom allowlist
-                content: |
-                  # Allow all blobs — transcrypt encrypts file contents before staging.
-                  # The global pre-commit hook (core.hooksPath) would otherwise flag
-                  # every commit in this repo as containing "secrets" (AES-256-CBC ciphertext).
-                  [allowlist]
-                    description = "Transcrypt-encrypted notes repo — all blobs are encrypted ciphertext"
-                    paths = ['.*']
-
-            - name: Suppress gitleaks allowlist from git status
-              ansible.builtin.lineinfile:
-                path: "{{ notes_repo_path }}/.git/info/exclude"
-                line: ".gitleaks.toml"
-                create: true
-                mode: '0600'
 
         - name: Check transcrypt initialization status
           when:
@@ -129,6 +116,7 @@
           register: notes_transcrypt_init_result
           no_log: true
           changed_when: notes_transcrypt_init_result.rc == 0
+          failed_when: false  # reported by the warning below (e.g. a dirty checkout or wrong password)
           when:
             - notes_transcrypt_available
             - not notes_transcrypt_inited
@@ -144,6 +132,33 @@
             # default(0) required: skipped tasks have no .rc; prevents UndefinedError
             - notes_transcrypt_init_result.rc | default(0) != 0
 
+        # Only an encrypted repo may skip secret scanning: in a plaintext checkout (no password,
+        # transcrypt missing, init failed) this allowlist would let secrets be committed unscanned.
+        - name: Deploy gitleaks repo protection
+          when: >-
+            notes_transcrypt_available and (notes_transcrypt_inited
+            or (notes_transcrypt_init_result.rc | default(1)) == 0)
+          block:
+            - name: Deploy gitleaks allowlist for notes repo
+              ansible.builtin.copy:
+                dest: "{{ notes_repo_path }}/.gitleaks.toml"
+                mode: "0644"
+                force: false  # create-once: do not overwrite a committed custom allowlist
+                content: |
+                  # Allow all blobs — transcrypt encrypts file contents before staging.
+                  # The global pre-commit hook (core.hooksPath) would otherwise flag
+                  # every commit in this repo as containing "secrets" (AES-256-CBC ciphertext).
+                  [allowlist]
+                    description = "Transcrypt-encrypted notes repo — all blobs are encrypted ciphertext"
+                    paths = ['.*']
+
+            - name: Suppress gitleaks allowlist from git status
+              ansible.builtin.lineinfile:
+                path: "{{ notes_repo_path }}/.git/info/exclude"
+                line: ".gitleaks.toml"
+                create: true
+                mode: '0600'
+
         # password rotation is not automatic; manual re-init required if vault_notes_transcrypt_password changes
         - name: Warn if transcrypt already initialized
           ansible.builtin.debug:
@@ -158,18 +173,11 @@
             - notes_transcrypt_inited
 
 
-        - name: Restrict notes repo directory and .git/config permissions
-          ansible.builtin.file:
-            path: "{{ item.path }}"
-            mode: "{{ item.mode }}"
-            state: "{{ item.state }}"
-          loop:
-            - {path: "{{ notes_repo_path }}", mode: '0700', state: directory}
-            - {path: "{{ notes_repo_path }}/.git/config", mode: '0600', state: file}
-
         - name: Warn if transcrypt not available
           ansible.builtin.debug:
-            msg: "transcrypt not installed — run 'make packages' first"
+            msg: >-
+              transcrypt not found at {{ notes_transcrypt_bin_path }} — 'make packages' installs it
+              on the work profile only; on other profiles install it manually.
           when:
             - not notes_transcrypt_available
 
@@ -188,4 +196,5 @@
         msg: >-
           Could not clone notes repo via SSH or HTTPS.
           Run 'gh auth login' or load SSH keys, then re-run 'make notes'.
-      when: not notes_repo_available
+      # check mode never clones, so a missing checkout is expected there
+      when: not notes_repo_available and not ansible_check_mode

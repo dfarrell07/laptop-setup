@@ -31,10 +31,16 @@
             state: enforcing
           register: system_selinux_enforce_result
 
-        - name: Refresh SELinux facts after mode change  # noqa: no-handler — subsequent tasks require the updated SELinux facts
+        # Also refresh when the gathered fact is not 'enabled': facts gathered before the SELinux
+        # Python bindings were installed (fresh images; policycoreutils-python-utils pulls them in)
+        # report 'Missing selinux Python library', which would fail the assertion below and skip
+        # the sshd port label.
+        - name: Refresh SELinux facts after mode change or binding install  # noqa: no-handler
           ansible.builtin.setup:
             filter: ansible_selinux
-          when: system_selinux_enforce_result.changed
+          when: >-
+            system_selinux_enforce_result.changed or
+            ansible_facts['selinux'].status | default('') != 'enabled'
 
         - name: Verify SELinux is enforcing
           when: not ansible_check_mode and not (system_selinux_enforce_result.reboot_required | default(false))
@@ -73,6 +79,7 @@
         argv: [rpm, -qf, --queryformat, "%{NAME}", /etc/polkit-1/rules.d/49-polkit-pkla-compat.rules]
       register: _polkit_compat_owner
       changed_when: false
+      check_mode: false
       failed_when: false
       when:
         - is_dnf
@@ -83,6 +90,7 @@
         argv: [rpm, --verify, polkit-pkla-compat]
       register: _polkit_compat_integrity
       changed_when: false
+      check_mode: false
       failed_when: false
       when:
         - _polkit_compat_owner is not skipped

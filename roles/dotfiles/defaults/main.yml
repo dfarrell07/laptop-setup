@@ -16,9 +16,14 @@ dotfiles_aws_profile: ""  # set in config.yml to your AWS CLI named profile; e.g
 
 # Red Hat-specific defaults; override in config.yml with your organization's internal Go module domains.
 # Empty config uses explicit no-match patterns; Go ignores empty exports and otherwise falls back to stale GoENV values.
-dotfiles_gonosumdb: ""  # set in config.yml for private Go module domains; e.g. "*.redhat.com,*.engineering.redhat.com"
-dotfiles_goprivate: ""   # set in config.yml for private Go repos; e.g. "gitlab.cee.redhat.com,pkgs.devel.redhat.com"
+dotfiles_gonosumdb: ""  # set in config.yml for private Go module domains; e.g. "*.example.internal"
+dotfiles_goprivate: ""   # set in config.yml for private Go repos; e.g. "git.example.internal"
 dotfiles_internal_git_host: ""  # internal HTTPS git hostname; when set, adds http sslCAInfo + SSH Host stanza
+
+# Work-profile SSH Host stanzas for internal git servers (ControlMaster no, redhat key; StrictHostKeyChecking yes
+# once the host is seeded via ssh_work_keyscan_hosts). Items: {host: git.example.internal, user: git}; user
+# defaults to the login name. Set in config.yml.
+dotfiles_ssh_work_hosts: []
 
 profile: work  # playbook-level variable shared across 7 roles
 
@@ -67,7 +72,8 @@ ssh_ciphers: 'chacha20-poly1305@openssh.com,aes256-gcm@openssh.com'
 ssh_macs: 'hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com'
 system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml; used in tasks/main.yml, not templates
 needs_container_tier: "host-only"  # fallback; authoritative value in group_vars/all/vars.yml; used in tasks/main.yml, not templates
-notes_repo_path: "{{ ansible_facts['user_dir'] }}/notes"  # mirrors roles/notes/defaults; used in zshrc.j2 notes alias
+# mirrors roles/notes/defaults; used by the zshrc.j2 notes alias
+notes_repo_path: "{{ ansible_facts['user_dir'] }}/{{ notes_repo_name | default('notes') }}"
 dotfiles_user_name: 'CHANGE_ME'  # override in config.yml
 dotfiles_user_email_work: 'CHANGE_ME@work.invalid'  # override in config.yml
 dotfiles_user_email_personal: 'CHANGE_ME@personal.invalid'  # override in config.yml
@@ -80,6 +86,7 @@ dotfiles_claude_max_subagents: 2000
 # Cross-role fallbacks for standalone dotfiles provisioning.
 claude_default_config_dir: "{{ ansible_facts['user_dir'] }}/.claude"
 claude_queue_runtime_config_dir: "{{ ansible_facts['user_dir'] }}/.config/claude"
+claude_personal_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-personal"
 claude_personal2_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-per2"
 claude_personal2_instance_enabled: true
 codex_work_config_dir: "{{ ansible_facts['user_dir'] }}/.codex"

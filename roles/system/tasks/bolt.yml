@@ -17,6 +17,11 @@
       ansible.builtin.systemd:
         name: bolt
         state: started
+      register: _bolt_start
+      # check mode only simulates the install on hosts without bolt, so the unit is absent
+      failed_when:
+        - _bolt_start is failed
+        - not (ansible_check_mode and 'Could not find the requested service' in (_bolt_start.msg | default('')))
   rescue:
     - name: Record bolt install/start failure in CSB report
       ansible.builtin.include_tasks: ../../../common/tasks/csb-failure-handler.yml
@@ -35,12 +40,6 @@
         _csb_ticket_priority: "Normal"
         _csb_ticket_category: "Software Installation"
 
-- name: Set bolt authorization policy to manual (require explicit enroll per device)
-  ansible.builtin.command: boltctl policy --set manual
-  register: _boltctl_result
-  when:
-    - is_dnf
-    - system_bolt_enabled
-    - not system_is_container
-  changed_when: "'already' not in _boltctl_result.stderr"
-  failed_when: _boltctl_result.rc != 0 and 'already' not in _boltctl_result.stderr
+# No policy step: boltctl has no 'policy' command (bolt 0.9.x), and with security level
+# 'user' a device that is not enrolled is only authorized after an explicit
+# 'boltctl enroll' (or the desktop's prompt), which is the manual behaviour wanted here.

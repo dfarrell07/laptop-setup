@@ -36,8 +36,8 @@
         that: not verify_golangci_absent.stat.exists
         fail_msg: >-
           golangci-lint exists after an intentional offline run.
-          Either go is installed and the network was reachable, or the distrobox-export
-          stub unexpectedly caused an install side-effect.
+          Either go is installed and the network was reachable, or the go install
+          failure guard (failed_when) in the role changed.
 
     - name: Stat /usr/local/bin/podman
       ansible.builtin.stat:
@@ -68,15 +68,18 @@
           download block was silently skipped (when: condition false) or the rescue path
           was bypassed. The offline scenario must trigger the rescue block.
 
-    - name: Stat oc host wrapper at ~/.local/bin/oc
-      ansible.builtin.stat:
-        path: "{{ ansible_env.HOME }}/.local/bin/oc"
-      register: verify_oc_export_absent
+    - name: Read distrobox-export stub invocation log
+      ansible.builtin.slurp:
+        src: /tmp/distrobox-export.log
+      register: verify_export_log
 
-    - name: Assert oc export absent — container_oc_installed=false skipped the export task
+    - name: Assert only golangci-lint was exported — container_oc_installed=false skipped oc and kubectl
       ansible.builtin.assert:
-        that: not verify_oc_export_absent.stat.exists
+        that:
+          - "'/go/bin/golangci-lint' in (verify_export_log.content | b64decode)"
+          - "'/usr/local/bin/oc' not in (verify_export_log.content | b64decode)"
+          - "'/usr/local/bin/kubectl' not in (verify_export_log.content | b64decode)"
         fail_msg: >-
-          ~/.local/bin/oc exists despite oc download failure.
-          The export task guard (container_oc_installed | default(true)) must have
-          allowed the export to run — container_oc_installed=false was not set by rescue.
+          distrobox-export was called for oc/kubectl despite oc download failure, or never
+          called for golangci-lint. The export loop guard (container_oc_installed | default(true))
+          must skip oc and kubectl when the rescue sets container_oc_installed=false.

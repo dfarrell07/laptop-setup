@@ -27,13 +27,19 @@
           Options=mode=1777,strictatime,nosuid,nodev{{ _noexec_opt }},size=50%%,nr_inodes=1m,x-systemd.graceful-option=usrquota
         dest: /etc/systemd/system/tmp.mount.d/hardening.conf
         mode: "0644"
-      notify: Remount /tmp  # handler live-removes noexec; daemon_reload below handles first-provision
+      notify: Remount /tmp  # handler remounts live (adds, never removes, noexec); daemon_reload below handles first-provision
+
+    - name: Check tmp.mount.d exists (absent in check mode until created)
+      ansible.builtin.stat:
+        path: /etc/systemd/system/tmp.mount.d
+      register: _tmp_dropin_dir
 
     - name: Find all files in tmp.mount.d
       ansible.builtin.find:
         paths: /etc/systemd/system/tmp.mount.d
         file_type: file
       register: _tmp_dropin_files
+      when: _tmp_dropin_dir.stat.isdir | default(false)
 
     - name: Remove unauthorized drop-ins from tmp.mount.d (keep only hardening.conf)
       ansible.builtin.file:
@@ -74,7 +80,7 @@
     - >-
       'nosuid' not in (system_tmp_opts.stdout | default('')) or
       'nodev' not in (system_tmp_opts.stdout | default('')) or
-      (system_tmp_noexec | bool and 'noexec' not in (system_tmp_opts.stdout | default('')))
+      (system_tmp_noexec | bool and not csb_rhel and 'noexec' not in (system_tmp_opts.stdout | default('')))
 
 - name: Verify /tmp hardening is active
   ansible.builtin.command:
@@ -83,7 +89,7 @@
   failed_when: >-
     'nosuid' not in _tmp_verify.stdout or
     'nodev' not in _tmp_verify.stdout or
-    (system_tmp_noexec | bool and 'noexec' not in _tmp_verify.stdout)
+    (system_tmp_noexec | bool and not csb_rhel and 'noexec' not in _tmp_verify.stdout)
   changed_when: false
   when: not system_is_container
 
@@ -98,6 +104,7 @@
   when:
     - system_tmp_noexec | bool
     - not system_is_container
+    - not csb_rhel
 
 # --- Harden /dev/shm mount options ---
 # Fedora 44 does NOT ship a dev-shm.mount systemd unit, so a drop-in under

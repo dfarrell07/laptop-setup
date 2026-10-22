@@ -1,7 +1,7 @@
 ---
 # molecule/shared/verify-i3.yml
 # i3 WM config assertions.
-# Include from scenario verify.yml files where converge.yml sets desktop_environment: i3.
+# Imported (import_tasks) from scenario verify.yml files where converge.yml sets desktop_environment: i3.
 # This file has no internal guard — callers are responsible for skipping it when i3 is not the configured WM.
 
 - name: Verify i3 config deployed
@@ -41,17 +41,21 @@
 
 - name: Verify i3 config starts xss-lock for sleep-triggered screen lock
   ansible.builtin.command:
-    cmd: grep -q 'exec.*xss-lock' "{{ ansible_user_dir }}/.config/i3/config"
+    cmd: grep -q 'exec.*xss-lock --transfer-sleep-lock -- i3lock --nofork' "{{ ansible_user_dir }}/.config/i3/config"
   changed_when: false
 
 - name: Verify i3 config starts xautolock for idle screen lock
   ansible.builtin.command:
-    cmd: grep -q 'exec.*xautolock' "{{ ansible_user_dir }}/.config/i3/config"
+    argv:
+      - grep
+      - -q
+      - "exec.*xautolock -time {{ [1, (desktop_wm_idle_lock_timeout | default(300) | int // 60)] | max }} "
+      - "{{ ansible_user_dir }}/.config/i3/config"
   changed_when: false
 
-- name: Verify i3lock invocation in xautolock includes lock color flag
+- name: Verify i3lock invocation in xautolock uses the configured lock color
   ansible.builtin.command:
-    cmd: grep -q 'i3lock -c [0-9a-fA-F]' "{{ ansible_user_dir }}/.config/i3/config"
+    cmd: grep -q "i3lock -c {{ desktop_wm_lock_color | default('000000') }}'" "{{ ansible_user_dir }}/.config/i3/config"
   changed_when: false
 
 - name: Verify i3 config starts nm-applet for network tray icon

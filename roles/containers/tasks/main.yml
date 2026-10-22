@@ -39,10 +39,11 @@
     src: policy.json.j2
     dest: "{{ containers_config_dir }}/policy.json"
     mode: "0600"
+    # Kept in sync so containers_policy_unsigned_registries changes take effect; edits are backed up
+    backup: true
   when:
     - is_linux
     - containers_policy_enabled | bool
-    - not (containers_policy_user_stat.stat.exists | default(false))
     # Note: system-level /etc/containers/policy.json is NOT checked here — user-level
     # ~/.config/containers/policy.json takes precedence over the system file in Podman's
     # containers/image library. Deploy the user-level policy regardless of system file
@@ -85,7 +86,7 @@
 
 - name: Check vault registry pre-auth status
   ansible.builtin.command:
-    cmd: "podman login --authfile {{ containers_auth_file }} --get-login {{ item.registry }}"
+    argv: ["podman", "login", "--authfile", "{{ containers_auth_file }}", "--get-login", "{{ item.registry }}"]
   loop: "{{ registry_tokens }}"
   loop_control:
     label: "{{ item.registry }}"
@@ -100,7 +101,15 @@
 
 - name: Authenticate to container registries from vault
   ansible.builtin.command:
-    cmd: "podman login --authfile {{ containers_auth_file }} --username {{ item.item.username }} --password-stdin {{ item.item.registry }}"
+    argv:
+      - podman
+      - login
+      - --authfile
+      - "{{ containers_auth_file }}"
+      - --username
+      - "{{ item.item.username }}"
+      - --password-stdin
+      - "{{ item.item.registry }}"
     stdin: "{{ item.item.token }}"
   timeout: 60
   register: _vault_login_result
@@ -121,7 +130,7 @@
 
 - name: Check registry auth status after vault login
   ansible.builtin.command:
-    cmd: "podman login --authfile {{ containers_auth_file }} --get-login {{ item.registry }}"
+    argv: ["podman", "login", "--authfile", "{{ containers_auth_file }}", "--get-login", "{{ item.registry }}"]
   loop: "{{ registry_tokens }}"
   loop_control:
     label: "{{ item.registry }}"
@@ -164,7 +173,7 @@
 
 - name: Check registry auth status
   ansible.builtin.command:
-    cmd: "podman login --authfile {{ containers_auth_file }} --get-login {{ item }}"
+    argv: ["podman", "login", "--authfile", "{{ containers_auth_file }}", "--get-login", "{{ item }}"]
   vars:
     _vault_registries: "{{ registry_tokens | map(attribute='registry') | list }}"
     _check_registries: "{{ (containers_registries + containers_registries_extra) | unique | reject('in', _vault_registries) | list }}"
@@ -357,6 +366,7 @@
     src: containers.conf.j2
     dest: "{{ containers_config_dir }}/containers.conf"
     mode: "0644"
+    backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
   when: is_linux
 
 # SECURITY: Deploy registries.conf to enforce fully-qualified image references.
@@ -374,6 +384,7 @@
     cmd: grep -E '^\s*unqualified-search-registries\s*=' /etc/containers/registries.conf
   register: containers_fqin_it_uqsr
   changed_when: false
+  check_mode: false
   failed_when: false
   when:
     - is_linux
@@ -384,6 +395,7 @@
     src: registries.conf.j2
     dest: "{{ containers_config_dir }}/registries.conf"
     mode: "0644"
+    backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
   when:
     - is_linux
     - containers_enforce_fqin | bool
@@ -426,7 +438,7 @@
 - name: Assert containers_prune_schedule contains only valid OnCalendar characters
   ansible.builtin.assert:
     that:
-      - containers_prune_schedule | string | regex_search('^[a-zA-Z0-9:*/, .-]+$') is not none
+      - containers_prune_schedule | string | regex_search('^[a-zA-Z0-9:*/,~ .-]+$') is not none
     fail_msg: "containers_prune_schedule '{{ containers_prune_schedule }}' contains invalid characters for a systemd OnCalendar value"
   when: containers_prune_enabled | bool
 
@@ -598,3 +610,24 @@
   # processes in the graphical session including Make — unlike .zshrc which is
   # skipped by 'sh' (spawned by make). Without this, 'make kind' in OVN-K or
   # Submariner finds no Docker socket and fails even though Podman is available.
+
+# Opt-out must take effect: a file left by an earlier opt-in keeps exporting DOCKER_HOST to
+# every graphical-session process.
+- name: Remove containers environment.d config when disabled
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.config/environment.d/containers.conf"
+    state: absent
+  when:
+    - is_linux
+    - not (system_is_container)
+    - not (containers_environment_d_enabled | bool)
+  register: _containers_envd_removed
+
+- name: Report removed containers environment.d config  # noqa: no-handler — must show right after removal
+  ansible.builtin.debug:
+    msg: >-
+      NOTICE: removed ~/.config/environment.d/containers.conf (containers_environment_d_enabled is
+      false), so DOCKER_HOST/KIND_EXPERIMENTAL_PROVIDER are no longer exported at login and
+      'make kind' run from non-interactive shells cannot find Podman. To keep them, set
+      containers_environment_d_enabled: true in config.yml and re-run make containers.
+  when: _containers_envd_removed is changed

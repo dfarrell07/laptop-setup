@@ -6,30 +6,30 @@
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
        test-scripts test-poller test-gitleaks test-% \
        repos-% \
-       preflight guard-not-root \
-       pip-lock pip-sync npm setup-yubikeys vendor-collections migration-inventory workstation-audit
+       preflight guard-not-root guard-libvirt-group \
+       pip-lock pip-sync npm setup-yubikeys vendor-collections migration-inventory workstation-audit usb-add aide-rebaseline \
+       test-vm repos-dnf test-ssti-guard
 
 # *** ORDERING CRITICAL — DO NOT MOVE THESE BLOCKS ***
-# The make -x check MUST precede 'override MAKEFLAGS :=' because:
+# The make -n check MUST precede 'override MAKEFLAGS :=' because:
 # override MAKEFLAGS := clears MAKEFLAGS to empty string; the ifneq after
 # it sees empty MAKEFLAGS and NEVER fires — making the protection useless.
 # This has been reverted 3 times. If you are an agent reading this: DO NOT
 # move 'override MAKEFLAGS :=' before the ifneq check below.
 
-# Guard against shell tracing exposure of vault password (make -x exposes vault password in stderr)
-# MUST be before 'override MAKEFLAGS :=' — see ordering note above.
-ifneq ($(findstring x,$(MAKEFLAGS)),)
-$(error ERROR: Provisioning with 'make -x' is forbidden — shell tracing exposes vault password. \
-	Use: make all  (no -x flag). For Ansible debugging: make all -- -vv)
-endif
+# NOTE: GNU make has no -x option ('make -x' fails with "invalid option"), so no guard is
+# needed here; shell tracing of the vault password is handled in the wrapper and vault-pass.sh
+# (set +x, BASH_XTRACEFD/PS4/SHELLOPTS cleared). Only the first MAKEFLAGS word carries
+# single-letter flags; long options such as --no-print-directory must not match.
+_short_makeflags := $(filter-out --%,$(firstword -$(MAKEFLAGS)))
 
 # Guard against dry-run bypass — 'make -n' prints but does not execute recipes, skipping VERIFY_AND_RUN and preflight.
 # MUST be before 'override MAKEFLAGS :=' — see ordering note above.
-ifneq ($(findstring n,$(MAKEFLAGS)),)
+ifneq ($(findstring n,$(_short_makeflags)),)
 $(error ERROR: Provisioning with 'make -n' is forbidden — dry-run bypasses preflight and VERIFY_AND_RUN guards.)
 endif
 
-# Guard against MAKEFLAGS flag injection (CWE-426) — attacker-supplied -x flag exposes vault password in shell trace. MUST be AFTER ifneq above.
+# Guard against MAKEFLAGS flag injection (CWE-426) — clears inherited MAKEFLAGS. MUST be AFTER the ifneq above.
 override MAKEFLAGS :=
 
 # Guard against SHELL variable injection (CWE-426) — 'make SHELL=/tmp/evil_sh all' causes every
@@ -39,8 +39,9 @@ override MAKEFLAGS :=
 override SHELL := /bin/bash
 
 # Bootstrap installs the Homebrew runtime and checksum tools used below.
+# coreutils' gnubin provides the unprefixed sha256sum/timeout the recipes and scripts call.
 ifeq ($(shell uname -s),Darwin)
-export PATH := /opt/homebrew/bin:/usr/local/bin:$(PATH)
+export PATH := /opt/homebrew/opt/coreutils/libexec/gnubin:/usr/local/opt/coreutils/libexec/gnubin:/opt/homebrew/bin:/usr/local/bin:$(PATH)
 endif
 
 # Guard against BASH_ENV/ENV/ZDOTDIR shell-init injection (CWE-454/CWE-426).
@@ -62,7 +63,7 @@ ansible-galaxy collection install -p ./collections \
 	collections-dist/ansible-posix-2.2.2.tar.gz \
 	collections-dist/community-general-13.5.0.tar.gz \
 	collections-dist/community-library_inventory_filtering_v1-1.1.5.tar.gz \
-	collections-dist/containers-podman-1.21.1.tar.gz
+	collections-dist/containers-podman-1.21.2.tar.gz
 endef
 
 # Verify collections integrity, validate ANSIBLE_COLLECTIONS_PATH, and reject dangerous flags.
@@ -77,7 +78,9 @@ export ANSIBLE_COLLECTIONS_PATH := $(CURDIR)/collections:~/.ansible/collections:
 
 # display_ok_hosts is a callback plugin option not in the core config schema;
 # ansible-config validate rejects it in [defaults]. Use the env var instead.
-export ANSIBLE_DISPLAY_OK_HOSTS = false
+# Shown by default: the playbook reports warnings and notices through debug tasks, which
+# the default callback hides along with every other 'ok' result. QUIET=1 restores terse output.
+export ANSIBLE_DISPLAY_OK_HOSTS = $(if $(QUIET),false,true)
 # callback_result_format is a callback plugin option not in the core config schema;
 # ansible-config validate rejects it in [defaults]. Use the env var instead.
 export ANSIBLE_CALLBACK_RESULT_FORMAT = yaml
@@ -87,9 +90,12 @@ help:
 	@echo "Roles:      dotfiles packages repos notes ssh desktop system repos_dnf"
 	@echo "            redhat containers claude codex"
 	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream repos-evpn repos-rh-context"
-	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-container-offline-distrobox test-distrobox-role test-packages-binaries smoke-test smoke-test-container smoke-test-user check"
+	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-container-offline-distrobox test-distrobox-role test-packages-binaries test-ssti-guard test-gitleaks smoke-test smoke-test-container smoke-test-user check"
 	@echo "Linting:    shellcheck markdownlint commitlint check-vars-sync syntax-check"
-	@echo "Setup:      bootstrap bootstrap-test hooks npm setup-yubikeys vendor-collections"
+	@echo "Setup:      bootstrap bootstrap-hooks bootstrap-test hooks npm setup-yubikeys vendor-collections"
+	@echo "Output:     QUIET=1 hides ok results, including debug warnings (e.g. make all QUIET=1)"
+	@echo "USB:        usb-add  (allow blocked/connected USB devices now; save rules to config.yml)"
+	@echo "AIDE:       aide-rebaseline  (accept current files as the baseline after expected changes, e.g. dnf upgrade)"
 	@echo "Other:      backup backup-dry-run migration-inventory workstation-audit csb-audit diff vault-edit vault-view vault-diff pip-lock pip-sync preflight"
 
 # --- Primary targets ---
@@ -99,7 +105,7 @@ guard-not-root:
 		{ echo "ERROR: Do not run as root. Use -K for privilege escalation (make all)." >&2; exit 1; }
 
 all: guard-not-root preflight
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --ask-become-pass
+	$(VERIFY_AND_RUN) --run-log=all ansible-playbook site.yml --ask-become-pass
 	@if command -v npm >/dev/null 2>&1 && [ ! -d node_modules ]; then \
 		npm ci --ignore-scripts; \
 	fi
@@ -111,10 +117,12 @@ offline: guard-not-root
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --ask-become-pass -e packages_install_binaries=false
 
 container: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,distrobox
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,distrobox --skip-tags become
 
 container-rebuild: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,distrobox -e container_replace=true
+	@printf 'Destroy and rebuild container $(CONTAINER)? Anything installed inside it (outside $$HOME) is lost. [y/N] '; \
+		read -r a; [ "$$a" = y ] || [ "$$a" = Y ] || { echo "Aborted."; exit 1; }
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,distrobox -e container_replace=true --skip-tags become
 
 backup: guard-not-root
 	scripts/backup.sh
@@ -134,29 +142,29 @@ bootstrap: guard-not-root bootstrap-hooks
 	@if [ "$$(uname -s)" = "Darwin" ]; then \
 		brew install ansible git openssh libfido2 ykman make shellcheck coreutils node bash python3; \
 	elif command -v apt-get >/dev/null 2>&1; then \
-		sudo apt-get update && sudo apt-get install -y ansible git yubikey-personalization make shellcheck python3-venv python3-pip; \
+		sudo apt-get update && sudo apt-get install -y ansible git yubikey-personalization yubikey-manager make shellcheck python3-venv python3-pip; \
 	else \
-		sudo bash -c 'dnf install -y ansible-core git make; dnf install -y ykpers yubikey-manager ShellCheck || echo "WARN: ykpers/yubikey-manager/ShellCheck unavailable (RHEL: install EPEL first; Fedora: check repo availability) — continuing without optional tools"'; \
+		sudo bash -c 'dnf install -y ansible-core git make && { dnf install -y ykpers yubikey-manager ShellCheck || echo "WARN: ykpers/yubikey-manager/ShellCheck unavailable (RHEL: install EPEL first; Fedora: check repo availability) — continuing without optional tools"; }'; \
 	fi
 	@# --- Integrity verification: reject tampered security-critical scripts ---
 	@test -f scripts/vault-pass-ci.sh || { printf 'ERROR: scripts/vault-pass-ci.sh missing — restore with: git checkout scripts/vault-pass-ci.sh\n' >&2; exit 1; }
 	@# Verify vault-pass-ci.sh integrity BEFORE copying (FATAL if check fails) — guards against supply chain tampering
-	@cd scripts && sha256sum -c vault-pass-ci.sh.sha256 > /dev/null 2>&1 && echo "✓ vault-pass-ci.sh integrity verified" || { echo "ERROR: vault-pass-ci.sh failed integrity check — possible tampering. Run: sha256sum scripts/vault-pass-ci.sh > scripts/vault-pass-ci.sh.sha256" >&2; exit 1; }
+	@cd scripts && sha256sum -c vault-pass-ci.sh.sha256 > /dev/null 2>&1 && echo "✓ vault-pass-ci.sh integrity verified" || { echo "ERROR: vault-pass-ci.sh failed integrity check — possible tampering. Run: (cd scripts && sha256sum vault-pass-ci.sh > vault-pass-ci.sh.sha256)" >&2; exit 1; }
 	@if [ ! -f scripts/vault-pass.sh ]; then \
 		cd scripts && cat vault-pass-ci.sh > vault-pass.sh && chmod 700 vault-pass.sh && sha256sum vault-pass.sh > vault-pass.sh.sha256 && cd .. && \
 		echo "SECURITY: Created stub vault-pass.sh — you MUST replace with YubiKey/keyring/encrypted-file before encrypting vault.yml"; \
 	fi
 	@chmod 700 scripts/vault-pass.sh scripts/vault-pass-ci.sh
 	@# Verify vault-pass.sh integrity after creation/update (FATAL if check fails)
-	@cd scripts && sha256sum -c vault-pass.sh.sha256 > /dev/null 2>&1 && echo "✓ vault-pass.sh integrity verified" || { echo "ERROR: vault-pass.sh failed integrity check — possible tampering or stale .sha256 file. If expected (after make setup-yubikeys), the hash file should have been automatically updated. Run: sha256sum scripts/vault-pass.sh > scripts/vault-pass.sh.sha256" >&2; exit 1; }
+	@cd scripts && sha256sum -c vault-pass.sh.sha256 > /dev/null 2>&1 && echo "✓ vault-pass.sh integrity verified" || { echo "ERROR: vault-pass.sh failed integrity check — possible tampering or stale .sha256 file. If expected (after make setup-yubikeys), the hash file should have been automatically updated. Run: (cd scripts && sha256sum vault-pass.sh > vault-pass.sh.sha256)" >&2; exit 1; }
 	@# Verify verify-collections.sh integrity (FATAL if check fails) — guards against supply chain tampering
-	@cd scripts && sha256sum -c verify-collections.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-collections.sh integrity verified" || { echo "ERROR: verify-collections.sh failed integrity check — possible tampering. Run: sha256sum scripts/verify-collections.sh > scripts/verify-collections.sh.sha256" >&2; exit 1; }
+	@cd scripts && sha256sum -c verify-collections.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-collections.sh integrity verified" || { echo "ERROR: verify-collections.sh failed integrity check — possible tampering. Run: (cd scripts && sha256sum verify-collections.sh > verify-collections.sh.sha256)" >&2; exit 1; }
 	@# Verify verify-ansible-args.sh integrity (FATAL if check fails) — guards against pre-flight check bypass
-	@cd scripts && sha256sum -c verify-ansible-args.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-ansible-args.sh integrity verified" || { echo "ERROR: verify-ansible-args.sh failed integrity check — possible tampering. Run: sha256sum scripts/verify-ansible-args.sh > scripts/verify-ansible-args.sh.sha256" >&2; exit 1; }
+	@cd scripts && sha256sum -c verify-ansible-args.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-ansible-args.sh integrity verified" || { echo "ERROR: verify-ansible-args.sh failed integrity check — possible tampering. Run: (cd scripts && sha256sum verify-ansible-args.sh > verify-ansible-args.sh.sha256)" >&2; exit 1; }
 	@# Verify pre-commit hook integrity (FATAL if check fails) — guards against hook tampering
-	@cd .githooks && sha256sum -c pre-commit.sha256 > /dev/null 2>&1 && echo "✓ pre-commit hook integrity verified" || { echo "ERROR: .githooks/pre-commit failed integrity check — possible tampering. Run: sha256sum .githooks/pre-commit > .githooks/pre-commit.sha256" >&2; exit 1; }
+	@cd .githooks && sha256sum -c pre-commit.sha256 > /dev/null 2>&1 && echo "✓ pre-commit hook integrity verified" || { echo "ERROR: .githooks/pre-commit failed integrity check — possible tampering. Run: (cd .githooks && sha256sum pre-commit > pre-commit.sha256)" >&2; exit 1; }
 	@# Verify verify-collections-galaxy.sh integrity (FATAL if check fails) — guards against supply chain verification bypass
-	@cd scripts && sha256sum -c verify-collections-galaxy.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-collections-galaxy.sh integrity verified" || { echo "ERROR: verify-collections-galaxy.sh failed integrity check — possible tampering. Run: sha256sum scripts/verify-collections-galaxy.sh > scripts/verify-collections-galaxy.sh.sha256" >&2; exit 1; }
+	@cd scripts && sha256sum -c verify-collections-galaxy.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-collections-galaxy.sh integrity verified" || { echo "ERROR: verify-collections-galaxy.sh failed integrity check — possible tampering. Run: (cd scripts && sha256sum verify-collections-galaxy.sh > verify-collections-galaxy.sh.sha256)" >&2; exit 1; }
 	cd collections-dist && sha256sum -c SHA256SUMS
 	@# Verify collections against Galaxy API to detect supply chain tampering
 	@scripts/verify-collections-galaxy.sh
@@ -195,6 +203,7 @@ bootstrap: guard-not-root bootstrap-hooks
 	@echo "     (For manual vault-pass.sh without hardware key, see SECURITY.md §Setting Up vault-pass.sh)"
 	@echo "     (For first provision without real secrets, vault.yml plaintext stub is fine.)"
 	@echo "  4. make preflight   # validate all pre-conditions before provisioning"
+	@echo "     make check       # full sudo dry run; review the diff before provisioning"
 	@echo "  5. make all         # full provisioning (run at local console or inside tmux)"
 	@echo "  6. Reboot — kernel hardening (lockdown/IOMMU) and SSH port 722 only take effect after reboot"
 	@echo "  7. After reboot — required manual steps:"
@@ -207,12 +216,28 @@ bootstrap: guard-not-root bootstrap-hooks
 	@echo "     See CLAUDE.md 'Quick Reference' step 6 for post-provisioning details."
 	@echo ""
 
+# Fedora 41+ runs modular libvirt daemons (virtqemud.service Conflicts=libvirtd.service), so their
+# sockets are enabled instead of the monolithic libvirtd. vagrant-libvirt uses qemu:///system;
+# without the libvirt group every call needs a polkit admin prompt. gpasswd resolves SSSD/IdM
+# users through NSS (usermod cannot). The box download is skipped when already added.
+# molecule/vm uses its own 'laptop-setup' storage pool under /var/lib/libvirt/images: on CSB
+# laptops IT points the 'default' pool at ~/VirtualMachines, which qemu cannot traverse into.
 bootstrap-test: guard-not-root
 	sudo dnf install -y libvirt vagrant vagrant-libvirt
-	sudo systemctl enable --now libvirtd
-	vagrant box add --name fedora/44-cloud --provider libvirt \
-		--checksum-type sha256 --checksum 4695d5ef2bfcc882649b98de0c545d04671d2064f6609e7e68e606718c8333dc \
-		https://dl.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-Base-Vagrant-libvirt-44-1.7.x86_64.vagrant.libvirt.box
+	sudo systemctl enable --now virtqemud.socket virtnetworkd.socket virtstoraged.socket virtproxyd.socket
+	@sudo virsh -c qemu:///system pool-info laptop-setup >/dev/null 2>&1 || { \
+		sudo virsh -c qemu:///system pool-define-as laptop-setup dir --target /var/lib/libvirt/images/laptop-setup && \
+		sudo virsh -c qemu:///system pool-build laptop-setup; }
+	@sudo virsh -c qemu:///system pool-info laptop-setup | grep -q '^State: *running' || sudo virsh -c qemu:///system pool-start laptop-setup
+	sudo virsh -c qemu:///system pool-autostart laptop-setup
+	@# The monolithic libvirtd sockets conflict with the modular ones above (Conflicts=); keep them off.
+	sudo systemctl disable --now libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket
+	@if getent group libvirt | cut -d: -f4 | tr , '\n' | grep -qx "$$USER"; then :; else \
+		sudo gpasswd -a "$$USER" libvirt && echo "Added $$USER to the libvirt group: log out and back in before make test-vm"; fi
+	@if vagrant box list 2>/dev/null | grep -q '^fedora/44-cloud .*libvirt'; then echo "Vagrant box fedora/44-cloud already present"; else \
+		vagrant box add --name fedora/44-cloud --provider libvirt \
+			--checksum-type sha256 --checksum 4695d5ef2bfcc882649b98de0c545d04671d2064f6609e7e68e606718c8333dc \
+			https://dl.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-Base-Vagrant-libvirt-44-1.7.x86_64.vagrant.libvirt.box; fi
 
 hooks:
 	git config --local core.hooksPath .githooks
@@ -243,7 +268,7 @@ vendor-collections: guard-not-root
 		"ansible/posix/2.2.2/ansible-posix-2.2.2.tar.gz" \
 		"community/general/13.5.0/community-general-13.5.0.tar.gz" \
 		"community/library_inventory_filtering_v1/1.1.5/community-library_inventory_filtering_v1-1.1.5.tar.gz" \
-		"containers/podman/1.21.1/containers-podman-1.21.1.tar.gz"; do \
+		"containers/podman/1.21.2/containers-podman-1.21.2.tar.gz"; do \
 		ns=$$(echo "$$spec" | cut -d/ -f1); \
 		name=$$(echo "$$spec" | cut -d/ -f2); \
 		ver=$$(echo "$$spec" | cut -d/ -f3); \
@@ -277,6 +302,22 @@ vendor-collections: guard-not-root
 setup-yubikeys: guard-not-root
 	scripts/setup-yubikeys.sh
 
+# With USBGuard running: allow blocked USB devices now and save their rules. Otherwise: only save
+# rules for connected devices no rule covers yet. Rules go to config.yml for the next make system.
+usb-add: guard-not-root
+	python3 scripts/usb-add.py
+
+# Accept the current filesystem as the AIDE baseline after expected changes (dnf upgrade,
+# new tools). aide --update exits 1-7 when it found changes; 8+ is an error.
+aide-rebaseline: guard-not-root
+	@# Review the changes aide reports before accepting them: anything listed becomes trusted.
+	sudo sh -c 'cd /var/lib/aide && aide --update; rc=$$?; \
+		if [ $$rc -ge 8 ]; then rm -f aide.db.new.gz; echo "aide --update failed (exit $$rc); baseline unchanged" >&2; exit 1; fi; \
+		printf "Accept the changes above as the new baseline? [y/N] "; read -r a; \
+		case "$$a" in y|Y) cp -p aide.db.gz aide.db.gz.prev && mv aide.db.new.gz aide.db.gz \
+			&& echo "Baseline updated (previous kept as /var/lib/aide/aide.db.gz.prev).";; \
+		*) rm -f aide.db.new.gz; echo "Baseline unchanged." >&2; exit 1;; esac'
+
 update: guard-not-root preflight
 	$(MAKE) npm
 	cd collections-dist && sha256sum -c SHA256SUMS
@@ -285,23 +326,25 @@ update: guard-not-root preflight
 
 # --- Individual roles ---
 
+# Targets without --ask-become-pass skip become-tagged tasks: the always-tagged system
+# audits in the sudo play would otherwise call sudo with no password and fail.
 dotfiles: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,dotfiles
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,dotfiles --skip-tags become
 
 packages: guard-not-root
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,packages --ask-become-pass
 
 repos: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,repos
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,repos --skip-tags become
 
 notes: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,notes
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,notes --skip-tags become
 
 repos-%: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,repos -e repo_category=$*
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,repos -e repo_category=$* --skip-tags become
 
 ssh: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,ssh
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,ssh --skip-tags become
 
 desktop: guard-not-root
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,desktop --ask-become-pass
@@ -325,7 +368,7 @@ claude: guard-not-root
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,claude --ask-become-pass
 
 codex: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,codex
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,codex --skip-tags become
 
 distrobox: container  # alias for backwards compatibility
 
@@ -342,13 +385,15 @@ preflight:
 	scripts/preflight.sh
 
 csb-audit: guard-not-root preflight
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common --check -v
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common --check -v --skip-tags become
 
-check: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --check --diff --ask-become-pass
+# Full dry run of every play, including the sudo system play; run before 'make all'.
+# 'make check' and 'make all' log to ~/.cache/laptop-setup/logs/<target>-latest.log.
+check: guard-not-root preflight
+	$(VERIFY_AND_RUN) --run-log=check ansible-playbook site.yml --check --diff --ask-become-pass
 
 diff: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --check --diff --tags dotfiles
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --check --diff --tags dotfiles --skip-tags become
 
 # NOTE: includes test-macos — requires macOS runner. On Linux use: make test
 ci: lint syntax-check test-scripts test-poller test-gitleaks test-fedora test-rocky test-debian test-macos test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role test-ssti-guard
@@ -386,12 +431,12 @@ shellcheck:
 	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh .githooks/pre-commit .githooks/commit-msg .githooks/prepare-commit-msg .githooks/pre-push roles/dotfiles/files/git-template-*
 
 markdownlint:
-	@test -d node_modules || { echo "SKIP: node_modules absent — run: npm ci --ignore-scripts"; exit 0; }
-	npm run lint:markdown
+	@if [ -d node_modules ]; then npm run lint:markdown; \
+	else echo "SKIP: node_modules absent — run: npm ci --ignore-scripts"; fi
 
 commitlint:
-	@test -d node_modules || { echo "SKIP: node_modules absent — run: npm ci --ignore-scripts"; exit 0; }
-	npx --no -- commitlint --from origin/main --to HEAD
+	@if [ -d node_modules ]; then npx --no -- commitlint --from origin/main --to HEAD; \
+	else echo "SKIP: node_modules absent — run: npm ci --ignore-scripts"; fi
 
 # Container-based molecule tests + script tests (Podman, no libvirt required).
 # Matches CI molecule coverage (test-macos excluded — requires macOS runner).
@@ -407,6 +452,7 @@ test-scripts: .venv
 	bash -n scripts/test-queue-poller.sh
 	bash -n scripts/verify-collections.sh
 	bash -n scripts/verify-ansible-args.sh
+	bash -n scripts/verify-collections-galaxy.sh
 	bash -n scripts/test-hooks-security.sh
 	bash scripts/test-hooks-security.sh
 	.venv/bin/python3 scripts/test-config-parser.py
@@ -426,12 +472,18 @@ test-scripts: .venv
 	.venv/bin/python3 scripts/test-ssh-known-hosts.py
 	.venv/bin/python3 scripts/test-sshd-template.py
 	.venv/bin/python3 scripts/test-sysctl-template.py
+	.venv/bin/python3 scripts/test-rendered-configs.py
+	.venv/bin/python3 scripts/test-module-args.py
+	.venv/bin/python3 scripts/test-pam-faillock-debian.py
+	.venv/bin/python3 scripts/test-critical-assertions.py
+	.venv/bin/python3 scripts/test-claude-settings-merge.py
 	.venv/bin/python3 scripts/test-smoke-test.py
 	.venv/bin/python3 scripts/test-workstation-audit.py
 	.venv/bin/python3 scripts/test-go-checksum.py
 	.venv/bin/python3 scripts/test-laptop-migration.py
 	.venv/bin/python3 scripts/test-claude-privacy.py
 	.venv/bin/python3 scripts/test-ansible-input-guards.py
+	.venv/bin/python3 scripts/test-usb-add.py
 	.venv/bin/python3 scripts/test-collection-source-verifier.py
 	bash test-var-override.sh
 
@@ -442,6 +494,13 @@ test-gitleaks:
 # Unit tests for roles/claude/files/claude-queue-poller.sh internal helpers.
 test-poller:
 	scripts/test-queue-poller.sh
+
+# The VM scenario talks to qemu:///system: fail early with the fix instead of a polkit error.
+test-vm: export PATH := $(CURDIR)/.venv/bin:$(PATH)
+test-vm: guard-libvirt-group .venv
+	$(VERIFY_AND_RUN) .venv/bin/molecule test -s vm
+guard-libvirt-group:
+	@id -nG | tr ' ' '\n' | grep -qx libvirt || { echo "ERROR: $$USER is not in the libvirt group in this session. Run make bootstrap-test, then log out and back in." >&2; exit 1; }
 
 test-%: export PATH := $(CURDIR)/.venv/bin:$(PATH)
 test-%: .venv
@@ -467,5 +526,8 @@ vault-view:
 
 vault-diff:
 	PAGER= MANPAGER= SYSTEMD_PAGER= EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) bash -c \
-		'diff <(ansible-vault decrypt --output=- <(git show HEAD:group_vars/all/vault.yml)) \
-		<(ansible-vault decrypt --output=- group_vars/all/vault.yml) || true'
+		'old=$$(ansible-vault decrypt --output=- <(git show HEAD:group_vars/all/vault.yml)) \
+			|| { echo "Cannot decrypt the committed vault.yml" >&2; exit 1; }; \
+		new=$$(ansible-vault decrypt --output=- group_vars/all/vault.yml) \
+			|| { echo "Cannot decrypt group_vars/all/vault.yml" >&2; exit 1; }; \
+		diff <(printf "%s\\n" "$$old") <(printf "%s\\n" "$$new"); [ $$? -le 1 ]'

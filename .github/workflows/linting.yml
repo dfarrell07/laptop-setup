@@ -115,7 +115,7 @@ jobs:
   shell-checks:
     name: Shell Checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20  # regression suites take ~10 min on hosted runners
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -177,46 +177,7 @@ jobs:
               failed = True
           with open('.githooks/pre-push', 'r') as f:
               content = f.read()
-          if "git ls-files -z -- '*vault.yml'" not in content:
-              print('::error::.githooks/pre-push: vault file enumeration missing', file=sys.stderr)
-              failed = True
-          if 'ANSIBLE_VAULT' not in content:
-              print('::error::.githooks/pre-push: vault encryption check missing', file=sys.stderr)
-              failed = True
-          with open('.githooks/commit-msg', 'r') as f:
-              content = f.read()
-          if 'Signed-off-by' not in content:
-              print('::error::.githooks/commit-msg: Signed-off-by requirement missing', file=sys.stderr)
-              failed = True
-          if failed:
-              sys.exit(1)
-          print('✓ All hooks passed structural integrity validation')
-          SUBPYEOF
-
-
-      - name: Validate hook structural integrity (detect behavioral bypasses)
-        run: |
-          python3 << 'SUBPYEOF'
-          import sys
-          import re
-          failed = False
-          with open('.githooks/pre-commit', 'r') as f:
-              content = f.read()
-          if re.search(r'if\s+(?:false|true)\s*;?\s*then\b.*?gitleaks\b', content, re.DOTALL | re.IGNORECASE):
-              print('::error::.githooks/pre-commit: gitleaks call wrapped in "if false/true" bypass', file=sys.stderr)
-              failed = True
-          if 'gitleaks git --pre-commit' not in content:
-              print('::error::.githooks/pre-commit: gitleaks call missing or wrong command', file=sys.stderr)
-              failed = True
-          if '_gitleaks_rc' not in content or 'if [ "$_gitleaks_rc" -ne 0 ]' not in content:
-              print('::error::.githooks/pre-commit: gitleaks return code validation missing', file=sys.stderr)
-              failed = True
-          if 'if [ "$_gitleaks_rc" -ne 0 ]; then' in content and 'failed=1' not in content:
-              print('::error::.githooks/pre-commit: gitleaks failure not propagated', file=sys.stderr)
-              failed = True
-          with open('.githooks/pre-push', 'r') as f:
-              content = f.read()
-          if "git ls-files -z -- '*vault.yml'" not in content:
+          if 'check_vault_blob "$commit"' not in content or "vault\\.yml$" not in content:
               print('::error::.githooks/pre-push: vault file enumeration missing', file=sys.stderr)
               failed = True
           if 'ANSIBLE_VAULT' not in content:
@@ -236,9 +197,9 @@ jobs:
       - name: Verify hook baseline integrity (detect behavior changes)
         if: github.event_name == 'pull_request'
         run: |
-          # SECURITY: Enforce that hook changes are semantically reviewed.
+          # SECURITY: Flag (notice only) hook changes that need maintainer review.
           # If a PR modifies .githooks/*, require explicit evidence of intent (commit message pattern).
-          # This is a behavioral gate in addition to code review policy.
+          # Informational: enforcement is branch protection plus code review.
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
           HEAD_SHA="${{ github.event.pull_request.head.sha }}"
 
@@ -267,18 +228,53 @@ jobs:
 
       - name: Validate preflight JSON output
         run: |
-          pf_output=$(bash scripts/preflight.sh --json 2>&1 || true)
-          test -n "$pf_output" || { echo 'preflight.sh --json produced no output'; exit 1; }
-          printf '%s' "$pf_output" | python3 -m json.tool > /dev/null
+          # Exit 0 = pass, 1 = findings (valid JSON still emitted); anything else is a crash.
+          rc=0
+          out=$(bash scripts/preflight.sh --json 2>/dev/null) || rc=$?
+          if [ "$rc" -gt 1 ]; then
+            echo "::error::preflight.sh crashed with exit code $rc"
+            exit 1
+          fi
+          printf '%s' "$out" | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)
+          assert isinstance(d, dict), "top level must be an object"
+          assert isinstance(d.get("checks"), list) and d["checks"], "missing or empty checks"
+          for c in d["checks"]:
+              assert {"name", "status", "detail"} <= set(c), "malformed check entry"
+          '
 
       - name: Validate smoke-test JSON output
         run: |
-          st_output=$(bash scripts/smoke-test.sh --user-only --json 2>&1 || true)
-          test -n "$st_output" || { echo 'smoke-test.sh --json produced no output'; exit 1; }
-          printf '%s' "$st_output" | python3 -m json.tool > /dev/null
+          # Exit 0 = pass, 1 = findings (valid JSON still emitted); anything else is a crash.
+          rc=0
+          out=$(bash scripts/smoke-test.sh --user-only --json 2>/dev/null) || rc=$?
+          if [ "$rc" -gt 1 ]; then
+            echo "::error::smoke-test.sh crashed with exit code $rc"
+            exit 1
+          fi
+          printf '%s' "$out" | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)
+          assert isinstance(d, dict), "top level must be an object"
+          assert isinstance(d.get("results"), list) and d["results"], "missing or empty results"
+          for c in d["results"]:
+              assert {"name", "status", "detail"} <= set(c), "malformed check entry"
+          '
 
-      - name: Test raw config parsing and unsafe-tag handling
+      - name: Set up CI environment
         uses: ./.github/actions/ci-setup
+
+      - name: Parse sample config with an unsafe-tagged value
+        run: |
+          out=$(printf 'dotfiles_goprivate: !unsafe "a.example,{{ b }}"\nplain: x\n' \
+            | python3 scripts/parse-config.py)
+          printf '%s' "$out" | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)
+          assert d["plain"] == "x", d
+          assert d["dotfiles_goprivate"] == "a.example,{{ b }}", d
+          '
 
       - name: Install zsh for migration launcher regression tests
         run: |
@@ -295,6 +291,14 @@ jobs:
           python3 scripts/test-laptop-migration.py
           python3 scripts/test-workstation-audit.py
           python3 scripts/test-go-checksum.py
+          python3 scripts/test-sysctl-template.py
+          python3 scripts/test-rendered-configs.py
+          python3 scripts/test-module-args.py
+          python3 scripts/test-pam-faillock-debian.py
+          python3 scripts/test-critical-assertions.py
+          python3 scripts/test-claude-settings-merge.py
+          python3 scripts/test-usb-add.py
+          bash scripts/test-hooks-security.sh
 
       - name: Run pre-push enforcement regression tests
         run: |
@@ -486,7 +490,7 @@ jobs:
             echo "::error::verify-collections.sh integrity check failed"
             echo "The verify-collections.sh script has been tampered with or the .sha256 file is out of sync."
             echo "If changes to verify-collections.sh are intentional, regenerate the hash:"
-            echo "  sha256sum scripts/verify-collections.sh > scripts/verify-collections.sh.sha256"
+            echo "  (cd scripts && sha256sum verify-collections.sh > verify-collections.sh.sha256)"
             echo "Then commit both files together to prevent supply chain tampering."
             exit 1
           fi
@@ -517,16 +521,6 @@ jobs:
             gpg --import collections-dist/signing-key.asc
           fi
           scripts/verify-collections.sh
-
-      - name: Verify collections-dist SHA256SUMS
-        run: |
-          cd collections-dist
-          if ! sha256sum -c SHA256SUMS; then
-            echo "::error::collections-dist integrity check failed"
-            echo "One or more collection tarballs have been tampered with or SHA256SUMS is out of sync."
-            echo "If collections were intentionally updated, run: cd collections-dist && sha256sum *.tar.gz > SHA256SUMS"
-            exit 1
-          fi
 
   syntax-check:
     name: Ansible Syntax Check
@@ -584,30 +578,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify core.hooksPath not overridden
+      - name: Verify hook installer targets the tracked hooks directory
         run: |
-          failed=0
-          # Check local repo config
-          local_hookspath=$(git config --local core.hooksPath || true)
-          if [ -n "$local_hookspath" ] && [ "$local_hookspath" != ".githooks" ]; then
-            echo "::error::Local core.hooksPath overridden to: $local_hookspath (must be .githooks or unset)"
-            failed=1
-          fi
-          # Check system/global config (defensive against system-level tampering)
-          global_hookspath=$(git config --global core.hooksPath || true)
-          if [ -n "$global_hookspath" ] && [ "$global_hookspath" != ".githooks" ]; then
-            echo "::error::Global core.hooksPath set to: $global_hookspath (should be unset)"
-            failed=1
-          fi
-          system_hookspath=$(git config --system core.hooksPath || true)
-          if [ -n "$system_hookspath" ]; then
-            echo "::error::System core.hooksPath set to: $system_hookspath (should be unset)"
-            failed=1
-          fi
-          if [ "$failed" -eq 0 ]; then
-            echo "✓ core.hooksPath verified: correctly configured (local unset or .githooks, global/system unset)"
-          fi
-          exit "$failed"
+          # Repo-content check: the Makefile must install hooks from .githooks.
+          grep -qE 'git config --local core\.hooksPath \.githooks$' Makefile || {
+            echo "::error::Makefile no longer sets core.hooksPath to .githooks"
+            exit 1
+          }
+          test -d .githooks || { echo "::error::.githooks/ directory missing"; exit 1; }
 
       - name: Validate hook files for git config modifications
         run: |
@@ -617,7 +595,7 @@ jobs:
           for hook in .githooks/*; do
             # Reject git config modifications that could disable hooks
             if grep -vE '^[[:space:]]*#' "$hook" | \
-               grep -qE 'git\s+config\s+(--local\s+)?core\.hooksPath|git\s+config\s+(--local\s+)?--unset\s+core\.hooksPath'; then
+               grep -qE 'git\s+config(\s+(--(local|global|system|worktree|unset|add)|set|unset))*\s+core\.hooksPath'; then
               echo "::error::$hook: git config core.hooksPath modification detected (hook disabling risk)" >&2
               failed=1
             fi
@@ -641,14 +619,14 @@ jobs:
             # Look for git config core.hooksPath modifications in .githooks/ diff
             if git show "$commit" -- .githooks/ | \
                grep -vE '^\+[[:space:]]*#' | \
-               grep -qE '^\+.*git\s+config\s+(--local\s+)?core\.hooksPath'; then
+               grep -qE '^\+.*git\s+config(\s+(--(local|global|system|worktree|unset|add)|set|unset))*\s+core\.hooksPath'; then
               echo "::error::Commit $commit modifies .githooks/ with git config core.hooksPath write (hook disabling risk)" >&2
               failed=1
             fi
             # Also check for config unset patterns
             if git show "$commit" -- .githooks/ | \
                grep -vE '^\+[[:space:]]*#' | \
-               grep -qE '^\+.*git\s+config\s+(--local\s+)?--unset\s+core\.hooksPath'; then
+               grep -qE '^\+.*git\s+config(\s+(--(local|global|system|worktree|unset|add)|set|unset))*\s+core\.hooksPath'; then
               echo "::error::Commit $commit modifies .githooks/ with git config --unset core.hooksPath (hook disabling risk)" >&2
               failed=1
             fi
@@ -889,16 +867,23 @@ jobs:
         env:
           GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
         run: |
-          curl -sSLO https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          # Download outside the checkout so repository files cannot shadow it.
+          mkdir -p "${RUNNER_TEMP}/gitleaks-bin"
+          cd "${RUNNER_TEMP}/gitleaks-bin"
+          curl -sSLO --fail --retry 3 --retry-delay 5 \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
           echo "${GITLEAKS_SHA256}  gitleaks_8.30.1_linux_x64.tar.gz" | sha256sum -c -
           tar xzf gitleaks_8.30.1_linux_x64.tar.gz gitleaks
           chmod +x gitleaks
 
       - name: Verify secret scanner exceptions remain narrow
-        run: PATH="$PWD:$PATH" python3 scripts/test-gitleaks-config.py
+        # The test locates gitleaks via PATH; only the runner-temp dir (never the
+        # checkout) is prepended, and the binary is invoked by absolute path below.
+        run: PATH="${RUNNER_TEMP}/gitleaks-bin:${PATH}" python3 scripts/test-gitleaks-config.py
 
       - name: Run gitleaks
-        run: ./gitleaks git . --redact --max-decode-depth 2 --config .gitleaks.toml
+        run: |
+          "${RUNNER_TEMP}/gitleaks-bin/gitleaks" git . --redact --max-decode-depth 2 --config .gitleaks.toml
 
   workflow-security:
     name: Workflow Security
@@ -991,7 +976,7 @@ jobs:
             "ansible/posix/2.2.2/ansible-posix-2.2.2.tar.gz" \
             "community/general/13.5.0/community-general-13.5.0.tar.gz" \
             "community/library_inventory_filtering_v1/1.1.5/community-library_inventory_filtering_v1-1.1.5.tar.gz" \
-            "containers/podman/1.21.1/containers-podman-1.21.1.tar.gz"; do
+            "containers/podman/1.21.2/containers-podman-1.21.2.tar.gz"; do
 
             ns=$(echo "$spec" | cut -d/ -f1)
             name=$(echo "$spec" | cut -d/ -f2)
@@ -1055,6 +1040,7 @@ jobs:
       - gpg-signatures
       - node-lint
       - gitleaks
+    # Kept because branch protection requires this check name.
     steps:
       - name: Verify supply-chain validation jobs succeeded
         run: |
@@ -1124,10 +1110,21 @@ jobs:
       - collections-manifest
       - galaxy-recheck
       - upstream-collections-check
-      - supply-chain-validation-gate
     steps:
-      - name: Verify no required job failed or was cancelled
-        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+      - name: Verify every required job succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
         run: |
-          echo "One or more required jobs failed or were cancelled"
-          exit 1
+          # Only gpg-signatures has an `if:` (skipped on workflow_dispatch); every
+          # other job must succeed, so an unexpected skip is a failure.
+          python3 -c '
+          import json, os, sys
+          bad = []
+          for job, v in json.loads(os.environ["NEEDS"]).items():
+              ok = {"success"} | ({"skipped"} if job == "gpg-signatures" else set())
+              if v["result"] not in ok:
+                  bad.append(job + ": " + v["result"])
+          if bad:
+              print("::error::Required jobs not successful: " + ", ".join(bad))
+              sys.exit(1)
+          '

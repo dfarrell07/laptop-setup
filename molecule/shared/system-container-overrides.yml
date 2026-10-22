@@ -2,10 +2,11 @@
 # Shared container-safe overrides for the system role in all molecule CI scenarios.
 # Included by molecule/{fedora,rocky,debian}/converge.yml system role pre_tasks.
 # Prevents container-incompatible tasks from running in Podman-based CI scenarios.
-# NOTE: sshd hardening is exercised in Fedora/Rocky container CI (openssh-server is
-# pre-installed in those images). Debian container CI skips the openssh-server apt install
+# NOTE: sshd hardening is exercised in Fedora container CI (openssh-server is
+# pre-installed by prepare.yml; Rocky installs it in converge, but csb_rhel skips the
+# drop-in). Debian container CI skips the openssh-server apt install
 # (daemon-reload on /etc/systemd/** writes crashes the container), so the sshd hardening
-# block is also skipped there (CI gap; make test-vm covers full sshd hardening on Debian).
+# block is also skipped there (CI gap; make test-vm is Fedora-only, so Debian sshd hardening is untested).
 - name: Compute OS detection facts (mirrors csb_detect.yml for system role pre-context)
   # In site.yml, csb_detect.yml runs in Play 1 pre_tasks before the system role, setting
   # is_dnf/is_apt/is_rhel/is_fedora/is_linux via set_fact (p19) which overrides vars.yml (p18).

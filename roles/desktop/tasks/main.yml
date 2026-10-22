@@ -80,29 +80,41 @@
     - name: Warn if desktop packages install failed
       ansible.builtin.debug:
         msg: >-
-          WARNING: desktop package installation failed (some packages may not be available in repos).
-          alacritty is not in Fedora 44 base repos — install via copr, flatpak, or use fallback terminal.
-          Continuing provisioning...
+          WARNING: desktop package installation failed: {{ ansible_failed_result.msg | default('unknown error') }}.
+          The install is one transaction, so none of the desktop packages were installed; fix the
+          cause (network, repos) and re-run make desktop. Continuing provisioning...
 
 - name: Install desktop packages (apt)
-  vars:
-    _apt_wm_pkgs: >-
-      {{ (desktop_sway_apt_packages if desktop_effective == 'sway' else [])
-         + (desktop_alacritty_packages if desktop_terminal == 'alacritty' else []) }}
-  ansible.builtin.apt:
-    name: "{{ desktop_apt_packages + _apt_wm_pkgs }}"
-    state: present
-    update_cache: true
-    cache_valid_time: 3600
-  become: true
-  tags: [become]
   when: is_apt
+  block:
+    - name: Install desktop packages (apt)
+      vars:
+        _apt_wm_pkgs: >-
+          {{ (desktop_sway_apt_packages if desktop_effective == 'sway' else [])
+             + (desktop_i3_apt_packages if desktop_effective == 'i3' else [])
+             + (desktop_alacritty_packages if desktop_terminal == 'alacritty' else []) }}
+      ansible.builtin.apt:
+        name: "{{ desktop_apt_packages + _apt_wm_pkgs }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+      become: true
+      tags: [become]
+      register: _desktop_apt_install
+  rescue:
+    - name: Warn if desktop packages install failed (apt)
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: desktop package installation failed: {{ ansible_failed_result.msg | default('unknown error') }}.
+          The install is one transaction, so none of the desktop packages were installed; fix the
+          cause (network, repos) and re-run make desktop. Continuing provisioning...
 
 # --- Alacritty config ---
 - name: Deploy Alacritty configuration
   when:
     - desktop_terminal == 'alacritty'
     - not (_desktop_dnf_install.failed | default(false))
+    - not (_desktop_apt_install.failed | default(false))
   block:
     - name: Ensure Alacritty config directory
       ansible.builtin.file:
@@ -115,6 +127,7 @@
         src: alacritty.toml.j2
         dest: "{{ ansible_facts['user_dir'] }}/.config/alacritty/alacritty.toml"
         mode: "0644"
+        backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
 
 # --- i3 config ---
 - name: Deploy i3 configuration
@@ -168,7 +181,7 @@
       ansible.builtin.file:
         path: "{{ ansible_facts['user_dir'] }}/.config/{{ item }}"
         state: directory
-        mode: "0755"
+        mode: "u+rwx"  # never widens an existing dir (gtk-3.0 is often 0700: bookmarks)
       loop: [sway, swaylock, xdg-desktop-portal, gtk-3.0, gtk-4.0]
 
     - name: Deploy Sway config
@@ -176,16 +189,41 @@
         src: sway.config.j2
         dest: "{{ ansible_facts['user_dir'] }}/.config/sway/config"
         mode: "0644"
+        backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
 
     - name: Deploy swaylock config (show-failed-attempts, indicator-caps-lock)
       ansible.builtin.template:
         src: swaylock.config.j2
         dest: "{{ ansible_facts['user_dir'] }}/.config/swaylock/config"
         mode: "0644"
+        backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
 
-    - name: Deploy xdg-desktop-portal portals.conf (Sway screen sharing)
+    # sway-portals.conf applies only when XDG_CURRENT_DESKTOP=sway; a plain portals.conf would
+    # also route GNOME sessions' screen sharing to the wlr backend, which fails on mutter.
+    - name: Check for an earlier desktop-agnostic portals.conf
+      ansible.builtin.stat:
+        path: "{{ ansible_facts['user_dir'] }}/.config/xdg-desktop-portal/portals.conf"
+      register: _desktop_portals_conf_stat
+
+    - name: Find the earlier desktop-agnostic portals.conf written by this role
+      ansible.builtin.find:
+        paths: "{{ ansible_facts['user_dir'] }}/.config/xdg-desktop-portal"
+        patterns: portals.conf
+        contains: '.*Ansible managed'  # find matches from the start of each line
+      register: _desktop_legacy_portals_conf
+      when: _desktop_portals_conf_stat.stat.exists
+
+    - name: Remove the earlier desktop-agnostic portals.conf
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ _desktop_legacy_portals_conf.files | default([]) }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Deploy xdg-desktop-portal sway-portals.conf (Sway screen sharing)
       ansible.builtin.copy:
-        dest: "{{ ansible_facts['user_dir'] }}/.config/xdg-desktop-portal/portals.conf"
+        dest: "{{ ansible_facts['user_dir'] }}/.config/xdg-desktop-portal/sway-portals.conf"
         mode: "0644"
         content: |
           # {{ ansible_managed }}
@@ -200,6 +238,7 @@
         src: gtk-settings.ini.j2
         dest: "{{ ansible_facts['user_dir'] }}/.config/{{ item }}/settings.ini"
         mode: "0644"
+        backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
       loop: [gtk-3.0, gtk-4.0]
 
     - name: Set GTK dark color-scheme via dconf (xdg-desktop-portal-gtk)
@@ -242,6 +281,7 @@
         src: i3status.conf.j2
         dest: "{{ ansible_facts['user_dir'] }}/.config/i3status/config"
         mode: "0644"
+        backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
 
 # --- Chrome managed policies ---
 - name: Chrome and Chromium managed policies
@@ -311,6 +351,15 @@
   when:
     - is_linux
     - not _zsh_binary_stat.stat.exists
+    - not ansible_check_mode
+
+- name: Report zsh not installed yet in check mode
+  ansible.builtin.debug:
+    msg: "CHECK MODE: /bin/zsh is absent; the packages role installs it before this step in a real run."
+  when:
+    - is_linux
+    - not _zsh_binary_stat.stat.exists
+    - ansible_check_mode
 
 - name: Set zsh as default shell (local /etc/passwd user)
   ansible.builtin.user:
@@ -323,7 +372,7 @@
     - _zsh_local_user_check.rc | default(1) == 0
 
 # For SSSD/LDAP domain accounts, chsh and usermod only modify /etc/passwd
-# and cannot write to LDAP backends. Set override_shell in sssd.conf instead —
+# and cannot write to LDAP backends. Set override_shell for the domain instead —
 # this takes effect for the domain user on next login after sssd restarts.
 - name: Get SSSD domain section for override_shell
   ansible.builtin.shell:
@@ -346,14 +395,31 @@
     - is_linux
     - _zsh_local_user_check.rc | default(1) != 0
 
-- name: Set zsh via override_shell in sssd.conf (SSSD/LDAP user)
-  community.general.ini_file:
+# A conf.d snippet, not an edit of sssd.conf: Red Hat IT re-templates sssd.conf on CSB
+# (dropping override_shell), and sssd on Fedora 41+ runs as the sssd user, so the file it
+# reads must keep sssd.conf's group and mode (root:sssd 0640 there). Mode 0600 would make
+# sssd unable to read its config and break domain logins.
+- name: Read sssd.conf ownership for the override_shell snippet
+  ansible.builtin.stat:
     path: /etc/sssd/sssd.conf
-    section: "{{ _sssd_domain_section.stdout }}"
-    option: override_shell
-    value: /bin/zsh
-    no_extra_spaces: true
-    mode: "0600"
+  register: _sssd_conf_stat
+  become: true
+  tags: [become]
+  when:
+    - is_linux
+    - _zsh_local_user_check.rc | default(1) != 0
+    - _sssd_domain_section.stdout | default('') | length > 0
+
+- name: Set zsh via override_shell in an sssd conf.d snippet (SSSD/LDAP user)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [{{ _sssd_domain_section.stdout | trim }}]
+      override_shell = /bin/zsh
+    dest: /etc/sssd/conf.d/90-laptop-setup-shell.conf
+    owner: root
+    group: "{{ _sssd_conf_stat.stat.gr_name | default('root') }}"
+    mode: "{{ '0640' if (_sssd_conf_stat.stat.gr_name | default('root')) != 'root' else '0600' }}"
   become: true
   tags: [become]
   register: _sssd_override_shell_result
@@ -362,6 +428,7 @@
     - _zsh_local_user_check.rc | default(1) != 0
     - _sssd_domain_section.stdout | default('') | length > 0
     - _zsh_binary_stat.stat.exists
+    - _sssd_conf_stat.stat.exists | default(false)
 
 - name: Restart sssd after override_shell change
   ansible.builtin.systemd:
@@ -380,8 +447,9 @@
       WARNING: could not set zsh as default shell for {{ ansible_facts['user_id'] }}.
       The account has no local /etc/passwd entry (SSSD/LDAP-managed) and no
       [domain/...] section was found in /etc/sssd/sssd.conf.
-      Manual fix: add 'override_shell = /bin/zsh' to the [domain/...] stanza
-      in /etc/sssd/sssd.conf, then run 'systemctl restart sssd'.
+      Manual fix: add 'override_shell = /bin/zsh' to the [domain/...] stanza in a
+      root-owned /etc/sssd/conf.d/*.conf (same group/mode as sssd.conf), then run
+      'systemctl restart sssd'.
   when:
     - is_linux
     - _zsh_local_user_check.rc | default(1) != 0
@@ -420,6 +488,8 @@
       ansible.builtin.slurp:
         src: "{{ ansible_facts['user_dir'] }}/.config/aerospace/aerospace.toml"
       register: _desktop_aerospace_content
+      check_mode: false
+      failed_when: _desktop_aerospace_content is failed and not ansible_check_mode
       no_log: true
 
     - name: Migrate the old factory terminal binding while preserving custom bindings
@@ -431,7 +501,7 @@
         - desktop_terminal in ['ghostty', 'terminal']
         - >-
           "alt-enter = 'exec-and-forget open -na Alacritty'" in
-          (_desktop_aerospace_content.content | b64decode).splitlines()
+          (_desktop_aerospace_content.content | default('') | b64decode).splitlines()
 
 # --- macOS: defaults ---
 - name: Set macOS defaults

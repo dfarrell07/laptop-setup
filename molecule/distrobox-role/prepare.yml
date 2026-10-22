@@ -4,6 +4,12 @@
   gather_facts: true
 
   tasks:
+    - name: Reset distrobox call log
+      ansible.builtin.copy:
+        dest: /tmp/distrobox-calls.log
+        content: ""
+        mode: "0644"
+
     - name: Create stub distrobox binary (records argv to log, exits 0)
       ansible.builtin.copy:
         dest: /usr/local/bin/distrobox
@@ -30,8 +36,6 @@
             exit "$rc"
           elif [ "$1" = "inspect" ]; then
             echo "false"
-            exit 0
-          elif [ "$1" = "start" ]; then
             exit 0
           elif [ "$1" = "exec" ]; then
             echo "/usr/bin/python3"

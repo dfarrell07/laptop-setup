@@ -10,7 +10,7 @@
 
     # openssh-server install intentionally skipped in Debian Podman CI: apt triggers daemon-reload
     # on /etc/systemd/** writes, crashing the privileged container. The sshd hardening block is
-    # therefore also skipped for Debian Podman CI; make test-vm exercises full sshd hardening.
+    # therefore also skipped for Debian Podman CI; no Debian VM scenario covers it (make test-vm is Fedora 44).
 
   roles:
     - role: system
@@ -55,7 +55,7 @@
         name: desktop
       vars:
         desktop_environment: unknown
-        # Chrome policy not deployed in container CI (system_is_container=true blocks it); VM scenario only
+        # Chrome policy not deployed in container CI (system_is_container=true blocks it); Fedora VM scenario only; Debian is untested
 
     - name: Run shared converge post-tasks
       ansible.builtin.include_tasks: ../shared/converge-post-common.yml

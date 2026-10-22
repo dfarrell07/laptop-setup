@@ -31,3 +31,18 @@
     NPM_CONFIG_USERCONFIG: /dev/null
     NPM_CONFIG_GLOBALCONFIG: "{{ ansible_facts['user_dir'] }}/.npm-global/global.npmrc"
   loop: "{{ packages_extra_npm }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _packages_extra_npm_results
+  ignore_errors: true  # noqa: ignore-errors — optional tooling; failures are reported by the warning below
+
+- name: Warn about optional npm tools that failed to install
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: optional npm tools failed to install (continuing):
+      {{ _packages_extra_npm_results.results | selectattr('failed', 'defined')
+         | selectattr('failed') | map(attribute='item.name') | join(', ') }}.
+      Re-run `make packages` when online.
+  when: >-
+    _packages_extra_npm_results.results | default([]) | selectattr('failed', 'defined')
+    | selectattr('failed') | list | length > 0

@@ -200,7 +200,41 @@
         path: "{{ item.path }}"
         state: absent
       loop: "{{ _sshd_dropin_files.files | default([]) }}"
-      when: item.path | basename != '00-hardening.conf'
+      # Hybrid CSB: IT's remote-access role rewrites its drop-in from cron (PermitRootLogin no,
+      # also set here); 00-hardening.conf sorts first, so its directives still win.
+      when: >-
+        item.path | basename not in
+        (['00-hardening.conf'] + (['99-csb-remote-access.conf'] if csb_detected | default(false) else []))
+
+    # The kept IT drop-in is trusted by name only; IT's template sets just PermitRootLogin.
+    # Anything else (Match, ForceCommand, AuthorizedKeysCommand, ...) would be read by sshd and
+    # could add access that 00-hardening.conf does not override, so it is reported.
+    - name: Read the IT remote-access sshd drop-in (CSB)
+      ansible.builtin.slurp:
+        src: /etc/ssh/sshd_config.d/99-csb-remote-access.conf
+      register: _sshd_csb_dropin
+      failed_when: false
+      when: csb_detected | default(false)
+
+    - name: Warn when the IT remote-access drop-in sets more than PermitRootLogin
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: /etc/ssh/sshd_config.d/99-csb-remote-access.conf contains directives other than
+          PermitRootLogin: {{ _sshd_csb_extra }}. IT's template only sets PermitRootLogin; review the
+          file (sudo cat) and remove it if it was not placed by IT.
+      vars:
+        _sshd_csb_extra: >-
+          {{ (_sshd_csb_dropin.content | b64decode).splitlines() | map('trim')
+             | reject('match', '^(#|$)') | reject('match', '(?i)^PermitRootLogin\s') | list }}
+      when:
+        - csb_detected | default(false)
+        - _sshd_csb_dropin.content is defined
+        - _sshd_csb_extra | length > 0
+
+    - name: Check whether sshd.service.d exists
+      ansible.builtin.stat:
+        path: /etc/systemd/system/sshd.service.d
+      register: _sshd_unit_dropin_dir
 
     - name: Remove unauthorized drop-ins from /etc/systemd/system/sshd.service.d  # noqa: command-instead-of-module
       ansible.builtin.find:
@@ -208,6 +242,7 @@
         patterns: "*.conf"
         file_type: file
       register: _sshd_unit_dropin_files
+      when: _sshd_unit_dropin_dir.stat.isdir | default(false)  # find warns on a missing dir
 
     - name: Delete all sshd.service.d drop-ins (none are playbook-owned)
       ansible.builtin.file:
@@ -233,6 +268,16 @@
       register: _sshd_temp_template
       changed_when: false  # validation scratch is removed in this transaction
 
+    # Check mode writes no temp file to move, so show the drop-in diff directly instead.
+    - name: Preview sshd hardening drop-in changes
+      ansible.builtin.template:
+        src: sshd-hardening.conf.j2
+        dest: /etc/ssh/sshd_config.d/00-hardening.conf
+        owner: root
+        group: root
+        mode: "0600"
+      when: ansible_check_mode
+
     - name: Atomically move config to production location for validation
       ansible.builtin.copy:
         src: /etc/ssh/sshd_config.d/.00-hardening.conf.tmp
@@ -243,6 +288,7 @@
         mode: "0600"
       notify: Restart sshd
       register: _sshd_config_copy
+      when: not ansible_check_mode
 
     - name: Validate sshd config after deploying new drop-in
       ansible.builtin.command:
@@ -280,16 +326,23 @@
     - name: Fail after cleaning up broken sshd drop-in
       ansible.builtin.fail:
         msg: >-
-          sshd -t rejected 00-hardening.conf — the broken drop-in has been removed
-          to prevent SSH lockout on reboot. Review template rendering above.
+          Deploying or validating 00-hardening.conf failed, so the drop-in has been removed
+          to prevent SSH lockout on reboot. Error from '{{ ansible_failed_task.name | default('unknown') }}':
+          {{ ansible_failed_result.msg | default(ansible_failed_result.stderr | default('unknown')) | truncate(300) }}
 
-# Mask sshd.socket to prevent port-22 socket activation (sshd.service on port 722 is authoritative).
+# Mask the SSH socket unit (ssh.socket on Debian, sshd.socket elsewhere) to prevent port-22 socket
+# activation (sshd.service on port 722 is authoritative).
 # Without masking, 'systemctl start sshd.socket' would reopen port 22 bypassing the drop-in.
+- name: Select SSH socket unit name
+  ansible.builtin.set_fact:
+    _system_ssh_socket_unit: "{{ 'ssh.socket' if is_apt else 'sshd.socket' }}"
+
 - name: Inspect SSH socket availability independently of service facts
   ansible.builtin.command:
-    argv: [systemctl, show, --property=LoadState, --value, sshd.socket]
+    argv: [systemctl, show, --property=LoadState, --value, "{{ _system_ssh_socket_unit }}"]
   register: _system_sshd_socket_load
   changed_when: false
+  check_mode: false
   when:
     - not csb_rhel
     - not system_is_container
@@ -302,9 +355,9 @@
     - not csb_rhel
     - not system_is_container
 
-- name: Mask sshd.socket to prevent port-22 socket activation
+- name: Mask SSH socket to prevent port-22 socket activation
   ansible.builtin.systemd:
-    name: sshd.socket
+    name: "{{ _system_ssh_socket_unit }}"
     masked: true
     enabled: false
     state: stopped
@@ -370,6 +423,9 @@
     - system_crypto_policy.rc | default(-1) == 0
     - system_crypto_policy.stdout | default('') != system_crypto_policy_target
     - not csb_rhel  # RHEL CSB: IT may enforce FIPS/FUTURE
+    # Fedora CSB: IT's infosec role resets the policy to DEFAULT on every csb-cron run, so
+    # setting it here only flip-flops (and re-notifies sshd/chronyd each make all).
+    - not csb_detected
     - is_dnf
   register: system_crypto_policy_set
   changed_when: system_crypto_policy_set.rc == 0
@@ -410,8 +466,26 @@
   when:
     - _sshd_dropin_post_validation is defined
     - _sshd_dropin_post_validation.stat is defined
+    # check mode never writes the drop-in, so on a first provision there is nothing to compare
+    - _sshd_dropin_post_validation.stat.exists | default(false)
     - (_sshd_dropin_pre_handler.stat.checksum | default('')) !=
       _sshd_dropin_post_validation.stat.checksum
+
+# force_handlers is false: if an earlier run failed after writing the drop-in, that run's restart
+# was lost and this run sees no change. Restart whenever sshd is up but not on the configured port.
+- name: Detect sshd not yet listening on the configured port (interrupted earlier run)  # noqa: command-instead-of-module
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      systemctl is-active --quiet {{ 'ssh' if is_apt else 'sshd' }} || exit 0
+      ss -Htln "sport = :{{ ssh_port | int }}" | grep -q . || echo not-listening
+    executable: /bin/bash
+  register: _sshd_port_live
+  changed_when: "'not-listening' in _sshd_port_live.stdout"
+  failed_when: false
+  check_mode: false
+  notify: Restart sshd
+  when: not system_is_container
 
 - name: Check if provisioning session is over SSH on port 22 (connection safety check)
   ansible.builtin.set_fact:

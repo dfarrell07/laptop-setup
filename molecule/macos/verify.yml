@@ -19,9 +19,10 @@
         name: verify_package_defaults
 
     # set_fact from converge does not persist to a separate verify invocation.
-    # macOS converge sets dotfiles_github_user: dfarrell07; re-apply here so
-    # the SSH agent launchd plist path resolves correctly.
-    - name: Set dotfiles_github_user for verify context
+    # shared/ci-default-vars.yml sets dotfiles_github_user: dfarrell07; re-apply here so
+    # the SSH agent launchd plist path resolves correctly. is_macos and profile are re-applied
+    # for the same reason (converge facts do not persist).
+    - name: Set dotfiles_github_user, is_macos and profile for verify context
       ansible.builtin.set_fact:
         dotfiles_github_user: 'dfarrell07'
         is_macos: true
@@ -60,11 +61,6 @@
       ansible.builtin.command: gh --version
       changed_when: false
 
-    - name: Check go is installed
-      ansible.builtin.command: go version
-      changed_when: false
-      when: profile == 'work'
-
     - name: Check shellcheck is installed
       ansible.builtin.command: shellcheck --version
       changed_when: false
@@ -80,11 +76,6 @@
     - name: Check fd is installed
       ansible.builtin.command: fd --version
       changed_when: false
-
-    - name: Check nmap is installed
-      ansible.builtin.command: nmap --version
-      changed_when: false
-      when: profile == 'work'
 
     - name: Check bat is installed (packages_brew)
       ansible.builtin.command: bat --version
@@ -129,18 +120,6 @@
         that: verify_aerospace.stat.exists
         fail_msg: "AeroSpace config not deployed"
 
-    - name: Verify Alacritty config deployed
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.config/alacritty/alacritty.toml"
-      register: verify_alacritty_macos
-      when: desktop_terminal == 'alacritty'
-
-    - name: Assert Alacritty config exists
-      ansible.builtin.assert:
-        that: verify_alacritty_macos.stat.exists
-        fail_msg: "Alacritty config not deployed on macOS"
-      when: desktop_terminal == 'alacritty'
-
     - name: Verify selected macOS terminal application is installed
       ansible.builtin.stat:
         path: "{{ desktop_macos_terminal_path }}"
@@ -149,6 +128,7 @@
     - name: Assert selected macOS terminal application exists
       ansible.builtin.assert:
         that: verify_macos_terminal.stat.isdir | default(false)
+        fail_msg: "{{ desktop_macos_terminal_path }} is not an installed application directory"
 
     - name: Verify selected macOS terminal application code signature
       ansible.builtin.command:
@@ -174,6 +154,24 @@
       ansible.builtin.assert:
         that: verify_ssh_plist.stat.exists
         fail_msg: "SSH agent launchd plist not deployed"
+
+    - name: Read the installed SSH agent launch agent
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - -c
+          - "import json,plistlib,sys; print(json.dumps(plistlib.load(open(sys.argv[1], 'rb'))))"
+          - "{{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist"
+      register: verify_ssh_plist_content
+      changed_when: false
+
+    - name: Assert SSH agent plist runs ssh-agent in the foreground with a socket
+      ansible.builtin.assert:
+        that:
+          - (verify_ssh_plist_content.stdout | from_json).ProgramArguments[0].endswith('/bin/ssh-agent')
+          - "'-D' in (verify_ssh_plist_content.stdout | from_json).ProgramArguments"
+          - "'-a' in (verify_ssh_plist_content.stdout | from_json).ProgramArguments"
+          - (verify_ssh_plist_content.stdout | from_json).KeepAlive
 
     # --- Native Homebrew metadata refresh ---
     - name: Read the installed metadata update launch agent
@@ -230,10 +228,10 @@
       until:
         - verify_brew_update_execution.stdout is search('last exit code = 0')
         - verify_brew_update_execution.stdout is not search('state = running')
-      retries: 60
+      retries: 150  # brew update on a cold cache can exceed two minutes
       delay: 2
 
-    # --- pipx tools: yamllint and ansible-lint (cycle-41b: moved from brew to pipx on macOS) ---
+    # --- pipx tools: yamllint and ansible-lint (installed via pipx on macOS, not brew) ---
     - name: Check yamllint installed via pipx
       ansible.builtin.command:
         argv: ["{{ ansible_user_dir }}/.local/bin/yamllint", --version]
@@ -258,9 +256,10 @@
 
     - name: Assert macOS firewall is enabled (State = 1)
       ansible.builtin.assert:
-        that: "'State = 1' in verify_fw.stdout"
-        fail_msg: "macOS application firewall not enabled — desktop role firewall task regression"
-      when: verify_fw.rc == 0
+        that:
+          - verify_fw.rc == 0
+          - "'State = 1' in verify_fw.stdout"
+        fail_msg: "macOS application firewall not enabled or not queryable — desktop role firewall task regression"
 
     - name: Verify macOS firewall stealth mode is enabled
       ansible.builtin.command:

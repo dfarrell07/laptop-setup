@@ -36,16 +36,20 @@ fi
 RESULTS=()
 FAILURES=0
 WARNS=0
+SKIPS=0
 
 record() { # name status [detail]
   local n="$1" s="$2" d="${3:-}"
+  # JSON-safe: drop other control bytes, then escape backslash, quote and common whitespace (name and detail)
+  n="$(printf '%s' "$n" | LC_ALL=C tr -d '\000-\037\177')"; local nj="${n//\\/\\\\}"; nj="${nj//\"/\\\"}"
+  d="$(printf '%s' "$d" | LC_ALL=C tr -d '\000-\010\013\014\016-\037\177')"
   local dj="${d//\\/\\\\}"; dj="${dj//$'\n'/\\n}"; dj="${dj//$'\t'/\\t}"; dj="${dj//$'\r'/\\r}"
-  RESULTS+=("$(printf '{"name":"%s","status":"%s","detail":"%s"}' "$n" "$s" "${dj//\"/\\\"}")")
+  RESULTS+=("$(printf '{"name":"%s","status":"%s","detail":"%s"}' "$nj" "$s" "${dj//\"/\\\"}")")
   case "$s" in
     PASS) [[ "$JSON" != true ]] && printf "${P}PASS${R}  %s\n" "$n" ;;
     WARN) WARNS=$((WARNS + 1)); [[ "$JSON" != true ]] && printf "${W}WARN${R}  %s — %s\n" "$n" "$d" ;;
     FAIL) FAILURES=$((FAILURES + 1)); [[ "$JSON" != true ]] && printf "${F}FAIL${R}  %s — %s\n" "$n" "$d" ;;
-    SKIP) [[ "$JSON" != true ]] && printf "SKIP  %s — %s\n" "$n" "$d" ;;
+    SKIP) SKIPS=$((SKIPS + 1)); [[ "$JSON" != true ]] && printf "SKIP  %s — %s\n" "$n" "$d" ;;
     *) echo "BUG: unknown record status '$s'" >&2; exit 99 ;;
   esac
   return 0  # recording a successful check must not trigger set -e
@@ -72,6 +76,20 @@ _notes_enabled=false
 grep -qiE '^notes_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _notes_enabled=true
 _disable_bluetooth=true
 grep -qiE '^system_disable_bluetooth:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _disable_bluetooth=false
+_mask_nfs=true
+grep -qiE '^system_mask_nfs_server:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_nfs=false
+_mask_iscsi=true
+grep -qiE '^system_mask_iscsi:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_iscsi=false
+_usbguard_enabled=true
+grep -qiE '^system_install_usbguard:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _usbguard_enabled=false
+_mask_abrt=true
+grep -qiE '^system_mask_abrt:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_abrt=false
+_rpmfusion_free=true
+grep -qiE '^repo_rpmfusion_free:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _rpmfusion_free=false
+_aide_enabled=false
+grep -qiE '^system_aide_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _aide_enabled=true
+_agent_fwd=$(awk -F': ' '/^system_ssh_allow_agent_forwarding:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
+case "$(printf %s "$_agent_fwd" | tr "[:upper:]" "[:lower:]")" in yes|true|on) _agent_fwd=yes ;; *) _agent_fwd=no ;; esac
 _cfg_ssh_port=$(awk -F': ' '/^ssh_port:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
 [[ -z "$_cfg_ssh_port" ]] && _cfg_ssh_port="722"
 # Validate ssh_port matches decimal format to prevent regex injection in grep patterns
@@ -87,6 +105,17 @@ else
 fi
 # Read desktop_sway_trackpoint_id if configured (for TrackPoint device validation)
 _trackpoint_id=$(awk -F': ' '/^desktop_sway_trackpoint_id:/{gsub(/^[[:space:]]*["'"'"']|["'"'"'][[:space:]]*$/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
+_desktop_terminal=$(awk -F': ' '/^desktop_terminal:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
+[[ -n "$_desktop_terminal" ]] || _desktop_terminal="alacritty"  # role default on Linux
+# Role defaults (roles/repos_dnf, roles/notes) apply when config.yml does not override these.
+_gcloud_min_version=$(awk -F': ' '/^repos_dnf_gcloud_min_version:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
+[[ "$_gcloud_min_version" =~ ^[0-9]+(\.[0-9]+)*$ ]] || _gcloud_min_version="500.0.0"
+_notes_repo_name=$(awk -F': ' '/^notes_repo_name:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
+# Plain directory name only (no path separators or leading dot-dot) since it is used in $HOME paths
+[[ "$_notes_repo_name" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]*$ ]] || _notes_repo_name="notes"
+[[ -n "${HOME:-}" ]] || { echo "Error: HOME is not set" >&2; exit 2; }
+_notes_dir="$HOME/$_notes_repo_name"
+USER="${USER:-$(id -un)}"  # cron/env -i runs leave USER unset; later checks use it under set -u
 unset _cfg
 
 exec_cmd() { # execute locally or inside container
@@ -105,10 +134,11 @@ exec_cmd() { # execute locally or inside container
 
 _sysctl_check() {
   local k="$1" v="$2" n="$3"; local got
-  got=$(sysctl -n "$k" 2>/dev/null || echo "?")
+  got=$(PATH="$PATH:/usr/sbin:/sbin" sysctl -n "$k" 2>/dev/null || echo "?")
   if [[ "$got" == "$v" ]]; then record "$n" "PASS"
   elif [[ "$got" == "?" && "$EUID" -ne 0 ]]; then
     record "$n" "WARN" "$k unreadable as non-root (re-run with sudo to verify value=$v)"
+  elif ${_csb_non_fedora:-false}; then record "$n" "WARN" "$k=$got expected $v (RHEL CSB — IT manages sysctl)"
   else record "$n" "FAIL" "$k=$got expected $v"; fi
 }
 
@@ -117,10 +147,13 @@ if ! $SYSTEM_ONLY; then
 
 # SSH auth to GitHub (bypass exec_cmd() — host SSH keys and agent are not forwarded into the container; exec_cmd() would use container key material and always fail)
 _ssh_ret=0
-if ! command -v timeout &>/dev/null; then
+_timeout_bin=$(command -v timeout || command -v gtimeout || true)
+if [[ -z "$_timeout_bin" ]]; then
   record "github-ssh-auth" "WARN" "timeout not available (install gnu-coreutils on macOS) — skipping GitHub SSH auth check"
 else
-  timeout 10 ssh -T git@github.com &>/dev/null || _ssh_ret=$?
+  # Read-only: never write known_hosts, never prompt
+  "$_timeout_bin" 10 ssh -T -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+    -o BatchMode=yes git@github.com &>/dev/null || _ssh_ret=$?
   if [[ "$_ssh_ret" -eq 1 ]]; then
     record "github-ssh-auth" "PASS" "exit 1 = GitHub auth success"
   elif [[ "$_ssh_ret" -eq 124 ]]; then
@@ -137,7 +170,7 @@ unset _ssh_ret
 # prior authselect profile, permissive pwquality). Warn so the operator closes those sessions
 # and logs in fresh under the new PAM stack. macOS: 'who' output differs; skip there.
 if $IS_LINUX && command -v who &>/dev/null; then
-  _pts_sessions=$(who 2>/dev/null | awk '$2 ~ /^pts\// {count++} END {print count+0}')
+  _pts_sessions=$(who 2>/dev/null | awk '$2 ~ /^pts\// && $NF ~ /^\([^:]/ && $NF !~ /^\(tmux/ {count++} END {print count+0}')
   if [[ "$_pts_sessions" -gt 0 ]]; then
     record "pam-session-continuity" "WARN" \
       "${_pts_sessions} active SSH session(s) (pts) predate this provisioning run and retain the old PAM stack — log out and reconnect to activate new faillock/pwquality/authselect settings"
@@ -154,7 +187,7 @@ fi
 # smoke run exits 0 and the assert in verify-smoke.yml passes.
 _tool_absent="FAIL"
 [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && _tool_absent="WARN"
-for tool in "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "sops:sops --version" "k9s:k9s version" "transcrypt:transcrypt --version" "gitleaks:gitleaks version" "direnv:direnv --version"; do
+for tool in "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "sops:sops --disable-version-check --version" "k9s:k9s version" "transcrypt:transcrypt --version" "gitleaks:gitleaks version" "direnv:direnv --version"; do
   name="${tool%%:*}"; cmd="${tool#*:}"
   # shellcheck disable=SC2086  # intentional word-split: cmd is "binary arg1 arg2"
   if exec_cmd $cmd &>/dev/null; then record "$name" "PASS"; else record "$name" "$_tool_absent" "not found"; fi
@@ -208,16 +241,16 @@ for _b in "cosign:cosign version" "tkn:tkn version --component=client" \
 done
 # gcloud minimum-version floor (guards against repomd.xml suppression — repo_gpgcheck disabled upstream)
 if command -v gcloud &>/dev/null; then
-  if command -v timeout &>/dev/null; then
-    _gcloud_ver=$(timeout 15 gcloud version 2>/dev/null | awk '/^Google Cloud SDK/ {print $4}' || true)
+  if [[ -n "${_timeout_bin:-}" ]]; then
+    _gcloud_ver=$("$_timeout_bin" 15 gcloud version 2>/dev/null | awk '/^Google Cloud SDK/ {print $4}' || true)
   else
     _gcloud_ver=$(gcloud version 2>/dev/null | awk '/^Google Cloud SDK/ {print $4}' || true)
   fi
-  _gcloud_major=${_gcloud_ver%%.*}
-  if [[ -n "$_gcloud_major" ]] && (( _gcloud_major >= 500 )); then
+    # full dotted compare like the role's version() test (sort -V picks the lower of the two)
+  if [[ "$_gcloud_ver" =~ ^[0-9]+(\.[0-9]+)*$ && "$(printf '%s\n%s\n' "$_gcloud_min_version" "$_gcloud_ver" | sort -V | head -1)" == "$_gcloud_min_version" ]]; then
     record "gcloud-version-floor" "PASS"
   else
-    record "gcloud-version-floor" "FAIL" "gcloud ${_gcloud_ver} below minimum floor 500 — check for repo metadata suppression (repo_gpgcheck disabled)"
+    record "gcloud-version-floor" "FAIL" "gcloud ${_gcloud_ver} below minimum floor ${_gcloud_min_version} — check for repo metadata suppression (repo_gpgcheck disabled)"
   fi
 fi
 
@@ -255,9 +288,9 @@ else record "yubikey" "WARN" "not detected (plugged in?)"; fi
 if $IS_LINUX && [[ -z "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then
   if getent group libvirt &>/dev/null && getent group kvm &>/dev/null; then
     # Check if user is in /etc/group but not active in current session
-    if getent group libvirt | grep -q "$USER" && getent group kvm | grep -q "$USER"; then
+    if getent group libvirt | cut -d: -f4 | tr ',' '\n' | grep -qxF -- "$USER" && getent group kvm | cut -d: -f4 | tr ',' '\n' | grep -qxF -- "$USER"; then
       # User is in groups per /etc/group — check if active in session
-      if groups | grep -q libvirt && groups | grep -q kvm; then
+      if groups | tr ' ' '\n' | grep -qx libvirt && groups | tr ' ' '\n' | grep -qx kvm; then
         record "libvirt-kvm-groups" "PASS"
       else
         record "libvirt-kvm-groups" "WARN" "User in libvirt/kvm groups but not active in session. Log out and back in, or run: newgrp libvirt. Verify with: groups | grep libvirt"
@@ -269,19 +302,20 @@ fi
 # vault-pass.sh stub (skip in molecule — stub is intentional in CI)
 if [[ -z "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then
   _vp="$SCRIPT_DIR/vault-pass.sh"
-  if [[ -x "$_vp" ]]; then
-    _vp_out=$("$_vp" 2>/dev/null) || true
-    if [[ "$_vp_out" == *ci-dummy-vault-password* ]]; then
-      record "vault-pass-stub" "WARN" "vault-pass.sh is still the CI dummy stub — replace with YubiKey HMAC-SHA1 implementation before encrypting vault.yml (see SECURITY.md 'Setting Up vault-pass.sh')"
+  if [[ -f "$_vp" ]]; then
+    # Never execute it (YubiKey touch, secret in memory): inspect for stub markers only
+    if grep -qE "^pass=['\"]CHANGE_ME['\"]|ci-dummy-vault-password" "$_vp" 2>/dev/null; then
+      record "vault-pass-stub" "WARN" "vault-pass.sh is still a placeholder stub — replace with YubiKey HMAC-SHA1 implementation before encrypting vault.yml (see SECURITY.md 'Setting Up vault-pass.sh')"
+    elif [[ ! -x "$_vp" ]]; then
+      record "vault-pass-stub" "WARN" "vault-pass.sh is not executable — run: chmod 700 scripts/vault-pass.sh"
     else
       record "vault-pass-stub" "PASS"
-      if grep -q 'ykchalresp' "$_vp" 2>/dev/null; then
+      if grep -v '^[[:space:]]*#' "$_vp" 2>/dev/null | grep -q 'ykchalresp'; then
         record "vault-pass-tooling" "WARN" "vault-pass.sh uses deprecated ykchalresp — run: make setup-yubikeys"
       else
         record "vault-pass-tooling" "PASS"
       fi
     fi
-    unset _vp_out
   fi
   unset _vp
 fi
@@ -293,8 +327,14 @@ elif exec_cmd tailscale status &>/dev/null; then record "tailscale" "PASS" "tail
 else record "tailscale" "WARN" "tailscaled not running or VPN not established (check: systemctl status tailscaled)"; fi
 
 # ssh-agent has a FIDO2 sk-ssh-ed25519 key loaded (use -L for full pubkey: -l shows ED25519-SK not sk-ssh-ed25519)
-_ssh_add_rc=0; _ssh_add_out=$(ssh-add -L 2>/dev/null) || _ssh_add_rc=$?
-if [[ "$_ssh_add_out" == *sk-ssh-ed25519* ]]; then record "ssh-agent-key" "PASS"
+_ssh_add_rc=0
+# a stalled agent socket must not hang the whole run: bound the call when a timeout tool exists
+if [[ -n "$_timeout_bin" ]]; then _ssh_add_out=$("$_timeout_bin" 10 ssh-add -L 2>/dev/null) || _ssh_add_rc=$?
+else _ssh_add_out=$(ssh-add -L 2>/dev/null) || _ssh_add_rc=$?; fi
+[[ "$_ssh_add_rc" -eq 124 ]] && _ssh_add_rc=2  # timed out: treat as unreachable agent
+unset _timeout_bin
+# match the key-type field, not the free-text comment
+if printf '%s\n' "$_ssh_add_out" | grep -q '^sk-ssh-ed25519@openssh.com '; then record "ssh-agent-key" "PASS"
 elif [[ "$_ssh_add_rc" -eq 2 ]]; then
   record "ssh-agent-key" "WARN" "ssh-agent socket unreachable (SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-<unset>} — log out and back in)"
 elif [[ "$_ssh_add_rc" -eq 1 ]]; then
@@ -303,7 +343,7 @@ else record "ssh-agent-key" "WARN" "key loaded but not sk-ssh-ed25519 type"; fi
 
 # LUKS discard protection (Linux only — mitigates SSD wear-pattern fingerprinting attacks)
 if $IS_LINUX; then
-  if grep -q 'rd\.luks\.options=discard\|rd\.luks\.allow-discards' /proc/cmdline 2>/dev/null; then
+  if grep -qE 'rd\.luks\.options=[^[:space:]]*discard|rd\.luks\.allow-discards' /proc/cmdline 2>/dev/null; then
     record "luks-discard-protection" "WARN" "LUKS discard enabled (rd.luks.options=discard or rd.luks.allow-discards in kernel cmdline) — SSD wear-patterns may leak plaintext locations"
   else
     record "luks-discard-protection" "PASS"
@@ -382,7 +422,7 @@ unset _rg
 
 # alacritty config (terminal emulator — only expected on Sway/i3 desktop machines)
 _alc="$HOME/.config/alacritty/alacritty.toml"
-if command -v sway &>/dev/null || command -v i3 &>/dev/null; then
+if [[ "$_desktop_terminal" == "alacritty" ]] && { command -v sway &>/dev/null || command -v i3 &>/dev/null; }; then
   if [[ ! -f "$_alc" ]]; then record "dotfile-alacritty" "FAIL" "not deployed — run: make desktop"
   elif ! grep -q 'Ansible managed' "$_alc"; then record "dotfile-alacritty" "WARN" "$_alc present but not Ansible-managed"
   else
@@ -422,11 +462,13 @@ if command -v sway &>/dev/null; then
   # TrackPoint device ID validation (prevents silent scroll failure after device ID changes)
   if [[ -n "$_trackpoint_id" ]]; then
     # Extract device name from vendor:product:Name format (e.g., "2:10:TPPS/2_Elan_TrackPoint" → "TPPS/2_Elan_TrackPoint")
+    # sway ids use '_' for the spaces in the kernel name ("TPPS/2 Elan TrackPoint" in /proc)
     _tp_name="${_trackpoint_id##*:}"
+    _tp_name="${_tp_name//_/ }"
     _tp_found=false
     if [[ -r /proc/bus/input/devices ]]; then
       # Check if TrackPoint device exists in /proc/bus/input/devices
-      if grep -q "Name=.*$_tp_name" /proc/bus/input/devices 2>/dev/null; then
+      if [[ -n "$_tp_name" ]] && grep -F 'Name=' /proc/bus/input/devices 2>/dev/null | grep -qF "$_tp_name"; then
         _tp_found=true
       fi
     fi
@@ -460,6 +502,7 @@ else
     record "home-tmp-dir" "WARN" "$HOME/tmp exists but cannot create temp file"
   else
     # Guard cleanup with trap so set -e abort doesn't leak the temp file
+    _prev_exit_trap=$(trap -p EXIT)
     trap 'rm -f "$_htmp_test"' EXIT
     if cp /usr/bin/true "$_htmp_test" 2>/dev/null && chmod +x "$_htmp_test" 2>/dev/null; then
       if "$_htmp_test" 2>/dev/null; then record "home-tmp-dir" "PASS"
@@ -467,6 +510,8 @@ else
     else record "home-tmp-dir" "WARN" "exec-test setup failed (cp or chmod error)"; fi
     rm -f "$_htmp_test"
     trap - EXIT
+    [[ -z "$_prev_exit_trap" ]] || eval "$_prev_exit_trap"
+    unset _prev_exit_trap
   fi
   unset _htmp_test
 fi
@@ -508,7 +553,7 @@ if [[ -n "$CONTAINER" || -f /run/.containerenv || -f /.dockerenv ]] ||
    { $IS_LINUX && command -v systemd-detect-virt &>/dev/null && systemd-detect-virt --container --quiet; }; then
   _in_container=true
 fi
-# environment.d containers.conf (KIND + Podman socket — pam_env injection for make kind)
+# environment.d containers.conf (KIND + Podman socket — systemd environment.d generator, needed by make kind)
 if $IS_LINUX && $_in_container; then
   record "env-d-containers" "SKIP" "uses the host session environment"
   record "env-d-ssh-agent" "SKIP" "uses the host SSH agent"
@@ -525,20 +570,19 @@ elif $IS_LINUX; then
   if [[ -f "$_saf" ]] && grep -q "SSH_AUTH_SOCK" "$_saf"; then record "env-d-ssh-agent" "PASS"
   elif [[ ! -f "$_saf" ]]; then record "env-d-ssh-agent" "FAIL" "missing: $_saf — SSH_AUTH_SOCK not set in systemd session"
   else record "env-d-ssh-agent" "FAIL" "SSH_AUTH_SOCK missing from $_saf"; fi
-  unset _saf
   if [[ "${SSH_AUTH_SOCK:-}" == */ssh-agent.socket ]]; then
     record "ssh-auth-sock" "PASS"
-  elif [[ -f "$HOME/.config/environment.d/ssh-agent.conf" ]] && \
-       grep -q "SSH_AUTH_SOCK" "$HOME/.config/environment.d/ssh-agent.conf"; then
+  elif [[ -f "$_saf" ]] && grep -q "SSH_AUTH_SOCK" "$_saf"; then
     record "ssh-auth-sock" "WARN" "SSH_AUTH_SOCK not yet updated — environment.d/ssh-agent.conf is deployed; log out and back in to activate (current: ${SSH_AUTH_SOCK:-<unset>})"
   else
     record "ssh-auth-sock" "WARN" "SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-<unset>} does not point to custom ssh-agent (expected .../ssh-agent.socket) — run: make dotfiles"
   fi
+  unset _saf
   # subuid/subgid required for rootless Podman user namespaces (/etc/subuid is world-readable)
   # Skipped with --user-only or --container: requires system role (not run in container scenarios)
   if ! $USER_ONLY && [[ -z "$CONTAINER" ]]; then
     _subuid_user="${SUDO_USER:-$USER}"
-    if grep -q "^${_subuid_user}:" /etc/subuid 2>/dev/null && grep -q "^${_subuid_user}:" /etc/subgid 2>/dev/null; then
+    if awk -F: -v u="$_subuid_user" '$1 == u {f=1} END {exit !f}' /etc/subuid 2>/dev/null && awk -F: -v u="$_subuid_user" '$1 == u {f=1} END {exit !f}' /etc/subgid 2>/dev/null; then
       record "subuid-subgid" "PASS"
     else record "subuid-subgid" "FAIL" "subuid/subgid not configured for ${_subuid_user} — rootless Podman will fail with cryptic namespace errors"; fi
     unset _subuid_user
@@ -555,7 +599,10 @@ if [[ -f "$HOME/.ssh/config" ]]; then
   else record "ssh-config-hash-known-hosts" "FAIL" "HashKnownHosts yes missing from ~/.ssh/config — host list exposed in plaintext"; fi
   if grep -qE '^[[:space:]]*StrictHostKeyChecking accept-new' "$HOME/.ssh/config"; then record "ssh-config-strict-host-key" "PASS"
   else record "ssh-config-strict-host-key" "FAIL" "StrictHostKeyChecking accept-new missing from ~/.ssh/config"; fi
-  if grep -qE '^[[:space:]]*ControlMaster auto' "$HOME/.ssh/config"; then record "ssh-config-control-master" "PASS"
+  # Effective value: per-host blocks placed after Host * are silently ignored (first value wins)
+  if ssh -F "$HOME/.ssh/config" -G github.com 2>/dev/null | grep -qx 'stricthostkeychecking true'; then record "ssh-config-github-strict" "PASS"
+  else record "ssh-config-github-strict" "FAIL" "github.com does not resolve to StrictHostKeyChecking yes (ssh -G) — run: make dotfiles"; fi
+  if grep -qE '^[[:space:]]*ControlMaster auto([[:space:]]|$)' "$HOME/.ssh/config"; then record "ssh-config-control-master" "PASS"
   else record "ssh-config-control-master" "FAIL" "ControlMaster auto missing from ~/.ssh/config — connection multiplexing not configured"; fi
   if ! grep -q 'MACs' "$HOME/.ssh/config"; then record "ssh-config-no-non-etm-macs" "FAIL" "MACs line absent — client uses OpenSSH defaults (may include non-ETM); run: make dotfiles"
   elif grep -qE 'hmac-sha2-(512|256)($|[^-])' "$HOME/.ssh/config"; then record "ssh-config-no-non-etm-macs" "WARN" "non-ETM MAC found in ~/.ssh/config MACs line — use ETM variants (hmac-sha2-512-etm@openssh.com, hmac-sha2-256-etm@openssh.com) only"
@@ -587,7 +634,7 @@ else
     record "authorized-keys-exclusive" "WARN" "one key present but not sk-ssh-ed25519 type — unexpected key type in $_ak"
   fi
 fi
-unset _ak _ak_perms _ak_total
+unset _ak _ak_total
 
 _kh="$HOME/.ssh/known_hosts"
 if [[ -f "$_kh" ]]; then
@@ -595,7 +642,7 @@ if [[ -f "$_kh" ]]; then
   if ssh-keygen -F github.com -f "$_kh" &>/dev/null; then record 'known-hosts-github' 'PASS'
   else record 'known-hosts-github' 'FAIL' 'github.com not in known_hosts — run: make ssh'; fi
 fi
-unset _kh _kh_perms
+unset _kh
 
 homedir_perms=$(stat -c '%a' "$HOME" 2>/dev/null || stat -f '%Lp' "$HOME" 2>/dev/null || echo "?")
 # CIS intent: home dir should be no MORE permissive than 750 (group has no write, others=0)
@@ -668,19 +715,17 @@ if command -v git-lfs &>/dev/null; then
 fi
 
 # Claude Code sandbox enabled (use jq if available, fall back to grep)
-# Security config is in settings.local.json (survives /config writes); fall
-# back to settings.json for instances provisioned before this change.
+# The security policy is merged into each instance's settings.json (the user settings file
+# Claude Code loads; a settings.local.json in the config dir is never read).
 for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-personal" "$HOME/.claude-per2"; do
-  # Prefer settings.local.json (Ansible-managed security policy); fall back to settings.json
-  sec_file="$d/settings.local.json"
-  [[ -f "$sec_file" ]] || sec_file="$d/settings.json"
+  sec_file="$d/settings.json"
   [[ -f "$sec_file" ]] || continue
   label="${d##*/}"
   if command -v jq &>/dev/null; then
-    if jq -e '.sandbox.enabled' "$sec_file" &>/dev/null; then
+    if jq -e '.sandbox.enabled == true' "$sec_file" &>/dev/null; then
       record "sandbox($label)" "PASS"
     else record "sandbox($label)" "FAIL" "sandbox not enabled in $sec_file — run: make claude"; fi
-    if jq -e '.sandbox.failIfUnavailable' "$sec_file" &>/dev/null; then
+    if jq -e '.sandbox.failIfUnavailable == true' "$sec_file" &>/dev/null; then
       record "sandbox-failsafe($label)" "PASS"
     else record "sandbox-failsafe($label)" "FAIL" "sandbox.failIfUnavailable not true in $sec_file — run: make claude"; fi
     if jq -e '.sandbox.allowUnsandboxedCommands == false' "$sec_file" &>/dev/null; then
@@ -690,7 +735,7 @@ for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-personal" "$HOME/.c
       record "mcp-disabled($label)" "PASS"
     else record "mcp-disabled($label)" "WARN" "enableAllProjectMcpServers not false"; fi
   else
-    if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("sandbox",{}).get("enabled") else 1)' "$sec_file" 2>/dev/null; then
+    if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("sandbox",{}).get("enabled") is True else 1)' "$sec_file" 2>/dev/null; then
       record "sandbox($label)" "PASS"
     else record "sandbox($label)" "FAIL" "not enabled in $sec_file — run: make claude"; fi
   fi
@@ -727,18 +772,19 @@ if [[ -f /etc/opt/chrome/policies/managed/security.json ]]; then
 fi
 
 # --- Notes repo (transcrypt-encrypted) ---
-if [[ -d "$HOME/notes/.git" ]]; then
+if [[ -d "$_notes_dir/.git" ]]; then
   record "notes-repo" "PASS"
   if command -v transcrypt &>/dev/null; then
-    if (cd "$HOME/notes" && transcrypt --display) &>/dev/null; then
+    if (cd "$_notes_dir" && transcrypt --display) &>/dev/null; then
       # Spot-check: verify decryption actually works — if the password is wrong,
       # smudge-filtered files remain as encrypted blobs (non-text) in the working tree
       _any_text=false
       while IFS= read -r _f; do
-        if [[ "$(file -b "$HOME/notes/$_f" 2>/dev/null)" == *text* ]]; then
+        # grep -I: non-binary file with content (no file(1) dependency)
+        if grep -qI . "$_notes_dir/$_f" 2>/dev/null; then
           _any_text=true; break
         fi
-      done < <(git -C "$HOME/notes" ls-files 2>/dev/null | head -100)
+      done < <(git -C "$_notes_dir" ls-files 2>/dev/null)
       if $_any_text; then
         record "notes-transcrypt" "PASS"
       else
@@ -847,11 +893,13 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
   _csb_non_fedora=false
   $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null && _csb_non_fedora=true
+  _csb_rhel_host=$_csb_non_fedora  # mirrors csb_rhel: RHEL CSB skips items that hybrid Fedora CSB applies
 
   # DNS-over-TLS: check config is deployed (not runtime negotiation — DoT is opportunistic so
   # +DNSOverTLS flag may be absent on port-853-blocked networks without indicating a problem)
   if [[ -f /etc/systemd/resolved.conf.d/99-dot.conf ]]; then
-    if resolvectl status 2>/dev/null | grep -qE '\+DNSOverTLS'; then
+    _rs_out=$(resolvectl status 2>/dev/null || true)  # capture first: grep -q on a pipe can SIGPIPE under pipefail
+    if grep -qE '\+DNSOverTLS' <<<"$_rs_out"; then
       record "dns-over-tls" "PASS"
     else record "dns-over-tls" "WARN" "config deployed but TLS not negotiated on this network (opportunistic — plain DNS in use)"; fi
   elif $CSB_HOST; then
@@ -861,15 +909,16 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   # DNSSEC: WARN-level observability check consistent with DoT "opportunistic" pattern
   if [[ -f /etc/systemd/resolved.conf.d/99-dot.conf ]]; then
     _dnssec_cfg=$(awk -F'=' '/^DNSSEC/{print $2}' /etc/systemd/resolved.conf.d/99-dot.conf 2>/dev/null | tr -d '[:space:]')
-    if resolvectl status 2>/dev/null | grep -qE 'DNSSEC.*yes'; then
+    # modern resolvectl prints DNSSEC=<mode>/<supported|unsupported>; older: "DNSSEC supported: yes"
+    if grep -qE 'DNSSEC=(yes|allow-downgrade)/supported|DNSSEC supported: yes' <<<"$_rs_out"; then
       record "dnssec-active" "PASS"
     else record "dnssec-active" "WARN" "DNSSEC not active on current network (config: ${_dnssec_cfg:-unknown} — allow-downgrade tolerates this)"; fi
-    unset _dnssec_cfg
+    unset _dnssec_cfg _rs_out
   fi
 
-  # ptrace scope — read expected value from deployed config (system_ptrace_scope defaults to 0 in default.config.yml)
+  # ptrace scope — read expected value from deployed config (system_ptrace_scope defaults to 1 per group_vars/all/vars.yml)
   _ptrace_expected=$(awk -F' *= *' '/^kernel\.yama\.ptrace_scope/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
-  _sysctl_check "kernel.yama.ptrace_scope" "${_ptrace_expected:-0}" "sysctl-ptrace-scope"
+  _sysctl_check "kernel.yama.ptrace_scope" "${_ptrace_expected:-1}" "sysctl-ptrace-scope"
 
   # SELinux
   if command -v getenforce &>/dev/null; then
@@ -904,8 +953,13 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   fi
 
   # LUKS disk encryption (informational — not managed by Ansible)
-  if lsblk -o FSTYPE 2>/dev/null | grep -q "crypto_LUKS"; then record "luks-encryption" "PASS"
-  else record "luks-encryption" "WARN" "no LUKS volumes found — full-disk encryption not confirmed"; fi
+  # Prefer the root device's ancestry (a LUKS data disk must not vouch for an unencrypted root); fall back to any volume.
+  _root_src=$(findmnt -n -o SOURCE / 2>/dev/null | sed 's/\[.*//' || true)
+  if [[ "$_root_src" == /dev/* ]]; then _luks_fs=$(lsblk -s -n -o FSTYPE "$_root_src" 2>/dev/null || true)
+  else _luks_fs=$(lsblk -n -o FSTYPE 2>/dev/null || true); fi
+  unset _root_src
+  if grep -q "crypto_LUKS" <<<"$_luks_fs"; then record "luks-encryption" "PASS"
+  else record "luks-encryption" "WARN" "no LUKS volume under / found — full-disk encryption not confirmed"; fi
   # Stale rd.luks.key param: if cmdline references a keyfile but it doesn't exist on /boot,
   # that's a latent foothold — a keyfile dropped there unlocks LUKS without passphrase.
   # UUID-device form (rd.luks.key=/path:UUID=...) means keyfile is on a separate device —
@@ -978,14 +1032,24 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       if [[ "$ts_zone" == "trusted" ]]; then record "firewall-tailscale-zone" "PASS"
       else record "firewall-tailscale-zone" "FAIL" "tailscale0 in zone '$ts_zone', expected 'trusted'"; fi
     fi
-    # wt0 (NetBird VPN) — same trusted-zone requirement as tailscale0
-    if firewall-cmd --permanent --zone=trusted --query-interface=wt0 &>/dev/null; then
+    # wt0 (NetBird VPN) — same trusted-zone requirement as tailscale0, except on CSB
+    # where IT's firewall role binds wt0 to its 'redhat' zone
+    wt_expect="trusted"
+    if $CSB_HOST && firewall-cmd --permanent --zone=redhat --query-interface=wt0 &>/dev/null; then
+      wt_expect="redhat"
+    fi
+    if firewall-cmd --permanent --zone="$wt_expect" --query-interface=wt0 &>/dev/null; then
       record "firewall-wt0-permanent" "PASS"
+    elif $CSB_HOST; then
+      # nm.yml never moves wt0 on any CSB tier; IT's firewall role owns it
+      record "firewall-wt0-permanent" "WARN" "wt0 in neither redhat nor trusted zone on CSB — playbook does not move wt0 there (IT manages zones)"
     else record "firewall-wt0-permanent" "FAIL" "wt0 not in permanent trusted zone config — NetBird peer traffic will be dropped (run: make system)"; fi
     if ip link show wt0 &>/dev/null; then
       wt_zone=$(firewall-cmd --get-zone-of-interface=wt0 2>/dev/null || echo "?")
-      if [[ "$wt_zone" == "trusted" ]]; then record "firewall-wt0-zone" "PASS"
-      else record "firewall-wt0-zone" "FAIL" "wt0 in zone '$wt_zone', expected 'trusted'"; fi
+      if [[ "$wt_zone" == "$wt_expect" ]]; then record "firewall-wt0-zone" "PASS"
+      elif $CSB_HOST && [[ "$wt_zone" != "trusted" && "$wt_zone" != "redhat" ]]; then
+        record "firewall-wt0-zone" "WARN" "wt0 in zone '$wt_zone' on CSB — playbook does not move wt0 there (IT manages zones)"
+      else record "firewall-wt0-zone" "FAIL" "wt0 in zone '$wt_zone', expected '$wt_expect'"; fi
     fi
     # ICMP block-inversion must be enabled when drop zone is active
     if [[ "$zone" == "drop" ]]; then
@@ -1037,14 +1101,15 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if systemctl is-enabled sshd.service &>/dev/null; then record "sshd-enabled" "PASS"
   else record "sshd-enabled" "FAIL" "sshd.service not enabled — reboot will leave machine unreachable"; fi
   # Verify sshd.socket masked — prevents socket activation from reopening port 22
-  # Note: systemctl is-masked is not a valid verb in systemd 259; use show UnitFileState.
-  if systemctl cat sshd.socket &>/dev/null; then
-    if [[ "$(systemctl is-enabled sshd.socket 2>/dev/null)" == "masked" ]]; then
+  # Note: systemctl is-masked is not a valid verb in systemd 259; use is-enabled.
+  _ssh_sock=sshd.socket; command -v apt-get &>/dev/null && _ssh_sock=ssh.socket
+  if systemctl cat "$_ssh_sock" &>/dev/null; then
+    if [[ "$(systemctl is-enabled "$_ssh_sock" 2>/dev/null)" == "masked" ]]; then
       record "sshd-socket-masked" "PASS"
     elif $CSB_HOST; then
-      record "sshd-socket-masked" "WARN" "sshd.socket not masked on CSB — IT manages sshd; port-722 drop-in not deployed"
+      record "sshd-socket-masked" "WARN" "$_ssh_sock not masked on CSB — IT manages sshd; port-722 drop-in not deployed"
     else
-      record "sshd-socket-masked" "FAIL" "sshd.socket not masked — socket activation can reopen port 22, bypassing 00-hardening.conf"
+      record "sshd-socket-masked" "FAIL" "$_ssh_sock not masked — socket activation can reopen port 22, bypassing 00-hardening.conf"
     fi
   fi
 
@@ -1063,22 +1128,25 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     elif systemctl is-active usbguard &>/dev/null; then
       record "usbguard" "WARN" "usbguard active but not enabled (won't start on reboot)"
     else record "usbguard" "FAIL" "installed but usbguard.service not active"; fi
+  elif ! $_usbguard_enabled; then
+    record "usbguard" "SKIP" "system_install_usbguard: false in config.yml"
   elif grep -qiE '^ID=debian' /etc/os-release 2>/dev/null; then
     record "usbguard" "WARN" "skipped on Debian — Ansible USBGuard block is Fedora/RHEL-only (dnf/dnf5 required)"
   else record "usbguard" "FAIL" "not installed"; fi
   if command -v usbguard &>/dev/null; then
-    if grep -q '^ImplicitPolicyTarget=block' /etc/usbguard/usbguard-daemon.conf 2>/dev/null; then record 'usbguard-implicit-policy' 'PASS'
-    else record 'usbguard-implicit-policy' 'FAIL' 'ImplicitPolicyTarget is not block — all unmatched devices may be allowed'; fi
-    if grep -q '^AuditBackend=LinuxAudit' /etc/usbguard/usbguard-daemon.conf 2>/dev/null; then record 'usbguard-audit-backend' 'PASS'
-    else record 'usbguard-audit-backend' 'FAIL' 'AuditBackend is not LinuxAudit — USBGuard events not forwarded to auditd'; fi
-    if grep -q '^IPCAllowedGroups=wheel' /etc/usbguard/usbguard-daemon.conf 2>/dev/null; then record 'usbguard-ipc-groups' 'PASS'
-    else record 'usbguard-ipc-groups' 'FAIL' 'IPCAllowedGroups is not wheel — non-root users cannot manage USBGuard'; fi
-    if grep -q '1050:' /etc/usbguard/rules.conf 2>/dev/null; then record 'usbguard-yubikey-rule' 'PASS'
-    else record 'usbguard-yubikey-rule' 'FAIL' 'YubiKey whitelist rule missing from rules.conf'; fi
-    if grep -q '3297:1969' /etc/usbguard/rules.conf 2>/dev/null; then record 'usbguard-moonlander-rule' 'PASS'
-    else record 'usbguard-moonlander-rule' 'WARN' 'Moonlander whitelist rule missing from rules.conf'; fi
-    if grep -q '0483:df11' /etc/usbguard/rules.conf 2>/dev/null; then record 'usbguard-stm32-dfu-rule' 'PASS'
-    else record 'usbguard-stm32-dfu-rule' 'WARN' 'STM32 DFU whitelist rule missing from rules.conf (needed for Moonlander firmware flashing)'; fi
+    # usbguard-daemon.conf and rules.conf are mode 0600 root: unreadable != missing
+    _ug_chk() { # name severity file pattern failmsg
+      if [[ ! -r "$3" && "$EUID" -ne 0 ]]; then record "$1" "WARN" "skipped — $3 requires root"
+      elif grep -q "$4" "$3" 2>/dev/null; then record "$1" "PASS"
+      else record "$1" "$2" "$5"; fi
+    }
+    _ug_chk usbguard-implicit-policy FAIL /etc/usbguard/usbguard-daemon.conf '^ImplicitPolicyTarget=block' 'ImplicitPolicyTarget is not block — all unmatched devices may be allowed'
+    _ug_chk usbguard-audit-backend FAIL /etc/usbguard/usbguard-daemon.conf '^AuditBackend=LinuxAudit' 'AuditBackend is not LinuxAudit — USBGuard events not forwarded to auditd'
+    _ug_chk usbguard-ipc-groups FAIL /etc/usbguard/usbguard-daemon.conf '^IPCAllowedGroups=wheel' 'IPCAllowedGroups is not wheel — non-root users cannot manage USBGuard'
+    _ug_chk usbguard-yubikey-rule FAIL /etc/usbguard/rules.conf '^allow id 1050:' 'YubiKey whitelist rule missing from rules.conf'
+    _ug_chk usbguard-moonlander-rule WARN /etc/usbguard/rules.conf '^allow id 3297:1969' 'Moonlander whitelist rule missing from rules.conf'
+    _ug_chk usbguard-stm32-dfu-rule WARN /etc/usbguard/rules.conf '^allow id 0483:df11' 'STM32 DFU whitelist rule missing from rules.conf (needed for Moonlander firmware flashing)'
+    unset -f _ug_chk
   fi
 
   # bpfman.socket enabled (socket-activated daemon — socket must be enabled for bpfman load/list to work)
@@ -1125,6 +1193,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     _bad_directive=""
     if [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
       while IFS=: read -r _f _d _p; do
+        _p="${_p//\$_agent_fwd/$_agent_fwd}"  # heredoc is quoted; expand the one placeholder
         case "$_f" in
           P) grep -qP "^${_d} ${_p}([[:space:]]+#.*)?$" /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null ;;
           *) grep -qE "^${_d} ${_p}([[:space:]]+#.*)?$" /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null ;;
@@ -1141,7 +1210,7 @@ q:TCPKeepAlive:no
 q:LogLevel:VERBOSE
 q:HostKeyAlgorithms:ssh-ed25519
 q:PubkeyAuthentication:yes
-P:AllowAgentForwarding:no
+q:AllowAgentForwarding:$_agent_fwd
 P:AllowTcpForwarding:(no|local|remote|yes|all)
 q:PermitUserEnvironment:no
 P:MaxSessions:[1-9][0-9]*
@@ -1163,10 +1232,11 @@ EOF
     else record "sshd-hardening" "FAIL" "sshd drop-in not deployed"; fi
     # AllowUsers must contain the actual user — empty or 'root' would lock everyone out
     if [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
-      _allow_users=$(grep -oP '^AllowUsers \K.*' /etc/ssh/sshd_config.d/00-hardening.conf | tr -d ' ' || true)
-      _expected_user="${SUDO_USER:-$USER}"
-      if [[ "$_allow_users" == "$_expected_user" ]]; then record "sshd-allowusers" "PASS"
-      else record "sshd-allowusers" "FAIL" "AllowUsers='$_allow_users' expected '$_expected_user'"; fi
+            _expected_user="${SUDO_USER:-${USER:-$(id -un)}}"
+      # Template appends system_ssh_extra_allow_users after the primary user
+      _allow_users=$(grep -oP '^AllowUsers \K.*' /etc/ssh/sshd_config.d/00-hardening.conf | sed 's/[[:space:]]*#.*//' || true)
+      if [[ " $_allow_users " == *" $_expected_user "* ]]; then record "sshd-allowusers" "PASS"
+      else record "sshd-allowusers" "FAIL" "AllowUsers='$_allow_users' does not include '$_expected_user'"; fi
       unset _allow_users _expected_user
     elif $CSB_HOST; then
       record "sshd-allowusers" "WARN" "sshd drop-in not deployed on CSB — IT manages sshd"
@@ -1211,6 +1281,8 @@ EOF
   # Non-CSB: expect -e 2 (immutable) — rules locked until reboot
   if $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then
     record "auditd-rules" "WARN" "skipped on RHEL CSB — audit rules managed by IT/SIEM pipeline"
+  elif [[ $EUID -ne 0 && ! -r /etc/audit/rules.d/claude-code.rules ]]; then
+    record "auditd-rules" "WARN" "needs root (run make smoke-test with sudo) — /etc/audit is unreadable"
   elif $CSB_HOST && grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null && \
      grep -q '^-e 1' /etc/audit/rules.d/claude-code.rules 2>/dev/null && \
      grep -q ' -k claude-sensitive-write$' /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
@@ -1234,7 +1306,9 @@ EOF
     record "auditd-immutable" "WARN" "auditctl requires root to check kernel state; re-run as root to verify"
   fi
   # Auditd watch keys for new paths deployed by the system role (skipped on RHEL CSB — IT manages rules)
-  if ! $CSB_HOST || grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
+  if [[ $EUID -ne 0 && ! -r /etc/audit/rules.d/claude-code.rules ]]; then
+    record "auditd-watches" "WARN" "needs root (run make smoke-test with sudo) — /etc/audit is unreadable"
+  elif ! $CSB_HOST || grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
     for _key in power-config device-policy kernel-params kernel-modules logins kernel-module-load kernel-module-unload perm_mod bpfman-config crypto-policy user-mgmt aide-integrity mac-policy network-config; do
       if grep -q " -k ${_key}$" /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
         record "auditd-watch-${_key}" "PASS"
@@ -1242,26 +1316,38 @@ EOF
     done
   fi
   if [[ -f /etc/systemd/system/aide-check.timer ]]; then
-    # AIDE monitoring of security-critical conf.d directories (verify lineinfile tasks applied)
-    if [[ -f /etc/aide.conf ]]; then
-      for _path in "/usr/local/bin" "/etc/ssh/sshd_config.d" "/etc/NetworkManager/conf.d" "/etc/systemd/resolved.conf.d" "/etc/systemd/logind.conf.d" "/etc/crypto-policies" "/etc/selinux" "/etc/bpfman" "/etc/usbguard" "/etc/audit" "/etc/aide.conf" "/boot" "/etc/sysctl.d" "/etc/kernel" "/etc/modprobe.d" "/etc/sudoers.d" "/etc/dconf" "/etc/systemd/system" "/etc/systemd/journald.conf.d" "/etc/systemd/coredump.conf.d"; do
-        label="aide-monitors-$(basename "$_path")"
-        if grep -qF "$_path" /etc/aide.conf 2>/dev/null; then record "$label" "PASS"
+    # AIDE monitoring of security-critical paths (exact entry at line start, as the lineinfile
+    # tasks in roles/system/tasks/aide.yml write them; optional $ suffix is AIDE syntax)
+    if [[ $EUID -ne 0 && ! -r /etc/aide.conf ]]; then
+      record "aide-monitors" "WARN" "needs root (run make smoke-test with sudo) — /etc/aide.conf is unreadable"
+    elif [[ -r /etc/aide.conf ]]; then
+      _aide_paths=(/usr/local/bin /etc/ssh/sshd_config.d /etc/NetworkManager/conf.d /etc/systemd/resolved.conf.d /etc/systemd/logind.conf.d /etc/crypto-policies/config /etc/crypto-policies/policies /etc/selinux/config /etc/audit /etc/aide.conf /etc/sysctl.d /etc/kernel /etc/modprobe.d /etc/sudoers.d /etc/dconf /etc/systemd/journald.conf.d /etc/systemd/coredump.conf.d)
+      [[ "$profile" != "work" ]] || _aide_paths+=(/etc/bpfman)
+      ! $_usbguard_enabled || _aide_paths+=(/etc/usbguard)
+      for _path in "${_aide_paths[@]}"; do
+        label="aide-monitors-$(basename "$(dirname "$_path")")-$(basename "$_path")"
+        if grep -qE "^${_path//./\\.}"'\$?[[:space:]]' /etc/aide.conf 2>/dev/null; then record "$label" "PASS"
         else record "$label" "WARN" "$_path not found in /etc/aide.conf"; fi
       done
+      unset _aide_paths
+      if grep -qxE '!/etc/NetworkManager/system-connections[[:space:]]*' /etc/aide.conf 2>/dev/null \
+         && ! grep -qE '^/etc/NetworkManager/system-connections[[:space:]]' /etc/aide.conf 2>/dev/null; then
+        record "aide-nm-connections-excluded" "PASS"
+      else record "aide-nm-connections-excluded" "WARN" "/etc/aide.conf must exclude (!) /etc/NetworkManager/system-connections and not monitor it — run: make system"; fi
     else record "aide-not-configured" "WARN" "/etc/aide.conf absent — run: make system (enable system_aide_enabled: true in config.yml first); after deploy, initialise with: aide --init"; fi
     # TLP paths only added to aide.conf when TLP is enabled (system_tlp_enabled=true for laptops)
     if [[ -f /etc/tlp.conf ]]; then
       for _path in "/etc/tlp.d" "/etc/tlp.conf"; do
         label="aide-monitors-$(basename "$_path")"
-        if grep -qF "$_path" /etc/aide.conf 2>/dev/null; then record "$label" "PASS"
+        if [[ ! -r /etc/aide.conf ]]; then :  # already reported above as needs-root
+        elif grep -qE "^${_path//./\\.}"'[[:space:]]' /etc/aide.conf 2>/dev/null; then record "$label" "PASS"
         else record "$label" "WARN" "$_path not found in /etc/aide.conf — expected when system_tlp_enabled: true"; fi
       done
     fi
   fi
 
   # USB storage blacklist is conditional on system_disable_usb_storage (default: false)
-  if grep -q '^blacklist usb_storage' /etc/modprobe.d/hardening.conf 2>/dev/null; then
+  if grep -q '^blacklist usb_storage' /etc/modprobe.d/hardening.conf 2>/dev/null && grep -q '^install usb_storage /bin/false' /etc/modprobe.d/hardening.conf 2>/dev/null; then
     record "usb-storage-blocked" "PASS"
   else record "usb-storage-blocked" "WARN" "usb_storage not kernel-blocked — USB drives may mount (expected if system_disable_usb_storage: false)"; fi
 
@@ -1277,13 +1363,16 @@ EOF
   # coredump security check — alert if ansible-playbook, gpg, or ssh-agent have coredumps
   # (these processes handle vault plaintext/SSH keys; their coredumps expose secrets)
   if command -v coredumpctl &>/dev/null; then
-    _cd_priv_dumps=$(coredumpctl list --no-pager --no-legend 2>/dev/null \
-      | awk '{print $NF}' | grep -cE '^(ansible-playbook|gpg|gpg-agent|ssh-agent)$' || true)
-    if [[ "$_cd_priv_dumps" -eq 0 ]]; then
+    # comm is truncated to 15 chars (ansible-playboo). -F COREDUMP_COMM lists the crashed processes' names (the last list column is SIZE).
+    _cd_priv_dumps=$(coredumpctl list --no-pager --no-legend -F COREDUMP_COMM 2>/dev/null \
+      | grep -cE '^(ansible-playbook|ansible-playboo|gpg|gpg-agent|ssh-agent)$' || true)
+    if [[ "$_cd_priv_dumps" -eq 0 && "$EUID" -ne 0 ]]; then
+      record "coredump-no-vault-process-dumps" "WARN" "none visible, but coredumpctl lists only readable dumps as non-root (re-run with sudo)"
+    elif [[ "$_cd_priv_dumps" -eq 0 ]]; then
       record "coredump-no-vault-process-dumps" "PASS" "no ansible-playbook/gpg/ssh-agent coredumps found"
     else
       record "coredump-no-vault-process-dumps" "FAIL" \
-        "$_cd_priv_dumps coredump(s) from privileged process(es) found — may contain vault plaintext or SSH keys; clean before proceeding: coredumpctl clean"
+        "$_cd_priv_dumps coredump(s) from privileged process(es) found — may contain vault plaintext or SSH keys; remove them (journalctl --vacuum / delete files under /var/lib/systemd/coredump) before proceeding"
     fi
     unset _cd_priv_dumps
   else
@@ -1291,15 +1380,14 @@ EOF
   fi
 
   # journald persistent storage (verify Storage=persistent, not just file existence)
-  # Skipped on CSB — Ansible omits journald config to avoid suppressing SIEM-forwarded events
-  # (RateLimitBurst in the drop-in could drop audit events before audisp-remote ships them)
+  # Skipped on RHEL CSB only (role guard: not csb_rhel); hybrid Fedora CSB applies the drop-in
   if grep -q '^Storage=persistent' /etc/systemd/journald.conf.d/99-hardening.conf 2>/dev/null; then
     record "journald-persistent" "PASS"
-  elif $CSB_HOST; then record "journald-persistent" "WARN" "skipped on CSB — journald config not deployed (IT may forward to SIEM; Ansible guard intentional)"
+  elif $_csb_rhel_host; then record "journald-persistent" "WARN" "skipped on RHEL CSB — journald config not deployed (IT may forward to SIEM; Ansible guard intentional)"
   else record "journald-persistent" "FAIL" "journald Storage=persistent not configured — run: make system"; fi
   if grep -q '^SystemMaxUse=4G' /etc/systemd/journald.conf.d/99-hardening.conf 2>/dev/null; then
     record "journald-maxuse" "PASS"
-  elif $CSB_HOST; then record "journald-maxuse" "WARN" "skipped on CSB — journald config not deployed (IT may forward to SIEM; Ansible guard intentional)"
+  elif $_csb_rhel_host; then record "journald-maxuse" "WARN" "skipped on RHEL CSB — journald config not deployed (IT may forward to SIEM; Ansible guard intentional)"
   else record "journald-maxuse" "FAIL" "journald SystemMaxUse=4G not configured — run: make system"; fi
 
   # bluetooth: masked when system_disable_bluetooth: true (default); skip check when intentionally enabled
@@ -1315,7 +1403,7 @@ EOF
   # (CVE-2024-47176 risk only when running; disabled = not auto-starting = acceptable in printing-enabled mode)
   _cups_browsed_state=$(systemctl is-enabled cups-browsed.service 2>/dev/null || true)
   if [[ "$_cups_browsed_state" == "masked" ]]; then record "cups-browsed-masked" "PASS"
-  elif [[ -z "$_cups_browsed_state" ]] && grep -qiE '^ID=debian' /etc/os-release 2>/dev/null; then
+  elif [[ -z "$_cups_browsed_state" || "$_cups_browsed_state" == "not-found" ]] && grep -qiE '^ID=debian' /etc/os-release 2>/dev/null; then
     record "cups-browsed-masked" "WARN" "cups-browsed not installed on Debian (cups-filters absent) — no CVE-2024-47176 exposure"
   elif [[ "$_cups_browsed_state" == "disabled" || "$_cups_browsed_state" == "static" ]]; then
     record "cups-browsed-masked" "WARN" "cups-browsed not masked (state: '$_cups_browsed_state') — not running; confirm system_disable_printing: false is intentional (CVE-2024-47176 if started)"
@@ -1350,7 +1438,7 @@ EOF
   # passim masked (fwupd dependency — unauthenticated HTTP on 0.0.0.0:27500 reachable via Tailscale trusted zone)
   _passim_state=$(systemctl is-enabled passim.service 2>/dev/null || true)
   if [[ "$_passim_state" == "masked" ]]; then record "passim-masked" "PASS"
-  elif [[ -z "$_passim_state" ]]; then record "passim-masked" "WARN" "passim unit not found — package not installed (no port-27500 exposure)"
+  elif [[ -z "$_passim_state" || "$_passim_state" == "not-found" ]]; then record "passim-masked" "WARN" "passim unit not found — package not installed (no port-27500 exposure)"
   elif $_csb_non_fedora; then record "passim-masked" "WARN" "passim masking skipped on RHEL CSB (state: $_passim_state) — IT manages fwupd/firmware; Ansible not csb_rhel gate"
   else record "passim-masked" "FAIL" "not masked (state: $_passim_state) — unauthenticated HTTP server on 0.0.0.0:27500"; fi
   unset _passim_state
@@ -1376,7 +1464,9 @@ EOF
     'rpcbind.service:rpcbind-masked:rpcbind.service not masked (required by nfs-server; mask both per CIS 2.2.7)' \
     'rpcbind.socket:rpcbind-socket-masked:rpcbind.socket not masked — socket activation can start rpcbind (CIS 2.2.7)'; do
     _u_svc="${_unit%%:*}"; _rest="${_unit#*:}"; _u_key="${_rest%%:*}"; _u_msg="${_rest#*:}"
-    if [[ "$(systemctl is-enabled "$_u_svc" 2>/dev/null)" == 'masked' ]]; then record "$_u_key" 'PASS'
+    if ! $_mask_nfs; then record "$_u_key" 'SKIP' "system_mask_nfs_server: false in config.yml"
+    elif $_csb_non_fedora; then record "$_u_key" 'SKIP' "RHEL CSB — IT manages service masking"
+    elif [[ "$(systemctl is-enabled "$_u_svc" 2>/dev/null)" == 'masked' ]]; then record "$_u_key" 'PASS'
     else record "$_u_key" 'FAIL' "$_u_msg"; fi
   done
   unset _unit _u_svc _rest _u_key _u_msg
@@ -1387,7 +1477,9 @@ EOF
       'iscsid.service:iscsid-masked:iscsid.service not masked — iSCSI initiator daemon can be started (CIS 2.3.x)' \
       'iscsid.socket:iscsid-socket-masked:iscsid.socket not masked — socket activation can start iscsid (CIS 2.3.x)'; do
       _u_svc="${_unit%%:*}"; _rest="${_unit#*:}"; _u_key="${_rest%%:*}"; _u_msg="${_rest#*:}"
-      if [[ "$(systemctl is-enabled "$_u_svc" 2>/dev/null)" == 'masked' ]]; then record "$_u_key" 'PASS'
+      if ! $_mask_iscsi; then record "$_u_key" 'SKIP' "system_mask_iscsi: false in config.yml"
+      elif $_csb_non_fedora; then record "$_u_key" 'SKIP' "RHEL CSB — IT manages service masking"
+      elif [[ "$(systemctl is-enabled "$_u_svc" 2>/dev/null)" == 'masked' ]]; then record "$_u_key" 'PASS'
       else record "$_u_key" 'FAIL' "$_u_msg"; fi
     done
     unset _unit _u_svc _rest _u_key _u_msg
@@ -1415,6 +1507,7 @@ EOF
       [[ -z "$_abrt_state" || "$_abrt_state" == "not-found" ]] && continue
       _abrt_base="${_abrt_svc%.service}"; _abrt_key="${_abrt_base}-masked"
       if [[ "$_abrt_state" == "masked" ]]; then record "$_abrt_key" "PASS"
+      elif ! $_mask_abrt; then record "$_abrt_key" "SKIP" "system_mask_abrt: false in config.yml"
       else record "$_abrt_key" "FAIL" "$_abrt_svc not masked (state: $_abrt_state) — ABRT should be masked in favour of systemd-coredump"; fi
     done
     unset _abrt_svc _abrt_state _abrt_key _abrt_base
@@ -1444,8 +1537,9 @@ EOF
     elif systemctl is-enabled aide-check.timer &>/dev/null; then
       record "aide-timer" "WARN" "timer enabled but not active (reboot or: systemctl start aide-check.timer)"
     else record "aide-timer" "WARN" "timer not enabled"; fi
-    if [[ -f /var/lib/aide/aide.db.gz ]]; then record "aide-db" "PASS"
-    else record "aide-db" "WARN" "AIDE database not initialized (run: sudo bash -c 'aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz')"; fi
+    if [[ $EUID -ne 0 && ! -r /var/lib/aide ]]; then record "aide-db" "WARN" "needs root (run make smoke-test with sudo) — /var/lib/aide is unreadable"
+    elif [[ -f /var/lib/aide/aide.db.gz ]]; then record "aide-db" "PASS"
+    else record "aide-db" "$($_aide_enabled && echo FAIL || echo WARN)" "AIDE database not initialized (run: sudo bash -c 'aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz')"; fi
     if grep -q '^RestrictAddressFamilies=none$' /etc/systemd/system/aide-check.service 2>/dev/null; then
       record "aide-service-no-network" "PASS"
     elif [[ -f /etc/systemd/system/aide-check.service ]]; then
@@ -1457,8 +1551,12 @@ EOF
   # (AIDE disabled means filesystem integrity monitoring is absent; undetected
   # setuid persistence is the primary risk on workstations with AIDE off)
   if [[ ! -f /etc/systemd/system/aide-check.timer ]] && ! $CSB_HOST; then
-    if grep -qiE '^ID=(fedora|rhel|centos|rocky|almalinux)' /etc/os-release 2>/dev/null; then
-      record "aide-disabled" "FAIL" "AIDE not deployed — filesystem integrity monitoring absent; enable system_aide_enabled: true in config.yml (or setuid-scan.timer covers setuid-only gap)"
+    if grep -qiE '^ID="?(fedora|rhel|centos|rocky|almalinux)"?$' /etc/os-release 2>/dev/null; then
+      if $_aide_enabled; then
+        record "aide-disabled" "FAIL" "system_aide_enabled: true but AIDE not deployed — run: make system"
+      else
+        record "aide-disabled" "SKIP" "AIDE disabled (system_aide_enabled: false, the default); setuid-scan.timer covers the setuid gap"
+      fi
     fi
   fi
 
@@ -1469,10 +1567,11 @@ EOF
     elif systemctl is-enabled setuid-scan.timer &>/dev/null; then
       record "setuid-scan-timer" "WARN" "setuid-scan.timer enabled but not active (reboot or: systemctl start setuid-scan.timer)"
     else record "setuid-scan-timer" "WARN" "setuid-scan.timer not enabled"; fi
-    if [[ -f /var/lib/setuid-scan/baseline ]]; then record "setuid-scan-baseline" "PASS"
+    if [[ "$EUID" -ne 0 ]]; then record "setuid-scan-baseline" "WARN" "skipped — /var/lib/setuid-scan is root-only (re-run with sudo)"
+    elif [[ -f /var/lib/setuid-scan/baseline ]]; then record "setuid-scan-baseline" "PASS"
     else record "setuid-scan-baseline" "WARN" "setuid-scan baseline not yet created (timer has not fired; run: systemctl start setuid-scan.service)"; fi
   elif ! $CSB_HOST; then
-    if grep -qiE '^ID=(fedora|rhel|centos|rocky|almalinux)' /etc/os-release 2>/dev/null; then
+    if grep -qiE '^ID="?(fedora|rhel|centos|rocky|almalinux)"?$' /etc/os-release 2>/dev/null; then
       record "setuid-scan-timer" "WARN" "setuid-scan.timer not deployed — setuid binary scan absent; enable system_setuid_scan_enabled: true in config.yml"
     fi
   fi
@@ -1481,8 +1580,14 @@ EOF
   # (port 4460 is required for NTS-KE; may be blocked on CSB corporate networks)
   _chrony_conf="/etc/chrony.conf"
   [[ -f /etc/chrony/chrony.conf ]] && _chrony_conf="/etc/chrony/chrony.conf"
-  if grep -qE '^(pool|server|peer).*\bnts\b' "$_chrony_conf" 2>/dev/null; then
-    if chronyc -c authdata 2>/dev/null | awk -F, '$5 > 0 {found=1} END {exit !found}'; then
+  # chronyc authdata is root-only ("501 Not authorised"); unprivileged runs cannot judge NTS.
+  _chrony_authdata=$(chronyc -c authdata 2>&1 || true)
+  _chrony_auth_denied=false
+  [[ "$_chrony_authdata" == *"Not authorised"* ]] && _chrony_auth_denied=true
+  if grep -qE '^(pool|server|peer).*\bnts\b' "$_chrony_conf" 2>/dev/null && $_chrony_auth_denied; then
+    record "chrony-nts" "WARN" "NTS configured; authentication state needs root (run: sudo chronyc authdata)"
+  elif grep -qE '^(pool|server|peer).*\bnts\b' "$_chrony_conf" 2>/dev/null; then
+    if printf '%s\n' "$_chrony_authdata" | awk -F, '$9+0 > 0 {found=1} END {exit !found}'; then
       record "chrony-nts" "PASS"
     else record "chrony-nts" "WARN" "NTS configured but chronyc authdata shows no authenticated sources — time sync may have fallen back to unauthenticated pool (TCP 4460 blocked? run: chronyc authdata)"; fi
   elif $CSB_HOST; then record "chrony-nts" "WARN" "skipped on CSB — IT manages chrony.conf (Kerberos NTP)"
@@ -1492,11 +1597,13 @@ EOF
   # specifically targets the selected source — if TCP 4460 is blocked after provisioning,
   # chrony silently falls back to the unauthenticated pool as its active reference while
   # potentially retaining stale cookies, so chrony-nts can PASS while this check WARNs.
-  if ! $CSB_HOST && command -v chronyc &>/dev/null; then
+  if ! $CSB_HOST && command -v chronyc &>/dev/null && ${_chrony_auth_denied:-false}; then
+    record "chrony-nts-active" "WARN" "needs root to read chronyc authdata (run: sudo chronyc authdata)"
+  elif ! $CSB_HOST && command -v chronyc &>/dev/null; then
     if _chrony_sources=$(chronyc -c sources 2>/dev/null); then
       _chrony_active=$(printf '%s\n' "$_chrony_sources" | awk -F, '$2 == "*" {print $3; exit}')
       if [[ -n "$_chrony_active" ]]; then
-        if chronyc -c authdata 2>/dev/null | awk -F, -v s="$_chrony_active" '$1 == s && $5+0 > 0 {found=1} END {exit !found}'; then
+        if chronyc -c authdata 2>/dev/null | awk -F, -v s="$_chrony_active" '$1 == s && $9+0 > 0 {found=1} END {exit !found}'; then
           record "chrony-nts-active" "PASS"
         else
           record "chrony-nts-active" "WARN" \
@@ -1599,11 +1706,11 @@ EOF
 
   # sudoers hardening drop-in (mode 0440 — unreadable by non-root; WARN not FAIL)
   if [[ "$EUID" -eq 0 ]]; then
-    if grep -qE '^Defaults[[:space:]].*use_pty' /etc/sudoers.d/99-hardening 2>/dev/null && \
+    if grep -qE '^Defaults[[:space:]]+(.*,[[:space:]]*)?use_pty([[:space:],]|$)' /etc/sudoers.d/99-hardening 2>/dev/null && \
        grep -qE '^Defaults[[:space:]].*logfile=' /etc/sudoers.d/99-hardening 2>/dev/null && \
-       grep -qE '^Defaults[[:space:]].*umask=' /etc/sudoers.d/99-hardening 2>/dev/null; then
+       grep -qE '^Defaults[[:space:]]+umask=0?[0-7]*[2367]7\b' /etc/sudoers.d/99-hardening 2>/dev/null; then
       record "sudoers-hardening" "PASS"
-    elif $_csb_non_fedora; then record "sudoers-hardening" "WARN" "skipped on RHEL CSB — IT manages sudoers via Satellite/SCAP; 99-hardening not deployed"
+    elif $_csb_rhel_host; then record "sudoers-hardening" "WARN" "skipped on RHEL CSB — IT manages sudoers; 99-hardening not deployed (not csb_rhel guard)"
     else record "sudoers-hardening" "FAIL" "sudoers hardening drop-in missing or incomplete"; fi
   else record "sudoers-hardening" "WARN" "skipped — /etc/sudoers.d/ is mode 0440 (run with sudo for full check)"; fi
 
@@ -1621,15 +1728,17 @@ EOF
   unset _skip_pwhistory
 
   # yescrypt password hashing (CIS 5.3.6)
-  # Skipped on CSB — login.defs not modified; IPA/SSSD + IT group policy governs password hashing
+  # Skipped on RHEL CSB only (role guard: not csb_rhel) — IPA/SSSD + IT group policy governs there
   if grep -q '^ENCRYPT_METHOD YESCRYPT$' /etc/login.defs 2>/dev/null; then record "yescrypt" "PASS"
-  elif $CSB_HOST; then record "yescrypt" "WARN" "skipped on CSB — login.defs not modified; IPA/SSSD governs password policy"
+  elif grep -qiE '^ID=debian' /etc/os-release 2>/dev/null; then record "yescrypt" "WARN" "not set on Debian — role leaves Debian login.defs hashing unchanged"
+  elif $_csb_rhel_host; then record "yescrypt" "WARN" "skipped on RHEL CSB — login.defs not modified; IPA/SSSD governs password policy"
   else record "yescrypt" "FAIL" "ENCRYPT_METHOD YESCRYPT not set in login.defs"; fi
 
   # yescrypt cost factor (CIS 5.4.1) — use $ to avoid prefix match against e.g. 50
-  # Skipped on CSB — login.defs not modified; IPA/SSSD + IT group policy governs password hashing
+  # Skipped on RHEL CSB only (role guard: not csb_rhel) — IPA/SSSD + IT group policy governs there
   if grep -qE '^YESCRYPT_COST_FACTOR 5$' /etc/login.defs 2>/dev/null; then record "yescrypt-cost" "PASS"
-  elif $CSB_HOST; then record "yescrypt-cost" "WARN" "skipped on CSB — login.defs not modified; IPA/SSSD governs password policy"
+  elif grep -qiE '^ID=debian' /etc/os-release 2>/dev/null; then record "yescrypt-cost" "WARN" "not set on Debian — role leaves Debian login.defs hashing unchanged"
+  elif $_csb_rhel_host; then record "yescrypt-cost" "WARN" "skipped on RHEL CSB — login.defs not modified; IPA/SSSD governs password policy"
   else record "yescrypt-cost" "FAIL" "YESCRYPT_COST_FACTOR 5 not set in login.defs"; fi
 
   # fprintd masked (prevents fingerprint from bypassing faillock; or intentionally enabled via system_disable_fingerprint: false)
@@ -1639,16 +1748,16 @@ EOF
     record "fprintd-masked" "SKIP" "fprintd.service not installed (no fingerprint authentication)"
   elif [[ "$_fprintd_state" == "enabled" || "$_fprintd_state" == "static" ]]; then
     record "fprintd-masked" "WARN" "fprintd.service enabled (state: $_fprintd_state) — confirm system_disable_fingerprint: false is intentional (faillock bypass risk)"
-  elif $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then
-    record "fprintd-masked" "WARN" "fprintd masking skipped on RHEL CSB — IT manages fingerprint auth; Ansible not csb_rhel gate"
+  elif $CSB_HOST; then
+    record "fprintd-masked" "WARN" "fprintd masking skipped on CSB — IT manages fingerprint auth; Ansible not csb_detected gate"
   else record "fprintd-masked" "FAIL" "fprintd.service not masked (state: $_fprintd_state) — fingerprint can bypass faillock"; fi
   unset _fprintd_state
 
   # resolv.conf points to systemd-resolved stub (required for split DNS/MagicDNS)
-  # Skipped on CSB — Ansible guard omits this because NM/VPN manages resolv.conf on corporate networks
+  # Skipped on RHEL CSB only (role guard: not csb_rhel) — NM/VPN manages resolv.conf there; Fedora hybrid enforces the symlink
   if [[ "$(readlink /etc/resolv.conf 2>/dev/null)" == "/run/systemd/resolve/stub-resolv.conf" ]]; then
     record "resolv-stub" "PASS"
-  elif $CSB_HOST; then record "resolv-stub" "WARN" "skipped on CSB — NM/VPN manages resolv.conf on corporate networks"
+  elif $_csb_non_fedora; then record "resolv-stub" "WARN" "skipped on RHEL CSB — NM/VPN manages resolv.conf on corporate networks"
   else record "resolv-stub" "FAIL" "resolv.conf not symlinked to stub-resolv.conf — Tailscale MagicDNS broken; fix: sudo ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf"; fi
 
   # systemd-resolved service must be active for stub socket at 127.0.0.53 to work
@@ -1656,14 +1765,16 @@ EOF
   else record "systemd-resolved-active" "FAIL" "systemd-resolved.service not active — stub socket 127.0.0.53 down; fix: sudo systemctl enable --now systemd-resolved"; fi
 
   # cron.allow restricts cron to root only (CIS 5.1.8)
-  # Skipped on RHEL CSB — katello-agent, Insights client, and IT monitoring run cron jobs under
+  # Skipped on RHEL CSB only — katello-agent, Insights client, and IT monitoring run cron jobs under
   # non-root system users; cron.allow=root-only would silently break those IT management jobs
-  if grep -qx 'root' /etc/cron.allow 2>/dev/null; then record "cron-allow-root" "PASS"
-  elif $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then record "cron-allow-root" "WARN" "skipped on RHEL CSB — IT monitoring agents use cron; cron.allow not restricted to root"
+  if [[ "$EUID" -ne 0 && ! -r /etc/cron.allow ]]; then record "cron-allow-root" "WARN" "skipped — /etc/cron.allow requires root to read"
+  elif grep -qx 'root' /etc/cron.allow 2>/dev/null; then record "cron-allow-root" "PASS"
+  elif $_csb_rhel_host; then record "cron-allow-root" "WARN" "skipped on RHEL CSB — IT monitoring agents use cron; cron.allow not restricted to root"
   else record "cron-allow-root" "FAIL" "/etc/cron.allow missing or not restricted to root (CIS 5.1.8)"; fi
   # at.allow restricts 'at' command to root only (CIS 5.1.9)
-  if grep -qx 'root' /etc/at.allow 2>/dev/null; then record "at-allow-root" "PASS"
-  elif $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then record "at-allow-root" "WARN" "skipped on RHEL CSB — IT monitoring agents may use at; at.allow not restricted to root"
+  if [[ "$EUID" -ne 0 && ! -r /etc/at.allow ]]; then record "at-allow-root" "WARN" "skipped — /etc/at.allow requires root to read"
+  elif grep -qx 'root' /etc/at.allow 2>/dev/null; then record "at-allow-root" "PASS"
+  elif $_csb_rhel_host; then record "at-allow-root" "WARN" "skipped on RHEL CSB — IT monitoring agents may use at; at.allow not restricted to root"
   else record "at-allow-root" "FAIL" "/etc/at.allow missing or not restricted to root (CIS 5.1.9)"; fi
 
   # splunk system account shell (CIS 5.6) — CSB hosts only; splunk absent on standard Fedora
@@ -1675,11 +1786,10 @@ EOF
   fi
 
   # Login banner deployed to /etc/issue (CIS 1.7.1)
-  # Skipped on RHEL CSB only — IT deploys a mandated corporate legal banner; Ansible does not
-  # write /etc/issue on RHEL CSB (csb_rhel guard). On Fedora hybrid CSB, Ansible does deploy
-  # the banner (not csb_rhel is true), so a missing banner is a real FAIL there.
+  # Skipped on RHEL CSB only — IT deploys a mandated corporate legal banner there; the playbook
+  # guard is `not csb_rhel` (roles/system/tasks/main.yml), so hybrid Fedora CSB gets the banner.
   if grep -qi 'authorized users' /etc/issue 2>/dev/null; then record "login-banner" "PASS"
-  elif $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then record "login-banner" "WARN" "skipped on RHEL CSB — IT deploys mandated legal banner; Ansible does not write /etc/issue"
+  elif $_csb_rhel_host; then record "login-banner" "WARN" "skipped on RHEL CSB — IT deploys mandated legal banner; Ansible does not write /etc/issue"
   else record "login-banner" "FAIL" "login banner not deployed or missing expected text (/etc/issue)"; fi
 
   # Critical file permissions (CIS 6.1.x)
@@ -1693,11 +1803,14 @@ EOF
   else record "gshadow-perms" "FAIL" "permissions $gshadow_mode, expected 0000 (Fedora/RHEL) or 0640 (Debian)"; fi
 
   # TMOUT session timeout (CIS 5.5.5) — verify numeric value <=900s in bash (profile.d) and zsh (/etc/zshrc)
-  _tmout_val=$(grep -oP '^(readonly\s+)?TMOUT=\K[0-9]+' /etc/profile.d/tmout.sh 2>/dev/null || echo "")
+  # Debian has no profile.d/tmout.sh (see session_timeout.yml); bash TMOUT lives in /etc/bash.bashrc
+  _bash_tmout_file="/etc/profile.d/tmout.sh"
+  grep -qiE '^ID=debian' /etc/os-release 2>/dev/null && _bash_tmout_file="/etc/bash.bashrc"
+  _tmout_val=$(grep -oP '^(readonly\s+)?TMOUT=\K[0-9]+' "$_bash_tmout_file" 2>/dev/null || echo "")
   if [[ -n "$_tmout_val" && "$_tmout_val" -gt 0 && "$_tmout_val" -le 900 ]]; then
     record "tmout-bash" "PASS"
   elif [[ -z "$_tmout_val" ]]; then
-    record "tmout-bash" "WARN" "tmout.sh missing or TMOUT not set — may be intentional (system_tmout: 0 disables)"
+    record "tmout-bash" "WARN" "$_bash_tmout_file missing or TMOUT not set — may be intentional (system_tmout: 0 disables)"
   else
     record "tmout-bash" "FAIL" "TMOUT=$_tmout_val exceeds CIS 5.5.5 maximum of 900s"
   fi
@@ -1712,7 +1825,7 @@ EOF
   else
     record "tmout-zsh" "FAIL" "TMOUT=$_tmout_zsh in $_zsh_tmout_file exceeds CIS 5.5.5 maximum of 900s"
   fi
-  unset _zsh_tmout_file _tmout_val _tmout_zsh
+  unset _zsh_tmout_file _bash_tmout_file _tmout_val _tmout_zsh
 
   # /tmp hardening (CIS 1.1.2.x) — noexec/nosuid/nodev all required
   _tmp_opts=$(findmnt -n -o OPTIONS /tmp 2>/dev/null || echo "")
@@ -1739,7 +1852,7 @@ EOF
   # On CSB, fstab is IT-managed so Ansible deploys dev-shm-harden.service to re-apply
   # hardening on each boot. Verify the service is enabled — if it isn't, a reboot loses
   # nosuid/nodev/noexec and the shm-hardening check above would pass until next reboot.
-  if $CSB_HOST; then
+  if $_csb_non_fedora; then  # unit is deployed only when csb_rhel
     if systemctl is-enabled dev-shm-harden.service &>/dev/null; then record "dev-shm-harden-enabled" "PASS"
     else record "dev-shm-harden-enabled" "FAIL" "dev-shm-harden.service not enabled on CSB — /dev/shm hardening lost on reboot"; fi
   fi
@@ -1782,7 +1895,7 @@ EOF
     # On CSB, fstab is IT-managed so Ansible deploys boot-harden.service to re-apply
     # hardening on each boot. Verify the service is enabled — if it isn't, a reboot loses
     # nosuid/nodev/noexec and the boot-hardening check above would pass until next reboot.
-    if $CSB_HOST; then
+    if $_csb_non_fedora; then  # unit is deployed only when csb_rhel
       if systemctl is-enabled boot-harden.service &>/dev/null; then record "boot-harden-enabled" "PASS"
       else record "boot-harden-enabled" "FAIL" "boot-harden.service not enabled on CSB — /boot hardening lost on reboot"; fi
     fi
@@ -1801,7 +1914,7 @@ EOF
     unset _efi_opts
     # On CSB, Ansible deploys boot-efi-harden.service to re-apply options each boot.
     # Verify it is enabled — silent enable failure (ignore_errors: true) leaves no other signal.
-    if $CSB_HOST; then
+    if $_csb_non_fedora; then  # unit is deployed only when csb_rhel
       if systemctl is-enabled boot-efi-harden.service &>/dev/null; then
         record "boot-efi-harden-enabled" "PASS"
       else
@@ -1829,20 +1942,25 @@ EOF
   if [[ "$(systemctl is-enabled ctrl-alt-del.target 2>/dev/null)" == "masked" ]]; then record "ctrl-alt-del-masked" "PASS"
   else record "ctrl-alt-del-masked" "FAIL" "ctrl-alt-del.target not masked"; fi
 
-  # dnf-automatic
+  # dnf-automatic (dnf hosts only; the role does not install it on Debian)
   timer="dnf-automatic.timer"
   command -v dnf5 &>/dev/null && timer="dnf5-automatic.timer"
   if systemctl is-enabled "$timer" &>/dev/null && systemctl is-active "$timer" &>/dev/null; then
     record "dnf-automatic" "PASS"
   elif systemctl is-enabled "$timer" &>/dev/null; then
     record "dnf-automatic" "WARN" "timer enabled but not active (reboot or: systemctl start $timer)"
+  elif ! command -v rpm &>/dev/null; then
+    record "dnf-automatic" "SKIP" "dnf-automatic is installed on dnf hosts only"
   elif $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then
     record "dnf-automatic" "WARN" "skipped on RHEL CSB — IT manages updates via Satellite/RHSM; Ansible not-csb_rhel guard"
   else record "dnf-automatic" "WARN" "timer not enabled"; fi
 
   # RPM Fusion free repo (Fedora only; mirrors repos_dnf not csb_rhel guard)
-  if grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
-    if dnf repolist rpmfusion-free 2>/dev/null | grep -q 'rpmfusion-free'; then record "rpmfusion-free-repo" "PASS"
+  if ! $_rpmfusion_free; then
+    record "rpmfusion-free-repo" "SKIP" "repo_rpmfusion_free: false in config.yml"
+  elif grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
+    # Read repo files only: `dnf repolist` would refresh metadata over the network
+    if cat /etc/yum.repos.d/*.repo 2>/dev/null | awk '/^\[/{in_r=($0=="[rpmfusion-free]")} in_r&&/^enabled[[:space:]]*=[[:space:]]*1/{ok=1} END{exit !ok}'; then record "rpmfusion-free-repo" "PASS"
     else record "rpmfusion-free-repo" "WARN" "rpmfusion-free repo not enabled (run: make repos_dnf; default repo_rpmfusion_free=true)"; fi
   fi
 
@@ -1916,7 +2034,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   else record "dconf-db-local" "FAIL" "compiled database /etc/dconf/db/local missing (run: dconf update)"; fi
   # GDM database — WARN not FAIL: Sway uses greetd, not GDM
   if [[ -f /etc/dconf/db/gdm ]]; then record "dconf-db-gdm" "PASS"
-  else record "dconf-db-gdm" "WARN" "/etc/dconf/db/gdm missing (GDM not installed? Sway/greetd systems not affected)"; fi
+  else record "dconf-db-gdm" "WARN" "/etc/dconf/db/gdm missing although gdm.service exists — run: make system"; fi
   # Media-handling automount/autorun (CIS 1.8.6-1.8.8)
   if grep -q '^automount=false' /etc/dconf/db/local.d/50-hardening 2>/dev/null && \
      grep -q '^autorun-never=true' /etc/dconf/db/local.d/50-hardening 2>/dev/null && \
@@ -1947,13 +2065,13 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   if grep -q '^disable-user-list=true' /etc/dconf/db/gdm.d/03-hardening 2>/dev/null; then
     record "dconf-gdm-user-list" "PASS"
   elif [[ ! -f /etc/dconf/db/gdm.d/03-hardening ]]; then
-    record "dconf-gdm-user-list" "WARN" "gdm.d/03-hardening not deployed (GDM not installed? Sway/greetd systems not affected)"
+    record "dconf-gdm-user-list" "WARN" "gdm.d/03-hardening not deployed although gdm.service exists — run: make system"
   else record "dconf-gdm-user-list" "FAIL" "disable-user-list=true missing in /etc/dconf/db/gdm.d/03-hardening"; fi
   # GDM lock file: ensure disable-user-list cannot be overridden by users
   if grep -q '^/org/gnome/login-screen/disable-user-list$' /etc/dconf/db/gdm.d/locks/03-hardening 2>/dev/null; then
     record "dconf-gdm-user-list-lock" "PASS"
   elif [[ ! -f /etc/dconf/db/gdm.d/03-hardening ]]; then
-    record "dconf-gdm-user-list-lock" "WARN" "gdm.d/locks/03-hardening not checked (GDM not installed)"
+    record "dconf-gdm-user-list-lock" "WARN" "gdm.d/locks/03-hardening not checked (gdm.d/03-hardening missing)"
   else record "dconf-gdm-user-list-lock" "FAIL" "disable-user-list not locked in /etc/dconf/db/gdm.d/locks/03-hardening"; fi
   # XDMCP disabled (CIS 1.8.10) — prevents remote graphical session requests on UDP/TCP 177
   if [[ ! -f /etc/gdm/custom.conf ]]; then
@@ -1968,7 +2086,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # Unexpected listening ports (non-loopback)
   if ! command -v ss &>/dev/null; then record "no-open-ports" "WARN" "ss not installed — cannot check for unexpected listeners"
   else
-    listeners=$(ss -tulnp 2>/dev/null | grep -vE "127\.[0-9]+\.[0-9]+\.[0-9]+|::1" | grep -vE ":(22|${_ssh_port:-$_cfg_ssh_port})([^0-9]|$)" | tail -n +2 || true)
+    listeners=$(ss -tulnp 2>/dev/null | awk '$5 !~ /^(127\.|\[::1\]:)/' | grep -vE ":(22|${_ssh_port:-$_cfg_ssh_port})([^0-9]|$)" | tail -n +2 || true)
     if [[ -z "$listeners" ]]; then record "no-open-ports" "PASS"
     else record "no-open-ports" "WARN" "$listeners"; fi
   fi
@@ -1990,46 +2108,48 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   fi
 
   # login.defs password aging (CIS 5.4.x)
-  # Skipped on CSB — login.defs is not modified on CSB; IPA/SSSD + IT group policy governs local
-  # accounts. INACTIVE=30 in particular could lock IT-managed service accounts that don't rotate
-  # passwords, so Ansible deliberately skips all login.defs writes when csb_detected is true.
+  # Skipped on RHEL CSB only (role guard: not csb_rhel) — IPA/SSSD + IT group policy governs local
+  # accounts there. Hybrid Fedora CSB applies login.defs and chage for local accounts.
   _pass_max_days=$(awk '/^PASS_MAX_DAYS[[:space:]]/{print $2}' /etc/login.defs 2>/dev/null || echo "")
   if [[ -n "$_pass_max_days" && "$_pass_max_days" -ge 1 && "$_pass_max_days" -le 365 ]]; then record "pass-max-days" "PASS"
-  elif $CSB_HOST; then record "pass-max-days" "WARN" "skipped on CSB — login.defs not modified; IT group policy governs password aging"
+  elif $_csb_rhel_host; then record "pass-max-days" "WARN" "skipped on RHEL CSB — login.defs not modified; IT group policy governs password aging"
   else record "pass-max-days" "FAIL" "PASS_MAX_DAYS=${_pass_max_days:-unset} not in CIS range 1-365 in login.defs"; fi
   if grep -qE "^UMASK[[:space:]]+${_system_umask}([[:space:]]+#.*)?$" /etc/login.defs 2>/dev/null; then record "umask-login-defs" "PASS"
-  elif $CSB_HOST; then record "umask-login-defs" "WARN" "skipped on CSB — login.defs not modified"
+  elif $_csb_rhel_host; then record "umask-login-defs" "WARN" "skipped on RHEL CSB — login.defs not modified"
   else record "umask-login-defs" "FAIL" "UMASK not set to ${_system_umask} in login.defs"; fi
   _inactive_logindefs=$(awk '/^INACTIVE[[:space:]]/{print $2}' /etc/login.defs 2>/dev/null || echo "")
   if [[ -n "$_inactive_logindefs" && "$_inactive_logindefs" -ge 1 && "$_inactive_logindefs" -le 30 ]]; then record "inactive-lock" "PASS"
-  elif $CSB_HOST; then record "inactive-lock" "WARN" "skipped on CSB — INACTIVE not set (would lock IT-managed service accounts with non-rotating passwords)"
+  elif $_csb_rhel_host; then record "inactive-lock" "WARN" "skipped on RHEL CSB — INACTIVE not set (would lock IT-managed service accounts with non-rotating passwords)"
   else record "inactive-lock" "FAIL" "INACTIVE=${_inactive_logindefs:-unset} not in CIS range 1-30 in login.defs"; fi
   # CIS 5.5.1.5: verify chage -I 30 was applied to the existing user account (not just new-account default).
   # login.defs INACTIVE=30 only governs future accounts created with useradd — the retroactive chage
   # updates /etc/shadow field 7 directly for the pre-existing user. Requires root to read /etc/shadow.
   if [[ "$EUID" -eq 0 ]]; then
     _chage_user="${SUDO_USER:-$USER}"
+    [[ "$_chage_user" != "root" ]] || _chage_user=""  # direct root login: the provisioned account is unknown
     _shadow_line=$(awk -F: -v u="$_chage_user" '$1==u' /etc/shadow 2>/dev/null)
-    if [[ -z "$_shadow_line" ]]; then
+    if [[ -z "$_chage_user" ]]; then
+      record "chage-inactive-user" "WARN" "skipped — running as root without sudo; re-run via sudo from the provisioned account"
+    elif [[ -z "$_shadow_line" ]]; then
       record "chage-inactive-user" "WARN" "no shadow entry for '$_chage_user' (SSSD/IPA domain account?)"
     else
       _inactive_val=$(awk -F: '{print $7}' <<< "$_shadow_line")
       if [[ -n "$_inactive_val" && "$_inactive_val" -ge 1 && "$_inactive_val" -le 30 ]]; then record "chage-inactive-user" "PASS"
-      elif $CSB_HOST; then record "chage-inactive-user" "WARN" "skipped on CSB — Ansible intentionally omits chage -I 30 (IPA krbPwdPolicy manages inactive lockout centrally)"
+      elif $_csb_rhel_host; then record "chage-inactive-user" "WARN" "skipped on RHEL CSB — Ansible intentionally omits chage -I 30 (IPA krbPwdPolicy manages inactive lockout centrally)"
       else record "chage-inactive-user" "FAIL" "shadow INACTIVE='$_inactive_val' for '$_chage_user', not in CIS range 1-30 (CIS 5.5.1.5 — run: chage -I 30 $_chage_user)"; fi
     fi
     unset _chage_user _inactive_val _shadow_line
   else record "chage-inactive-user" "WARN" "skipped — reading /etc/shadow requires root (re-run with sudo for full check)"; fi
   _pass_min_days=$(awk '/^PASS_MIN_DAYS[[:space:]]/{print $2}' /etc/login.defs 2>/dev/null || echo "")
   if [[ -n "$_pass_min_days" && "$_pass_min_days" -ge 1 ]]; then record "pass-min-days" "PASS"
-  elif $CSB_HOST; then record "pass-min-days" "WARN" "skipped on CSB — login.defs not modified; IT group policy governs password aging"
+  elif $_csb_rhel_host; then record "pass-min-days" "WARN" "skipped on RHEL CSB — login.defs not modified; IT group policy governs password aging"
   else record "pass-min-days" "FAIL" "PASS_MIN_DAYS=${_pass_min_days:-unset} not >= 1 in login.defs (CIS minimum)"; fi
   _pass_warn_age=$(awk '/^PASS_WARN_AGE[[:space:]]/{print $2}' /etc/login.defs 2>/dev/null || echo "")
   if [[ -n "$_pass_warn_age" && "$_pass_warn_age" -ge 7 ]]; then record "pass-warn-age" "PASS"
-  elif $CSB_HOST; then record "pass-warn-age" "WARN" "skipped on CSB — login.defs not modified; IT group policy governs password aging"
+  elif $_csb_rhel_host; then record "pass-warn-age" "WARN" "skipped on RHEL CSB — login.defs not modified; IT group policy governs password aging"
   else record "pass-warn-age" "FAIL" "PASS_WARN_AGE=${_pass_warn_age:-unset} not >= 7 in login.defs (CIS minimum)"; fi
   if grep -qE '^HOME_MODE[[:space:]]+0?[0-7][0145]0[[:space:]]*(#.*)?$' /etc/login.defs 2>/dev/null; then record "home-mode" "PASS"
-  elif $CSB_HOST; then record "home-mode" "WARN" "skipped on CSB — login.defs not modified"
+  elif $_csb_rhel_host; then record "home-mode" "WARN" "skipped on RHEL CSB — login.defs not modified"
   else record "home-mode" "FAIL" "HOME_MODE missing or allows group write/other access in login.defs (CIS)"; fi
 
   # Console keymap
@@ -2039,30 +2159,36 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # logind IdleAction=lock (physical security)
   if grep -q '^IdleAction=lock' /etc/systemd/logind.conf.d/99-hardening.conf 2>/dev/null; then
     record "logind-idle-lock" "PASS"
+  elif $_csb_non_fedora; then record "logind-idle-lock" "WARN" "skipped on RHEL CSB — IT manages session policy"
   else record "logind-idle-lock" "FAIL" "logind IdleAction not set to lock — check /etc/systemd/logind.conf.d/99-hardening.conf; fix: make system"; fi
-  if grep -q '^IdleActionSec=' /etc/systemd/logind.conf.d/99-hardening.conf 2>/dev/null; then
+  if grep -qE '^IdleActionSec=[1-9]' /etc/systemd/logind.conf.d/99-hardening.conf 2>/dev/null; then
     record "logind-idle-sec" "PASS"
+  elif $_csb_non_fedora; then record "logind-idle-sec" "WARN" "skipped on RHEL CSB — IT manages session policy"
   else record "logind-idle-sec" "FAIL" "logind IdleActionSec not configured (idle-lock timeout undefined) — check /etc/systemd/logind.conf.d/99-hardening.conf; fix: make system"; fi
 
   # Session lingering (required for rootless podman.socket to survive provisioning SSH sessions)
-  if loginctl show-user "${SUDO_USER:-$USER}" --property=Linger 2>/dev/null | grep -q "^Linger=yes"; then
+  if [[ "${SUDO_USER:-$USER}" == "root" ]]; then
+    record "session-linger" "WARN" "skipped — running as root without sudo; re-run via sudo or as the provisioned user"
+  elif loginctl show-user "${SUDO_USER:-$USER}" --property=Linger 2>/dev/null | grep -q "^Linger=yes"; then
     record "session-linger" "PASS"
   else record "session-linger" "FAIL" "linger not enabled — podman.socket dies when provisioning SSH session ends"; fi
   # Podman user socket (required for 'kind create cluster' via DOCKER_HOST — 'make kind' in OVN-K/Submariner)
-  if [[ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock" ]]; then
+  if [[ -S "${XDG_RUNTIME_DIR:-/run/user/${SUDO_UID:-$(id -u)}}/podman/podman.sock" ]]; then
     record "podman-socket" "PASS"
   else record "podman-socket" "WARN" "Podman user socket not present — kind create cluster will fail (re-login or restart podman.socket)"; fi
   # Verify podman user socket is durably enabled (survives reboot); complements the runtime -S check above.
   if $SYSTEM_ONLY; then
     record "podman-socket-enabled" "SKIP" "verified in the real user session"
+  elif [[ "$EUID" -eq 0 && -n "${SUDO_USER:-}" ]]; then
+    record "podman-socket-enabled" "SKIP" "user-scope systemd is unreachable under sudo; re-run: make smoke-test-user"
   elif systemctl --user is-enabled podman.socket &>/dev/null; then
     record "podman-socket-enabled" "PASS"
   else record "podman-socket-enabled" "FAIL" "podman.socket not enabled — socket will not start on reboot; fix: systemctl --user enable podman.socket"; fi
 
   _sysctl_check "kernel.kptr_restrict"               "2" "sysctl-kptr-restrict"
-  # kexec: read expected value from deployed config (system_kexec_load_disabled defaults to 0 in default.config.yml)
+  # kexec: read expected value from deployed config (system_kexec_load_disabled defaults to 1 in roles/system/defaults)
   _kexec_expected=$(awk -F' *= *' '/^kernel\.kexec_load_disabled/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
-  _sysctl_check "kernel.kexec_load_disabled" "${_kexec_expected:-0}" "sysctl-kexec-disabled"
+  _sysctl_check "kernel.kexec_load_disabled" "${_kexec_expected:-1}" "sysctl-kexec-disabled"
   _io_uring_expected=$(awk -F' *= *' '/^kernel\.io_uring_disabled/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
   _sysctl_check "kernel.io_uring_disabled" "${_io_uring_expected:-1}" "sysctl-io-uring-disabled"
   _sysctl_check "kernel.dmesg_restrict"              "1" "sysctl-dmesg-restrict"
@@ -2183,7 +2309,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # kernel.panic: read expected value from deployed config (system_kernel_panic defaults to 0 in default.config.yml)
   _panic_expected=$(awk -F' *= *' '/^kernel\.panic /{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
   _sysctl_check "kernel.panic" "${_panic_expected:-0}" "sysctl-panic-reboot"
-  # kernel.panic_on_oops: read expected value from deployed config (system_kernel_panic_on_oops may override default 1).
+  # kernel.panic_on_oops: read expected value from deployed config (system_kernel_panic_on_oops may override default 0).
   # Hardcoding 1 here would false-FAIL on machines with system_kernel_panic_on_oops: 0 (OVN-K/bpfman debugging).
   _panic_on_oops_expected=$(awk -F' *= *' '/^kernel\.panic_on_oops/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
   _sysctl_check "kernel.panic_on_oops" "${_panic_on_oops_expected:-0}" "sysctl-panic-on-oops"
@@ -2273,7 +2399,12 @@ fi
 # any file here is unexpected (IT-managed scripts are possible on CSB, hence WARN there)
 if $IS_LINUX && ! $USER_ONLY && [[ -z "$CONTAINER" ]] && [[ -d /etc/NetworkManager/dispatcher.d ]]; then
   _dispatcher_files=""
+  # Mirror nm.yml allowlist: IT's csb-fedora-logo on CSB (plus system_nm_dispatcher_allowlist)
+  _dispatcher_allow=""
+  ! $CSB_HOST || _dispatcher_allow="csb-fedora-logo"
+  _dispatcher_allow+=" $(awk '/^system_nm_dispatcher_allowlist:/{f=1; if (match($0,/\[.*\]/)) {t=substr($0,RSTART+1,RLENGTH-2); gsub(/[,"\047]/," ",t); print t; f=0}; next} f&&/^[[:space:]]*-[[:space:]]/{sub(/^[[:space:]]*-[[:space:]]*/,""); sub(/[[:space:]]*#.*/,""); gsub(/["\047]/,""); print; next} f&&!/^[[:space:]]*(#|$)/{f=0}' "$SCRIPT_DIR/../config.yml" 2>/dev/null | tr '\n' ' ' || true)"
   while IFS= read -r _dispatcher_file; do
+    [[ " $_dispatcher_allow " == *" $(basename "$_dispatcher_file") "* ]] && continue
     if [[ "$_dispatcher_file" == /etc/NetworkManager/dispatcher.d/90-console-login-helper-messages-gensnippet_if ]] &&
        command -v rpm &>/dev/null &&
        [[ "$(rpm -qf --queryformat '%{NAME}' "$_dispatcher_file" 2>/dev/null)" == console-login-helper-messages-issuegen ]] &&
@@ -2281,7 +2412,7 @@ if $IS_LINUX && ! $USER_ONLY && [[ -z "$CONTAINER" ]] && [[ -d /etc/NetworkManag
       continue
     fi
     _dispatcher_files+=" $_dispatcher_file"
-  done < <(find /etc/NetworkManager/dispatcher.d -maxdepth 1 \( -type f -o -type l \) 2>/dev/null | sort)
+  done < <(find /etc/NetworkManager/dispatcher.d \( -type f -o -type l \) 2>/dev/null | sort)
   if [[ -z "${_dispatcher_files// /}" ]]; then
     record "nm-dispatcher-clean" "PASS"
   elif $CSB_HOST; then
@@ -2293,24 +2424,30 @@ fi
 
 # resolved.conf.d/99-dot.conf content check (file-gated; silently skips on macOS or where system role was not run)
 if [[ -f /etc/systemd/resolved.conf.d/99-dot.conf ]]; then
-  if grep -qE '^DNSOverTLS=' /etc/systemd/resolved.conf.d/99-dot.conf && \
+  if grep -qE '^DNSOverTLS=(yes|true|opportunistic|no|false)$' /etc/systemd/resolved.conf.d/99-dot.conf && \
      grep -qE '^Domains=~\.' /etc/systemd/resolved.conf.d/99-dot.conf; then
     record "resolved-dot-conf" "PASS"
   else
-    record "resolved-dot-conf" "FAIL" "99-dot.conf missing DNSOverTLS= or Domains=~. directive — run: make system"
+    record "resolved-dot-conf" "FAIL" "99-dot.conf missing a valid DNSOverTLS= value or Domains=~. directive — run: make system"
   fi
 fi
 
 # resolved.conf.d/98-llmnr.conf content check — file-gated; silently skips on macOS or where system role was not run
 if [[ -f /etc/systemd/resolved.conf.d/98-llmnr.conf ]]; then
-  if grep -q 'LLMNR=no' /etc/systemd/resolved.conf.d/98-llmnr.conf && \
-     grep -q 'MulticastDNS=no' /etc/systemd/resolved.conf.d/98-llmnr.conf; then
+  # expected values follow system_resolved_llmnr / system_resolved_multicast_dns (role default 'no')
+  _llmnr_exp=$(awk -F': ' '/^system_resolved_llmnr:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$SCRIPT_DIR/../config.yml" 2>/dev/null || true)
+  _mdns_exp=$(awk -F': ' '/^system_resolved_multicast_dns:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$SCRIPT_DIR/../config.yml" 2>/dev/null || true)
+  [[ "$_llmnr_exp" =~ ^(no|yes|resolve)$ ]] || _llmnr_exp=no
+  [[ "$_mdns_exp" =~ ^(no|yes|resolve)$ ]] || _mdns_exp=no
+  if grep -qxF "LLMNR=$_llmnr_exp" /etc/systemd/resolved.conf.d/98-llmnr.conf && \
+     grep -qxF "MulticastDNS=$_mdns_exp" /etc/systemd/resolved.conf.d/98-llmnr.conf; then
     record 'llmnr-disabled' 'PASS'
   else
-    record 'llmnr-disabled' 'FAIL' '98-llmnr.conf missing LLMNR=no or MulticastDNS=no'
+    record 'llmnr-disabled' 'FAIL' "98-llmnr.conf missing LLMNR=$_llmnr_exp or MulticastDNS=$_mdns_exp"
   fi
 elif $IS_LINUX && ! $USER_ONLY && [[ -z "$CONTAINER" ]]; then
-  record 'llmnr-disabled' 'FAIL' '/etc/systemd/resolved.conf.d/98-llmnr.conf not deployed — run: make system'
+  if $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then record 'llmnr-disabled' 'WARN' 'skipped on RHEL CSB — IT manages resolved config'
+  else record 'llmnr-disabled' 'FAIL' '/etc/systemd/resolved.conf.d/98-llmnr.conf not deployed — run: make system'; fi
 fi
 
 # ---- Output ----
@@ -2318,11 +2455,11 @@ if $JSON; then
   printf '{"results":[%s],"failures":%d,"warns":%d}\n' "$(IFS=,; printf '%s' "${RESULTS[*]}")" "$FAILURES" "$WARNS"
 else
   total=${#RESULTS[@]}
-  passes=$((total - FAILURES - WARNS))
+  passes=$((total - FAILURES - WARNS - SKIPS))
   if [[ $FAILURES -gt 0 ]]; then
-    printf "\n--- %d PASS / %d WARN / ${F}%d FAIL${R} (total %d) ---\n" "$passes" "$WARNS" "$FAILURES" "$total"
+    printf "\n--- %d PASS / %d WARN / ${F}%d FAIL${R} / %d SKIP (total %d) ---\n" "$passes" "$WARNS" "$FAILURES" "$SKIPS" "$total"
   else
-    printf "\n--- %d PASS / %d WARN (total %d) ---\n" "$passes" "$WARNS" "$total"
+    printf "\n--- %d PASS / %d WARN / %d SKIP (total %d) ---\n" "$passes" "$WARNS" "$SKIPS" "$total"
   fi
 fi
 exit $(( FAILURES > 0 ? 1 : 0 ))

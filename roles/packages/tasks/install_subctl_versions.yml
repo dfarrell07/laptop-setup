@@ -14,8 +14,17 @@
       verification, or uses unsupported pattern syntax. Use private domain prefixes
       or literal private owners; only literals and '*' globs are supported.
 
+- name: Report versioned subctl builds not simulated in check mode
+  ansible.builtin.debug:
+    msg: "CHECK MODE: subctl {{ packages_subctl_versioned | map(attribute='version') | join(', ') }} go builds not simulated."
+  when:
+    - ansible_check_mode
+    - _packages_linux_x86_work and packages_subctl_versioned | default([]) | length > 0
+
 - name: Install versioned subctl binaries (subctlXX) for multi-cluster Submariner management
-  when: _packages_linux_x86_work and packages_subctl_versioned | default([]) | length > 0
+  when:
+    - not ansible_check_mode  # builds into a temp dir that check mode never creates
+    - _packages_linux_x86_work and packages_subctl_versioned | default([]) | length > 0
   vars:
     _subctl_installed: >-
       {{ ((packages_subctl_version_check.results[loop_idx].stdout | default('')) ~
@@ -32,6 +41,12 @@
       loop: "{{ packages_subctl_versioned }}"
       loop_control:
         label: "subctl{{ item.suffix }}"
+
+    - name: Create GOTMPDIR directory for subctl compilation
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/tmp"
+        state: directory
+        mode: "0700"
 
     - name: Create secure temp directory for subctl binary (TOCTOU mitigation)
       ansible.builtin.tempfile:
@@ -79,20 +94,16 @@
     - name: Warn if versioned subctl go install failed
       ansible.builtin.debug:
         msg: >-
-          WARNING: go install failed for subctl@v{{ item.item.version }};
-          subctl{{ item.item.suffix }} may be missing. Check Go installation.
+          WARNING: go install failed for subctl@v{{ item.item.version }}
+          ({{ item.stderr | default(item.msg | default(''), true) | truncate(200) }});
+          subctl{{ item.item.suffix }} is missing or outdated. Re-run make packages when the
+          Go proxy is reachable.
       loop: >-
         {{ packages_subctl_install_results.results | default([])
-           | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list }}
+           | selectattr('failed', 'defined') | selectattr('failed') | list }}
       loop_control:
         label: "subctl{{ item.item.suffix }}"
 
-    - name: Fail if any versioned subctl go install failed
-      ansible.builtin.fail:
-        msg: "go install failed for subctl version(s) — see warnings above"
-      when: >
-        packages_subctl_install_results.results | default([])
-        | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list | length > 0
 
     - name: Inspect versioned subctl destination without following symlinks
       ansible.builtin.stat:
@@ -149,7 +160,9 @@
       when: _subctl_tmpdir.path is defined
 
 - name: Install downstream RH subctl versions (registry.redhat.io/rhacm2/subctl-rhel{8,9})
-  when: _packages_linux_x86_work and packages_subctl_rh_versions | default([]) | length > 0
+  when:
+    - not ansible_check_mode  # extracts into a temp dir that check mode never creates
+    - _packages_linux_x86_work and packages_subctl_rh_versions | default([]) | length > 0
   block:
     - name: Check installed version of downstream RH subctl binaries
       ansible.builtin.command:
@@ -197,7 +210,6 @@
     - name: Find RH subctl tarball in secure temp directory
       ansible.builtin.find:
         paths: "{{ _subctl_rh_tmpdir.path }}"
-        maxdepth: 1
         patterns: "subctl-{{ item.tag }}-linux-amd64.tar.xz"
         file_type: file
       register: _subctl_exact_match
@@ -213,7 +225,6 @@
     - name: Find RH subctl tarball (wildcard fallback) in secure temp directory
       ansible.builtin.find:
         paths: "{{ _subctl_rh_tmpdir.path }}"
-        maxdepth: 1
         patterns: "subctl-{{ item.tag }}*-linux-amd64.tar.xz"
         file_type: file
       register: _subctl_wildcard_match
@@ -232,9 +243,10 @@
         cmd: |
           set -eo pipefail
           # Inline tarball path lookup (per-iteration, fixes multi-version bug)
-          EXACT=( {{ _subctl_exact_match.results[loop_idx].files | default([]) | map(attribute='path') | list | join(' ') }} )
+          EXACT=( {{ _subctl_exact_match.results[loop_idx].files | default([])
+            | map(attribute='path') | map('quote') | list | join(' ') }} )
           WILDCARD=( {{ _subctl_wildcard_match.results[loop_idx].files | default([])
-            | sort(attribute='mtime', reverse=True) | map(attribute='path') | list | join(' ') }} )
+            | sort(attribute='mtime', reverse=True) | map(attribute='path') | map('quote') | list | join(' ') }} )
           TARBALL="${EXACT[0]:-${WILDCARD[0]:-}}"
           [[ -z "$TARBALL" ]] && exit 0
           # Atomic symlink check (TOCTOU mitigation)

@@ -49,8 +49,9 @@ Determine the OS and profile before running roles.
 ansible -m setup -a 'filter=ansible_os_family,ansible_distribution*' localhost
 ```
 
-CSB is detected via three factors: RHEL distribution + fapolicyd installed +
-internal CA certs present. The playbook sets `csb_detected`/`csb_restricted` facts.
+CSB is detected when internal CA certs are present and the host is RHEL with
+fapolicyd installed, or Fedora with a `.csb` FQDN or fapolicyd installed (see `common/tasks/csb_detect.yml`).
+The playbook sets `csb_detected`/`csb_restricted` facts.
 
 Check sudo access level. This determines which targets can run:
 
@@ -59,7 +60,7 @@ sudo -n -l 2>/dev/null || echo "no-sudo"
 ```
 
 <!-- AGENT DECISION POINT: If sudo is unavailable or scoped, skip targets that
-require become (repos-dnf, system, packages, redhat, containers, desktop). Inform the user which
+require become (repos_dnf, system, packages, redhat, containers, desktop). Inform the user which
 targets are being skipped and why. On CSB, suggest `make minimal` if full
 sudo is unavailable. -->
 
@@ -68,11 +69,19 @@ sudo is unavailable. -->
 Run each role as a separate `make` invocation in dependency order. Do NOT run
 `make all` in one shot -- individual targets give clear per-role pass/fail.
 
+Before Play 1 targets, run `make preflight` (includes vault/YubiKey checks that
+`--json` skips) and suggest `make check` (dry run) on first provision. On a first provision, confirm
+the user has run `lsusb`/`make usb-add` so USBGuard does not block their devices. `make system` restarts
+sshd: run it only from the local console or tmux, never over SSH.
+
+Before running any sudo target (Play 1, plus packages, redhat, containers, desktop), tell the user what it
+will change and get their go-ahead; do not chain these without it.
+
 Run targets in this order, matching the plan's three-play structure (skip
 targets that do not apply to this OS/profile or that the user did not request):
 
 *Play 1 targets (need sudo):*
-1. `make repos-dnf` (third-party RPM repos — dnf-based OS only)
+1. `make repos_dnf` (third-party RPM repos — dnf-based OS only)
 2. `make system` (firewall, kernel, services)
 
 *Play 2 targets (no play-level sudo, per-task escalation):*
@@ -90,6 +99,7 @@ targets that do not apply to this OS/profile or that the user did not request):
     tool call, or use `run_in_background=true` and wait for the completion notification
     before reading results.
 12. `make claude`
+13. `make codex` (user-space Codex CLI; no sudo)
 
 Note: `common` role is tagged `always` and runs automatically with any target.
 
@@ -184,7 +194,7 @@ podman login --get-login quay.io 2>&1
 
 For each unauthenticated registry, tell the user to run:
 ```
-podman login --authfile ~/.config/containers/auth.json <registry>
+umask 077 && podman login --authfile ~/.config/containers/auth.json <registry>
 ```
 
 Remind them to `chmod 0600 ~/.config/containers/auth.json` afterward.

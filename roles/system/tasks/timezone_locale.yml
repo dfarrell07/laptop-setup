@@ -8,9 +8,11 @@
   when: not system_is_container  # timedatectl uses D-Bus → systemd-timedated; crashes Debian 13 container PID 1
 
 - name: Set system locale
-  ansible.builtin.copy:
-    content: "LANG={{ system_locale }}\n"
-    dest: /etc/locale.conf
+  ansible.builtin.lineinfile:
+    path: /etc/locale.conf
+    regexp: '^LANG='
+    line: "LANG={{ system_locale }}"
+    create: true
     mode: "0644"
   when: not system_is_container  # locale.conf write triggers inotify/PAM re-eval chain in Debian 13 containers
 

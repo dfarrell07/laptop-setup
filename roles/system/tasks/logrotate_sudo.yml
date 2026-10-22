@@ -3,9 +3,8 @@
 # --- Logrotate for sudo.log (created by sudoers Defaults logfile) ---
 - name: Install and configure logrotate for sudo.log
   when:
-    # CSB: IT manages sudoers on all CSB tiers; 99-hardening (Defaults logfile=) is skipped on csb_detected — no sudo.log will ever be
-    # written
-    - not csb_detected
+    # RHEL CSB: IT manages sudoers; 99-hardening (Defaults logfile=) is skipped on csb_rhel — no sudo.log will ever be written
+    - not csb_rhel
     - not system_is_container
   block:
     - name: Install logrotate
@@ -36,13 +35,26 @@
       ansible.builtin.shell:
         cmd: |
           set -o pipefail
+          rpm -q rpm &>/dev/null || { echo 'rpm database query failed' >&2; exit 3; }
           find /etc/logrotate.d -maxdepth 1 -type f \
             | while IFS= read -r f; do rpm -qf "$f" &>/dev/null || printf '%s\n' "$f"; done
         executable: /bin/bash
       register: _logrotated_unowned
       changed_when: false
+      check_mode: false
       failed_when: false
       when: is_dnf
+
+    - name: "WARNING: /etc/logrotate.d ownership scan itself failed"
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: the pre-plant ownership scan of /etc/logrotate.d failed
+          (rc={{ _logrotated_unowned.rc | default('n/a') }}), so unowned files were NOT checked.
+          stderr: {{ _logrotated_unowned.stderr | default('') | trim }}
+      when:
+        - _logrotated_unowned is not skipped
+        - (_logrotated_unowned.rc | default(1)) != 0
+        - is_dnf
 
     - name: Inspect the playbook-managed Claude poller logrotate file
       ansible.builtin.stat:
@@ -108,10 +120,10 @@
         - is_dnf
         - _unexpected | length > 0
 
-- name: Remove logrotate config for sudo.log on CSB (all tiers)
+- name: Remove logrotate config for sudo.log on RHEL CSB
   ansible.builtin.file:
     path: /etc/logrotate.d/sudo
     state: absent
   when:
-    - csb_detected
+    - csb_rhel
     - not system_is_container

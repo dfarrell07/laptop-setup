@@ -30,13 +30,26 @@
       ansible.builtin.shell:
         cmd: |
           set -o pipefail
+          rpm -q rpm &>/dev/null || { echo 'rpm database query failed' >&2; exit 3; }
           find /etc/modprobe.d -maxdepth 1 -type f \
             | while IFS= read -r f; do rpm -qf "$f" &>/dev/null || printf '%s\n' "$f"; done
         executable: /bin/bash
       register: _modprobe_unowned
       changed_when: false
+      check_mode: false
       failed_when: false
       when: is_dnf
+
+    - name: "WARNING: /etc/modprobe.d ownership scan itself failed"
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: the pre-plant ownership scan of /etc/modprobe.d failed
+          (rc={{ _modprobe_unowned.rc | default('n/a') }}), so unowned files were NOT checked.
+          stderr: {{ _modprobe_unowned.stderr | default('') | trim }}
+      when:
+        - _modprobe_unowned is not skipped
+        - (_modprobe_unowned.rc | default(1)) != 0
+        - is_dnf
 
     - name: Fail on unexpected files in /etc/modprobe.d
       vars:
@@ -86,6 +99,7 @@
         executable: /bin/bash
       register: _blacklisted_modules_loaded
       changed_when: false
+      check_mode: false
 
     - name: Unload unconditionally blacklisted modules (best-effort, pre-reboot)
       # Modules already loaded at provisioning time remain exploitable until reboot.

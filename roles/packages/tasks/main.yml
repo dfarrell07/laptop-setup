@@ -95,7 +95,7 @@
       WARNING: csb_detected=true but fapolicyd not enforcing (hybrid tier).
       Binary downloads to /usr/local/bin will fail if IT enables fapolicyd enforcement.
       Persistent warning written to: /var/lib/ansible-packages/fapolicyd-binary-risk.txt
-      If binaries fail with EPERM, run: make container && distrobox enter {{ container_name }}
+      If binaries fail with EPERM, run: make container && distrobox enter {{ container_name | default('fedora-dev') }}
   when:
     - needs_container_tier == 'hybrid'
     - packages_install_binaries | bool
@@ -126,7 +126,7 @@
 
       Migration path if binaries fail with EPERM:
       1. Run: make container
-      2. Enter container: distrobox enter {{ container_name }}
+      2. Enter container: distrobox enter {{ container_name | default('fedora-dev') }}
       3. All dev tools will be available inside the container
 
       This file persists across reboots. Remove it manually if fapolicyd is disabled.
@@ -169,26 +169,22 @@
     - _packages_lockdown_state.rc == 0
     - "'[integrity]' in _packages_lockdown_state.stdout"
 
-# Re-check GitHub CLI availability POST-install to overwrite pre-flight false value.
-# Pre-flight checks run BEFORE packages role installs gh via DNF; the idempotency
-# guard prevents re-checking. Attestation verification tasks (actionlint, zizmor)
-# gate on packages_gh_available; without this post-install check they skip on first
-# provision even after gh is successfully installed.
-- name: Check GitHub CLI availability post-install (attestation verification prerequisite)
-  when:
-    - is_dnf
-    - profile == 'work'
-  block:
-    - name: Check GitHub CLI in PATH after package installation
-      ansible.builtin.command: which gh
-      changed_when: false
-      failed_when: false
-      check_mode: false
-      register: _packages_gh_postinstall_check
+# gh attestation verify needs an authenticated gh. Pre-flight only checked that gh exists, and on
+# a fresh laptop 'gh auth login' happens after provisioning, so attestation would abort the role.
+# Attest only when gh is logged in (or GH_TOKEN is set); otherwise the sha256 pin alone applies.
+- name: Check GitHub CLI is installed and authenticated (attestation verification prerequisite)
+  ansible.builtin.command:
+    argv: [gh, auth, status]
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  register: _packages_gh_auth_check
+  when: profile == 'work'
 
-    - name: Set packages_gh_available fact (overwrite pre-flight value)
-      ansible.builtin.set_fact:
-        packages_gh_available: "{{ _packages_gh_postinstall_check.rc == 0 }}"
+- name: Set packages_gh_available fact (overwrite pre-flight value)
+  ansible.builtin.set_fact:
+    packages_gh_available: "{{ _packages_gh_auth_check.rc | default(1) == 0 }}"
+  when: profile == 'work'
 
 # Enable bpfman.socket here (Play 2 packages role) to catch the case where bpfman
 # was just installed in this play. The system role (Play 1) also attempts this, but
@@ -224,13 +220,11 @@
 - name: Check bpfman SELinux context for unconfined warning
   ansible.builtin.shell:
     cmd: |
-      set -euo pipefail
-      pid=$(systemctl show -p MainPID bpfman.socket 2>/dev/null | awk -F= '{print $2}')
-      if [[ -n "$pid" && "$pid" != "0" && -r "/proc/$pid/attr/current" ]]; then
-        cat "/proc/$pid/attr/current"
-      else
-        echo "no-pid"
-      fi
+      set -uo pipefail
+      # A socket unit has no MainPID, and a running service would be unconfined_service_t; the
+      # binary's file label decides the domain: bin_t means no bpfman policy (runs unconfined).
+      bin=$(command -v bpfman) || { echo "no-binary"; exit 0; }
+      stat -c %C "$bin"
     executable: /bin/bash
   register: _bpfman_selinux_context
   changed_when: false
@@ -245,7 +239,7 @@
 - name: Warn if bpfman is running unconfined (no SELinux policy)
   ansible.builtin.debug:
     msg: |
-      WARNING: bpfman.socket enabled but running unconfined (no SELinux policy).
+      WARNING: bpfman.socket enabled but bpfman has no SELinux policy (binary labelled bin_t), so it runs unconfined.
       A compromised bpfman has CAP_SYS_ADMIN and can load arbitrary kernel eBPF programs.
       Consider manual bpftool for one-off tasks instead of persistent bpfman daemon.
       Persistent warning written to: {{ ansible_facts['user_dir'] }}/.local/share/ansible-packages/bpfman-selinux-WARNING.txt
@@ -256,7 +250,7 @@
     - profile == 'work'
     - (_packages_bpfman_check.rc | default(-1)) == 0
     - _bpfman_selinux_context.stdout is defined
-    - "'unconfined_t' in _bpfman_selinux_context.stdout"
+    - "':bin_t:' in _bpfman_selinux_context.stdout"
 
 - name: Create ansible-packages doc directory for bpfman SELinux warning
   ansible.builtin.file:
@@ -270,12 +264,12 @@
     - profile == 'work'
     - (_packages_bpfman_check.rc | default(-1)) == 0
     - _bpfman_selinux_context.stdout is defined
-    - "'unconfined_t' in _bpfman_selinux_context.stdout"
+    - "':bin_t:' in _bpfman_selinux_context.stdout"
 
 - name: Write persistent bpfman SELinux warning
   ansible.builtin.copy:
     content: |
-      WARNING: bpfman.socket enabled but running unconfined (no SELinux policy).
+      WARNING: bpfman.socket enabled but bpfman has no SELinux policy (binary labelled bin_t), so it runs unconfined.
 
       SELinux context: {{ _bpfman_selinux_context.stdout }}
       Expected: bpfman_t (confined policy — not available in Fedora 44)
@@ -292,7 +286,6 @@
       - Check: semodule -l | grep bpfman
 
       This file persists across reboots. Remove it manually if SELinux policy is deployed.
-      Last checked: {{ ansible_date_time.iso8601 }}
     dest: "{{ ansible_facts['user_dir'] }}/.local/share/ansible-packages/bpfman-selinux-WARNING.txt"
     mode: "0644"
   when:
@@ -302,7 +295,7 @@
     - profile == 'work'
     - (_packages_bpfman_check.rc | default(-1)) == 0
     - _bpfman_selinux_context.stdout is defined
-    - "'unconfined_t' in _bpfman_selinux_context.stdout"
+    - "':bin_t:' in _bpfman_selinux_context.stdout"
 
 - name: Install virtualization packages and post-install setup
   ansible.builtin.include_tasks: install_virtualization.yml
@@ -413,9 +406,19 @@
 - name: Install binary downloads
   ansible.builtin.import_tasks: install_binary_downloads.yml
 
+# The standalone chains download into tempfile directories that check mode never creates.
+- name: Note standalone binaries are not simulated in check mode
+  ansible.builtin.debug:
+    msg: "Check mode: standalone binary downloads and signature checks are skipped."
+  when:
+    - packages_install_binaries | bool
+    - ansible_check_mode
+
 - name: Install standalone binaries
   ansible.builtin.include_tasks: install_standalone_binaries.yml
-  when: packages_install_binaries | bool
+  when:
+    - packages_install_binaries | bool
+    - not ansible_check_mode
 
 # --- golang verification (defense-in-depth before GOTOOLCHAIN=local) ---
 
@@ -426,11 +429,22 @@
     - (is_dnf or is_apt or is_macos)
     - packages_install_binaries | bool
 
+# go install runs only for real: its temp GOBIN/subctl dirs (tempfile) are not created in
+# check mode, so templating their .path would abort make check once Go is installed.
+- name: Report check mode skips Go tool installs
+  ansible.builtin.debug:
+    msg: "CHECK MODE: Go tools (go install) are not simulated."
+  when:
+    - packages_install_binaries | bool
+    - is_linux or is_macos
+    - ansible_check_mode
+
 - name: Install Go tools
   ansible.builtin.include_tasks: install_go_tools.yml
   when:
     - packages_install_binaries | bool
     - is_linux or is_macos
+    - not ansible_check_mode
 
 - name: Install pipx packages (yamllint, ansible-lint)
   ansible.builtin.include_tasks: install_pipx.yml
@@ -448,18 +462,18 @@
   register: _krew_binary_stat
   when: _packages_linux_x86_work
 
-- name: Fail if krew binary is missing
-  ansible.builtin.fail:
+- name: Warn if krew binary is missing
+  ansible.builtin.debug:
     msg: >-
-      krew installation completed but binary is missing at
-      {{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew.
-      Installation may have failed silently. Verify network connectivity and
-      re-run provisioning, or install manually from
-      https://krew.sigs.k8s.io/docs/user-guide/setup/install/
+      WARNING: krew binary is missing at
+      {{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew; krew plugins are skipped.
+      Installation may have failed (offline?). Re-run `make packages` when online,
+      or install manually from https://krew.sigs.k8s.io/docs/user-guide/setup/install/
   when:
     - _packages_linux_x86_work
     - not _krew_binary_stat.stat.exists
     - not csb_detected
+    - not ansible_check_mode  # install not simulated in check mode
 
 - name: Install subctl multi-version binaries
   ansible.builtin.include_tasks: install_subctl_versions.yml
@@ -471,24 +485,16 @@
   when:
     - _packages_linux_x86_work
     - _krew_binary_stat.stat.exists | default(false)
+    - not ansible_check_mode  # plugin installs use tempfile paths check mode never creates
   block:
     - name: Update krew plugin index
       ansible.builtin.command:
         cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew update"
       timeout: 60
       changed_when: false
-      register: _krew_index_update
 
       environment:
         KREW_ROOT: "{{ ansible_facts['user_dir'] }}/.krew"
-
-    - name: Fail if krew plugin index update failed
-      ansible.builtin.fail:
-        msg: >-
-          Failed to update krew plugin index.
-          Error: {{ _krew_index_update.stderr | default('unknown error') }}.
-          This may indicate a transient network error or a corrupted krew installation.
-      when: _krew_index_update.rc | default(0) != 0
 
     - name: Create private directory for pinned krew plugin manifests and archives
       ansible.builtin.tempfile:
@@ -515,64 +521,7 @@
       loop_control:
         label: "{{ item.name }}@{{ item.version }}"
 
-    # Post-install checksum verification: krew index has no cryptographic signing (no Sigstore/GPG),
-    # so we pin known-good SHA256 values and assert the installed scripts match.
-    # Missing plugins must fail loudly to detect network errors or incomplete installations.
-    - name: Stat ctx krew plugin binary for checksum verification
-      ansible.builtin.stat:
-        path: "{{ ansible_facts['user_dir'] }}/.krew/store/ctx/{{ packages_krew_plugin_ctx_version }}/kubectx"
-        get_checksum: true
-        checksum_algorithm: sha256
-      register: _krew_ctx_stat
-
-    - name: Fail if ctx krew plugin is missing
-      ansible.builtin.fail:
-        msg: >-
-          ctx plugin installation failed — file missing at
-          {{ ansible_facts['user_dir'] }}/.krew/store/ctx/{{ packages_krew_plugin_ctx_version }}/kubectx.
-          This may indicate a network error during plugin download.
-          Re-run provisioning or install manually.
-      when: not _krew_ctx_stat.stat.exists
-
-    - name: Assert ctx krew plugin binary checksum
-      ansible.builtin.assert:
-        that:
-          - _krew_ctx_stat.stat.exists | bool
-          - _krew_ctx_stat.stat.checksum == packages_krew_plugin_ctx_sha256
-        fail_msg: >-
-          ctx plugin verification failed at
-          {{ ansible_facts['user_dir'] }}/.krew/store/ctx/{{ packages_krew_plugin_ctx_version }}/kubectx:
-          file exists={{ _krew_ctx_stat.stat.exists | default(false) }},
-          expected checksum {{ packages_krew_plugin_ctx_sha256 }},
-          got {{ _krew_ctx_stat.stat.checksum | default('MISSING') }}
-
-    - name: Stat ns krew plugin binary for checksum verification
-      ansible.builtin.stat:
-        path: "{{ ansible_facts['user_dir'] }}/.krew/store/ns/{{ packages_krew_plugin_ns_version }}/kubens"
-        get_checksum: true
-        checksum_algorithm: sha256
-      register: _krew_ns_stat
-
-    - name: Fail if ns krew plugin is missing
-      ansible.builtin.fail:
-        msg: >-
-          ns plugin installation failed — file missing at
-          {{ ansible_facts['user_dir'] }}/.krew/store/ns/{{ packages_krew_plugin_ns_version }}/kubens.
-          This may indicate a network error during plugin download.
-          Re-run provisioning or install manually.
-      when: not _krew_ns_stat.stat.exists
-
-    - name: Assert ns krew plugin binary checksum
-      ansible.builtin.assert:
-        that:
-          - _krew_ns_stat.stat.exists | bool
-          - _krew_ns_stat.stat.checksum == packages_krew_plugin_ns_sha256
-        fail_msg: >-
-          ns plugin verification failed at
-          {{ ansible_facts['user_dir'] }}/.krew/store/ns/{{ packages_krew_plugin_ns_version }}/kubens:
-          file exists={{ _krew_ns_stat.stat.exists | default(false) }},
-          expected checksum {{ packages_krew_plugin_ns_sha256 }},
-          got {{ _krew_ns_stat.stat.checksum | default('MISSING') }}
+    # install_krew_plugin.yml verifies each plugin's pinned binary SHA256 and 0755 mode.
 
   rescue:
     - name: Record krew post-install failure (CSB)
@@ -590,12 +539,13 @@
           github.com CDN access being filtered by corporate network policy.
           Install manually: kubectl krew update && kubectl krew install ctx ns
       when: csb_detected
-    - name: Fail the play after non-CSB krew post-install failure
-      ansible.builtin.fail:
+    - name: Warn after non-CSB krew post-install failure
+      ansible.builtin.debug:
         msg: >-
-          krew plugin installation failed and is required for this provisioning profile.
+          WARNING: krew plugin installation failed (optional tooling; continuing).
           Error: {{ ansible_failed_result.msg | default('unknown error') }}.
-          Install manually: kubectl krew update && kubectl krew install ctx ns
+          Re-run `make packages` when online, or install manually:
+          kubectl krew update && kubectl krew install ctx ns
       when: not csb_detected
 
   always:

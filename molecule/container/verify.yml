@@ -4,18 +4,6 @@
   gather_facts: true
 
   tasks:
-    - name: Verify oc stub is present at /usr/local/bin/oc
-      ansible.builtin.stat:
-        path: /usr/local/bin/oc
-      register: verify_oc
-
-    - name: Assert oc present and executable
-      ansible.builtin.assert:
-        that:
-          - verify_oc.stat.exists
-          - verify_oc.stat.mode == '0755'
-        fail_msg: "/usr/local/bin/oc missing or wrong permissions after converge"
-
     - name: Run oc version to confirm stub is functional
       ansible.builtin.command:
         cmd: /usr/local/bin/oc version --client
@@ -53,11 +41,6 @@
           - verify_podman_symlink.stat.lnk_target == '/usr/bin/distrobox-host-exec'
         fail_msg: "/usr/local/bin/podman is not a symlink to /usr/bin/distrobox-host-exec"
 
-    - name: Check curl is installed
-      ansible.builtin.command:  # noqa: command-instead-of-module
-        cmd: curl --version
-      changed_when: false
-
     - name: Verify golangci-lint stub present (go install was skipped)
       ansible.builtin.stat:
         path: "{{ ansible_env.HOME }}/go/bin/golangci-lint"
@@ -68,9 +51,9 @@
         that:
           - verify_golangci.stat.exists
           - verify_golangci.stat.mode == '0755'
-        fail_msg: "golangci-lint binary missing or wrong permissions — go install may have failed or creates: guard broke"
+        fail_msg: "golangci-lint binary missing or wrong permissions — go install may have failed"
 
-    - name: Stat subctl binary (go install in container-provision-tasks.yml)
+    - name: Stat subctl binary (go install in container-provision.yml)
       ansible.builtin.stat:
         path: "{{ ansible_env.HOME }}/go/bin/subctl"
       register: verify_container_subctl

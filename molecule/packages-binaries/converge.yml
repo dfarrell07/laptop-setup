@@ -7,6 +7,9 @@
     - name: Load CI pre-tasks (config, group_vars, project root)
       ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-pre-tasks.yml"
 
+    - name: Load packages role defaults (pre_tasks cannot see role defaults)
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/roles/packages/defaults/main.yml"
+
     - name: Override for binary download testing
       ansible.builtin.set_fact:
         packages_install_binaries: true           # the critical toggle under test

@@ -9,6 +9,8 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parent.parent
+# A provisioned host sets a global core.hooksPath; keep fixture commits independent of it.
+os.environ.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1')
 
 
 class BaselineTests(unittest.TestCase):
@@ -18,9 +20,9 @@ class BaselineTests(unittest.TestCase):
             subprocess.run(['git', 'init', '-q', str(repo)], check=True)
             source = repo / 'Makefile'
             baseline = repo / 'Makefile.sha256'
-            def write(content, digest=None):
+            def write(content):
                 source.write_bytes(content)
-                baseline.write_text((digest or hashlib.sha256(content).hexdigest()) + '  Makefile\n')
+                baseline.write_text(hashlib.sha256(content).hexdigest() + '  Makefile\n')
             write(b'original\n')
             subprocess.run(['git', '-C', str(repo), 'add', '.'], check=True)
             subprocess.run(['git', '-C', str(repo), '-c', 'user.name=Test', '-c', 'user.email=test@ci.invalid',
@@ -39,11 +41,12 @@ class BaselineTests(unittest.TestCase):
             subprocess.run(['git', '-C', str(repo), 'add', '.'], check=True)
             source.write_bytes(b'unstaged unrelated content\n')
             check(True)  # The staged pair, not the worktree, is authoritative.
-            portable = repo / 'tools'
-            portable.mkdir()
-            for tool in ['git', 'shasum']:
-                (portable / tool).symlink_to(shutil.which(tool))
-            check(True, str(portable))  # Native macOS checksum tool, with no GNU sha256sum.
+            if shutil.which('shasum'):  # perl-Digest-SHA is not in a default Fedora install
+                portable = repo / 'tools'
+                portable.mkdir()
+                for tool in ['git', 'shasum']:
+                    (portable / tool).symlink_to(shutil.which(tool))
+                check(True, str(portable))  # Native macOS checksum tool, with no GNU sha256sum.
             baseline.write_text('0' * 64 + '  Makefile\n')
             subprocess.run(['git', '-C', str(repo), 'add', 'Makefile.sha256'], check=True)
             check(False)

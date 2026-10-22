@@ -100,36 +100,18 @@
           or packages_support_work could not be installed.
           This may be due to fapolicyd repo policy or a missing repository.
       when: csb_rhel
-    - name: Warn dnf package install failed (non-CSB)
-      ansible.builtin.debug:
+    # The install is one transaction: on failure none of the core tools (golang, pipx, ...) exist,
+    # and the later Go/pipx steps would skip quietly, so the run must not report success.
+    - name: Fail when dnf package install failed (non-CSB)
+      ansible.builtin.fail:
         msg: >-
-          PACKAGE INSTALL FAILED: Install dnf packages in role packages.
-          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
-          This may be a transient network error or missing repo access.
-          Continuing playbook execution.
+          PACKAGE INSTALL FAILED: no core packages were installed (one dnf transaction).
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(300) }}.
+          Fix the cause (network, repo access, a package name) and re-run make packages.
       when: not csb_rhel
 
-# --- Post-install service masking ---
-# OVN/openvswitch service masking must run AFTER package installation.
-# System role's service_masking.yml runs in Play 1 (before packages), so ovn/openvswitch
-# services remain unmasked on first provision. This task ensures masking occurs in the
-# same provision run as package installation.
-- name: Mask openvswitch and OVN services after package installation
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    masked: true
-  loop:
-    - ovs-vswitchd.service
-    - ovsdb-server.service
-    - ovn-controller.service
-    - ovn-northd.service
-  become: true
-  tags: [become]
-  when:
-    - is_dnf
-    - profile == 'work'
-    - not csb_rhel
-    - not system_is_container
+# OVS/OVN units are masked by the system role (service_masking.yml); masking works before the
+# packages exist (it only writes the /dev/null symlink), so it is not repeated here.
 
 - name: Create ansible-packages doc directory for OVN service guidance
   ansible.builtin.file:

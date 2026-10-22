@@ -29,11 +29,11 @@
         reject: false
       - name: malformed YAML
         reject: true
-        failure_task: Parse raw config YAML without evaluating template expressions
+        failure_task: Fail when config.yml cannot be parsed
         content: 'value: ['
       - name: non-mapping YAML
         reject: true
-        failure_task: Parse raw config YAML without evaluating template expressions
+        failure_task: Fail when config.yml cannot be parsed
         content: '[one, two]'
       - name: safe values
         reject: false
@@ -43,21 +43,18 @@
       - name: unsafe tagged safe value
         reject: false
         content: |
-          dotfiles_goprivate: !unsafe 'gitlab.internal.com,pkgs.devel.redhat.com'
+          dotfiles_goprivate: !unsafe 'git.example.internal,pkgs.example.internal'
 
   pre_tasks:
-    - name: Create isolated config directory inside the test container
+    - name: Ensure the fixture config directory exists inside the test container
       ansible.builtin.file:
         path: "{{ playbook_dir }}"
         state: directory
         mode: "0755"
 
-    - name: Remove any marker from a previous failed test
-      ansible.builtin.file:
-        path: /tmp/ssti-guard-payload-executed
-        state: absent
-
-    - name: Remove any payload marker on the controller
+    # Payloads use lookup('pipe', ...), which always runs on the controller, so the
+    # execution marker is only ever created (and therefore checked) there.
+    - name: Remove any payload marker left by a previous failed test
       ansible.builtin.file:
         path: /tmp/ssti-guard-payload-executed
         state: absent

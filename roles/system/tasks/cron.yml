@@ -1,9 +1,11 @@
 ---
 # --- Cron access restriction (defense-in-depth if cronie is ever installed) ---
-# Any CSB machine: Satellite katello-agent, Insights client, IT monitoring agents, and other
+# RHEL CSB: Satellite katello-agent, Insights client, IT monitoring agents, and other
 # IT-provisioned tools may run cron jobs under dedicated non-root system users. Creating
-# cron.allow with only 'root' would silently block those IT management jobs. Skip on all
-# CSB machines (both RHEL CSB and hybrid Fedora CSB) to avoid conflicting with IT cron policy.
+# cron.allow with only 'root' would silently block those IT management jobs, so RHEL CSB skips
+# all of this. Hybrid Fedora CSB: IT's csb-fedora automation does not manage cron.allow/at.allow,
+# so only that access restriction is applied there (see the hybrid block below); the /etc/cron.d
+# audit and directory chmod stay limited to non-CSB hosts because IT may drop files in /etc/cron.d.
 - name: Cron access restriction (skip on CSB and containers)
   when:
     - not system_is_container
@@ -66,28 +68,56 @@
         - /etc/cron.deny
         - /etc/at.deny
 
-    - name: Harden cron directory permissions (CIS 5.1.2-5.1.7)
-      ansible.builtin.file:
+    - name: Stat cron paths to harden (absent paths are legitimately skipped)
+      ansible.builtin.stat:
         path: "{{ item.path }}"
-        owner: root
-        group: root
-        mode: "{{ item.mode }}"
-      loop:
-        - path: /etc/crontab
-          mode: "0600"
-        - path: /etc/cron.hourly
-          mode: "0700"
-        - path: /etc/cron.daily
-          mode: "0700"
-        - path: /etc/cron.weekly
-          mode: "0700"
-        - path: /etc/cron.monthly
-          mode: "0700"
-        - path: /etc/cron.d
-          mode: "0700"
+        follow: false
+        get_checksum: false
+      loop: "{{ _system_cron_harden_paths }}"
       loop_control:
         label: "{{ item.path }}"
+      register: _system_cron_harden_stat
+      vars:
+        _system_cron_harden_paths:
+          - path: /etc/crontab
+            mode: "0600"
+          - path: /etc/cron.hourly
+            mode: "0700"
+          - path: /etc/cron.daily
+            mode: "0700"
+          - path: /etc/cron.weekly
+            mode: "0700"
+          - path: /etc/cron.monthly
+            mode: "0700"
+          - path: /etc/cron.d
+            mode: "0700"
+
+    - name: Harden cron directory permissions (CIS 5.1.2-5.1.7)
+      ansible.builtin.file:
+        path: "{{ item.item.path }}"
+        owner: root
+        group: root
+        mode: "{{ item.item.mode }}"
+      loop: "{{ _system_cron_harden_stat.results }}"
+      loop_control:
+        label: "{{ item.item.path }}"
+      when: item.stat.exists | default(false)
+      register: _system_cron_harden
       failed_when: false
+
+    - name: Warn when cron permission hardening failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: cron permission hardening failed for
+          {{ _system_cron_harden.results | selectattr('failed', 'defined') | selectattr('failed')
+             | map(attribute='item.item.path') | list }} — these paths keep their previous
+          owner/mode (CIS 5.1.2-5.1.7).
+      when: _system_cron_harden.results | selectattr('failed', 'defined') | selectattr('failed') | list | length > 0
+
+    - name: Check whether /etc/cron.d exists
+      ansible.builtin.stat:
+        path: /etc/cron.d
+      register: system_crond_files_dir
 
     - name: Find unmanaged files in /etc/cron.d
       ansible.builtin.find:
@@ -96,6 +126,7 @@
         excludes: "{{ system_crond_whitelist }}"
       register: system_crond_files
       failed_when: false
+      when: system_crond_files_dir.stat.isdir | default(false)  # absent without cronie; find would warn
 
     - name: Abort on unexpected /etc/cron.d files not in system_crond_whitelist
       ansible.builtin.fail:
@@ -108,6 +139,29 @@
       when:
         - (system_crond_files.files | default([])) | length > 0
 
+- name: Cron and at access restriction on hybrid Fedora CSB (cron.allow/at.allow only)
+  when:
+    - csb_detected
+    - not csb_rhel
+    - not system_is_container
+  block:
+    - name: Restrict cron and at access to root only (CIS 5.1.8/5.1.9, hybrid CSB)
+      ansible.builtin.copy:
+        content: "root\n"
+        dest: "{{ item }}"
+        mode: "0600"
+      loop:
+        - /etc/cron.allow
+        - /etc/at.allow
+
+    - name: Remove cron.deny and at.deny (hybrid CSB — allow files are authoritative)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/cron.deny
+        - /etc/at.deny
+
 # CSB machines skip the block above (IT manages cron policy) but still need visibility into
 # unexpected /etc/cron.d files that IT may have dropped. This block runs only on CSB machines.
 - name: Check /etc/cron.d for unexpected files on CSB machines (warn-only)
@@ -115,6 +169,11 @@
     - csb_detected
     - not system_is_container
   block:
+    - name: Check whether /etc/cron.d exists (CSB)
+      ansible.builtin.stat:
+        path: /etc/cron.d
+      register: system_crond_files_csb_dir
+
     - name: Find unmanaged files in /etc/cron.d (CSB)
       ansible.builtin.find:
         paths: /etc/cron.d
@@ -122,6 +181,7 @@
         excludes: "{{ system_crond_whitelist }}"
       register: system_crond_files_csb
       failed_when: false
+      when: system_crond_files_csb_dir.stat.isdir | default(false)  # absent without cronie; find would warn
 
     - name: Warn on unexpected /etc/cron.d files not in system_crond_whitelist (CSB — IT may drop files)
       ansible.builtin.debug:

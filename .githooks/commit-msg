@@ -9,7 +9,7 @@ if ! grep -q '^Signed-off-by:' "$1"; then
   echo "ERROR: Missing Signed-off-by trailer — use --signoff / -s with your git command" >&2
   echo "" >&2
   echo "NOTE: -s adds text only (not cryptographic). When .gpg-enforcement is enabled, supply-chain files also need -S:" >&2
-  echo "  git commit -s -S" >&2
+  echo "  git -c commit.gpgsign=true commit -s -S" >&2
   echo "" >&2
   echo "See SECURITY.md § 'Supply-Chain Commits: -s vs -S' for the distinction." >&2
   exit 1
@@ -95,7 +95,7 @@ done
 
 # Check length (wc -m counts Unicode characters, not bytes — consistent with deployed global hook)
 # This value must match header-max-length in commitlint.config.js
-len=$(printf '%s' "$msg" | LC_ALL=en_US.UTF-8 wc -m)
+len=$(printf '%s' "$msg" | LC_ALL=C.UTF-8 wc -m)
 if [ "$len" -gt 72 ]; then
   echo "ERROR: Subject too long ($len > 72 chars)" >&2
   exit 1
@@ -114,7 +114,7 @@ if command -v npx >/dev/null 2>&1; then
     npx --no -- commitlint --edit "$1"
     exit $?
   else
-    echo "WARNING: commitlint not found in ./node_modules — run: npm install --ignore-scripts (or: make bootstrap)" >&2
+    echo "WARNING: commitlint not found in ./node_modules — run: npm ci --ignore-scripts (or: make bootstrap)" >&2
     exit 0
   fi
 else

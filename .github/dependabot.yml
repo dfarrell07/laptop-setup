@@ -48,3 +48,15 @@ updates:
       node:
         patterns:
           - "*"
+
+  - package-ecosystem: "npm"
+    cooldown:
+      default-days: 7
+    directory: "/roles/codex/files"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "dependencies"
+      - "npm"
+    # NOTE: the Codex pin is integrity-locked; review all archive URLs and
+    # integrity values in package-lock.json before merging a bump.

@@ -36,9 +36,9 @@
     cmd: grep -q 'exec_always mako' "{{ ansible_user_dir }}/.config/sway/config"
   changed_when: false
 
-- name: Verify sway output line contains scale directive
+- name: Verify sway output line contains a decimal scale directive
   ansible.builtin.command:
-    cmd: grep -q 'output.*scale' "{{ ansible_user_dir }}/.config/sway/config"
+    cmd: grep -qE '^output [^ ]+ scale [0-9]+\.[0-9]+( |$)' "{{ ansible_user_dir }}/.config/sway/config"
   changed_when: false
 
 - name: Verify sway output line contains adaptive_sync setting
@@ -80,24 +80,24 @@
     cmd: grep -q 'grim.*wl-copy -t image/png' "{{ ansible_user_dir }}/.config/sway/config"
   changed_when: false
 
-- name: Verify portals.conf deployed
+- name: Verify sway-portals.conf deployed
   ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/.config/xdg-desktop-portal/portals.conf"
+    path: "{{ ansible_user_dir }}/.config/xdg-desktop-portal/sway-portals.conf"
   register: verify_portals
 
-- name: Assert portals.conf exists
+- name: Assert sway-portals.conf exists
   ansible.builtin.assert:
     that: verify_portals.stat.exists
-    fail_msg: "portals.conf not deployed (screen sharing broken)"
+    fail_msg: "sway-portals.conf not deployed (screen sharing broken)"
 
-- name: Verify portals.conf routes ScreenCast to wlr backend
+- name: Verify sway-portals.conf routes ScreenCast to wlr backend
   ansible.builtin.command:
-    cmd: grep -q 'ScreenCast=wlr' "{{ ansible_user_dir }}/.config/xdg-desktop-portal/portals.conf"
+    cmd: grep -q 'ScreenCast=wlr' "{{ ansible_user_dir }}/.config/xdg-desktop-portal/sway-portals.conf"
   changed_when: false
 
-- name: Verify portals.conf routes Screenshot to wlr backend
+- name: Verify sway-portals.conf routes Screenshot to wlr backend
   ansible.builtin.command:
-    cmd: grep -q 'Screenshot=wlr' "{{ ansible_user_dir }}/.config/xdg-desktop-portal/portals.conf"
+    cmd: grep -q 'Screenshot=wlr' "{{ ansible_user_dir }}/.config/xdg-desktop-portal/sway-portals.conf"
   changed_when: false
 
 - name: Verify i3status config deployed (shared by sway)
@@ -199,6 +199,11 @@
     cmd: grep -q 'gtk-icon-theme-name' "{{ ansible_user_dir }}/.config/gtk-3.0/settings.ini"
   changed_when: false
 
+- name: Verify GTK 3.0 settings.ini enables the dark theme preference
+  ansible.builtin.command:
+    cmd: grep -qx 'gtk-application-prefer-dark-theme=1' "{{ ansible_user_dir }}/.config/gtk-3.0/settings.ini"
+  changed_when: false
+
 - name: Stat GTK 4.0 settings.ini
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/gtk-4.0/settings.ini"
@@ -217,4 +222,9 @@
 - name: Verify GTK 4.0 settings.ini contains gtk-icon-theme-name
   ansible.builtin.command:
     cmd: grep -q 'gtk-icon-theme-name' "{{ ansible_user_dir }}/.config/gtk-4.0/settings.ini"
+  changed_when: false
+
+- name: Verify GTK 4.0 settings.ini enables the dark theme preference
+  ansible.builtin.command:
+    cmd: grep -qx 'gtk-application-prefer-dark-theme=1' "{{ ansible_user_dir }}/.config/gtk-4.0/settings.ini"
   changed_when: false

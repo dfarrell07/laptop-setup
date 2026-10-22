@@ -11,27 +11,24 @@
                 {
                     "type": "signedBy",
                     "keyType": "GPGKeys",
-                    "keyPath": "{{ containers_policy_rh_gpg_key }}"
+                    "keyPath": {{ containers_policy_rh_gpg_key | to_json }}
                 }
             ],
             "registry.access.redhat.com": [
                 {
                     "type": "signedBy",
                     "keyType": "GPGKeys",
-                    "keyPath": "{{ containers_policy_rh_gpg_key }}"
+                    "keyPath": {{ containers_policy_rh_gpg_key | to_json }}
                 }
-            ],
+            ]{{ ',' if containers_policy_unsigned_registries | length > 0 else '' }}
 {% endif %}
-            "registry.fedoraproject.org": [
+{% for registry in containers_policy_unsigned_registries %}
+            "{{ registry | regex_replace('[^A-Za-z0-9./:-]', '') }}": [
                 {
                     "type": "insecureAcceptAnything"
                 }
-            ],
-            "quay.io": [
-                {
-                    "type": "insecureAcceptAnything"
-                }
-            ]
+            ]{{ ',' if not loop.last else '' }}
+{% endfor %}
         },
         "docker-daemon": {
             "": [
@@ -41,6 +38,27 @@
             ]
         },
         "containers-storage": {
+            "": [
+                {
+                    "type": "insecureAcceptAnything"
+                }
+            ]
+        },
+        "docker-archive": {
+            "": [
+                {
+                    "type": "insecureAcceptAnything"
+                }
+            ]
+        },
+        "oci-archive": {
+            "": [
+                {
+                    "type": "insecureAcceptAnything"
+                }
+            ]
+        },
+        "dir": {
             "": [
                 {
                     "type": "insecureAcceptAnything"

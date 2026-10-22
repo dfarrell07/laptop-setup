@@ -8,8 +8,9 @@
   ansible.builtin.shell:
     cmd: |
       set -o pipefail
+      rpm -q rpm &>/dev/null || { echo 'rpm database query failed' >&2; exit 3; }
       rogue=""
-      whitelist="{{ system_udev_rules_whitelist | join(' ') }}"
+      whitelist={{ (system_udev_rules_whitelist + system_udev_rules_d_allowlist) | join(' ') | quote }}
       for f in /etc/udev/rules.d/*.rules; do
         [ -f "$f" ] || continue
         b=$(basename "$f")
@@ -22,8 +23,22 @@
     executable: /bin/bash
   register: _udev_unowned_dnf
   changed_when: false
+  check_mode: false
   failed_when: false
   when:
+    - is_dnf
+    - not system_is_container
+  tags: [always]
+
+- name: "WARNING: udev rules (dnf) ownership scan itself failed"
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: the pre-plant ownership scan of /etc/udev/rules.d failed
+      (rc={{ _udev_unowned_dnf.rc | default('n/a') }}), so unowned files were NOT checked.
+      stderr: {{ _udev_unowned_dnf.stderr | default('') | trim }}
+  when:
+    - _udev_unowned_dnf is not skipped
+    - (_udev_unowned_dnf.rc | default(1)) != 0
     - is_dnf
     - not system_is_container
   tags: [always]
@@ -34,7 +49,7 @@
       SECURITY: unowned file(s) in /etc/udev/rules.d not belonging to any RPM:
       {{ _udev_unowned_dnf.stdout }}. These may be pre-planted backdoor rules that
       execute as root on every matching uevent. Remove suspicious files, or add
-      known-good basenames to system_udev_rules_whitelist in config.yml.
+      known-good basenames to system_udev_rules_d_allowlist in config.yml.
   when:
     - is_dnf
     - not system_is_container
@@ -45,8 +60,9 @@
   ansible.builtin.shell:
     cmd: |
       set -o pipefail
+      dpkg-query --version &>/dev/null || { echo 'dpkg database unavailable' >&2; exit 3; }
       rogue=""
-      whitelist="{{ system_udev_rules_whitelist | join(' ') }}"
+      whitelist={{ (system_udev_rules_whitelist + system_udev_rules_d_allowlist) | join(' ') | quote }}
       for f in /etc/udev/rules.d/*.rules; do
         [ -f "$f" ] || continue
         b=$(basename "$f")
@@ -59,8 +75,22 @@
     executable: /bin/bash
   register: _udev_unowned_apt
   changed_when: false
+  check_mode: false
   failed_when: false
   when:
+    - is_apt
+    - not system_is_container
+  tags: [always]
+
+- name: "WARNING: udev rules (apt) ownership scan itself failed"
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: the pre-plant ownership scan of /etc/udev/rules.d failed
+      (rc={{ _udev_unowned_apt.rc | default('n/a') }}), so unowned files were NOT checked.
+      stderr: {{ _udev_unowned_apt.stderr | default('') | trim }}
+  when:
+    - _udev_unowned_apt is not skipped
+    - (_udev_unowned_apt.rc | default(1)) != 0
     - is_apt
     - not system_is_container
   tags: [always]
@@ -71,7 +101,7 @@
       SECURITY: unowned file(s) in /etc/udev/rules.d not belonging to any dpkg package:
       {{ _udev_unowned_apt.stdout }}. These may be pre-planted backdoor rules that
       execute as root on every matching uevent. Remove suspicious files, or add
-      known-good basenames to system_udev_rules_whitelist in config.yml.
+      known-good basenames to system_udev_rules_d_allowlist in config.yml.
   when:
     - is_apt
     - not system_is_container
@@ -120,7 +150,7 @@
       The host will run permanently unaudited. Fix the package install failure
       (network error, dpkg conflict, or repo unavailability) then re-run provisioning.
   when:
-    - _apt_audit_pkg_install.rc | default(0) != 0
+    - _apt_audit_pkg_install is failed
     - not system_is_container
     - not csb_rhel
 
@@ -128,7 +158,7 @@
   when:
     - not csb_rhel  # no SIEM at home; audit package not installed in container CI (see comment above)
     - not system_is_container
-    - (is_dnf and _audit_pkg_install.rc | default(0) == 0) or (is_apt and _apt_audit_pkg_install.rc | default(0) == 0)
+    - (is_dnf and _audit_pkg_install.rc | default(0) == 0) or (is_apt and _apt_audit_pkg_install is not failed)
   block:
     - name: Find task-wide audit suppression rules
       ansible.builtin.find:
@@ -202,6 +232,7 @@
         executable: /bin/bash
       register: _auditd_late_e0_files
       changed_when: false
+      check_mode: false
       failed_when: false
 
     - name: "Guard: late-sorting audit rules must not disable enforcement"
@@ -273,8 +304,23 @@
         # no drop-in mechanism exists — last writer wins with no merge. Deploying our
         # SUSPEND disk-space settings would conflict with IT's STIG AU-5 HALT/SINGLE baseline on both tiers.
 
+    - name: Warn that auditd.conf size settings are not applied on CSB
+      ansible.builtin.debug:
+        msg: >-
+          NOTE: system_auditd_max_log_file={{ system_auditd_max_log_file }} and
+          system_auditd_num_logs={{ system_auditd_num_logs }} are not applied: auditd.conf is
+          IT-owned on CSB-detected hosts, so its current rotation settings stay in effect.
+      when:
+        - csb_detected
+        - (system_auditd_max_log_file | string) != '8' or (system_auditd_num_logs | string) != '5'
+
     - name: Ensure auditd is enabled and started
       ansible.builtin.systemd:
         name: auditd
         enabled: true
         state: started
+      register: _auditd_enable
+      # check mode only simulates the install on hosts without auditd (Debian), so the unit is absent
+      failed_when:
+        - _auditd_enable is failed
+        - not (ansible_check_mode and 'Could not find the requested service' in (_auditd_enable.msg | default('')))

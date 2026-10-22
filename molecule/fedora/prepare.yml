@@ -51,3 +51,18 @@
       until: systemd_state_post.stdout in ['running', 'degraded']
       failed_when: false
       changed_when: false
+
+    # Unmanaged-file quarantine fixtures: the dotfiles role must move these to
+    # ~/.local/state/laptop-setup/quarantine/ (asserted in verify.yml).
+    # environment.d is not planted: that cleanup is skipped when system_is_container.
+    - name: Create git template hooks directory for quarantine fixture
+      ansible.builtin.file:
+        path: ~/.config/git/template/hooks
+        state: directory
+        mode: "0755"
+
+    - name: Plant unmanaged git template hook (quarantine fixture)
+      ansible.builtin.copy:
+        dest: ~/.config/git/template/hooks/post-checkout
+        content: "#!/bin/sh\nexit 0\n"
+        mode: "0755"

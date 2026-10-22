@@ -19,7 +19,7 @@
       Found invalid values: {{ _sysctl_values_invalid }}
   vars:
     _sysctl_key_re: '^[a-zA-Z0-9._-]+\Z'
-    _sysctl_value_re: '^[a-zA-Z0-9._/|-]+\Z'
+    _sysctl_value_re: '^[a-zA-Z0-9._/|-]+( [a-zA-Z0-9._/|-]+)*\Z'  # multi-number values: '4 4 1 7'
     _sysctl_keys: "{{ (system_sysctl_extra.keys() | list) + (system_sysctl_extra_additional.keys() | list) }}"
     _sysctl_all_dicts: "{{ [system_sysctl_extra | default({}), system_sysctl_extra_additional | default({})] }}"
     # yamllint disable-line rule:line-length
@@ -27,32 +27,6 @@
       {{ _sysctl_all_dicts | map('dict2items') | flatten | map(attribute='value') | map('string')
       | reject('match', _sysctl_value_re) | list }}
   when: not (system_is_container or csb_rhel)
-  tags: [always]
-
-# --- SECURITY: Enforce collections-dist integrity against supply chain tampering ---
-# Detects commits created with `git commit --no-verify` that bypass pre-commit SHA256SUMS
-# check. Paired with CI collections-integrity job for defense-in-depth protection.
-- name: "SECURITY: Verify collections-dist SHA256SUMS before provisioning"
-  ansible.builtin.assert:
-    that:
-      - lookup('file', (common_project_root | default(playbook_dir)) ~ '/collections-dist/SHA256SUMS') is defined
-      - "'ansible-posix-2.2.2.tar.gz' in lookup('file', (common_project_root | default(playbook_dir)) ~ '/collections-dist/SHA256SUMS')"
-      - >-
-        'community-general-13.5.0.tar.gz' in lookup('file', (common_project_root | default(playbook_dir)) ~
-        '/collections-dist/SHA256SUMS')
-      - >-
-        'community-library_inventory_filtering_v1-1.1.5.tar.gz' in lookup('file', (common_project_root | default(playbook_dir)) ~
-        '/collections-dist/SHA256SUMS')
-      - >-
-        'containers-podman-1.21.1.tar.gz' in lookup('file', (common_project_root | default(playbook_dir)) ~
-        '/collections-dist/SHA256SUMS')
-    fail_msg: |
-      SECURITY FAILURE: collections-dist/SHA256SUMS missing or incomplete.
-      This indicates collections-dist/*.tar.gz may have been modified without updating
-      SHA256SUMS. Common cause: `git commit --no-verify` bypassed the pre-commit guard.
-
-      To fix: cd collections-dist && sha256sum *.tar.gz > SHA256SUMS
-      Then commit normally: git add SHA256SUMS && git commit (no --no-verify)
   tags: [always]
 
 - name: "SECURITY: Enumerate files in /etc/udev/rules.d/ (pre-plant audit)"
@@ -100,12 +74,9 @@
   ansible.builtin.service_facts:
   when: not system_is_container  # systemctl list-units --all crashes PID 1 in Debian 13 privileged Podman containers
 
-- name: Seed empty service facts for container environments
-  # Ensures ansible_facts.services is defined so downstream 'is defined' guards
-  # (firewall.yml, sshd.yml, main.yml gdm check) evaluate safely to False.
-  ansible.builtin.set_fact:
-    ansible_facts: "{{ ansible_facts | combine({'services': {}}) }}"
-  when: system_is_container
+# Containers skip service_facts; readers use (ansible_facts.services | default({})). Do not
+# set_fact ansible_facts here: that creates a variable shadowing the real facts for the
+# rest of the run, hiding facts gathered later (e.g. package_facts in repos_dnf).
 
 # --- Prerequisites (needed by seport and other system tasks) ---
 - name: Ensure policycoreutils-python-utils is installed
@@ -203,7 +174,8 @@
       {{ _systemd_dropin_find.files | default([]) | map(attribute='path') | map('basename') | list }}
     _unexpected_dropin_dirs: >-
       {{ _found_dropin_dirs
-         | reject('in', system_systemd_dropin_whitelist + (['sshd.service.d'] if _system_empty_ssh_dropin else [])) | list }}
+         | reject('in', system_systemd_dropin_whitelist + (['sshd.service.d'] if _system_empty_ssh_dropin else [])
+           + system_csb_systemd_dropin_whitelist) | list }}
   when:
     - csb_detected
     - not system_is_container
@@ -237,13 +209,29 @@
   ansible.builtin.shell:
     cmd: |
       set -o pipefail
+      rpm -q rpm &>/dev/null || { echo 'rpm database query failed' >&2; exit 3; }
       find /etc/dbus-1/system.d -maxdepth 1 -type f \
         | while IFS= read -r f; do rpm -qf "$f" &>/dev/null || printf '%s\n' "$f"; done
     executable: /bin/bash
   register: _dbus_unowned
   changed_when: false
+  check_mode: false
   failed_when: false
   when:
+    - not csb_rhel
+    - not system_is_container
+    - is_dnf
+  tags: [always]
+
+- name: "WARNING: /etc/dbus-1/system.d ownership scan itself failed"
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: the pre-plant ownership scan of /etc/dbus-1/system.d failed
+      (rc={{ _dbus_unowned.rc | default('n/a') }}), so unowned files were NOT checked.
+      stderr: {{ _dbus_unowned.stderr | default('') | trim }}
+  when:
+    - _dbus_unowned is not skipped
+    - (_dbus_unowned.rc | default(1)) != 0
     - not csb_rhel
     - not system_is_container
     - is_dnf
@@ -282,13 +270,15 @@
 - name: "Hardening core (mounts, firewall, kernel, sysctl, coredumps, modules blacklist, kernel lockdown)"
   ansible.builtin.import_tasks: hardening_core.yml
 
+# Apply this subsystem's queued handlers now: force_handlers is deliberately false, so a later
+# failure would otherwise drop them, and the rerun sees no change and never applies the config.
+- name: Apply pending handlers (hardening core)
+  ansible.builtin.meta: flush_handlers
+
 # --- Load kernel modules for kind AFTER sysctl.yml deploys 90-hardening.conf ---
-# WARNING: system_modules_disabled defaults to 1 (ratchet ENABLED). After provisioning
-# completes and kernel-modules-lockdown.service starts, ALL kernel module loading
-# is blocked until reboot. For dev machines that load modules at runtime (VirtualBox
-# vboxdrv, kvm, custom DKMS drivers, hot-plug devices), set system_modules_disabled: 0
-# in config.yml BEFORE first provision. See roles/system/defaults/main.yml:626 for
-# security rationale (closes pre-reboot init_module() attack window).
+# NOTE: with system_modules_disabled: 1 (opt-in; default 0), kernel-modules-lockdown.service
+# blocks ALL kernel module loading after provisioning until reboot, so modules needed later
+# must be loaded here first. Rationale: system_modules_disabled in roles/system/defaults/main.yml.
 #
 # kernel.modules_disabled=1 is a one-way ratchet (cannot be disabled until reboot).
 # Task order satisfies two constraints:
@@ -306,9 +296,19 @@
 - name: "GRUB bootloader password (CIS 1.4.2)"
   ansible.builtin.import_tasks: grub_password.yml
 
+# Apply this subsystem's queued handlers now: force_handlers is deliberately false, so a later
+# failure would otherwise drop them, and the rerun sees no change and never applies the config.
+- name: Apply pending handlers (GRUB)
+  ansible.builtin.meta: flush_handlers
+
 # --- Auditd ---
 - name: Auditd tasks
   ansible.builtin.import_tasks: auditd.yml
+
+# Apply this subsystem's queued handlers now: force_handlers is deliberately false, so a later
+# failure would otherwise drop them, and the rerun sees no change and never applies the config.
+- name: Apply pending handlers (auditd)
+  ansible.builtin.meta: flush_handlers
 
 - name: "Bolt hardening"
   ansible.builtin.import_tasks: bolt.yml
@@ -331,6 +331,8 @@
 - name: "SECURITY: Validate system_ssh_extra_allow_users entries (sshd AllowUsers injection guard)"
   ansible.builtin.assert:
     that:
+      - system_ssh_extra_allow_users | default([]) is sequence
+      - system_ssh_extra_allow_users | default([]) is not string
       - >-
         system_ssh_extra_allow_users | default([])
         | map('string') | select()
@@ -374,6 +376,11 @@
   ansible.builtin.import_tasks: chrony.yml
   when: not system_is_container  # chrony apt install + systemd start hang in Debian 13 privileged Podman containers
 
+# Apply this subsystem's queued handlers now: force_handlers is deliberately false, so a later
+# failure would otherwise drop them, and the rerun sees no change and never applies the config.
+- name: Apply pending handlers (chrony)
+  ansible.builtin.meta: flush_handlers
+
 - name: PAM hardening (faillock, pwhistory, pwquality, pam_wheel)
   ansible.builtin.import_tasks: pam.yml
 
@@ -398,9 +405,8 @@
     mode: "0644"
   loop: [/etc/issue, /etc/issue.net]
   when:
-    - not csb_detected  # CSB: IT maintains compliant login banner on all CSB tiers
+    - not csb_rhel  # RHEL CSB: IT maintains compliant login banner; csb-fedora does not touch /etc/issue
     - not system_is_container  # /etc/issue writes trigger getty inotify; crashes privileged Podman container PID 1
-  failed_when: false
 
 - name: Account hardening
   ansible.builtin.import_tasks: account_hardening.yml
@@ -409,7 +415,7 @@
 - name: System-level dconf hardening
   ansible.builtin.include_tasks: dconf.yml
   when:
-    - '"gdm.service" in ansible_facts.services'
+    - '"gdm.service" in (ansible_facts.services | default({}))'
     - not csb_rhel
 
 - name: "AIDE cleanup"

@@ -15,7 +15,10 @@ class VaultStubTests(unittest.TestCase):
         self.assertEqual(result.stdout, '')
 
     def test_committed_template_and_empty_types(self):
-        self.check((ROOT / 'group_vars/all/vault.yml').read_text(), True)
+        committed = (ROOT / 'group_vars/all/vault.yml').read_text()
+        # After the documented ansible-vault encrypt the file is ciphertext, not the stub
+        if not committed.startswith('$ANSIBLE_VAULT'):
+            self.check(committed, True)
         for value in ('[]', "''", '""'):
             self.check('---\nvault_placeholder: "encrypt-me"\nvault_key: ' + value + ' # empty\n', True)
 
@@ -29,8 +32,22 @@ class VaultStubTests(unittest.TestCase):
             with self.subTest(extra=extra):
                 self.check(marker + extra, False)
         self.check('# vault_placeholder\nvault_key: []\n', False)
+        for comment in ('# -----BEGIN OPENSSH PRIVATE KEY-----', '#   b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW', '# PRIVATE KEY'):
+            with self.subTest(comment=comment):
+                self.check(marker + comment + '\nvault_key: []\n', False)
+        for tail in ('# -----BEGIN OPENSSH PRIVATE KEY-----', '# b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAA'):
+            self.check(marker + 'vault_key: [] ' + tail + '\n', False)
+            self.check('vault_placeholder: "encrypt-me" ' + tail + '\nvault_key: []\n', False)
+        self.check(marker + '# Populate these, then run ansible-vault encrypt\nvault_key: []\n', True)
         self.check('vault_placeholder: secret\nvault_key: []\n', False)
         self.check('', False)
+        self.check(marker + '# PRIVATE\0 KEY\nvault_key: []\n', False)
+        self.check(marker + ''.join('vault_k%d: []\n' % i for i in range(40000)), False)
+        self.check(marker + '  \u00a0# hunter2 correct horse battery staple\n', False)
+        self.check(marker + 'vault_' + 'a' * 60 + ': []\n', False)
+        self.check(marker + 'vault_' + 'a' * 56 + ': []\n', True)
+        self.check(marker + '# private_key backup\nvault_key: []\n', False)
+        self.check(marker + 'vault_x: x' + ' ' * 5000 + 'y\n', False)
 
 
 if __name__ == '__main__':

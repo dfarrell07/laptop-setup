@@ -1,9 +1,10 @@
 ---
 # roles/redhat/tasks/main.yml
-# Red Hat-specific: CA certs, VPN. Work profile only.
+# Red Hat-specific: CA certs, VPN, CSB splunk account hardening. Work profile only.
 
 - name: Stat and deploy Red Hat CA certificates
-  when: not csb_rhel
+  # CSB: IT's system_certs role manages the 2022-IT-Root-CA.pem anchor; Eng-CA.crt is not IT-managed
+  when: not csb_detected
   block:
     - name: Stat Red Hat CA certificate files in role
       ansible.builtin.stat:
@@ -27,28 +28,14 @@
       ignore_errors: true
       register: _ca_copy_result
 
-    - name: Record CA certificate deploy failure
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: redhat
-        _csb_task_name: "Deploy Red Hat CA certificates"
-        _csb_error: "{{ _ca_copy_result.results | selectattr('failed') | map(attribute='msg') | join('; ') | default('unknown error') }}"
-        _csb_action: "Red Hat internal CA certs may be missing; verify {{ redhat_ca_dest }} exists and is writable"
-        _csb_ticket_summary: "Cannot deploy Red Hat CA certificates on CSB"
-        _csb_ticket_body: >-
-          Red Hat CA certificate files could not be copied to
-          {{ redhat_ca_dest }}/. Internal CA trust may be
-          broken, affecting access to internal HTTPS services.
-      when: _ca_copy_result is failed and csb_detected
-
     - name: Warn CA certificate deploy failed (non-CSB)
       ansible.builtin.debug:
         msg: >-
           TASK FAILED: Deploy Red Hat CA certificates in role redhat.
-          Error: {{ _ca_copy_result.msg | default('unknown') | truncate(200) }}.
+          Error: {{ _ca_copy_result.results | selectattr('failed') | map(attribute='msg')
+          | join('; ') | default('unknown', true) | truncate(200) }}.
           Continuing playbook execution.
-      # non-CSB host: csb_detected=false means no ticket needed, log only
-      when: _ca_copy_result is failed and not csb_detected
+      when: _ca_copy_result is failed
 
     - name: Warn when no CA cert files found in role
       ansible.builtin.debug:
@@ -58,7 +45,7 @@
       when: redhat_ca_stat.results | selectattr('stat.exists') | list | length == 0
 
 - name: Install Red Hat cert packages
-  # File-based cert deploy (above) covers CSB Fedora hybrid; the RPM is RHEL CSB only (IT-managed repos)
+  # CSB Fedora hybrid: IT's system_certs role deploys the CA anchors; this RPM is RHEL CSB only (IT-managed repos)
   ansible.builtin.dnf:
     name: "{{ redhat_cert_packages }}"
     state: present
@@ -174,10 +161,10 @@
 - name: Warn on splunk shell drift after package upgrade
   ansible.builtin.debug:
     msg: >-
-      Splunk account shell was reset and re-hardened to /sbin/nologin.
-      A Satellite/IT-managed splunkforwarder upgrade likely reset the shell.
+      Splunk account shell was changed to /sbin/nologin (first hardening, or a
+      Satellite/IT-managed splunkforwarder upgrade reset it).
       Long-term fix: request IT/CSB modify the splunk-managed package to set
-      shell=/sbin/nologin at install time (see rescue block above for ticket text).
+      shell=/sbin/nologin at install time (see the failure-handler ticket text above).
   when:
     - csb_rhel
     - _splunk_shell_result is defined

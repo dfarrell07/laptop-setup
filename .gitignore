@@ -1,12 +1,29 @@
 # User overrides — may contain sensitive values (per-machine)
-config.yml
+/config.yml
 
 # Vault password files
 .vault_pass*
 scripts/vault-pass.sh
 
+# Private key / credential files that must never be committed
+*.pem
+*.key
+*.p12
+*.pfx
+id_ed25519*
+id_rsa*
+id_ecdsa*
+.env
+.netrc
+.git-credentials
+*.kubeconfig
+*.jks
+*.ppk
+*.p8
+*.age
+
 # GnuPG homedir — contains private keys; never commit
-gpg/
+/gpg/
 
 # Installed collections
 collections/
@@ -22,6 +39,9 @@ csb-report.md
 .claude/worktrees/
 .claude/projects/
 .claude/file-history/
+.claude/scheduled_tasks.json
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
 CLAUDE.local.md
 
 # Ansible runtime
@@ -44,10 +64,11 @@ __pycache__/
 
 # Molecule runtime state
 .molecule/
-*.src.rpm
+
+# Downloaded RPM packages
 *.rpm
 
-# RPM build/packaging artifacts (tarballs, specs, patches, keys, systemd units)
+# RPM build/packaging artifacts (tarballs, specs, patches, keys, sysusers and pam files)
 # Root-anchored (/foo) to avoid shadowing tracked files in subdirectories.
 /*.patch
 /*.gpg
@@ -70,4 +91,7 @@ __pycache__/
 
 # Version-string files at repo root (binary download debugging artifacts)
 /[0-9]*.[0-9]*.[0-9]*
+
+# Stray test script at repo root
 /hello.sh
+/group_vars/all/local_repos.yml

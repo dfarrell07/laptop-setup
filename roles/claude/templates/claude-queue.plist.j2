@@ -29,6 +29,12 @@
     <string>{{ claude_queue_timeout | int }}</string>
     <key>CLAUDE_QUEUE_HOST_LABEL</key>
     <string>{{ claude_queue_host_label | e }}</string>
+    <key>CLAUDE_QUEUE_MAX_ISSUES_PER_RUN</key>
+    <string>{{ claude_queue_max_issues_per_run | int }}</string>
+    <key>CLAUDE_QUEUE_LOG_DIR</key>
+    <string>{{ claude_log_dir | e }}</string>
+    <key>CLAUDE_QUEUE_ALLOWED_AUTHORS</key>
+    <string>{{ claude_queue_allowed_authors | map('regex_replace', '[\r\n,=].*', '') | join(',') | e }}</string>
   </dict>
   <key>StandardOutPath</key>
   <string>{{ claude_log_dir | e }}/claude-queue.log</string>

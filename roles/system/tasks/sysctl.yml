@@ -223,6 +223,22 @@
           static CIS/STIG hardening entries from /etc/sysctl.d/90-hardening.conf.
           Do not override system_sysctl_hardening on the command line.
 
+    # zram swap lives in RAM, so the swap-persistence rationale for vm.swappiness=1 does not
+    # apply; on zram-only hosts it only stops the kernel compressing idle pages.
+    - name: Read active swap devices
+      ansible.builtin.slurp:
+        src: /proc/swaps
+      register: _system_proc_swaps
+
+    - name: Use system_zram_swappiness when every swap device is zram
+      ansible.builtin.set_fact:
+        system_sysctl_hardening: "{{ system_sysctl_hardening | combine({'vm.swappiness': system_zram_swappiness | int}) }}"
+      vars:
+        _swap_devices: "{{ (_system_proc_swaps.content | b64decode).splitlines()[1:] | map('split') | map('first') | list }}"
+      when:
+        - _swap_devices | length > 0
+        - _swap_devices | reject('match', '^/dev/zram[0-9]+$') | list | length == 0
+
     - name: Merge configurable sysctl values into hardening dict
       ansible.builtin.set_fact:
         system_sysctl_hardening: "{{ system_sysctl_hardening | combine({

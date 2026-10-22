@@ -125,6 +125,22 @@
     that: verify_protocol_ssh.stdout == 'always'
     fail_msg: "git protocol.ssh.allow is not set to always — SSH clones will be blocked"
 
+- name: Check git integrity, protocol and credential settings
+  ansible.builtin.command:
+    argv: [git, config, --global, "{{ item.key }}"]
+  register: verify_git_settings
+  changed_when: false
+  failed_when: verify_git_settings.stdout != item.value
+  loop:
+    - {key: transfer.fsckObjects, value: 'true'}
+    - {key: fetch.fsckObjects, value: 'true'}
+    - {key: receive.fsckObjects, value: 'true'}
+    - {key: protocol.file.allow, value: user}
+    - {key: 'credential.https://github.com.helper', value: '!gh auth git-credential'}
+    - {key: 'url.ssh://git@github.com/.pushinsteadof', value: 'https://github.com/'}
+  loop_control:
+    label: "{{ item.key }}"
+
 - name: Check git gpg.format
   ansible.builtin.command:  # noqa: command-instead-of-module
     cmd: git config --global gpg.format
@@ -177,17 +193,17 @@
       - verify_allowed_signers.stat.size > 0
     fail_msg: "~/.config/git/allowed_signers is empty — SSH signature verification not configured"
 
-- name: Check allowed_signers contains sk-ssh-ed25519 key
+- name: Check allowed_signers has a git-namespace ed25519 signing key (plain or sk-)
   ansible.builtin.command:
-    cmd: grep -qE '(sk-)?ssh-ed25519' "{{ ansible_user_dir }}/.config/git/allowed_signers"
+    cmd: grep -qE 'namespaces="git" (sk-)?ssh-ed25519(@openssh\.com)? ' "{{ ansible_user_dir }}/.config/git/allowed_signers"
   register: verify_allowed_signers_key
   changed_when: false
   failed_when: false
 
-- name: Assert allowed_signers contains sk-ssh-ed25519 key
+- name: Assert allowed_signers contains an ed25519 signing key
   ansible.builtin.assert:
     that: verify_allowed_signers_key.rc == 0
-    fail_msg: "allowed_signers does not contain an sk-ssh-ed25519 key — YubiKey SSH signing key not registered"
+    fail_msg: "allowed_signers has no git-namespace ssh-ed25519/sk-ssh-ed25519 key — SSH signing key not registered"
   when: verify_allowed_signers.stat.exists
 
 - name: Check git alias.revert-s (must exist; 'revert' shadows built-in)
@@ -208,7 +224,7 @@
     cmd: git config --global --get-all safe.directory
   register: verify_safe_directory_common
   changed_when: false
-  failed_when: false
+  failed_when: verify_safe_directory_common.rc not in [0, 1]  # 1 = no entries configured
 
 - name: Assert no wildcard safe.directory entries exist
   ansible.builtin.assert:

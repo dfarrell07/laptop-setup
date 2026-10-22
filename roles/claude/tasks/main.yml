@@ -74,7 +74,8 @@
       SUPPLY CHAIN ADVISORY: claude_pinned_version is not set in config.yml.
       Downloading the latest installer from {{ claude_install_url }} installs
       whatever version the CDN currently serves. Set claude_pinned_version
-      (e.g. "1.0.3") in config.yml to pin to a specific release.
+      (e.g. "1.0.3") in config.yml to install that version (and upgrade
+      an older installed one); it is a minimum, not a ceiling.
   when:
     - claude_install_method == 'native'
     - packages_install_binaries | bool
@@ -143,11 +144,27 @@
     - packages_install_binaries | bool
     - claude_install_sha256 | length > 0
 
+- name: Report Claude Code install not simulated in check mode
+  ansible.builtin.debug:
+    msg: "CHECK MODE: Claude Code {{ claude_pinned_version or 'latest' }} would be installed from {{ claude_install_url }}; not simulated."
+  when:
+    - ansible_check_mode
+    # The pin is a floor: Claude's own updater moves installs forward, so only a missing
+    # or older binary is (re)installed; an exact match would downgrade on every run.
+    - claude_version_check.rc != 0 or (claude_pinned_version | length > 0
+      and (claude_version_check.stdout | default('') | regex_search('[0-9]+[.][0-9]+[.][0-9]+')
+           | default('0', true)) is version(claude_pinned_version, '<'))
+    - claude_install_method == 'native'
+    - packages_install_binaries | bool
+
 - name: Install Claude Code via native binary
   when:
+    - not ansible_check_mode  # downloads into a temp file that check mode never creates
+    # The pin is a floor: Claude's own updater moves installs forward, so only a missing
+    # or older binary is (re)installed; an exact match would downgrade on every run.
     - claude_version_check.rc != 0 or (claude_pinned_version | length > 0
-      and claude_pinned_version not in
-      (claude_version_check.stdout | default('') | trim).split())
+      and (claude_version_check.stdout | default('') | regex_search('[0-9]+[.][0-9]+[.][0-9]+')
+           | default('0', true)) is version(claude_pinned_version, '<'))
     - claude_install_method == 'native'
     - packages_install_binaries | bool
   block:
@@ -163,6 +180,8 @@
       register: _claude_temp_file
 
     - name: Download Claude Code install script to temporary file
+      retries: 3  # transient GitHub/CDN errors
+      delay: 10
       ansible.builtin.get_url:
         url: "{{ claude_install_url }}"
         dest: "{{ _claude_temp_file.path }}"
@@ -269,11 +288,12 @@
     state: absent
   when: profile != 'work'
 
-# Deploy security-critical settings (sandbox, deny lists, telemetry, MCP policy)
-# to settings.local.json, not settings.json.  Claude Code's /config command
-# overwrites settings.json (theme, model, etc.) but does NOT touch
-# settings.local.json, so security policy survives user preference changes.
-# Claude Code merges both files; settings.local.json takes precedence.
+# Security policy (sandbox, deny lists, telemetry, MCP policy) must live in the
+# USER settings file <config_dir>/settings.json: Claude Code does not read
+# settings.local.json from the config dir (it reads <cwd>/.claude/settings.local.json),
+# and some sandbox/credential keys are honored only from user/managed/CLI scope.
+# The seed below only creates the file; the merge step applies the policy every run
+# while preserving every user/CLI-written key.
 - name: Seed Claude user preferences without replacing CLI edits
   ansible.builtin.copy:
     content: |
@@ -286,12 +306,33 @@
     force: false
   loop: "{{ _claude_instances }}"
 
-- name: Deploy instance settings.local.json
-  ansible.builtin.template:
-    src: settings.local.json.j2
-    dest: "{{ item }}/settings.local.json"
-    mode: "0600"
-    force: true
+# The merged policy enables the sandbox with failIfUnavailable: Claude Code refuses to start
+# without bubblewrap and socat on Linux (macOS uses the built-in sandbox), so install them here
+# rather than relying on the work-profile package list.
+- name: Install Claude Code sandbox dependencies (Linux)
+  ansible.builtin.package:
+    name: [bubblewrap, socat]
+    state: present
+  become: true
+  tags: [become]
+  when:
+    - is_linux
+    - not (system_is_container)
+    - claude_sandbox_config.enabled | default(false) | bool
+
+# The helper runs on the target with the target's Python (inline via -c: the controller path
+# ansible_playbook_python does not exist inside containers or on remote hosts).
+- name: Merge security policy into instance settings.json
+  ansible.builtin.command:
+    argv: >-
+      {{ [ansible_facts.get('python', {}).get('executable', 'python3'), '-I', '-c',
+          lookup('ansible.builtin.file', role_path ~ '/files/merge-claude-settings.py'),
+          item ~ '/settings.json', '--remove-legacy', item ~ '/settings.local.json']
+         + (['--check'] if ansible_check_mode else []) }}
+    stdin: "{{ lookup('ansible.builtin.template', 'settings-policy.json.j2') }}"
+  register: _claude_settings_merge
+  changed_when: _claude_settings_merge.stdout | trim == 'changed'
+  check_mode: false
   loop: "{{ _claude_instances }}"
   loop_control:
     label: "{{ item | basename }}"
@@ -489,6 +530,7 @@
       when: not item.skipped | default(false)
       no_log: true
 
+    # podman-prune.* are the containers role's units (containers_prune_enabled).
     - name: Warn on unmanaged systemd user unit files before daemon-reload
       ansible.builtin.fail:
         msg: >-
@@ -498,7 +540,8 @@
           allowlist before re-running provisioning.
       loop: "{{ _systemd_user_units.files }}"
       when: >-
-        item.path | basename not in ['claude-queue.service', 'claude-queue.timer', 'ssh-agent.service', 'gcr-ssh-agent.service']
+        item.path | basename not in ['claude-queue.service', 'claude-queue.timer', 'ssh-agent.service', 'gcr-ssh-agent.service',
+                                      'podman-prune.service', 'podman-prune.timer']
         or (not item.isreg | default(false) and item.path | basename != 'gcr-ssh-agent.service')
 
     - name: Reload systemd user daemon after deploying queue units  # noqa: no-handler
@@ -660,7 +703,7 @@
   ansible.builtin.file:
     path: "{{ claude_log_dir }}"
     state: directory
-    mode: "0750"
+    mode: "0700"  # matches the poller (umask 077); logs can contain session output
   when: claude_queue_enabled | bool or (is_macos and claude_remote_control_enabled | bool)
 
 - name: Manage enabled launchd agents (macOS)

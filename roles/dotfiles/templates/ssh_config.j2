@@ -1,8 +1,63 @@
 # {{ ansible_managed }}
 {% set _system = ansible_facts['system'] | default('Linux') %}
+{#- Hosts the ssh role seeds into known_hosts (listed, with no fingerprint or a full SHA256 pin).
+    Unseeded hosts keep Host *'s accept-new: "yes" would refuse every connection to them. -#}
+{% set _seeded = [] %}
+{% for h in ssh_work_keyscan_hosts | default([]) %}
+{%   if h is mapping %}
+{%     if h.fingerprint is not defined or h.fingerprint is match('^SHA256:[A-Za-z0-9+/]{43}$') %}{% set _ = _seeded.append(h.host) %}{% endif %}
+{%   else %}{% set _ = _seeded.append(h) %}{% endif %}
+{% endfor %}
+
+# Host-specific blocks come before Host *: ssh uses the first value it finds for each
+# directive, so settings here (StrictHostKeyChecking yes, ControlMaster no) would be
+# ignored after Host * sets them. Work hosts get StrictHostKeyChecking yes once seeded.
+
+Host gh gist github.com gist.github.com
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/{{ dotfiles_ssh_hardware_key_basename }}
+    HostKeyAlgorithms ssh-ed25519
+    StrictHostKeyChecking yes
+    # SK enforcement via IdentityFile+IdentitiesOnly rather than PubkeyAcceptedAlgorithms:
+    # On Fedora-patched OpenSSH 10.2+ the crypto-policies layer intersects PubkeyAcceptedAlgorithms
+    # with HostKeyAlgorithms; restricting to sk-ssh-ed25519 variants (which GitHub does not offer
+    # as host key algorithms) produces an empty intersection and breaks host key negotiation.
+
+{% if profile == 'work' %}
+{% for h in dotfiles_ssh_work_hosts | default([]) %}
+Host {{ h.host | regex_replace('[^\x20-\x7e]', '') }}
+    User {{ (h.user | default(real_user_id | default(ansible_facts['user_id'], true), true)) | regex_replace('[^\x20-\x7e]', '') }}
+    IdentityFile ~/.ssh/{{ dotfiles_ssh_redhat_key_basename }}
+    ControlMaster no
+{% if h.host in _seeded %}
+    StrictHostKeyChecking yes
+{% endif %}
+{% if not loop.last %}
+
+{% endif %}
+{% endfor %}
+{% endif %}
+{% if profile == 'work' and dotfiles_internal_git_host != '' %}
+
+Host internal-git
+    HostName {{ dotfiles_internal_git_host | regex_replace('[^\x20-\x7e]', '') }}
+    User git
+    IdentityFile ~/.ssh/{{ dotfiles_ssh_redhat_key_basename }}
+    ControlMaster no
+{% if dotfiles_internal_git_host in _seeded %}
+    StrictHostKeyChecking yes
+{% endif %}
+{% endif %}
+
+{% set _ts_hosts = [dotfiles_laptop_tailscale_host, dotfiles_mac_tailscale_host] | select | list %}
+{% if _ts_hosts %}
+Host {{ _ts_hosts | map('regex_replace', '[^\x20-\x7e]', '') | join(' ') }}
+    Port {{ ssh_port | int }}
+    IdentityFile ~/.ssh/{{ dotfiles_ssh_hardware_key_basename }}
+{% endif %}
 
 Host *
-    VisualHostKey yes
     HashKnownHosts yes
     IdentitiesOnly yes
     AddKeysToAgent confirm
@@ -14,10 +69,10 @@ Host *
     # - mlkem768/sntrup761: PQ-KEX, only emitted when dotfiles_ssh_kex_pq_enabled=true (probed at provision time)
     # - curve25519-sha256@libssh.org included: libssh servers advertise only the @libssh.org alias;
     #   OpenSSH does not auto-expand it — both forms required for interoperability
-    # - ecdh-sha2-nistp{521,384,256} required: RHEL FIPS servers (gitlab.cee.redhat.com,
-    #   code.engineering.redhat.com) strip curve25519 and advertise only NIST ECDH curves;
-    #   per-host KexAlgorithms + after Host * is silently ignored (first-match semantics), so
-    #   NIST curves must appear here; non-FIPS servers still negotiate PQ or curve25519 first
+    # - ecdh-sha2-nistp{521,384,256} required: RHEL FIPS servers (internal git
+    #   hosts) strip curve25519 and advertise only NIST ECDH curves;
+    #   kept here, not per host, so other FIPS hosts work too (config.local, included after
+    #   Host *, cannot add them); non-FIPS servers still negotiate PQ or curve25519 first
     # - mlkem768nistp256/mlkem1024nistp384 excluded: prefer x25519-based hybrid over NIST curve classical component
     KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled %}mlkem768x25519-sha256,sntrup761x25519-sha512,{% endif %}curve25519-sha256@libssh.org,curve25519-sha256,ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256
     ServerAliveInterval 60
@@ -27,52 +82,12 @@ Host *
     ControlPath /run/user/%i/ssh/%r@%h-%p
 {% else %}
     ControlPath ~/.ssh/sockets/%r@%h-%p
+    # Homebrew OpenSSH (installed for FIDO2) rejects Apple's UseKeychain unless told to ignore it.
+    IgnoreUnknown UseKeychain
     UseKeychain yes
 {% endif %}
     ControlPersist 600
     StrictHostKeyChecking accept-new
-
-Host gh gist github.com gist.github.com
-    HostName github.com
-    User git
-    IdentityFile ~/.ssh/{{ dotfiles_ssh_hardware_key_basename }}
-    HostKeyAlgorithms ssh-ed25519
-    StrictHostKeyChecking yes
-    StrictHostKeyChecking yes
-    # SK enforcement via IdentityFile+IdentitiesOnly rather than PubkeyAcceptedAlgorithms:
-    # On Fedora-patched OpenSSH 10.2+ the crypto-policies layer intersects PubkeyAcceptedAlgorithms
-    # with HostKeyAlgorithms; restricting to sk-ssh-ed25519 variants (which GitHub does not offer
-    # as host key algorithms) produces an empty intersection and breaks host key negotiation.
-
-{% if profile == 'work' %}
-Host code.engineering.redhat.com
-    User {{ real_user_id | default(ansible_facts['user_id'], true) }}
-    IdentityFile ~/.ssh/{{ dotfiles_ssh_redhat_key_basename }}
-    ControlMaster no
-    StrictHostKeyChecking yes
-
-Host gitlab.cee.redhat.com
-    User git
-    IdentityFile ~/.ssh/{{ dotfiles_ssh_redhat_key_basename }}
-    ControlMaster no
-    StrictHostKeyChecking yes
-{% endif %}
-{% if profile == 'work' and dotfiles_internal_git_host != '' %}
-
-Host internal-git
-    HostName {{ dotfiles_internal_git_host | regex_replace('[^\x20-\x7e]', '') }}
-    User git
-    IdentityFile ~/.ssh/{{ dotfiles_ssh_redhat_key_basename }}
-    ControlMaster no
-    StrictHostKeyChecking yes
-{% endif %}
-
-{% set _ts_hosts = [dotfiles_laptop_tailscale_host, dotfiles_mac_tailscale_host] | select | list %}
-{% if _ts_hosts %}
-Host {{ _ts_hosts | map('regex_replace', '[^\x20-\x7e]', '') | join(' ') }}
-    Port {{ ssh_port | int }}
-    IdentityFile ~/.ssh/{{ dotfiles_ssh_hardware_key_basename }}
-{% endif %}
 
 # User-local overrides (not managed by Ansible).
 # Host-specific stanzas here still take effect for hosts not covered above; SSH first-match wins per
