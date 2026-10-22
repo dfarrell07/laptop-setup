@@ -1,6 +1,13 @@
 # {{ ansible_managed }}
 # Audit rules for sensitive file access monitoring
 
+# Kernel queue settings (Fedora's /usr/share/audit-rules/10-base-config.rules values, which
+# nothing installs here). Without -b the kernel default backlog of 64 overflows under the
+# syscall rules below during builds, dropping events; augenrules hoists these to the top.
+-b 8192
+--backlog_wait_time 60000
+-f 1
+
 # Exclusion rules (MUST come before -a always,exit syscall rules — first-match wins).
 # These suppress noise from well-known agents when syscall rules are added.
 # They have NO effect on the -w watch rules below: -w rules use audit_inode_hash
@@ -23,7 +30,8 @@
 # Build tools generate thousands of delete/rename events during normal operation
 # (cargo clean, npm install, git checkout). Exclude only those specific syscalls;
 # -w watch rules use the inode-hash path and are unaffected by these exclusions,
-# and other syscall rules (privilege-escalation, bpf, perm_mod) remain active.
+# and other syscall rules (privilege-escalation, bpf) remain active. perm_mod is also
+# silenced for the cargo/git (fchmod*) and npm/dnf5/rpm (chmod/chown/xattr) exclusions below.
 -a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -S fchmod -S fchmodat -F exe=/usr/bin/cargo -k exclude-build-deletes
 -a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -S fchmod -S fchmodat -F exe=/usr/bin/cargo -k exclude-build-deletes
 -a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -S fchmod -S fchmodat -F exe=/usr/bin/git -k exclude-build-deletes
@@ -100,10 +108,6 @@
 -w /etc/cron.monthly/ -p wa -k persistence
 -w /etc/crontab -p wa -k persistence
 -w /etc/systemd/system/ -p wa -k persistence
--w /etc/systemd/system/sshd.service.d/ -p wa -k persistence
--w /etc/systemd/system/dnf-automatic.service.d/ -p wa -k persistence
--w /etc/systemd/system/dnf5-automatic.service.d/ -p wa -k persistence
--w /etc/systemd/system/tmp.mount.d/ -p wa -k persistence
 -w /etc/profile.d/ -p wa -k persistence
 -w /etc/ld.so.conf.d/ -p wa -k persistence
 -w /etc/udev/rules.d/ -p wa -k udev-rules
@@ -153,8 +157,8 @@
 -w /etc/modprobe.d/ -p wa -k kernel-modules
 # /boot: grubby silently modifies BLS entries without touching /etc — these watches
 # catch kernel cmdline stripping (lockdown=integrity, vsyscall=none, etc.)
--w /boot/loader/entries/ -p a -k kernel-params
--w /boot/grub2/grub.cfg -p a -k kernel-params
+-w /boot/loader/entries/ -p wa -k kernel-params
+-w /boot/grub2/grub.cfg -p wa -k kernel-params
 
 # Privilege escalation syscalls (CIS benchmark)
 -a always,exit -F arch=b64 -S setuid -S setreuid -S setresuid -F auid>=1000 -F auid!=-1 -k privilege-escalation
@@ -176,9 +180,11 @@
 # bpfman itself is excluded above; these catch direct bpf() calls that bypass bpfman.
 -a always,exit -F arch=b64 -S bpf -F auid>=1000 -F auid!=-1 -k bpf-syscall
 -a always,exit -F arch=b32 -S bpf -F auid>=1000 -F auid!=-1 -k bpf-syscall
-# Also audit root-initiated bpf() (auid=-1 covers daemon/service context)
--a always,exit -F arch=b64 -S bpf -F uid=0 -F auid=-1 -k bpf-syscall
--a always,exit -F arch=b32 -S bpf -F uid=0 -F auid=-1 -k bpf-syscall
+# Also audit root-initiated program loads (auid=-1 covers daemon/service context). Only
+# BPF_PROG_LOAD (cmd 5): systemd and other daemons issue map/link bpf() calls on every unit
+# start, which flooded the audit log without adding signal.
+-a always,exit -F arch=b64 -S bpf -F a0=5 -F uid=0 -F auid=-1 -k bpf-syscall
+-a always,exit -F arch=b32 -S bpf -F a0=5 -F uid=0 -F auid=-1 -k bpf-syscall
 
 # User account management tool execution (CIS 4.1.3.8)
 -w /usr/bin/useradd -p x -k user-mgmt
@@ -230,7 +236,7 @@
 -w /var/run/utmp -p wa -k session
 
 
-# Network environment changes (CIS 4.1.3.5 / 4.1.3.12)
+# Network environment, locale and login banner changes (CIS 4.1.3.5 / 4.1.3.12)
 -a always,exit -F arch=b64 -S sethostname -S setdomainname -k system-locale
 -a always,exit -F arch=b32 -S sethostname -S setdomainname -k system-locale
 -w /etc/hosts -p wa -k system-locale

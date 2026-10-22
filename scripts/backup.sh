@@ -5,9 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Reject hostile HOME overrides (e.g. HOME=/tmp/attacker make backup)
 if command -v getent >/dev/null 2>&1; then
-  _real_home="$(getent passwd "$(id -un)" | cut -d: -f6)"
+  _real_home="$(getent passwd "$(id -un)" | cut -d: -f6)" || _real_home=""
 else
-  _real_home="$(python3 -c 'import os,pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')"
+  _real_home="$(python3 -I -c 'import os,pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')"
 fi
 [[ "$HOME" == "$_real_home" ]] || { echo "ERROR: HOME mismatch (got '$HOME', expected '$_real_home')" >&2; exit 1; }
 
@@ -22,13 +22,23 @@ for arg in "$@"; do
   esac
 done
 
-# Derive GitHub username from config.yml (user override) falling back to role defaults (used in macOS plist filenames)
-GITHUB_USER="$(grep '^dotfiles_github_user:' "$SCRIPT_DIR/../config.yml" 2>/dev/null | awk '{print ($2 == "!unsafe" ? $3 : $2)}' | tr -d "'\"" || grep '^dotfiles_github_user:' "$SCRIPT_DIR/../roles/dotfiles/defaults/main.yml" 2>/dev/null | awk '{print ($2 == "!unsafe" ? $3 : $2)}' | tr -d "'\"" || true)"
+# Derive GitHub username from config.yml (used in macOS plist filenames; the role default is a CHANGE_ME sentinel)
+GITHUB_USER="$(grep '^dotfiles_github_user:' "$SCRIPT_DIR/../config.yml" 2>/dev/null | awk '{print ($2 == "!unsafe" ? $3 : $2)}' | tr -d "'\"" || true)"
 [[ -n "$GITHUB_USER" && "$GITHUB_USER" != "CHANGE_ME" ]] || GITHUB_USER=""
 # Validate GitHub username: alphanumeric, hyphens, underscores only (prevents directory traversal)
 if [[ -n "$GITHUB_USER" && ! "$GITHUB_USER" =~ ^[a-zA-Z0-9_-]+$ ]]; then
   echo "[warn] Invalid GitHub username (contains invalid characters), skipping macOS LaunchAgent plists" >&2
   GITHUB_USER=""
+fi
+
+# Refuse before creating any snapshot directory so an abort leaves no partial backup.
+_vault_yml="${SCRIPT_DIR}/../group_vars/all/vault.yml"
+# shellcheck disable=SC2016  # Intentional: literal $ANSIBLE_VAULT header
+if [[ -f "$_vault_yml" ]] && ! head -1 "$_vault_yml" | grep -q '^\$ANSIBLE_VAULT'; then
+  if ! python3 "$SCRIPT_DIR/verify-vault-stub.py" < "$_vault_yml"; then
+    echo "ERROR: vault.yml contains plaintext values; run: ansible-vault encrypt group_vars/all/vault.yml" >&2
+    exit 1
+  fi
 fi
 
 BACKUP_DIR="${HOME}/laptop-setup-backup-$(date +%Y%m%d-%H%M%S)"
@@ -39,6 +49,17 @@ if [[ "$DRY_RUN" = false ]]; then
     echo "ERROR: backup destination already exists or cannot be created: $BACKUP_DIR" >&2
     exit 1
   }
+  # An aborted run must not leave a partial snapshot of credentials behind
+  _backup_created=true
+  _cleanup() {
+    local rc=$?
+    rm -f "${_discovery_file:-}"
+    if [[ $rc -ne 0 && "${_backup_created:-false}" = true ]]; then
+      rm -rf "$BACKUP_DIR"
+      echo "[warn] removed incomplete backup: $BACKUP_DIR" >&2
+    fi
+  }
+  trap _cleanup EXIT
 fi
 
 DOTFILES=(
@@ -130,7 +151,7 @@ DOTFILES=(
   .config/gtk-3.0/settings.ini
   .config/gtk-4.0/settings.ini
   .config/autostart/gnome-keyring-ssh.desktop
-  .config/xdg-desktop-portal/portals.conf
+  .config/xdg-desktop-portal/sway-portals.conf
   .config/aerospace/aerospace.toml
   .config/systemd/user/ssh-agent.service
   .config/systemd/user/claude-queue.service
@@ -146,7 +167,7 @@ if [[ -n "$GITHUB_USER" ]]; then
     "Library/LaunchAgents/com.${GITHUB_USER}.claude-remote-control.plist"
   )
 else
-  echo "[warn] dotfiles_github_user not set; skipping macOS LaunchAgent plists" >&2
+  echo "[warn] no valid dotfiles_github_user; skipping macOS LaunchAgent plists" >&2
 fi
 
 # Machine-specific overrides and secrets (gitignored — not in the repo)
@@ -243,7 +264,7 @@ _backup_array() {
       case "$f" in
         .zshrc|.zlogin|.gitconfig|.vimrc|.tmux.conf|.Xdefaults|.i3/config|.i3status.conf|.ssh/config)
           local resolved
-          resolved=$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$src")
+          resolved=$(python3 -I -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$src")
           if [[ "$resolved" == "$HOME/.dotfiles/"* ]]; then
             _assert_searchable_parents "$resolved"
           fi
@@ -280,16 +301,12 @@ _backup_array() {
 
 _backup_array "${DOTFILES[@]}"
 
-_vault_yml="${SCRIPT_DIR}/../group_vars/all/vault.yml"
-if [[ -f "$_vault_yml" ]] && ! head -1 "$_vault_yml" | grep -q '^\$ANSIBLE_VAULT'; then
-  if ! python3 "$SCRIPT_DIR/verify-vault-stub.py" < "$_vault_yml"; then
-    echo "ERROR: vault.yml contains plaintext values; run: ansible-vault encrypt group_vars/all/vault.yml" >&2
-    exit 1
-  fi
-fi
-
 _vault_pass_sh="${SCRIPT_DIR}/vault-pass.sh"
-if [[ -f "$_vault_pass_sh" ]] && grep -q "pass='" "$_vault_pass_sh" && ! grep -q 'ykman\|hmac' "$_vault_pass_sh"; then
+# Look at code lines only: comments mentioning ykman/hmac must not vouch for a plaintext password
+# (the unconfigured stub's pass='CHANGE_ME' placeholder is not a secret)
+if [[ -f "$_vault_pass_sh" ]] \
+    && grep -v '^[[:space:]]*#' "$_vault_pass_sh" | grep -E "^[[:space:]]*pass=['\"]" | grep -qv "pass='CHANGE_ME'" \
+    && ! grep -v '^[[:space:]]*#' "$_vault_pass_sh" | grep -qE 'ykman|ykchalresp'; then
   echo "ERROR: vault-pass.sh appears to contain a plaintext password; back up out-of-band and exclude from automated backup" >&2
   exit 1
 fi
@@ -312,7 +329,7 @@ done
 # A process-substitution producer's exit status is not covered by set -e. Check
 # each discovery before consuming its private NUL-delimited list.
 _discovery_file="$(mktemp "${TMPDIR:-/tmp}/laptop-setup-backup-files.XXXXXX")"
-trap 'rm -f "$_discovery_file"' EXIT
+[[ "${_backup_created:-false}" = true ]] || trap 'rm -f "$_discovery_file"' EXIT
 _ai_state_dirs=(
   .local/share/applications
   .config/acli .config/gcloud/configurations .config/submariner-release-management
@@ -333,7 +350,8 @@ for _instance in .claude .claude-work .claude-personal .claude-per2; do
     exit 1
   fi
   while IFS= read -r -d '' _memory; do
-    _ai_state_dirs+=("${_memory#"$HOME/"}")
+    # --ai-history walks the whole projects tree, which already contains memory
+    [[ "$AI_HISTORY" = true ]] || _ai_state_dirs+=("${_memory#"$HOME/"}")
   done < "$_discovery_file"
 done
 if [[ "$AI_HISTORY" = true ]]; then

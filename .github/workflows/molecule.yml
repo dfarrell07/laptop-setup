@@ -4,6 +4,8 @@ name: Molecule
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: "37 5 * * 1"
@@ -36,12 +38,13 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          if [ "${EVENT_NAME}" = "workflow_dispatch" ] || [ "${EVENT_NAME}" = "schedule" ]; then
+          if [ "${EVENT_NAME}" != "pull_request" ]; then
             echo "ansible=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           ANSIBLE_PATHS='^(roles/|common/|group_vars/|site\.yml|ansible\.cfg|default\.config\.yml'
           ANSIBLE_PATHS+='|requirements\.yml|requirements-test\.(txt|lock)|molecule/|scripts/'
+          ANSIBLE_PATHS+='|collections-dist/|Makefile$|\.github/scripts/'
           ANSIBLE_PATHS+='|\.github/workflows/molecule\.yml|\.github/actions/)'
           changed_paths=$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")
           if grep -Eq "$ANSIBLE_PATHS" <<< "$changed_paths"; then
@@ -105,11 +108,20 @@ jobs:
       - molecule
     steps:
       # Documentation-only PRs report successful platform jobs without provisioning.
-      - name: Verify no required job failed or was cancelled
-        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+      - name: Verify required jobs succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
         run: |
-          echo "One or more required jobs failed or were cancelled"
-          exit 1
+          # Neither job has an `if:` (doc-only PRs skip steps, not jobs), so any
+          # result other than success, including skipped, is a failure.
+          python3 -c '
+          import json, os, sys
+          bad = [j + ": " + v["result"] for j, v in json.loads(os.environ["NEEDS"]).items()
+                 if v["result"] != "success"]
+          if bad:
+              print("::error::Required jobs not successful: " + ", ".join(bad))
+              sys.exit(1)
+          '
 
   notify-failure:
     name: Create Issue on Failure
@@ -128,7 +140,7 @@ jobs:
           BODY="Weekly Molecule run failed. See run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           EXISTING=$(gh issue list --label bug --state open \
             --search "$TITLE in:title" --json number \
-            --jq '.[0].number' 2>/dev/null || echo "")
+            --jq '.[0].number // empty' 2>/dev/null || echo "")
           if [ -n "$EXISTING" ]; then
             gh issue edit "$EXISTING" --body "$BODY"
           else

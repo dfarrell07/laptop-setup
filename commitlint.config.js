@@ -19,7 +19,7 @@ module.exports = {
       'Notes', 'Redhat', 'Containers', 'Desktop', 'System', 'Distrobox',
       'Claude', 'Ci', 'Docs', 'Chore', 'Smoke', 'Molecule', 'Multi',
       'Sshd', 'Nm', 'Auditd', 'Backup', 'Handlers', 'Security',
-      'Vault', 'Preflight', 'Simplify',
+      'Vault', 'Preflight', 'Simplify', 'Codex',
     ]],
     'subject-empty': [2, 'never'],
     'subject-full-stop': [2, 'never', '.'],

@@ -30,11 +30,11 @@ export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$HOME/.ssh/ssh-agent.socket}"
 {% endif %}
 {% if profile == 'work' %}
 {% if dotfiles_aws_profile %}
-export AWS_PROFILE='{{ dotfiles_aws_profile | replace("'", "'\''" ) }}'
+export AWS_PROFILE='{{ dotfiles_aws_profile | replace("'", "'\\''" ) }}'
 {% endif %}
 # Go ignores empty environment values; explicit patterns override stale GoENV entries.
-export GONOSUMDB='{{ (dotfiles_gonosumdb or dotfiles_goprivate or 'none') | replace("'", "'\''" ) }}'
-export GOPRIVATE='{{ (dotfiles_goprivate or 'none') | replace("'", "'\''" ) }}'
+export GONOSUMDB='{{ (dotfiles_gonosumdb or dotfiles_goprivate or 'none') | replace("'", "'\\''" ) }}'
+export GOPRIVATE='{{ (dotfiles_goprivate or 'none') | replace("'", "'\\''" ) }}'
 {% endif %}
 
 command -v direnv &>/dev/null && eval "$(direnv hook bash)"

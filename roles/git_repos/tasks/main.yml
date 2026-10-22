@@ -32,14 +32,17 @@
     msg: >-
       gh not found in PATH — run 'make packages' first.
       Cloning will fail for private repos.
-  when: git_repos_gh_auth.rc == 127
+  # The command module reports a missing binary as rc 2 with "No such file" (not shell rc 127).
+  when: "'No such file' in (git_repos_gh_auth.msg | default(''))"
 
 - name: Warn if gh not authenticated
   ansible.builtin.debug:
     msg: >-
       GitHub CLI not authenticated. Run 'gh auth login' before
       'make repos'. Cloning will fail for private repos.
-  when: git_repos_gh_auth.rc not in [0, 127]
+  when:
+    - git_repos_gh_auth.rc != 0
+    - "'No such file' not in (git_repos_gh_auth.msg | default(''))"
 
 - name: Determine active categories for profile
   ansible.builtin.set_fact:
@@ -111,12 +114,21 @@
       list | length > 0
   register: git_repos_vpn_check
   ignore_errors: true
+  check_mode: false  # read-only probe; wait_for is otherwise skipped in check mode
 
 - name: Warn if VPN-gated repo hosts are unreachable
   ansible.builtin.debug:
     msg: >-
       VPN-gated host {{ git_repos_vpn_check_host }} is unreachable (port {{ git_repos_vpn_check_port }}).
-      Repos at {{ git_repos_vpn_check_host }} require Red Hat VPN — connect to VPN or expect clone failures.
+      Skipping repos at {{ git_repos_vpn_check_host }} this run; connect to VPN and re-run 'make repos'.
+  when: git_repos_vpn_check.failed | default(false)
+
+# Without this, the known_hosts assertion below aborts the role whenever the VPN is down,
+# because the ssh role could not keyscan the VPN-gated host either.
+- name: Skip VPN-gated repos while the VPN host is unreachable
+  ansible.builtin.set_fact:
+    git_repos_filtered: >-
+      {{ git_repos_filtered | rejectattr('url', 'search', git_repos_vpn_check_host | regex_escape) | list }}
   when: git_repos_vpn_check.failed | default(false)
 
 - name: Stat base directory without following symlinks
@@ -136,41 +148,55 @@
       re-run, or set git_repos_base_dir to a non-symlinked path.
   when: git_repos_filtered | length > 0
 
-- name: Assert git_repos_base_dir is within user home directory
-  ansible.builtin.assert:
-    that:
-      - git_repos_base_dir | string is match('^' ~ ansible_facts['user_dir'] ~ '(/|$)')
-    fail_msg: >-
-      SECURITY: git_repos_base_dir='{{ git_repos_base_dir }}' is not inside {{ ansible_facts['user_dir'] }}.
-      Input: git_repos_base_dir set to an absolute path outside the user home dir (e.g., '/' or '/etc').
-      Mechanism: ansible.builtin.file with state=directory chmods the target path to mode 0755.
-      Example: git_repos_base_dir: / chmods the root filesystem; git_repos_base_dir: /home chmods /home world-readable.
-      Impact: privilege escalation via filesystem permission widening on sensitive system directories.
-      Fix: set git_repos_base_dir to a path inside your home directory, e.g. ~/src (default).
-  tags: [always]
-  when: git_repos_filtered | length > 0
-
 - name: Ensure base directory exists
   ansible.builtin.file:
     path: "{{ git_repos_base_dir }}"
     state: directory
-    mode: "0755"
+    mode: "u+rwx"  # never widens a mode the user tightened (e.g. 0700)
   when: git_repos_filtered | length > 0
 
 - name: Set up git-lfs smudge/clean filter drivers
   ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/git-lfs-setup.yml"
   when: git_repos_filtered | length > 0
 
-- name: Assert SSH git repo hosts are in known_hosts (--start-at-task guard)
+# accept_newhostkey below would trust an unseen host key, so SSH repos are cloned only from
+# hosts the ssh role already seeded (pinned fingerprint or GitHub API). Unseeded hosts (off VPN,
+# fingerprint not yet pinned) are deferred to a later 'make ssh repos' instead of failing the run.
+- name: Check SSH git repo hosts are in known_hosts
   ansible.builtin.command:
     cmd: >-
       ssh-keygen -F "{{ item }}" -f "{{ ansible_facts['user_dir'] }}/.ssh/known_hosts"
   loop: >-
     {{ git_repos_filtered | default([]) | map(attribute='url')
-       | select('match', '^git@') | map('regex_replace', '^git@([^:]+):.*', '\1')
+       | select('match', '^(git@|ssh://)') | map('regex_replace', '^git@([^:]+):.*', '\1')
+       | map('regex_replace', '^ssh://(?:[^@/]+@)?([^/:]+).*', '\1')
        | unique | list }}
+  register: _git_repos_known_hosts
   changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe
   tags: [always]
+
+- name: Defer SSH repos whose host key is not seeded
+  vars:
+    _unseeded: >-
+      {{ _git_repos_known_hosts.results | default([]) | rejectattr('rc', 'equalto', 0)
+         | map(attribute='item') | list }}
+  when: _unseeded | length > 0
+  tags: [always]
+  block:
+    - name: Warn about deferred SSH repos
+      ansible.builtin.debug:
+        msg: >-
+          Skipping SSH repos on {{ _unseeded | join(', ') }}: no known_hosts entry (host
+          unreachable or its fingerprint is not pinned in ssh_work_keyscan_hosts). Pin the
+          fingerprint, then run 'make ssh repos' on a network that reaches the host.
+
+    - name: Drop SSH repos on unseeded hosts
+      ansible.builtin.set_fact:
+        git_repos_filtered: >-
+          {{ git_repos_filtered | rejectattr('url', 'match',
+             '^(git@|ssh://([^@/]+@)?)(' ~ (_unseeded | map('regex_escape') | join('|')) ~ ')[:/]') | list }}
 
 - name: Clone repositories  # noqa: latest[git] SECURITY WARNING see SECURITY.md Internal SSH Git Host Setup
   ansible.builtin.git:
@@ -200,9 +226,11 @@
          | rejectattr('failed', 'equalto', true)
          | map(attribute='item.dest') | list }}
 
-- name: Fail when all clones failed
-  ansible.builtin.fail:
-    msg: "All {{ git_repos_filtered | length }} clone(s) failed — check clone errors above"
+- name: Warn when all clones failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: All {{ git_repos_filtered | length }} clone(s) failed (see per-repo errors
+      below; offline?). Continuing. Re-run `make repos` when online.
   when:
     - git_repos_filtered | length > 0
     - git_repos_available_dests | length == 0
@@ -211,14 +239,15 @@
   ansible.builtin.debug:
     msg: >-
       FAILED to clone {{ item.item.url }} -> {{ item.item.dest }}:
-      {{ item.stderr | default('', true) or item.msg | default('unknown error') }}
+      {{ ((item.stderr | default('', true) or item.msg | default('unknown error')) | string).splitlines() | map('trim')
+         | reject('match', '^([+|]|Host key fingerprint is|$)') | join(' ') }}
   loop: "{{ git_repos_clone_results.results | default([]) | selectattr('failed', 'equalto', true) | list }}"
   loop_control:
     label: "{{ item.item.dest }}"
 
 - name: Pull upstream changes (ff-only)  # noqa: command-instead-of-module
   ansible.builtin.command:
-    cmd: git pull --ff-only -c core.hooksPath=/dev/null
+    cmd: git -c core.hooksPath=/dev/null pull --ff-only
     chdir: "{{ git_repos_base_dir }}/{{ item.dest }}"
   environment:
     LC_ALL: C  # ensure 'Already up to date' string is stable regardless of system locale
@@ -242,22 +271,9 @@
 - name: Report failed pulls
   ansible.builtin.debug:
     msg: "FAILED to pull {{ item.item.dest }}: {{ item.stderr | default('', true) or item.msg | default('unknown error') }}"
-  loop: "{{ (git_repos_pull_results.results | default([])) | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list }}"
+  loop: "{{ (git_repos_pull_results.results | default([])) | selectattr('failed', 'defined') | selectattr('failed') | list }}"
   loop_control:
     label: "{{ item.item.dest }}"
-
-- name: Fail if any pulls failed
-  ansible.builtin.fail:
-    msg: >-
-      git pull failed for: {{ (git_repos_pull_results.results | default([]))
-        | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0)
-        | map(attribute='item.dest') | list | join(', ') }}
-  when:
-    - git_repos_pull | bool
-    - >-
-      (git_repos_pull_results.results | default([])
-      | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0)
-      | list | length) > 0
 
 - name: Configure fork remotes  # noqa: command-instead-of-module
   ansible.builtin.shell:
@@ -271,6 +287,22 @@
   loop: "{{ git_repos_filtered | subelements('extra_remotes', skip_missing=true) }}"
   loop_control:
     label: "{{ item.0.dest }} -> {{ item.1.name }}"
-  when: item.0.dest in git_repos_available_dests
+  when:
+    - item.0.dest in git_repos_available_dests
+    - not ansible_check_mode  # check mode clones nothing, so the chdir target may not exist
   register: git_repos_remote_result
   changed_when: git_repos_remote_result.stdout | trim in ['added', 'updated']
+
+# Last, so one repo that cannot fast-forward does not stop fork remotes being configured
+- name: Fail if any pulls failed
+  ansible.builtin.fail:
+    msg: >-
+      git pull failed for: {{ (git_repos_pull_results.results | default([]))
+        | selectattr('failed', 'defined') | selectattr('failed')
+        | map(attribute='item.dest') | list | join(', ') }}
+  when:
+    - git_repos_pull | bool
+    - >-
+      (git_repos_pull_results.results | default([])
+      | selectattr('failed', 'defined') | selectattr('failed')
+      | list | length) > 0

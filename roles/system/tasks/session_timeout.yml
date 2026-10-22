@@ -7,6 +7,7 @@
     file_type: file
   register: _profiled_files
   when:
+    - is_apt  # only the Debian fallback below reads this; dnf hosts use the rpm ownership scan
     - not csb_rhel
     - not system_is_container
 
@@ -14,6 +15,7 @@
   ansible.builtin.shell:
     cmd: |
       set -o pipefail
+      rpm -q rpm &>/dev/null || { echo 'rpm database query failed' >&2; exit 3; }
       find /etc/profile.d -maxdepth 1 -type f | while IFS= read -r f; do
         rpm -qf "$f" &>/dev/null || printf '%s\n' "$f"
       done
@@ -21,7 +23,20 @@
   register: _profiled_unowned
   failed_when: false
   changed_when: false
+  check_mode: false
   when:
+    - is_dnf
+    - not system_is_container
+
+- name: "WARNING: /etc/profile.d ownership scan itself failed"
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: the pre-plant ownership scan of /etc/profile.d failed
+      (rc={{ _profiled_unowned.rc | default('n/a') }}), so unowned files were NOT checked.
+      stderr: {{ _profiled_unowned.stderr | default('') | trim }}
+  when:
+    - _profiled_unowned is not skipped
+    - (_profiled_unowned.rc | default(1)) != 0
     - is_dnf
     - not system_is_container
 
@@ -33,7 +48,9 @@
       and by 'su -' to root during provisioning. Add the basename to
       system_profiled_whitelist in config.yml to suppress this warning.
   vars:
-    _unexpected: "{{ (_profiled_unowned.stdout_lines | default([]) | map('basename') | list) | difference(system_profiled_whitelist) }}"
+    _unexpected: >-
+      {{ (_profiled_unowned.stdout_lines | default([]) | map('basename') | list)
+         | difference(system_profiled_whitelist + (system_csb_profiled_whitelist if csb_detected | default(false) else [])) }}
   when:
     - is_dnf
     - not system_is_container
@@ -51,7 +68,9 @@
       add its basename to system_profiled_whitelist in config.yml before
       re-running provisioning.
   vars:
-    _unexpected: "{{ (_profiled_unowned.stdout_lines | default([]) | map('basename') | list) | difference(system_profiled_whitelist) }}"
+    _unexpected: >-
+      {{ (_profiled_unowned.stdout_lines | default([]) | map('basename') | list)
+         | difference(system_profiled_whitelist + (system_csb_profiled_whitelist if csb_detected | default(false) else [])) }}
   when:
     - is_dnf
     - not system_is_container
@@ -73,6 +92,15 @@
     - item.path | basename not in system_profiled_whitelist
 
 # --- Session timeout (TMOUT via profile.d — Fedora /etc/bashrc sources profile.d, covering non-login interactive shells too) ---
+- name: Warn that system_tmout is not applied on RHEL CSB
+  ansible.builtin.debug:
+    msg: >-
+      NOTE: system_tmout={{ system_tmout }} is not applied: TMOUT is left to IT on RHEL CSB
+      hosts, and no TMOUT is set in /etc/profile, /etc/profile.d or /etc/zshrc unless IT adds one.
+  when:
+    - csb_rhel
+    - system_tmout | int > 0
+
 - name: Deploy TMOUT to /etc/profile.d/tmout.sh (bash, Fedora/RHEL/macOS)
   ansible.builtin.copy:
     content: |
@@ -84,7 +112,7 @@
     mode: "0644"
   when:
     - system_tmout | int > 0
-    - not csb_detected  # CSB: IT manages TMOUT via SCAP session policy on all CSB tiers; avoid duplicate readonly assignment
+    - not csb_rhel
     - not system_is_container  # /etc/profile.d write triggers PAM/pam_env re-evaluation; crashes privileged Podman container PID 1
     - not is_apt  # Debian sets TMOUT in /etc/bash.bashrc; profile.d would cause a duplicate readonly assignment
 
@@ -115,7 +143,7 @@
     mode: "0644"
   when:
     - not is_apt
-    - not csb_detected  # CSB: IT manages TMOUT via SCAP session policy on all CSB tiers; avoid duplicate readonly assignment
+    - not csb_rhel
     - system_tmout | int > 0
 
 - name: Deploy session timeout to /etc/zsh/zshrc (Debian zsh — GLOBAL_ZSHRC)
@@ -137,7 +165,7 @@
     state: absent
   when:
     - system_tmout | int <= 0
-    - not csb_detected  # CSB: IT manages TMOUT; we never write tmout.sh on CSB machines so nothing to clean up
+    - not csb_rhel
     - not is_apt  # Debian does not use profile.d for TMOUT; avoid spurious no-op on Debian hosts
 
 - name: Remove session timeout from /etc/bash.bashrc when disabled (Debian)
@@ -156,7 +184,7 @@
     state: absent
   when:
     - not is_apt
-    - not csb_detected  # CSB: IT manages TMOUT; we never write /etc/zshrc TMOUT on CSB machines so nothing to clean up
+    - not csb_rhel
     - system_tmout | int <= 0
 
 - name: Remove session timeout from /etc/zsh/zshrc when disabled (Debian)

@@ -17,11 +17,6 @@
             'missing config after rejected payload', 'malformed YAML', 'non-mapping YAML',
             'safe values', 'unsafe tagged safe value']
 
-    - name: Inspect payload execution marker
-      ansible.builtin.stat:
-        path: /tmp/ssti-guard-payload-executed
-      register: _ssti_payload_marker
-
     - name: Inspect controller payload execution marker
       ansible.builtin.stat:
         path: /tmp/ssti-guard-payload-executed
@@ -31,6 +26,4 @@
 
     - name: Assert malicious payloads never executed
       ansible.builtin.assert:
-        that:
-          - not _ssti_payload_marker.stat.exists
-          - not _ssti_controller_marker.stat.exists
+        that: not _ssti_controller_marker.stat.exists

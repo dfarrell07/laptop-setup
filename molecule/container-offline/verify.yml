@@ -17,6 +17,19 @@
           Either the rescue block did not execute, a pre-existing oc binary is present
           in the image, or the invalid version accidentally resolved to a real release.
 
+    - name: Stat rescue sentinel /tmp/oc_rescue_fired
+      ansible.builtin.stat:
+        path: /tmp/oc_rescue_fired
+      register: verify_rescue_sentinel
+
+    - name: Assert rescue sentinel exists — rescue block executed
+      ansible.builtin.assert:
+        that: verify_rescue_sentinel.stat.exists
+        fail_msg: >-
+          /tmp/oc_rescue_fired is absent. The rescue block did not execute — either the
+          download block was silently skipped (when: condition false) or the rescue path
+          was bypassed. The offline scenario must trigger the rescue block.
+
     - name: Stat subctl after the optional Go build failure
       ansible.builtin.stat:
         path: "{{ ansible_env.HOME }}/go/bin/subctl"
@@ -31,13 +44,12 @@
         path: "{{ ansible_env.HOME }}/go/bin/golangci-lint"
       register: verify_golangci_absent
 
-    - name: Assert golangci-lint absent — go binary absent so go install was a no-op
+    - name: Assert golangci-lint absent — go install failed (no go binary or no network) and failed_when swallowed it
       ansible.builtin.assert:
         that: not verify_golangci_absent.stat.exists
         fail_msg: >-
-          golangci-lint exists — go must be installed in the test image and go install
-          succeeded unexpectedly; check distrobox_packages in offline-vars.yml and the
-          container image.
+          golangci-lint exists — go install succeeded unexpectedly; the test image
+          should lack go or the network should be unreachable.
 
     - name: Stat flatpak-spawn wrapper for podman
       ansible.builtin.stat:

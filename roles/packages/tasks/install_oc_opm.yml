@@ -17,7 +17,6 @@
       ansible.builtin.assert:
         that: packages_oc_sha256 | length == 64
         fail_msg: "packages_oc_sha256 must be a 64-char hex string — update defaults/main.yml when bumping packages_oc_version"
-      when: packages_oc_version != 'stable'
 
     - name: Check if oc is installed
       ansible.builtin.command:
@@ -39,49 +38,32 @@
       register: packages_kubectl_source_marker
       failed_when: false
       changed_when: false
+      check_mode: false
+
+    - name: Report check mode skips oc and kubectl install at {{ packages_oc_version }}
+      ansible.builtin.debug:
+        msg: "CHECK MODE: oc and kubectl {{ packages_oc_version }} would be downloaded, verified and installed; not simulated."
+      when:
+        - ansible_check_mode
+        - >-
+          packages_oc_check.rc != 0 or
+          (packages_oc_check.stdout | regex_findall('Client Version: (\d+\.\d+\.\d+[^\s]*)') + [''])[0] != packages_oc_version or
+          not packages_kubectl_stat.stat.exists or
+          (packages_kubectl_source == 'ocp' and
+          (packages_kubectl_source_marker.rc != 0 or
+          packages_kubectl_source_marker.stdout | trim != 'ocp'))
 
     - name: Oc + kubectl present at {{ packages_oc_version }}
-      when: >-
-        packages_oc_check.rc != 0 or
-        packages_oc_version == 'stable' or
-        (packages_oc_check.stdout | regex_findall('Client Version: (\d+\.\d+\.\d+[^\s]*)') + [''])[0] != packages_oc_version or
-        not packages_kubectl_stat.stat.exists or
-        (packages_kubectl_source == 'ocp' and
-         (packages_kubectl_source_marker.rc != 0 or
+      when:
+        - not ansible_check_mode  # downloads into a temp dir that check mode never creates
+        - >-
+          packages_oc_check.rc != 0 or
+          (packages_oc_check.stdout | regex_findall('Client Version: (\d+\.\d+\.\d+[^\s]*)') + [''])[0] != packages_oc_version or
+          not packages_kubectl_stat.stat.exists or
+          (packages_kubectl_source == 'ocp' and
+          (packages_kubectl_source_marker.rc != 0 or
           packages_kubectl_source_marker.stdout | trim != 'ocp'))
       block:
-        # WARNING: stable track fetches sha256sum.txt from the same server as the binary
-        # (mirror.openshift.com) with no GPG verification — a compromised server can serve a
-        # matching (malicious binary + hash) pair and this check will pass. Use a pinned
-        # packages_oc_version with a hardcoded packages_oc_sha256 in defaults/main.yml for
-        # stronger supply-chain integrity guarantees.
-        - name: Fetch OpenShift client sha256sum.txt
-          ansible.builtin.uri:
-            url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/sha256sum.txt"
-            return_content: true
-            timeout: 300
-          register: packages_oc_sha256sums
-          check_mode: false
-          retries: 3
-          delay: 10
-          until: packages_oc_sha256sums.status == 200
-          when: packages_oc_version == 'stable'
-
-        - name: Extract SHA256 for openshift-client-linux.tar.gz
-          ansible.builtin.set_fact:
-            packages_oc_sha256: >-
-              {{ packages_oc_sha256sums.content
-                 | regex_findall('^([0-9a-f]{64})\s+openshift-client-linux\.tar\.gz$',
-                                 multiline=True)
-                 | first | default('') }}
-          when: packages_oc_version == 'stable'
-
-        - name: Assert oc SHA256 was found
-          ansible.builtin.assert:
-            that: packages_oc_sha256 | length == 64
-            fail_msg: "Could not extract SHA256 for openshift-client-linux.tar.gz from checksum file (oc_version={{ packages_oc_version }})"
-          when: packages_oc_version == 'stable'
-
         - name: Create temporary directory for oc download
           ansible.builtin.tempfile:
             state: directory
@@ -130,10 +112,7 @@
           # Idempotency guard: skip re-extraction when get_url reports the tarball
           # is unchanged (sha256 matches the cached copy).  Still extracts
           # when oc is absent from disk (rc != 0) even if the tarball is cached,
-          # covering the edge case of a manually deleted binary.  This matters
-          # most for packages_oc_version == 'stable', where the outer when-clause
-          # always fires and creates: /usr/local/bin/oc would wrongly prevent
-          # upgrades when the stable pointer advances to a new release.
+          # covering the edge case of a manually deleted binary.
           # When packages_kubectl_source == 'upstream', only oc is extracted; kubectl
           # is installed separately from dl.k8s.io via install_kubectl_upstream.yml.
           ansible.builtin.unarchive:
@@ -227,7 +206,6 @@
           packages_opm_sha256 must be a 64-char hex string — update
           packages_opm_sha256 and packages_oc_sha256 in defaults/main.yml
           when bumping packages_oc_version
-      when: packages_oc_version != 'stable'
 
     - name: Check if opm binary exists
       ansible.builtin.command:
@@ -243,38 +221,26 @@
       register: packages_opm_marker
       failed_when: false
       changed_when: false
+      check_mode: false
+
+    - name: Report check mode skips opm install at {{ packages_oc_version }}
+      ansible.builtin.debug:
+        msg: "CHECK MODE: opm {{ packages_oc_version }} would be downloaded, verified and installed; not simulated."
+      when:
+        - ansible_check_mode
+        - >-
+          packages_opm_check.rc != 0 or
+          packages_opm_marker.rc != 0 or
+          packages_opm_marker.stdout | trim != packages_oc_version
 
     - name: Opm present at {{ packages_oc_version }}
-      when: >-
-        packages_opm_check.rc != 0 or
-        packages_oc_version == 'stable' or
-        packages_opm_marker.rc != 0 or
-        packages_opm_marker.stdout | trim != packages_oc_version
+      when:
+        - not ansible_check_mode  # downloads into a temp dir that check mode never creates
+        - >-
+          packages_opm_check.rc != 0 or
+          packages_opm_marker.rc != 0 or
+          packages_opm_marker.stdout | trim != packages_oc_version
       block:
-        - name: Extract SHA256 for opm-linux.tar.gz
-          ansible.builtin.set_fact:
-            packages_opm_sha256: >-
-              {{ packages_oc_sha256sums.content
-                 | regex_findall('^([0-9a-f]{64})\s+opm-linux\.tar\.gz$',
-                                 multiline=True)
-                 | first | default('') }}
-          when: packages_oc_version == 'stable' and packages_oc_sha256sums is defined and 'content' in packages_oc_sha256sums
-
-        - name: Assert opm SHA256 was found
-          ansible.builtin.assert:
-            that: packages_opm_sha256 | length == 64
-            fail_msg: "Could not extract SHA256 for opm-linux.tar.gz from checksum file (oc_version={{ packages_oc_version }})"
-          when: packages_oc_version == 'stable' and packages_oc_sha256sums is defined and 'content' in packages_oc_sha256sums
-
-        - name: Fail if stable-mode opm SHA256 could not be loaded from sha256sum.txt
-          ansible.builtin.fail:
-            msg: >-
-              packages_oc_version is 'stable' but sha256sum.txt was not fetched
-              (oc block likely entered rescue). Cannot verify opm SHA256.
-          when:
-            - packages_oc_version == 'stable'
-            - not (packages_oc_sha256sums is defined and 'content' in packages_oc_sha256sums)
-
         - name: Create temporary directory for opm download
           ansible.builtin.tempfile:
             state: directory

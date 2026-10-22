@@ -14,9 +14,9 @@
       ansible.builtin.set_fact:
         _pf_is_molecule: true
 
-    - name: Load group_vars baselines (feature toggles, csb_rhel, needs_container_tier)
+    - name: Load group_vars baselines (feature toggles, csb_detected)
       # Molecule generates its own inventory in a temp dir; the project's group_vars/all/
-      # are not auto-loaded. Load vars.yml explicitly so csb_rhel is defined in rescue blocks.
+      # are not auto-loaded. Load vars.yml explicitly so csb_detected is defined in rescue blocks.
       ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
 
   roles:
@@ -61,7 +61,7 @@
       ansible.builtin.set_fact:
         _pf_is_molecule: true
 
-    - name: Load group_vars baselines (feature toggles, csb_rhel, needs_container_tier)
+    - name: Load group_vars baselines (feature toggles, csb_detected)
       ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
 
   roles:

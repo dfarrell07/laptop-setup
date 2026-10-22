@@ -14,22 +14,25 @@ set -euo pipefail
 # Verification layers:
 #   1. SHA256SUMS.asc: GPG signature check when repository policy enables it
 #   2. SHA256SUMS: tarball integrity (fatal on mismatch)
-#   3. Python manifest: extracted .py files match tarballs + PYTHON_MANIFEST.json (fatal)
-# Usage: called by verify-ansible-args.sh via VERIFY_AND_RUN in Makefile
+#   3. Installed tree (once collections/ exists): .py/.so files match tarballs + PYTHON_MANIFEST.json;
+#      any symlink or collection-root __init__.py is fatal; a vendored collection that is not
+#      installed only warns (stderr, exit 0)
+# Usage: called by verify-ansible-args.sh (the Makefile's VERIFY_AND_RUN wrapper)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Step 1: Follow tracked GPG policy; all hash/content layers always run.
+# Step 1: Follow tracked GPG policy; the hash layers always run (the installed-tree layer needs collections/).
 # Security model when .gpg-enforcement is enabled:
 #   - Good signature with key in keyring (exit 0): PASS
 #   - Bad signature with key in keyring (exit 1): FATAL (active tampering detected)
-#   - Key NOT in keyring (exit 2): FATAL — SHA256SUMS is git-tracked and can be replaced
+#   - Key NOT in keyring (gpg reports no public key): FATAL — SHA256SUMS is git-tracked and can be replaced
 #     atomically with a malicious tarball; GPG is the only backstop against this.
 #
 # The bundled key and signature are placeholders. Enforced mode needs a real owner
 # key and a replacement checksum signature; see SECURITY.md for setup.
-# To bypass (non-production, CI without key material): set SKIP_GPG_VERIFY=1
+# To bypass the missing-key case only (non-production, CI without key material): set SKIP_GPG_VERIFY=1
+# (a bad signature with the key present is always fatal)
 cd "${REPO_DIR}/collections-dist"
 _gpg_policy=$("${REPO_DIR}/scripts/gpg-policy.sh")
 if [[ "$_gpg_policy" == disabled ]]; then
@@ -107,6 +110,11 @@ trap 'rm -rf "$_tmpdir"' EXIT
 # Tarball naming: namespace-collection-version.tar.gz (fields 0 and 1 are ns/col).
 for tarball in "${REPO_DIR}/collections-dist/"*.tar.gz; do
   [[ -f "$tarball" ]] || continue
+  # Exact filename comparison (not a regex), so '.' or '+' in a name cannot mis-match
+  if ! TARBALL_NAME="$(basename "$tarball")" awk 'BEGIN { n = ENVIRON["TARBALL_NAME"] } { f = $2; sub(/^\*/, "", f); if (f == n && length($1) == 64) found = 1 } END { exit !found }' "${REPO_DIR}/collections-dist/SHA256SUMS"; then
+    echo "ERROR: $(basename "$tarball") is not listed in SHA256SUMS — remove it or add a verified entry" >&2
+    exit 1
+  fi
   base="$(basename "$tarball" .tar.gz)"
   IFS='-' read -ra _parts <<< "$base"
   _ns="${_parts[0]}"
@@ -119,11 +127,19 @@ for tarball in "${REPO_DIR}/collections-dist/"*.tar.gz; do
 done
 
 _extracted="${REPO_DIR}/collections"
+if [[ -L "$_extracted" ]]; then
+  echo "FATAL: ${_extracted} is a symlink — possible tampering" >&2
+  exit 1
+fi
+if [[ ! -d "$_extracted/ansible_collections" ]] && { [[ -e "$_extracted/ansible_collections" ]] || [[ -L "$_extracted/ansible_collections" ]]; }; then
+  echo "FATAL: ${_extracted}/ansible_collections exists but is not a directory (broken link or file) — possible tampering" >&2
+  exit 1
+fi
 if [[ -d "$_extracted/ansible_collections" ]]; then
   # Step 2a: Comprehensive content verification for all collections
   # Compare extracted Python files against fresh extraction from verified tarballs
   # and validate against PYTHON_MANIFEST.json
-  python3 - "$_extracted/ansible_collections" "$_tmpdir" "$REPO_DIR/collections-dist/PYTHON_MANIFEST.json" << 'PYEOF'
+  python3 -I - "$_extracted/ansible_collections" "$_tmpdir" "$REPO_DIR/collections-dist/PYTHON_MANIFEST.json" << 'PYEOF'
 import sys
 import hashlib
 import json
@@ -140,24 +156,28 @@ def compute_file_hash(filepath):
 def extract_python_files(collection_dir):
     """Extract all .py and .so files from plugins, module_utils, roles.
 
-    Note: .pyc files not validated (Python handles mtime internally).
+    Note: .pyc files are not validated (known gap: a sourceless .pyc would be loaded unchecked).
     .so files included for C extension modules (security-critical).
     """
     python_files = {}
+    if collection_dir.is_symlink():
+        print(f"FATAL: symlink detected in vendored collection — possible tampering: {collection_dir}", file=sys.stderr)
+        sys.exit(1)
     for subdir in ['plugins', 'module_utils', 'roles']:
         base = collection_dir / subdir
+        if base.is_symlink():
+            print(f"FATAL: symlink detected in vendored collection — possible tampering: {base}", file=sys.stderr)
+            sys.exit(1)
         if not base.exists():
             continue
         for pyfile in base.rglob('*'):
-            # Skip cache and non-code files
-            if '__pycache__' in str(pyfile) or '__pycache__' in pyfile.parts:
-                continue
-            # Only .py and .so files
-            if pyfile.suffix not in ('.py', '.so'):
-                continue
+            # Any symlink (including a directory link hiding .py files) is tampering
             if pyfile.is_symlink():
                 print(f"FATAL: symlink detected in vendored collection — possible tampering: {pyfile}", file=sys.stderr)
                 sys.exit(1)
+            # Only .py and .so files
+            if pyfile.suffix not in ('.py', '.so'):
+                continue
             if pyfile.is_file():
                 rel_path = str(pyfile.relative_to(collection_dir))
                 python_files[rel_path] = compute_file_hash(pyfile)
@@ -179,12 +199,27 @@ manifest_data = load_manifest(manifest_path)
 # Map collections from ansible_collections hierarchy to flat tmpdir hierarchy
 # extracted_root: ansible_collections/ansible/posix/
 # tmpdir: plugins/, module_utils/, etc. (flat)
+if extracted_root.is_symlink():
+    print(f"FATAL: symlink detected in vendored collection — possible tampering: {extracted_root}", file=sys.stderr)
+    sys.exit(1)
+def reject_package_marker(directory):
+    # Ansible imports a collection root __init__.py; tarballs never ship one
+    if (directory / '__init__.py').exists() or (directory / '__init__.py').is_symlink():
+        print(f"FATAL: unexpected __init__.py in vendored collection root — possible tampering: {directory}", file=sys.stderr)
+        sys.exit(1)
+
+reject_package_marker(extracted_root)
 for namespace_dir in extracted_root.glob('*/'):
+    if namespace_dir.is_symlink():
+        print(f"FATAL: symlink detected in vendored collection — possible tampering: {namespace_dir}", file=sys.stderr)
+        sys.exit(1)
     if not namespace_dir.is_dir():
         continue
+    reject_package_marker(namespace_dir)
     for collection_dir in namespace_dir.glob('*/'):
         if not collection_dir.is_dir():
             continue
+        reject_package_marker(collection_dir)
         collection_name = f"{namespace_dir.name}/{collection_dir.name}"
         extracted_files = extract_python_files(collection_dir)
 
@@ -253,6 +288,12 @@ for namespace_dir in extracted_root.glob('*/'):
             print(f"ERROR: {collection_name}: runtime paths or hashes differ from the committed Python manifest", file=sys.stderr)
             print("       Regenerate the manifest only after verifying the archives against upstream sources.", file=sys.stderr)
             sys.exit(1)
+
+for fresh_namespace in sorted(p for p in tmpdir.glob('*/') if p.is_dir()):
+    for fresh_collection in sorted(p for p in fresh_namespace.glob('*/') if p.is_dir()):
+        if not (extracted_root / fresh_namespace.name / fresh_collection.name).is_dir():
+            print(f"WARN: {fresh_namespace.name}/{fresh_collection.name} is vendored but not installed under collections/ "
+                  "(partial bootstrap?); Ansible may load an unverified copy from another collections path", file=sys.stderr)
 
 print("✓ All collection Python files match verified tarballs")
 PYEOF

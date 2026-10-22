@@ -38,29 +38,48 @@
     state: directory
     mode: "0755"
 
-- name: Disable GDM user list and deploy login banner (CIS 1.8.2/1.8.3)
-  ansible.builtin.copy:
-    content: |
-      # {{ ansible_managed }}
-      # CIS 1.8.2: GDM login banner
-      # CIS 1.8.3: prevent username enumeration on GDM login screen
-      [org/gnome/login-screen]
-      banner-message-enable=true
-      banner-message-text='Authorized users only. All activity is monitored and logged.'
-      disable-user-list=true
-    dest: /etc/dconf/db/gdm.d/03-hardening
-    mode: "0644"
-  notify: Apply dconf schema database
+# A login banner already set by another gdm.d keyfile (Red Hat IT ships the corporate
+# acceptable-use text on CSB) is left in place: 03-hardening would override it.
+- name: Find GDM banners set by other dconf keyfiles
+  ansible.builtin.find:
+    paths: /etc/dconf/db/gdm.d
+    file_type: file
+    contains: '^banner-message-text='
+    excludes: 03-hardening
+  register: _system_gdm_banners
 
-- name: Lock GDM login-screen keys (CIS 1.8.2/1.8.3)
-  ansible.builtin.copy:
-    content: |
-      /org/gnome/login-screen/banner-message-enable
-      /org/gnome/login-screen/banner-message-text
-      /org/gnome/login-screen/disable-user-list
-    dest: /etc/dconf/db/gdm.d/locks/03-hardening
-    mode: "0644"
-  notify: Apply dconf schema database
+- name: Disable GDM user list and deploy login banner (CIS 1.8.2/1.8.3)
+  vars:
+    _own_banner: "{{ _system_gdm_banners.matched | default(0) == 0 }}"
+    _other_banner_files: "{{ _system_gdm_banners.files | default([]) | map(attribute='path') | map('basename') | join(', ') }}"
+  block:
+    - name: Deploy GDM login-screen keyfile
+      ansible.builtin.copy:
+        content: |
+          # {{ ansible_managed }}
+          # CIS 1.8.2: GDM login banner{{ '' if _own_banner else ' (kept from ' + _other_banner_files + ')' }}
+          # CIS 1.8.3: prevent username enumeration on GDM login screen
+          [org/gnome/login-screen]
+          {% if _own_banner %}
+          banner-message-enable=true
+          banner-message-text='Authorized users only. All activity is monitored and logged.'
+          {% endif %}
+          disable-user-list=true
+        dest: /etc/dconf/db/gdm.d/03-hardening
+        mode: "0644"
+      notify: Apply dconf schema database
+
+    - name: Lock GDM login-screen keys (CIS 1.8.2/1.8.3)
+      ansible.builtin.copy:
+        content: |
+          {% if _own_banner %}
+          /org/gnome/login-screen/banner-message-enable
+          /org/gnome/login-screen/banner-message-text
+          {% endif %}
+          /org/gnome/login-screen/disable-user-list
+        dest: /etc/dconf/db/gdm.d/locks/03-hardening
+        mode: "0644"
+      notify: Apply dconf schema database
 
 - name: Deploy screensaver/idle lock policy (CIS 1.8.4/1.8.5)
   ansible.builtin.copy:

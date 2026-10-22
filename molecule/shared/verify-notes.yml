@@ -1,20 +1,15 @@
 ---
 # molecule/shared/verify-notes.yml
-# Notes role assertions — private repo; clone expected to fail gracefully in CI.
-# Include from each scenario verify.yml via include_tasks.
+# Notes role assertions — private repo; ci-mock-notes.yml pre-creates the checkout so the role skips the clone in CI.
+# Imported from each scenario verify.yml via import_tasks.
 
-- name: Check notes repo directory
-  ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/notes/.git"
-  register: verify_notes
-
-# No existence assertion here: ci-mock-notes.yml creates ~/notes/.git unconditionally
-# before the notes role runs, so the stat above always succeeds and asserts nothing
-# about role behavior. The mode/gitleaks assertions below DO test role behavior.
+# No existence assertion for the notes checkout's .git: ci-mock-notes.yml creates it unconditionally before
+# the notes role runs, so it would assert nothing about role behavior. The mode/gitleaks
+# assertions below DO test role behavior.
 
 - name: Stat notes .git/config for permission check
   ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/notes/.git/config"
+    path: "{{ ansible_user_dir }}/{{ notes_repo_name | default('notes') }}/.git/config"
   register: verify_notes_config
 
 - name: Verify notes .git/config permissions
@@ -24,7 +19,7 @@
 
 - name: Stat notes directory for permission check
   ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/notes"
+    path: "{{ ansible_user_dir }}/{{ notes_repo_name | default('notes') }}"
   register: verify_notes_dir
 
 - name: Assert notes directory is mode 0700
@@ -34,10 +29,12 @@
 
 - name: Stat notes gitleaks allowlist
   ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/notes/.gitleaks.toml"
+    path: "{{ ansible_user_dir }}/{{ notes_repo_name | default('notes') }}/.gitleaks.toml"
   register: verify_notes_gitleaks
 
-- name: Assert notes gitleaks allowlist deployed
+# CI provisions without a transcrypt password, so the checkout stays plaintext and must keep
+# secret scanning (the allowlist is only deployed for an encrypted repo).
+- name: Assert notes gitleaks allowlist absent in a plaintext checkout
   ansible.builtin.assert:
-    that: verify_notes_gitleaks.stat.exists
-    fail_msg: "notes/.gitleaks.toml missing — pre-commit gitleaks hook will reject all notes commits"
+    that: not verify_notes_gitleaks.stat.exists
+    fail_msg: "notes/.gitleaks.toml deployed without transcrypt — secrets would be committed unscanned"

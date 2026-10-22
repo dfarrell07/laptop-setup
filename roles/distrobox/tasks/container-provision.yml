@@ -121,7 +121,6 @@
         content: "1"
         mode: "0644"
 
-# --- Go tools (not in Fedora repos) ---
   always:
     - name: Clean up oc temporary directory
       ansible.builtin.file:
@@ -130,6 +129,7 @@
       when: container_oc_tempdir is defined
       failed_when: false
 
+# --- Go tools (not in Fedora repos) ---
 - name: Check golangci-lint version
   ansible.builtin.command:
     cmd: "{{ ansible_env.HOME }}/go/bin/golangci-lint version --format short"
@@ -140,8 +140,10 @@
 
 - name: Install golangci-lint via go install
   ansible.builtin.command:
-    cmd: >-
-      go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{ distrobox_golangci_lint_version }}
+    argv:
+      - go
+      - install
+      - "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{ distrobox_golangci_lint_version }}"
   environment:
     GOPATH: "{{ ansible_env.HOME }}/go"
     GOBIN: "{{ ansible_env.HOME }}/go/bin"
@@ -162,7 +164,7 @@
   failed_when: false
   when: >-
     container_golangci_lint_check.rc != 0 or
-    distrobox_golangci_lint_version not in container_golangci_lint_check.stdout
+    (distrobox_golangci_lint_version | regex_replace('^v', '')) not in container_golangci_lint_check.stdout
 
 - name: Check subctl version
   ansible.builtin.command:
@@ -302,20 +304,46 @@
 # distrobox-export is only available inside distrobox containers (not toolbox).
 # container_host_exec.stat.exists is true for distrobox (distrobox-host-exec present),
 # false for toolbox. Without the guard, this hard-fails Play 3 for toolbox users.
-- name: Export oc and kubectl to host
-  ansible.builtin.command:
-    cmd: "distrobox-export --bin /usr/local/bin/{{ item }} --export-path {{ ansible_env.HOME }}/.local/bin"
-  loop: [oc, kubectl]
+# ~/.local/bin precedes /usr/local/bin and /usr/bin on PATH, so a wrapper there would shadow a
+# host install (the packages role puts oc/kubectl in /usr/local/bin) and break it once this
+# container is removed. A real file in ~/.local/bin is never overwritten either; only an existing
+# distrobox wrapper (marked '# distrobox_binary') is refreshed.
+- name: Export container tools to host
+  ansible.builtin.shell:
+    cmd: |
+      set -u
+      dest="$HOME/.local/bin/$TOOL"
+      if [ -e "/run/host/usr/local/bin/$TOOL" ] || [ -e "/run/host/usr/bin/$TOOL" ]; then
+        echo "skip: host already provides $TOOL"
+      elif [ -e "$dest" ] && ! grep -q '^# distrobox_binary' "$dest"; then
+        echo "skip: $dest is not a distrobox wrapper"
+      else
+        distrobox-export --bin "$SRC" --export-path "$HOME/.local/bin"
+      fi
+    executable: /bin/bash
+  environment:
+    TOOL: "{{ item.name }}"
+    SRC: "{{ item.src }}"
+  loop:
+    - {name: oc, src: /usr/local/bin/oc, enabled: "{{ container_oc_installed | default(true) }}"}
+    - {name: kubectl, src: /usr/local/bin/kubectl, enabled: "{{ container_oc_installed | default(true) }}"}
+    - {name: golangci-lint, src: "{{ ansible_env.HOME }}/go/bin/golangci-lint", enabled: true}
+  loop_control:
+    label: "{{ item.name }}"
+  register: _container_export
   changed_when: false
   failed_when: false
-  when: container_host_exec.stat.exists and container_oc_installed | default(true)
+  when:
+    - container_host_exec.stat.exists
+    - item.enabled | bool
 
-- name: Export golangci-lint to host (pinned version from container, not dnf)
-  ansible.builtin.command:
-    cmd: "distrobox-export --bin {{ ansible_env.HOME }}/go/bin/golangci-lint --export-path {{ ansible_env.HOME }}/.local/bin"
-  changed_when: false
-  failed_when: false
-  when: container_host_exec.stat.exists
+- name: Report container tools not exported
+  ansible.builtin.debug:
+    msg: "{{ item.item.name }}: {{ (item.stdout | default('', true)) or (item.stderr | default('export failed', true)) }}"
+  loop: "{{ _container_export.results | default([]) | selectattr('rc', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: item.rc != 0 or (item.stdout | default('')) is search('^skip:')
 
 # --- Verify ---
 - name: Confirm Python works
@@ -329,9 +357,15 @@
   register: container_oc_export_stat
   when: container_host_exec.stat.exists and container_oc_installed | default(true)
 
+- name: Confirm host does not already provide oc
+  ansible.builtin.stat:
+    path: /run/host/usr/local/bin/oc
+  register: container_oc_host_stat
+  when: container_host_exec.stat.exists and container_oc_installed | default(true)
+
 - name: Assert oc host wrapper exists
   ansible.builtin.assert:
-    that: container_oc_export_stat.stat.exists
+    that: container_oc_export_stat.stat.exists or container_oc_host_stat.stat.exists
     fail_msg: >-
       oc was not exported to {{ ansible_env.HOME }}/.local/bin —
       distrobox-export may have failed or the path is not writable.

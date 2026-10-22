@@ -8,10 +8,20 @@
     path: "{{ _legacy_path }}"
   register: _xdg_migrate_stat
 
+- name: "Stat existing backup {{ _backup_path }}"
+  ansible.builtin.stat:
+    path: "{{ _backup_path }}"
+  register: _xdg_migrate_backup_stat
+  when: _xdg_migrate_stat.stat.exists
+
+# A legacy file that reappears after an earlier migration (e.g. a tool recreated ~/.gitconfig)
+# gets its own timestamped backup instead of being deleted unsaved.
 - name: Back up legacy file before XDG migration — {{ _legacy_path }}
   ansible.builtin.copy:
     src: "{{ _legacy_path }}"
-    dest: "{{ _backup_path }}"
+    dest: >-
+      {{ _backup_path ~ ('.' ~ now(utc=true, fmt='%Y%m%dT%H%M%SZ')
+         if _xdg_migrate_backup_stat.stat.exists | default(false) else '') }}
     remote_src: true
     mode: "0644"
     force: false

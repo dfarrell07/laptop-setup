@@ -33,3 +33,15 @@
   register: _launchd_bootstrap_result
   changed_when: _launchd_bootstrap_result.rc == 0
   failed_when: false
+
+# After a plist change the preceding bootout leaves nothing loaded, so a non-zero bootstrap
+# here is a real failure (bad plist, wrong domain), not the already-bootstrapped case.
+- name: Warn when launchd bootstrap failed after a plist change (macOS) — {{ _launchd_label }}
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: launchctl bootstrap for {{ _launchd_label }} failed (rc={{ _launchd_bootstrap_result.rc }}):
+      {{ _launchd_bootstrap_result.stderr | default('') | trim }}
+  when:
+    - _launchd_enabled | bool
+    - _launchd_plist_result.changed
+    - _launchd_bootstrap_result.rc | default(0) != 0

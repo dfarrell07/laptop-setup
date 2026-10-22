@@ -156,9 +156,12 @@
       - leapseclist /usr/share/zoneinfo/leap-seconds.list
   register: _chrony_leapseclist_probe
   changed_when: false
+  check_mode: false  # read-only parse; the template diff depends on it
   failed_when:
     - _chrony_leapseclist_probe.rc != 0
     - "'Invalid directive' not in _chrony_leapseclist_probe.stderr"
+    # chronyd not installed yet (fresh host under --check): treat as unsupported
+    - "'Error executing command' not in (_chrony_leapseclist_probe.msg | default(''))"
   when:
     - not csb_rhel
     - system_chrony_service_enabled | bool
@@ -265,6 +268,11 @@
     name: "{{ _chrony_svc }}"
     state: started
     enabled: true
+  register: _chrony_enable
+  # check mode only simulates the install on hosts without chrony (Debian), so the unit is absent
+  failed_when:
+    - _chrony_enable is failed
+    - not (ansible_check_mode and 'Could not find the requested service' in (_chrony_enable.msg | default('')))
   when:
     - system_chrony_service_enabled | bool
     - is_dnf or is_apt

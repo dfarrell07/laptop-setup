@@ -10,7 +10,8 @@ Validates:
 1. Task name 'Assert identity vars are not CHANGE_ME placeholder values' exists
 2. Module type is exactly ansible.builtin.assert (not debug, set_fact, etc.)
 3. 'that' clause contains assertion conditions (actual validation logic)
-4. When condition is 'not _pf_is_molecule'
+3b. Each identity condition compares against CHANGE_ME; task has tag 'always'
+4. When condition is exactly 'not _pf_is_molecule'
 5. include_tasks for pre_flight_checks.yml is present in Play 2 pre_tasks
 """
 
@@ -112,7 +113,7 @@ def verify_identity_assertion(play2):
             # Must have comparison operators like !=, ==, |, or default() filter - not just 'is defined'
             for var_name, pattern in required_patterns.items():
                 if var_name not in found_vars:
-                    if re.search(pattern, condition_str):
+                    if re.search(pattern, condition_str) and 'CHANGE_ME' in condition_str:
                         found_vars.add(var_name)
 
         missing = [v for v in required_patterns.keys() if v not in found_vars]
@@ -120,6 +121,14 @@ def verify_identity_assertion(play2):
             errors.append(
                 f"::error::Task '{task_name}' 'that' clause must include proper value comparisons for: {', '.join(missing)}"
             )
+            return found_task, errors
+
+        # Check 3b: the task must run in every tag selection
+        tags = task.get('tags', [])
+        if isinstance(tags, str):
+            tags = [tags]
+        if 'always' not in tags:
+            errors.append(f"::error::Task '{task_name}' must carry the 'always' tag. Found: {tags}")
             return found_task, errors
 
         # Check 4: When condition must be present
@@ -132,7 +141,7 @@ def verify_identity_assertion(play2):
 
         # Check when condition contains 'not _pf_is_molecule'
         when_str = str(when_condition).strip()
-        if '_pf_is_molecule' not in when_str or 'not' not in when_str:
+        if when_str != 'not _pf_is_molecule':
             errors.append(
                 f"::error::Task '{task_name}' when condition is not 'not _pf_is_molecule'. "
                 f"Found: '{when_str}'"
@@ -151,7 +160,7 @@ def verify_identity_assertion(play2):
 
 def main():
     """Run all verification checks."""
-    playbook_path = 'site.yml'
+    playbook_path = sys.argv[1] if len(sys.argv) > 1 else 'site.yml'
     plays = load_playbook(playbook_path)
 
     if not plays:

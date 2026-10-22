@@ -7,9 +7,7 @@
     excludes: "{{ system_sudoersd_whitelist }}"
   register: system_sudoersd_files
   failed_when: false
-  when:
-    - not csb_detected
-    - not system_is_container
+  when: not system_is_container  # read-only; feeds the CSB warning and the non-CSB abort below
 
 - name: Warn on unexpected /etc/sudoers.d files not in system_sudoersd_whitelist (CSB — IT may drop files)
   ansible.builtin.debug:
@@ -52,8 +50,21 @@
     mode: "0440"
     validate: visudo -cf %s
   when:
-    # CSB: IT manages sudoers via Satellite/SCAP; log_input/log_output conflict with IT monitoring (all CSB tiers, not just csb_rhel)
-    - not csb_detected
+    # RHEL CSB: IT manages sudoers via Satellite/SCAP. Hybrid Fedora CSB: IT's csb-fedora automation does not touch these, so apply.
+    - not csb_rhel
+    - not system_is_container
+
+# log_input/log_output store every sudo session (including each Ansible become call) under
+# /var/log/sudo-io; logrotate only covers sudo.log, so expire old sessions with tmpfiles.
+- name: Expire old sudo I/O session logs
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      e /var/log/sudo-io - - - 30d
+    dest: /etc/tmpfiles.d/sudo-io.conf
+    mode: "0644"
+  when:
+    - not csb_rhel
     - not system_is_container
 
 - name: Propagate GOTMPDIR through sudo (go test under sudo)
@@ -66,7 +77,7 @@
     validate: visudo -cf %s
   when:
     - system_go_env_sudoers | default(true)
-    - not csb_detected  # CSB: IT manages all sudoers.d; unmanaged drop-ins may be removed by compliance (all CSB tiers, not just csb_rhel)
+    - not csb_rhel
     - not system_is_container  # /etc/sudoers.d is not meaningful inside a container
   # TRUST BOUNDARY: env_keep re-propagates the caller's GOTMPDIR into every subsequent sudo
   # invocation on this host. verify-ansible-args.sh unsets GOTMPDIR before provisioning to
@@ -84,9 +95,9 @@
     - not system_is_container
 
 # --- Password aging ---
-# CSB: login.defs governs local account policy. INACTIVE=30 could lock IT-managed local
-# service accounts that don't rotate passwords. YESCRYPT is the RHEL 9 default already.
-# Skip on CSB and rely on IPA/SSSD + IT group policy for account management.
+# RHEL CSB: login.defs governs local account policy (IPA/SSSD + IT group policy); skipped there.
+# Hybrid Fedora CSB: csb-fedora automation does not manage login.defs, so apply (local accounts only;
+# IPA/SSSD domain users have no shadow entry and are skipped by the getent/chage guards below).
 - name: Set login.defs password aging and home mode fields
   ansible.builtin.lineinfile:
     path: /etc/login.defs
@@ -114,8 +125,7 @@
   loop_control:
     label: "{{ item.name }}"
   when:
-    # CSB: intent is "Skip on CSB" (see comment above block); not csb_rhel was too narrow — hybrid Fedora CSB also uses IPA/SSSD
-    - not csb_detected
+    - not csb_rhel
     - not system_is_container  # logind inotify on login.defs crashes PID 1 in privileged Podman containers (Debian 13 and Rocky 10)
 
 # UMASK 027: applies to PAM sessions that do not source rc files (cron, systemd user services).
@@ -129,7 +139,7 @@
     create: false
     mode: "0644"
   when:
-    - not csb_detected  # CSB: IT manages local account policy via IPA/SSSD on all CSB tiers
+    - not csb_rhel
     - not system_is_container  # logind inotify on login.defs crashes PID 1 in privileged Podman containers (Debian 13 and Rocky 10)
 
 # NOTE: ENCRYPT_METHOD is a true no-op on Fedora 44 (already uncommented as YESCRYPT);
@@ -140,7 +150,7 @@
     regexp: '^#?ENCRYPT_METHOD'
     line: 'ENCRYPT_METHOD YESCRYPT'
   when:
-    - not csb_detected  # CSB: IT manages local account policy via IPA/SSSD on all CSB tiers
+    - not csb_rhel
     - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
     - not is_apt  # Debian 13 defaults to SHA512; YESCRYPT_COST_FACTOR is not in Debian's login.defs template
 
@@ -156,7 +166,7 @@
     regexp: '^#?YESCRYPT_COST_FACTOR'
     line: 'YESCRYPT_COST_FACTOR 5'
   when:
-    - not csb_detected  # CSB: IT manages local account policy via IPA/SSSD on all CSB tiers
+    - not csb_rhel
     - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
     - not is_apt  # YESCRYPT_COST_FACTOR not in Debian's login.defs; would append an unrecognized stray key
 
@@ -215,7 +225,7 @@
 - name: Configure inactive account lockout
   when:
     # CSB: IT-managed local service accounts may not rotate passwords; useradd -D -f 30 would lock them after 30 inactive days
-    - not csb_detected
+    - not csb_rhel
     - not system_is_container  # useradd/chage shadow ops trigger PAM events that crash Debian 13 container PID 1
   block:
     - name: Check useradd default INACTIVE setting
@@ -256,7 +266,7 @@
   register: system_chage_inactive_days
   check_mode: false
   when:
-    - not csb_detected  # CSB: IPA/SSSD domain users have no /etc/shadow entry; chage silently fails on all CSB tiers
+    - not csb_rhel
     - not system_is_container
     - real_user_id | length > 0
 
@@ -265,9 +275,8 @@
     argv: [chage, -I, "{{ system_inactive_days }}", "{{ real_user_id }}"]
   register: _chage_inactive_result
   when:
-    # CSB: IPA/SSSD domain users have no /etc/shadow entry; chage silently fails.
-    # IPA manages inactive lockout via krbPwdPolicy, not shadow aging.
-    - not csb_detected  # CSB: applies on all CSB tiers (hybrid Fedora CSB also uses IPA/SSSD)
+    # IPA/SSSD domain users have no /etc/shadow entry (skipped by the shadow check below); RHEL CSB skips entirely.
+    - not csb_rhel
     - not system_is_container
     - (system_chage_inactive_days.ansible_facts.getent_shadow | default({}))[real_user_id] is not none
     - >-
@@ -284,7 +293,7 @@
       CIS 5.5.1.5 inactive lockout may not be set on the existing account
   when:
     - _chage_inactive_result.rc | default(0) != 0
-    - not csb_detected
+    - not csb_rhel
     - not system_is_container
 
 - name: Check current password aging fields for existing user account
@@ -295,7 +304,7 @@
   failed_when: false
   check_mode: false
   when:
-    - not csb_detected  # CSB: IPA/SSSD manages password aging via krbPwdPolicy on all CSB tiers
+    - not csb_rhel
     - not system_is_container
     - real_user_id | length > 0
   loop:
@@ -310,7 +319,7 @@
     argv: [chage, '{{ item.item.flag }}', '{{ vars[item.item.var] }}', '{{ real_user_id }}']
   register: _chage_set_result
   when:
-    - not csb_detected  # CSB: IPA/SSSD manages password aging via krbPwdPolicy on all CSB tiers
+    - not csb_rhel
     - not system_is_container
     - real_user_id | length > 0
     - item.rc | default(1) == 0
@@ -330,7 +339,7 @@
   when:
     - item.rc | default(0) != 0
     - not (item.skipped | default(false))
-    - not csb_detected
+    - not csb_rhel
     - not system_is_container
 
 - name: Check if real user account exists in system passwd database

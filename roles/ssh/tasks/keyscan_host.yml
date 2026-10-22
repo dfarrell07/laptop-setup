@@ -4,7 +4,22 @@
 # _keyscan_host may be a plain hostname string or a dict:
 #   {host: hostname, fingerprint: "SHA256:..."}  (fingerprint is optional;
 #   when set, the scanned key fingerprint is asserted before known_hosts is seeded)
+# A fingerprint field that is set but not a full SHA256 (e.g. a placeholder awaiting the real
+# value) defers the host: nothing is seeded, so git_repos skips its SSH repos.
+# A host with no fingerprint field at all is TOFU (warned below).
+- name: Defer host with unpinned fingerprint {{ _keyscan_host.host | default(_keyscan_host) }}
+  ansible.builtin.debug:
+    msg: >-
+      Not seeding {{ _keyscan_host.host }}: fingerprint '{{ _keyscan_host.fingerprint }}' is not a
+      full SHA256 value. Its SSH repos are skipped until the real fingerprint is set in config.yml.
+  when:
+    - _keyscan_host.fingerprint is defined
+    - _keyscan_host.fingerprint is not match('^SHA256:[A-Za-z0-9+/]{43}$')
+
 - name: Pre-seed known_hosts for {{ _keyscan_host.host | default(_keyscan_host) }}
+  when: >-
+    _keyscan_host.fingerprint is not defined or
+    _keyscan_host.fingerprint is match('^SHA256:[A-Za-z0-9+/]{43}$')
   vars:
     _ks_host: "{{ _keyscan_host.host | default(_keyscan_host) }}"
     _ks_fingerprint: "{{ _keyscan_host.fingerprint | default('') }}"
@@ -28,8 +43,11 @@
       register: _ks_fp_result
       check_mode: false
       changed_when: false
-      failed_when: _ks_fingerprint not in _ks_fp_result.stdout
-      when: _ks_fingerprint | length > 0
+      # Exact match against the scanned key fingerprints (field 2 of each ssh-keygen -l line)
+      failed_when: >-
+        _ks_fingerprint not in (_ks_fp_result.stdout_lines | map('split') | map(attribute=1, default='') | list)
+      # An unreachable host (e.g. off VPN) is reported below, not as a key mismatch
+      when: _ks_fingerprint | length > 0 and ssh_keyscan_result is succeeded
 
     - name: Warn — TOFU key acceptance (no fingerprint configured) for {{ _ks_host }}
       ansible.builtin.debug:
@@ -40,6 +58,26 @@
           it in ssh_work_keyscan_hosts as: {host: {{ _ks_host }}, fingerprint: "SHA256:..."}.
       when: _ks_fingerprint | length == 0 and ssh_keyscan_result.rc == 0
 
+    # With a pin, seed only the key whose own fingerprint is the pin: one matching key proves
+    # the host, but a man-in-the-middle could replay it next to a key type of its own.
+    - name: Select the pinned host key for {{ _ks_host }}
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          while IFS= read -r line; do
+            case "$line" in "#"*|"") continue ;; esac
+            fp=$(printf '%s\n' "$line" | ssh-keygen -lf - | awk '{print $2}')
+            if [ "$fp" = "$KS_PIN" ]; then printf '%s\n' "$line"; fi
+          done
+        stdin: "{{ ssh_keyscan_result.stdout }}"
+        executable: /bin/bash
+      environment:
+        KS_PIN: "{{ _ks_fingerprint }}"
+      register: _ks_pinned_lines
+      check_mode: false
+      changed_when: false
+      when: _ks_fingerprint | length > 0 and ssh_keyscan_result is succeeded
+
     - name: Seed known_hosts entries for {{ _ks_host }}
       ansible.builtin.known_hosts:
         name: "{{ _ks_host }}"
@@ -47,7 +85,8 @@
         state: present
         hash_host: true
       loop: >-
-        {{ ssh_keyscan_result.stdout_lines
+        {{ ((_ks_pinned_lines.stdout_lines | default([])) if _ks_fingerprint | length > 0
+           else (ssh_keyscan_result.stdout_lines | default([])))
            | select('match', '^' + (_ks_host | regex_escape))
            | list }}
       loop_control:
@@ -58,7 +97,9 @@
         msg: >
           WARNING: ssh-keyscan output contained no lines starting with '{{ _ks_host }}'.
           known_hosts was not pre-seeded — git clone will prompt on first connection.
-      when: (ssh_keyscan_result.stdout_lines | select('match', '^' + (_ks_host | regex_escape)) | list | length) == 0
+      when:
+        - ssh_keyscan_result is succeeded  # an unreachable host is reported after the block
+        - (ssh_keyscan_result.stdout_lines | select('match', '^' + (_ks_host | regex_escape)) | list | length) == 0
 
   rescue:
     - name: Abort — fingerprint mismatch (MITM risk) for {{ _ks_host }}

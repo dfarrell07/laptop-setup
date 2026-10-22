@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify source comparison detects modified bytes with unchanged filenames."""
+"""Verify collection source comparison, checksum tooling, GPG policy gating and committed-baseline checks."""
 import hashlib
 import io
 import json
@@ -21,14 +21,17 @@ NAME = 'plugins/modules/fixture.py'
 SAFE = b'print("fixture")\n'
 
 
-class CollectionSignatureTests(unittest.TestCase):
+class CollectionChecksumAndSignatureTests(unittest.TestCase):
     def test_checksum_tools_and_native_macos_fallback(self):
         checksum_check = BASELINE_SOURCE.split('# Step 1b:', 1)[1].split('# Step 2:', 1)[0]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'fixture').write_bytes(SAFE)
             manifest = root / 'SHA256SUMS'
-            for tool in ['sha256sum', 'shasum']:
+            # shasum (perl-Digest-SHA) is native on macOS but absent from a default Fedora install
+            available = [name for name in ['sha256sum', 'shasum'] if shutil.which(name)]
+            self.assertTrue(available, 'no checksum tool on PATH')
+            for tool in available:
                 tools = root / tool
                 tools.mkdir()
                 (tools / tool).symlink_to(shutil.which(tool))
@@ -133,7 +136,7 @@ class CollectionSignatureTests(unittest.TestCase):
 
 
 class CollectionSourceTests(unittest.TestCase):
-    def check(self, contents, accepted, *, symlink=False, duplicate=False):
+    def check(self, contents, accepted, *, symlink=False, duplicate=False, extra=()):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             upstream = root / 'upstream'
@@ -152,15 +155,40 @@ class CollectionSourceTests(unittest.TestCase):
                     tar.addfile(member, io.BytesIO(contents))
                     if duplicate:
                         tar.addfile(member, io.BytesIO(contents))
-            result = subprocess.run([sys.executable, '-c', COMPARISON, str(archive), str(upstream)],
+                for extra_name, extra_type, *link in extra:
+                    member = tarfile.TarInfo(extra_name)
+                    member.type = extra_type
+                    if extra_type == tarfile.SYMTYPE:
+                        member.linkname = link[0] if link else '/tmp/elsewhere'
+                        tar.addfile(member)
+                    else:
+                        member.size = len(SAFE)
+                        tar.addfile(member, io.BytesIO(SAFE))
+            result = subprocess.run([sys.executable, '-I', '-c', COMPARISON, str(archive), str(upstream)],
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 0 if accepted else 1, result.stdout + result.stderr)
+            self.assertNotIn('Traceback', result.stderr)  # rc 1 must be a rejection, not a crash
 
     def test_identical_source_passes(self):
         self.check(SAFE, True)
 
     def test_modified_content_with_identical_filename_fails(self):
         self.check(b'print("modified fixture")\n', False)
+
+    def test_no_runtime_files_on_either_side_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'upstream').mkdir()
+            (root / 'upstream' / 'README.md').write_text('x')
+            archive = root / 'fixture.tar.gz'
+            with tarfile.open(archive, 'w:gz') as tar:
+                member = tarfile.TarInfo('README.md')
+                member.size = 1
+                tar.addfile(member, io.BytesIO(b'x'))
+            result = subprocess.run([sys.executable, '-I', '-c', COMPARISON, str(archive), str(root / 'upstream')],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn('No runtime files', result.stderr)
 
     def test_missing_source_fails(self):
         self.check(None, False)
@@ -171,9 +199,43 @@ class CollectionSourceTests(unittest.TestCase):
     def test_duplicate_python_members_fail(self):
         self.check(SAFE, False, duplicate=True)
 
+    def test_dot_slash_extra_member_fails(self):
+        self.check(SAFE, False, extra=[('./plugins/modules/evil.py', tarfile.REGTYPE)])
+
+    def test_path_tricks_fail(self):
+        for name in ['docs/../plugins/modules/evil.py', 'plugins/./modules/evil.py',
+                     '/plugins/modules/evil.py', 'meta//runtime.yml', 'meta/./runtime.yml',
+                     'Plugins/modules/evil.py', 'META/runtime.yml']:
+            with self.subTest(name=name):
+                self.check(SAFE, False, extra=[(name, tarfile.REGTYPE)])
+
+    def test_symlink_into_runtime_tree_fails(self):
+        self.check(SAFE, False, extra=[('docs', tarfile.SYMTYPE, 'plugins')])
+        self.check(SAFE, False, extra=[('docs/link', tarfile.SYMTYPE, '../plugins/modules')])
+
+    def test_members_below_a_link_fail(self):
+        self.check(SAFE, False, extra=[('x', tarfile.SYMTYPE, '.'), ('x/plugins/modules/evil.py', tarfile.REGTYPE)])
+        self.check(SAFE, False, extra=[('d', tarfile.SYMTYPE, 'docs/..'), ('d/roles/evil/tasks/main.yml', tarfile.REGTYPE)])
+        self.check(SAFE, False, extra=[('x', tarfile.SYMTYPE, '.')])
+
+    def test_link_chains_and_duplicate_names_fail(self):
+        chain = [('tests/Q', tarfile.SYMTYPE, '../tests'), ('tests/P', tarfile.SYMTYPE, 'Q/..')]
+        self.check(SAFE, False, extra=chain)
+        self.check(SAFE, False, extra=[('tests/Q', tarfile.SYMTYPE, '../tests'),
+                                       ('h', tarfile.SYMTYPE, 'tests/Q/plugins/modules/fixture.py')])
+        self.check(SAFE, False, extra=[('h', tarfile.SYMTYPE, 'elsewhere'), ('h', tarfile.REGTYPE)])
+        self.check(SAFE, False, extra=[('tests/Q', tarfile.SYMTYPE, 'sibling'), ('Tests/Q/x', tarfile.REGTYPE)])
+
+    def test_symlink_inside_other_tree_passes(self):
+        self.check(SAFE, True, extra=[('tests/link', tarfile.SYMTYPE, 'target')])
+        self.check(SAFE, True, extra=[('tests/link', tarfile.SYMTYPE, '..hidden')])
+
+    def test_runtime_directory_symlink_fails(self):
+        self.check(SAFE, False, extra=[('plugins', tarfile.SYMTYPE, 'docs')])
+
 
 class CommittedBaselineTests(unittest.TestCase):
-    def check(self, *, coordinated_change=False, native_addition=False, missing_baseline=False):
+    def check(self, *, coordinated_change=False, native_addition=False, missing_baseline=False, disk_only=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             installed = root / 'installed'
@@ -186,15 +248,18 @@ class CommittedBaselineTests(unittest.TestCase):
                 if native_addition:
                     (path.parent / 'added.so').write_bytes(b'new native code')
                 (collection / 'MANIFEST.json').write_text(json.dumps({'collection_info': {'version': '1.0.0'}}))
+            if disk_only:  # file injected into the installed tree after extraction
+                (installed / 'fixture/collection' / NAME).with_name('evil.py').write_bytes(b'import os\n')
             manifest = root / 'manifest.json'
             manifest.write_text(json.dumps({} if missing_baseline else {
                 'fixture-collection-1.0.0.tar': {'runtime_files': {NAME: hashlib.sha256(SAFE).hexdigest()}}
             }))
-            result = subprocess.run([sys.executable, '-c', BASELINE_COMPARISON,
+            result = subprocess.run([sys.executable, '-I', '-c', BASELINE_COMPARISON,
                                      str(installed), str(fresh), str(manifest)],
                                     capture_output=True, text=True)
-            self.assertEqual(result.returncode, 1 if any([coordinated_change, native_addition, missing_baseline]) else 0,
+            self.assertEqual(result.returncode, 1 if any([coordinated_change, native_addition, missing_baseline, disk_only]) else 0,
                              result.stdout + result.stderr)
+            self.assertNotIn('Traceback', result.stderr)
 
     def test_unchanged_baseline_passes(self):
         self.check()
@@ -207,6 +272,9 @@ class CommittedBaselineTests(unittest.TestCase):
 
     def test_missing_committed_baseline_fails(self):
         self.check(missing_baseline=True)
+
+    def test_installed_only_python_file_fails(self):
+        self.check(disk_only=True)
 
 
 if __name__ == '__main__':

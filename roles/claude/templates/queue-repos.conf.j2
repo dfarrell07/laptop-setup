@@ -7,8 +7,14 @@
 # Format (one block per repo — parsed as key=value, not executed):
 #   REPO_PATH[key]="/absolute/path/to/local/clone"
 #   REPO_REMOTE[key]="github-owner/repo-name"
-#   REPO_ALLOWED_TOOLS[key]="Read,Edit,Write,Bash(git *)"   # optional; defaults shown
-#   REPO_DEFAULT_BRANCH[key]="main"                          # optional; default: main
+#   REPO_ALLOWED_TOOLS[key]="Read,Edit,Write,Bash(git add *),Bash(git commit *)"
+#   REPO_DEFAULT_BRANCH[key]="main"
+#
+# REPO_ALLOWED_TOOLS and REPO_DEFAULT_BRANCH are optional (default branch: main).
+# Keep comments on their own lines; trailing comments are stripped but avoid them.
+# The poller itself fetches, checks out, pushes and opens the PR, so do NOT grant
+# Claude Bash(git push *), Bash(git fetch *), Bash(git pull *), Bash(git checkout *)
+# or Bash(git *).
 #
 # REPO_ALLOWED_TOOLS controls what Claude Code is permitted to call.
 # Use a restrictive allow-list; omit Bash entirely for read-only review tasks.
@@ -20,10 +26,10 @@
 #
 # REPO_PATH[laptop-setup]="{{ ansible_facts['user_dir'] }}/laptop-setup"
 # REPO_REMOTE[laptop-setup]="{{ dotfiles_github_user }}/laptop-setup"
-# REPO_ALLOWED_TOOLS[laptop-setup]="Read,Edit,Write,Bash(git *),Bash(make lint),Bash(make syntax-check)"
+# REPO_ALLOWED_TOOLS[laptop-setup]="Read,Edit,Write,Bash(git add *),Bash(git commit *),Bash(git diff *),Bash(make lint),Bash(make syntax-check)"
 # REPO_DEFAULT_BRANCH[laptop-setup]="main"
 #
 # REPO_PATH[my-project]="{{ ansible_facts['user_dir'] }}/repos/my-project"
 # REPO_REMOTE[my-project]="{{ dotfiles_github_user }}/my-project"
-# REPO_ALLOWED_TOOLS[my-project]="Read,Edit,Write,Bash(git *)"
+# REPO_ALLOWED_TOOLS[my-project]="Read,Edit,Write,Bash(git add *),Bash(git commit *),Bash(git diff *)"
 # REPO_DEFAULT_BRANCH[my-project]="main"

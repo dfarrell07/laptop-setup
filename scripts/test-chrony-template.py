@@ -21,7 +21,7 @@ SPEC.loader.exec_module(VALIDATOR)
 
 class ChronyTemplateTests(unittest.TestCase):
     def test_optional_leap_directives_and_native_parser(self):
-        binary = shutil.which('chronyd')
+        binary = shutil.which('chronyd') or shutil.which('chronyd', path='/usr/sbin:/sbin')
         supported = True
         if binary:
             probe = subprocess.run([binary, '-p', '-f', '/dev/null', 'leapseclist /usr/share/zoneinfo/leap-seconds.list'],
@@ -80,6 +80,8 @@ class ChronyTemplateTests(unittest.TestCase):
                         env=dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
                         capture_output=True, text=True, timeout=60)
                     self.assertEqual(result.returncode, 0 if accepted else 2, result.stdout + result.stderr)
+                    if not accepted:
+                        self.assertIn(error, result.stdout + result.stderr)  # failed on the probe's own error
 
 
 if __name__ == '__main__':

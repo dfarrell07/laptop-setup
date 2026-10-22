@@ -1,7 +1,7 @@
 #!/bin/bash
 # Pre-push hook: enforce vault encryption, Signed-off-by, configured GPG signing, and gitleaks
 # SECURITY: Blocks push if:
-#   1. Any vault.yml file is unencrypted (secrets exposure prevention)
+#   1. Any vault.yml file in a pushed commit is unencrypted (secrets exposure prevention)
 #   2. Any commit lacks Signed-off-by trailer (supply-chain validation)
 #   3. Critical supply-chain files modified without a signature when policy enables signing
 #   4. Secrets detected by gitleaks (credentials leakage prevention)
@@ -41,50 +41,53 @@ if [ -n "$current_hookspath" ] && [ "$current_hookspath" != ".githooks" ]; then
   exit 1
 fi
 
-# Iterate through vault files in the push
-while IFS= read -r -d '' f; do
-  if [ ! -f "$f" ]; then
-    continue
+# Validate one vault file as committed in <sha> (never the working tree, which
+# may differ from what is being pushed).
+check_vault_blob() {
+  local sha="$1" f="$2" label="$2@${1:0:12}" blob first_line
+  if ! git cat-file -e "$sha:$f" 2>/dev/null; then
+    return 0  # deleted in this commit
   fi
-
-  # Check if file starts with $ANSIBLE_VAULT (encrypted marker)
-  if ! head -1 "$f" | grep -q '^\$ANSIBLE_VAULT'; then
-    # Accept only the restricted secret-free template; all real values need encryption.
-    if python3 "$_repo_root/scripts/verify-vault-stub.py" < "$f"; then
-      echo "NOTE: $f is a plaintext stub (vault_placeholder marker + empty values) — OK" >&2
-      continue
+  first_line=$(git show "$sha:$f" | head -1)
+  if ! grep -q '^\$ANSIBLE_VAULT' <<< "$first_line"; then
+    # Accept only the restricted empty-value stub template; all real values need encryption.
+    if git show "$sha:$f" | python3 "$_repo_root/scripts/verify-vault-stub.py"; then
+      echo "NOTE: $label is a plaintext stub (vault_placeholder marker + empty values) — OK" >&2
+      return 0
     fi
-    echo "ERROR: $f is not encrypted. Run: ansible-vault encrypt $f" >&2
+    echo "ERROR: $label is not encrypted. Run: ansible-vault encrypt $f" >&2
     echo "ERROR: Unencrypted vault files cannot be pushed to prevent secrets exposure." >&2
     failed=1
-  else
-    # File has vault marker on line 1; validate actual encryption by attempting decryption
-    # This prevents marker spoofing (plaintext file with forged $ANSIBLE_VAULT prefix).
-    # Attack: Attacker writes plaintext secrets with $ANSIBLE_VAULT;1.1;AES256 prefix to bypass this check.
-    # Defense: Require actual decryption success (not just format validation).
-    vault_pass_file=""
-    if [ -f "vault-pass.sh" ]; then
-      vault_pass_file="vault-pass.sh"
-    elif [ -f "scripts/vault-pass-ci.sh" ]; then
-      # Fallback to CI stub (e.g., in CI environments where vault-pass.sh is gitignored)
-      vault_pass_file="scripts/vault-pass-ci.sh"
-    fi
-
-    if [ -n "$vault_pass_file" ]; then
-      if ! ansible-vault view --vault-password-file="$vault_pass_file" "$f" >/dev/null 2>&1; then
-        echo "ERROR: $f has vault marker but is not validly encrypted or password is incorrect." >&2
-        echo "ERROR: Run: ansible-vault encrypt $f" >&2
-        failed=1
-      fi
-    else
-      # vault-pass.sh and vault-pass-ci.sh both missing: cannot validate decryption, fail-fast
-      echo "ERROR: $f has vault marker but vault-pass.sh/scripts/vault-pass-ci.sh is missing." >&2
-      echo "ERROR: Cannot validate encryption without password provider. Run: ansible-vault view $f" >&2
-      echo "ERROR: (Requires vault-pass.sh or scripts/vault-pass-ci.sh in repo or environment)" >&2
-      failed=1
-    fi
+    return 0
   fi
-done < <(git ls-files -z -- '*vault.yml')
+  # Marker on line 1; validate actual encryption by attempting decryption.
+  # This prevents marker spoofing (plaintext file with forged $ANSIBLE_VAULT prefix).
+  # Attack: Attacker writes plaintext secrets with $ANSIBLE_VAULT;1.1;AES256 prefix to bypass this check.
+  # Defense: Require actual decryption success (not just format validation).
+  local vault_pass_file=""
+  if [ -x "scripts/vault-pass.sh" ]; then
+    vault_pass_file="scripts/vault-pass.sh"
+  elif [ -f "scripts/vault-pass-ci.sh" ]; then
+    # Fallback to CI stub (e.g., in CI environments where vault-pass.sh is gitignored)
+    vault_pass_file="scripts/vault-pass-ci.sh"
+  fi
+  if [ -z "$vault_pass_file" ]; then
+    # vault-pass.sh and vault-pass-ci.sh both missing: cannot validate decryption, fail-fast
+    echo "ERROR: $label has vault marker but vault-pass.sh/scripts/vault-pass-ci.sh is missing." >&2
+    echo "ERROR: Cannot validate encryption without password provider. Run: ansible-vault view $f" >&2
+    echo "ERROR: (Requires vault-pass.sh or scripts/vault-pass-ci.sh in repo or environment)" >&2
+    failed=1
+    return 0
+  fi
+  blob=$(mktemp)
+  git show "$sha:$f" > "$blob"
+  if ! ansible-vault view --vault-password-file="$vault_pass_file" "$blob" >/dev/null 2>&1; then
+    echo "ERROR: $label has vault marker but is not validly encrypted or password is incorrect." >&2
+    echo "ERROR: Run: ansible-vault encrypt $f" >&2
+    failed=1
+  fi
+  rm -f "$blob"
+}
 
 # Validate each ref once; new branches have a zero remote SHA, deletions a zero local SHA.
 zero_sha=0000000000000000000000000000000000000000
@@ -92,7 +95,7 @@ critical_pattern='^(scripts/|\.githooks/|collections-dist/|\.github/'
 critical_pattern+='|Makefile(\.sha256)?$|roles/(packages|repos_dnf)/defaults/main\.yml$'
 critical_pattern+='|requirements-(test\.lock|bootstrap\.txt)$|package(-lock)?\.json$|\.gitleaks\.toml$|\.gpg-enforcement$)'
 
-for update in "${updates[@]}"; do
+for update in ${updates[@]+"${updates[@]}"}; do
   read -r _local_ref local_sha remote_ref remote_sha <<< "$update"
   [ "$local_sha" = "$zero_sha" ] && continue
 
@@ -121,6 +124,9 @@ for update in "${updates[@]}"; do
     fi
 
     modified_files=$(git diff-tree --root --no-commit-id --name-only -r -m "$commit")
+    while IFS= read -r vault_file; do
+      [ -n "$vault_file" ] && check_vault_blob "$commit" "$vault_file"
+    done < <(grep -E '(^|/)vault\.yml$' <<< "$modified_files" | sort -u || true)
     if [ "$_gpg_policy" = enabled ] && grep -Eq "$critical_pattern" <<< "$modified_files"; then
       if ! git verify-commit "$commit"; then
         echo "ERROR: Commit $commit modifies supply-chain files without a valid signature" >&2
@@ -130,7 +136,7 @@ for update in "${updates[@]}"; do
   done
 
   if ! command -v gitleaks >/dev/null 2>&1; then
-    echo "ERROR: gitleaks is required before pushing (run make packages)" >&2
+    echo "ERROR: gitleaks is required before pushing (run make bootstrap-hooks)" >&2
     failed=1
   elif ! gitleaks git --log-opts "$range" --redact --max-decode-depth 2; then
     echo "ERROR: Secret scanning failed for $remote_ref" >&2

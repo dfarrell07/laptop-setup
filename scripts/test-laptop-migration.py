@@ -6,7 +6,9 @@ from pathlib import Path
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
+import re
 import tomllib
 import unittest
 
@@ -29,6 +31,7 @@ def run_play(directory, tasks=None, variables=None, roles=None, extra_args=()):
     path.write_text(yaml.safe_dump([play]))
     env = dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh'),
                MOLECULE_PROJECT_DIRECTORY=str(ROOT),
+               ANSIBLE_NOCOLOR='1', ANSIBLE_FORCE_COLOR='0',
                ANSIBLE_ROLES_PATH=str(ROOT / 'roles'),
                ANSIBLE_COLLECTIONS_PATH=str(ROOT / 'collections'))
     result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(path), *extra_args],
@@ -38,13 +41,18 @@ def run_play(directory, tasks=None, variables=None, roles=None, extra_args=()):
     return result.stdout
 
 
+def failed_task(name):
+    """Regex matching a failure reported for the task whose name contains `name`."""
+    return r'TASK \[[^\]]*' + re.escape(name) + r'[^\]]*\] \**\n(\[ERROR\]: Task failed|fatal:|failed:)'
+
+
 class MigrationTests(unittest.TestCase):
     def test_codex_model_overrides_are_validated_before_account_writes(self):
         for variable in ['codex_work_model', 'codex_personal_model']:
-            for invalid in [None, False, 123, '', '   ', 'custom-\x00-model', 'custom-\x1f-model', 'custom-\x7f-model']:
+            for invalid in [None, False, 123, '', '   ', 'custom-\x00-model', 'custom-\x1f-model', 'custom-\x7f-model', 'custom-\n[profiles.x]-model', 'custom-\t-model']:
                 with self.subTest(variable=variable, invalid=invalid), tempfile.TemporaryDirectory() as name:
                     directory = Path(name)
-                    with self.assertRaisesRegex(AssertionError, 'Validate distinct Codex account homes'):
+                    with self.assertRaisesRegex(AssertionError, failed_task('Validate Codex model and reasoning effort settings')):
                         run_play(directory, variables={'ansible_facts': {'user_dir': name},
                             'packages_install_binaries': False, variable: invalid}, roles=['codex'])
                     self.assertFalse((directory / '.codex').exists())
@@ -73,9 +81,9 @@ class MigrationTests(unittest.TestCase):
                 variables.update({'ansible_facts': {'user_dir': name}, 'profile': 'personal',
                                   'claude_personal2_config_dir': name + '/.claude-per2' + suffix})
                 if suffix:
-                    with self.assertRaisesRegex(AssertionError, 'cannot inject tmpfiles'):
+                    with self.assertRaisesRegex(AssertionError, 'must contain only simple filesystem path characters'):
                         run_play(directory, tasks=selected, variables=variables)
-                    self.assertFalse((directory / '.claude').exists())
+                    self.assertEqual(sorted(path.name for path in directory.iterdir()), ['play.yml'])
                 else:
                     run_play(directory, tasks=selected, variables=variables)
                     self.assertTrue((directory / '.claude-per2').is_dir())
@@ -283,13 +291,13 @@ class MigrationTests(unittest.TestCase):
                 variables = {'_claude_temp_file': {'path': str(installer)},
                              'claude_pinned_version': '1.2.3', 'claude_bin_path': str(binary)}
                 if wrong_version:
-                    with self.assertRaisesRegex(AssertionError, 'Verify pinned Claude Code version'):
+                    with self.assertRaisesRegex(AssertionError, failed_task('Verify pinned Claude Code version')):
                         run_play(directory, tasks=selected, variables=variables)
                 else:
                     run_play(directory, tasks=selected, variables=variables)
                 self.assertEqual(argument_log.read_text(), '1.2.3')
 
-    def test_lock_covers_all_archives_and_exact_platform_pins(self):
+    def test_lock_covers_all_archives_at_the_pinned_version(self):
         lock = json.loads((ROOT / 'roles/codex/files/package-lock.json').read_text())
         packages = lock['packages']
         version = packages['']['dependencies']['@openai/codex']
@@ -298,7 +306,7 @@ class MigrationTests(unittest.TestCase):
                 continue
             self.assertTrue(package['resolved'].startswith('https://registry.npmjs.org/@openai/codex/'))
             self.assertTrue(package['integrity'].startswith('sha512-'))
-            self.assertTrue(package['version'].startswith(version))
+            self.assertRegex(package['version'], '^' + re.escape(version) + '(-[a-z0-9-]+)?$')
         self.assertEqual(len(packages), 8)  # root, launcher, six platform archives
 
     @unittest.skipUnless(shutil.which('zsh'), 'zsh required for launcher regression')
@@ -353,7 +361,7 @@ print -r -- "PARENT:$CLAUDE_CODE_USE_VERTEX:$CODEX_HOME:$ANTHROPIC_API_KEY"
             env = dict(os.environ, HOME=name, PATH=str(binary_dir) + ':' + os.environ['PATH'],
                        CLAUDE_CODE_USE_VERTEX='1', CODEX_HOME='original', ANTHROPIC_API_KEY='fixture-key',
                        ANTHROPIC_AUTH_TOKEN='fixture-token', GOOGLE_APPLICATION_CREDENTIALS='/fixture/adc',
-                       OPENAI_API_KEY='fixture-openai')
+                       OPENAI_API_KEY='fixture-openai', ANTHROPIC_BASE_URL='')
             result = subprocess.run(['zsh', '-f', str(probe)], env=env, capture_output=True, text=True, check=True)
             rows = result.stdout.splitlines()
             records = [json.loads(line) for line in rows[:-1]]
@@ -367,6 +375,7 @@ print -r -- "PARENT:$CLAUDE_CODE_USE_VERTEX:$CODEX_HOME:$ANTHROPIC_API_KEY"
             for record in records[:2]:
                 self.assertEqual(record['env']['CLAUDE_CODE_USE_VERTEX'], '0')
                 self.assertNotIn('ANTHROPIC_API_KEY', record['env'])
+                self.assertNotIn('ANTHROPIC_AUTH_TOKEN', record['env'])
                 self.assertNotIn('GOOGLE_APPLICATION_CREDENTIALS', record['env'])
             self.assertEqual(records[2]['env']['CLAUDE_CONFIG_DIR'], defaults['claude_work_config_dir'])
             self.assertEqual(records[2]['env']['CLAUDE_CODE_USE_VERTEX'], '1')
@@ -541,8 +550,8 @@ print -r -- "PARENT:$CLAUDE_CODE_USE_VERTEX:$CODEX_HOME:$ANTHROPIC_API_KEY"
             nested_cache = config_repo / 'cache/plugin'
             subprocess.run(['git', 'init', '-q', str(nested_cache)], env=env, check=True)
             output = directory / 'report.json'
-            subprocess.run(['python3', str(ROOT / 'scripts/migration-inventory.py'), str(directory),
-                            '--output', str(output)], check=True, capture_output=True)
+            subprocess.run([sys.executable, str(ROOT / 'scripts/migration-inventory.py'), str(directory),
+                            '--output', str(output)], env=env, check=True, capture_output=True)
             report = json.loads(output.read_text())
             self.assertNotIn('helper-secret', output.read_text())
             self.assertNotIn('helper-token', output.read_text())
@@ -562,9 +571,12 @@ print -r -- "PARENT:$CLAUDE_CODE_USE_VERTEX:$CODEX_HOME:$ANTHROPIC_API_KEY"
             self.assertNotIn('fixture-secret', output.read_text())
             self.assertNotIn('fixture-token', output.read_text())
             self.assertEqual(output.stat().st_mode & 0o777, 0o600)
-            repeated = subprocess.run(['python3', str(ROOT / 'scripts/migration-inventory.py'), str(directory),
-                                       '--output', str(output)], capture_output=True)
+            before = output.read_bytes()
+            repeated = subprocess.run([sys.executable, str(ROOT / 'scripts/migration-inventory.py'), str(directory),
+                                       '--output', str(output)], env=env, capture_output=True, text=True)
             self.assertNotEqual(repeated.returncode, 0)
+            self.assertIn('FileExistsError', repeated.stderr)
+            self.assertEqual(output.read_bytes(), before)
 
 
 if __name__ == '__main__':

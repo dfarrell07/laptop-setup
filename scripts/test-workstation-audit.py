@@ -119,12 +119,12 @@ class WorkstationAuditTests(unittest.TestCase):
             config_dir.mkdir()
             (config_dir / 'setting.conf').write_text('private config contents\n')
             for manager in ['rpm', 'dpkg-query']:
-                def probe(command, errors, label):
+                def probe(command, errors, label, accept_output_on_error=False):
                     if label == 'file-owner':
                         return 'fixture-package' if manager == 'rpm' else 'fixture-package: /fixture/setting.conf\n'
                     return None
                 with patch.object(audit, 'SYSTEM_DIRS', [str(config_dir)]), patch.object(audit, 'probe', side_effect=probe), \
-                     patch.object(audit.shutil, 'which', side_effect=lambda tool: '/fixture/tool' if tool == manager else None):
+                     patch.object(audit.shutil, 'which', side_effect=lambda tool, path=None: '/fixture/tool' if tool == manager else None):
                     report = audit.collect(home=home, path_value='')
                 self.assertEqual(report['system_config_files'][0]['package_owner'], 'fixture-package')
                 self.assertFalse(report['findings']['unpackaged_system_files'])
@@ -155,6 +155,68 @@ class WorkstationAuditTests(unittest.TestCase):
             self.assertIsNone(audit.probe(['tool'], errors, 'fixture'))
         self.assertNotIn('credential', json.dumps(errors))
         self.assertEqual(errors[0]['exit_code'], 1)
+
+    def test_probe_keeps_output_when_allowed_and_tolerates_bad_bytes(self):
+        class Extraneous:
+            returncode = 1
+            stdout = '{"dependencies": {}}'
+            stderr = ''
+        errors = []
+        with patch.object(audit.shutil, 'which', return_value='/fixture/tool'), patch.object(audit.subprocess, 'run', return_value=Extraneous()):
+            self.assertEqual(audit.probe(['tool'], errors, 'fixture', accept_output_on_error=True), '{"dependencies": {}}')
+        self.assertEqual(errors, [])
+        with tempfile.TemporaryDirectory() as name:
+            tool = Path(name) / 'badbytes'
+            tool.write_text("#!/bin/sh\nprintf 'a\\377b\\n'\n")
+            tool.chmod(0o755)
+            with patch.dict(os.environ, {'PATH': name}):
+                self.assertIn('a', audit.probe(['badbytes'], [], 'fixture'))
+
+    def test_safe_spec_survives_malformed_urls(self):
+        self.assertEqual(audit.safe_spec('git+https://[fe80::1/x.git', '/home/x'), '<unparseable url>')
+        self.assertEqual(audit.safe_spec('bar @ git+https://example.com:70000/x.git', '/home/x'), 'bar @ <unparseable url>')
+
+    def test_private_path_redacts_per_user_mounts(self):
+        self.assertEqual(audit.private_path('/run/media/alice/Backup', '/home/alice'), '/run/media/<redacted>')
+        self.assertEqual(audit.private_path('/run/user/1000/gvfs/sftp:host=h', '/home/alice'), '/run/user/<redacted>')
+        self.assertEqual(audit.private_path('/home/alice/.zshrc', '/home/alice'), '~/.zshrc')
+
+    def test_command_paths_ignores_relative_path_entries(self):
+        with tempfile.TemporaryDirectory() as name:
+            tool = Path(name) / 'fixture-tool'
+            tool.write_text('#!/bin/sh\necho planted\n')
+            tool.chmod(0o755)
+            cwd = os.getcwd()
+            try:
+                os.chdir(name)
+                found = audit.command_paths(['fixture-tool'], '.' + os.pathsep + '.', Path(name))
+            finally:
+                os.chdir(cwd)
+            self.assertEqual(found['fixture-tool']['candidates'], [])
+
+    def test_probe_ignores_empty_path_entries(self):
+        with tempfile.TemporaryDirectory() as name:
+            tool = Path(name) / 'fixture-tool'
+            tool.write_text('#!/bin/sh\necho planted\n')
+            tool.chmod(0o755)
+            cwd = os.getcwd()
+            try:
+                os.chdir(name)
+                for value in ['', ':/nonexistent', '/nonexistent:']:
+                    with patch.dict(os.environ, {'PATH': value}):
+                        self.assertIsNone(audit.probe(['fixture-tool'], [], 'fixture'))
+            finally:
+                os.chdir(cwd)
+
+    def test_safe_spec_redacts_passwords_with_url_delimiters(self):
+        for password in ['pa/ss', 'pa?ss', 'pa#ss', 'pa/ss?x=1#frag']:
+            result = audit.safe_spec(f'https://fixture-user:{password}tail@example.com/pkg.whl', Path('/home/x'))
+            for sensitive in ['fixture-user', 'ss', 'tail', 'frag']:
+                self.assertNotIn(sensitive, result.replace('pkg.whl', ''))
+            self.assertEqual(result, 'https://example.com/pkg.whl')
+        self.assertEqual(audit.safe_spec('git+https://github.com/o/r.git@v1.0', Path('/home/x')),
+                         'git+https://github.com/o/r.git@v1.0')
+        self.assertEqual(audit.safe_spec('https://host:8443/o/r@v1', Path('/home/x')), 'https://host:8443/o/r@v1')
 
 
 MOCK_MODULE = '''from ansible.module_utils.basic import AnsibleModule

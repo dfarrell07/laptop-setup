@@ -2,7 +2,7 @@
 # SSTI guard: read config.yml as raw bytes (bypasses include_vars trusted_as_template tagging)
 # and reject Jinja2 expressions before loading any user overrides into the play.
 # Missing config is allowed; unreadable or invalid config fails closed.
-- name: Stat config.yml for parse-failure detection
+- name: Stat config.yml (a missing file is allowed)
   ansible.builtin.stat:
     path: "{{ playbook_dir }}/config.yml"
   register: _config_yml_stat
@@ -28,8 +28,20 @@
   when: _config_yml_stat.stat.exists
   register: _config_parsed
   changed_when: false
+  failed_when: false  # reported below: no_log would otherwise hide the parse error
   check_mode: false
   no_log: true
+  tags: [always]
+
+# parse-config.py prints only the error type (never config content), so it is safe to show
+- name: Fail when config.yml cannot be parsed
+  ansible.builtin.fail:
+    msg: >-
+      config.yml is not valid YAML or not a mapping ({{ _config_parsed.stderr | default('unknown error') | trim }}).
+      Find the line with: python3 -c 'import sys, yaml; yaml.safe_load(open(sys.argv[1]))' config.yml
+  when:
+    - _config_yml_stat.stat.exists
+    - _config_parsed.rc | default(0) != 0
   tags: [always]
 
 - name: Cache parsed config.yml dict for SSTI guard assertions

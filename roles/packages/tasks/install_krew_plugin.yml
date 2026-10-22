@@ -34,6 +34,8 @@
         that: _krew_plugin.archive_sha256 is match('^[0-9a-f]{64}$')
 
     - name: Download and verify plugin archive before replacing an installed plugin
+      retries: 3  # transient GitHub/CDN errors
+      delay: 10
       ansible.builtin.get_url:
         url: "https://github.com/ahmetb/kubectx/archive/{{ _krew_plugin.version }}.tar.gz"
         dest: "{{ _krew_plugin_tmpdir.path }}/{{ _krew_plugin.name }}.tar.gz"
@@ -80,9 +82,15 @@
       changed_when: true
       when: _krew_receipt_stat.stat.exists
 
+    # krew extracts with the caller's umask; the dotfiles' umask 077 would leave the plugin
+    # 0700 and fail the 0755 check below, so the install runs under umask 022.
     - name: Install krew plugin from its verified archive and pinned manifest
       ansible.builtin.command:
         argv:
+          - /bin/sh
+          - -c
+          - umask 022 && exec "$@"
+          - sh
           - "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew"
           - install
           - "--manifest={{ _krew_plugin_tmpdir.path }}/{{ _krew_plugin.name }}.yaml"

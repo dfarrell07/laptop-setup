@@ -1,7 +1,7 @@
 ---
 # molecule/shared/verify-containers.yml
 # Assertions for containers role (containers.conf).
-# Included by verify-dnf.yml and debian/verify.yml.
+# Imported by verify-dnf.yml and debian/verify.yml.
 
 - name: Verify containers config directory
   ansible.builtin.stat:
@@ -35,12 +35,21 @@
 
 - name: Assert containers.conf sets pids_limit to {{ containers_pids_limit | default(65536) }}
   ansible.builtin.command:
-    cmd: grep -q 'pids_limit = {{ containers_pids_limit | default(65536) }}' "{{ ansible_user_dir }}/.config/containers/containers.conf"
+    cmd: grep -qx 'pids_limit = {{ containers_pids_limit | default(65536) }}' "{{ ansible_user_dir }}/.config/containers/containers.conf"
   changed_when: false
 
 - name: Assert containers.conf sets default_ulimits for nofile
   ansible.builtin.command:
-    cmd: grep -q 'default_ulimits.*nofile' "{{ ansible_user_dir }}/.config/containers/containers.conf"
+    argv:
+      - grep
+      - -qxF
+      - 'default_ulimits = ["nofile={{ containers_nofile_limit | default(65536) }}:{{ containers_nofile_hard_limit | default(524288) }}"]'
+      - "{{ ansible_user_dir }}/.config/containers/containers.conf"
+  changed_when: false
+
+- name: Assert containers.conf sets the netavark network backend
+  ansible.builtin.command:
+    cmd: grep -qE '^network_backend\s*=\s*"netavark"' "{{ ansible_user_dir }}/.config/containers/containers.conf"
   changed_when: false
 
 - name: Verify policy.json is deployed by containers role
@@ -57,6 +66,16 @@
   ansible.builtin.slurp:
     src: "{{ ansible_user_dir }}/.config/containers/policy.json"
   register: verify_container_policy
+
+- name: Assert policy.json parses and defines docker transport rules
+  vars:
+    _policy: "{{ verify_container_policy.content | b64decode | from_json }}"
+  ansible.builtin.assert:
+    that:
+      - _policy.transports is defined
+      - "'docker' in _policy.transports"
+      - "'' not in _policy.transports.docker"  # no unscoped docker rule: unlisted registries fall through to default reject
+    fail_msg: "policy.json must define transports with a docker entry"
 
 - name: Assert policy.json default policy is reject
   ansible.builtin.assert:

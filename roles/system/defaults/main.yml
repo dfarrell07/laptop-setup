@@ -4,11 +4,11 @@ profile: work  # fallback for standalone invocation
 
 # Sysctl hardening values
 system_sysctl_hardening:
-  # kernel.yama.ptrace_scope: merged via system_ptrace_scope combine() in tasks.yml
+  # kernel.yama.ptrace_scope: merged via system_ptrace_scope combine() in sysctl.yml
   # STIG RHEL-09-213075 — hide kernel pointers from all processes including root/CAP_SYSLOG (prevents KASLR bypass)
   kernel.kptr_restrict: 2
-  # kernel.io_uring_disabled: merged via system_io_uring_disabled combine() in tasks.yml
-  # kernel.unprivileged_bpf_disabled: merged via system_unprivileged_bpf_disabled combine() in tasks.yml
+  # kernel.io_uring_disabled: merged via system_io_uring_disabled combine() in sysctl.yml
+  # kernel.unprivileged_bpf_disabled: merged via system_unprivileged_bpf_disabled combine() in sysctl.yml
   # MAINTENANCE: pinned defaults override third-party sysctl.d (90-hardening.conf sorts last).
   # On each Fedora upgrade review /usr/lib/sysctl.d/*.conf AND kernel compile-time defaults.
   # source: kernel compile-time default (CONFIG_SECURITY_DMESG_RESTRICT=y), not a sysctl.d file
@@ -31,8 +31,9 @@ system_sysctl_hardening:
   net.ipv4.conf.default.accept_source_route: 0
   net.ipv6.conf.all.accept_source_route: 0   # CIS — IPv6 source routing off; default 0 (no vendor sysctl.d); pinned vs third-party sysctl.d
   net.ipv6.conf.default.accept_source_route: 0
-  # Fedora 50-default.conf resets all.rp_filter to 0 after the *.rp_filter=2 wildcard; pinning 2
-  # floors all interfaces at loose mode. NOTE: all=2 is also a ceiling — max(all=2,per-iface=1)=2,
+  # Fedora 50-default.conf sets *.rp_filter=2 then excludes all.rp_filter (-net.ipv4.conf.all.rp_filter),
+  # leaving the kernel default 0 for all; pinning 2 floors all interfaces at loose mode.
+  # NOTE: all=2 is also a ceiling — max(all=2,per-iface=1)=2,
   # so strict-per-interface needs system_sysctl_extra_additional to lower all.rp_filter to 0 or 1.
   net.ipv4.conf.all.rp_filter: 2  # kernel uses max(all, per-iface)
   # loose (2) — OVN-K/Kubernetes asymmetric routing; strict (1) drops pod traffic
@@ -46,17 +47,17 @@ system_sysctl_hardening:
   net.ipv4.conf.all.log_martians: 1
   net.ipv4.conf.default.log_martians: 1
   # CIS 3.3.4/3.3.5. NOTE: secure_redirects is a no-op when accept_redirects=0 (the default here);
-  # these entries only activate if accept_redirects is overridden to 1 via system_sysctl_extra_additional.
+  # these entries are effectively inert (accept_redirects is hardening-critical and cannot be overridden).
   # When active: value 0 rejects redirects from non-gateway hosts; CIS mandates 0 regardless.
   net.ipv4.conf.all.secure_redirects: 0
   net.ipv4.conf.default.secure_redirects: 0
-  # net.ipv6.conf.all/default.accept_ra: merged via system_ipv6_accept_ra combine() in tasks.yml
+  # net.ipv6.conf.all/default.accept_ra: merged via system_ipv6_accept_ra combine() in sysctl.yml
   # CIS — prevent SUID processes from writing core dumps (avoids privileged memory leaks).
   # NOTE: this overrides 50-coredump.conf fs.suid_dumpable=2 and silently suppresses SUID crash
-  # capture even when system_coredump_storage: external. To re-enable SUID dumps: add
-  # fs.suid_dumpable: 2 to system_sysctl_extra in config.yml.
+  # capture even when system_coredump_storage: external. fs.suid_dumpable is hardening-critical:
+  # the sysctl.yml assert rejects it in system_sysctl_extra and system_sysctl_extra_additional.
   fs.suid_dumpable: 0
-  # kernel.core_pattern: merged via system_core_pattern combine() in tasks.yml
+  # kernel.core_pattern: merged via system_core_pattern combine() in sysctl.yml
   # kernel.core_pipe_limit omitted: no known third-party override risk; 50-coredump.conf already sets it correctly.
   # Fedora 44 kernel runtime defaults; pinned here to prevent /etc/sysctl.d override
   net.ipv4.icmp_echo_ignore_broadcasts: 1  # CIS — kernel default; pinned to prevent third-party sysctl.d override
@@ -65,18 +66,18 @@ system_sysctl_hardening:
   fs.protected_hardlinks: 1  # Fedora 44 default via 50-default.conf; pinned to block sysctl.d override
   fs.protected_symlinks: 1  # same
   fs.protected_fifos: 2    # CIS — value 2 covers world+group-writable sticky dirs (same rationale as fs.protected_regular)
-  # kernel.panic: merged via system_kernel_panic combine() in tasks.yml
-  # kernel.panic_on_oops: merged via system_kernel_panic_on_oops combine() in tasks.yml
+  # kernel.panic: merged via system_kernel_panic combine() in sysctl.yml
+  # kernel.panic_on_oops: merged via system_kernel_panic_on_oops combine() in sysctl.yml
   # Fedora 44 kernel runtime default; pinned here to prevent /etc/sysctl.d override
   net.ipv4.tcp_syncookies: 1       # CIS 3.3.8 — pinned to kernel default (1); guards against third-party sysctl.d override
   # net.ipv4.tcp_timestamps: kept at kernel default (1); CIS 3.3.9 recommends 0, but 0 harms RTTM/PAWS on OVN-K/Submariner high-BDP links
   net.ipv4.tcp_rfc1337: 1         # CIS — prevent TIME-WAIT assassination (RST injection into expiring connections)
-  # kernel.kexec_load_disabled: merged via system_kexec_load_disabled combine() in tasks.yml
+  # kernel.kexec_load_disabled: merged via system_kexec_load_disabled combine() in sysctl.yml
   # kernel.modules_disabled: applied by the ordered kernel-modules-lockdown.service
-  # kernel.sysrq: merged via system_sysrq combine() in tasks.yml
-  # net.core.bpf_jit_harden: merged via system_bpf_jit_harden combine() in tasks.yml
-  # net.ipv4.ip_forward: merged via system_enable_ip_forward combine() in tasks.yml
-  # net.ipv6.conf.all.forwarding: merged via system_enable_ip_forward combine() in tasks.yml
+  # kernel.sysrq: merged via system_sysrq combine() in sysctl.yml
+  # net.core.bpf_jit_harden: merged via system_bpf_jit_harden combine() in sysctl.yml
+  # net.ipv4.ip_forward: merged via system_enable_ip_forward combine() in sysctl.yml
+  # net.ipv6.conf.all.forwarding: merged via system_enable_ip_forward combine() in sysctl.yml
   # NOTE: No IPv6 privacy protection is active in the default config (system_ipv6_accept_ra=0 disables SLAAC).
   # Set system_ipv6_accept_ra: 2 to enable SLAAC with EUI-64 leakage prevention.
   # IPv6 privacy extensions: use_tempaddr=2 enables temporary (privacy) addresses for outbound connections.
@@ -97,7 +98,12 @@ system_sysctl_hardening:
   # default Fedora (zram) and RHEL (swap partition) hosts, any process with block
   # device read access can recover these pages offline. Override to 0 in config.yml
   # via system_sysctl_extra_additional if the host has full-disk encryption.
+  # Hosts whose only swap is zram get system_zram_swappiness instead (sysctl.yml).
   vm.swappiness: 1
+
+# vm.swappiness on hosts whose only swap is zram (RAM-backed, nothing persists): the kernel
+# default, so idle pages are compressed instead of dropping page cache first.
+system_zram_swappiness: 60
 
 # Firewall
 # True on standard Fedora and Fedora hybrid (csb_detected, not RHEL). False on RHEL CSB (csb_rhel) where IT manages zone policy.
@@ -163,7 +169,10 @@ system_journald_compress: "yes"    # Compress — compress journal data (matches
 # USBGuard
 system_install_usbguard: true  # authoritative in group_vars/all/vars.yml; here for standalone molecule invocability
 system_usbguard_whitelist:
-  - "allow id 1050:* name \"YubiKey*\" with-interface one-of { 03:*:* 0B:*:* }"
+  # Yubico vendor ID, HID (OTP/FIDO) and CCID interfaces. No name clause: USBGuard matches
+  # names literally ("*" is a wildcard only in id and interface types), and product strings
+  # differ by model ("YubiKey OTP+FIDO+CCID", "Security Key by Yubico", ...).
+  - "allow id 1050:* with-interface one-of { 03:*:* 0B:*:* }"
   # Linux Foundation vendor ID (1d6b) for all kernel-generated xHCI root hubs.
   # Root hubs have connect_type N/A (no port attribute), so they match neither
   # the hardwired rule below nor any with-connect-type "not used" per-device rule.
@@ -184,7 +193,7 @@ system_usbguard_whitelist:
 # replacing the whole base list. Examples:
 #   system_usbguard_extra_rules:
 #     - 'allow id 1234:5678 name "My USB Hub"'
-#     - 'allow id 3297:1969 name "Moonlander*" with-interface one-of { 03:*:* }'
+#     - 'allow id 3297:1969 name "Moonlander Mark I" with-interface one-of { 03:*:* }'  # exact name; no globs
 #     - 'allow id 0483:df11 name "DFU in FS Mode" with-interface one-of { FE:01:* }'
 system_usbguard_extra_rules: []
 system_usbguard_present_device_policy: keep
@@ -192,16 +201,17 @@ system_usbguard_inserted_device_policy: apply-policy
 
 # udev rules pre-plant scan: basenames of files in /etc/udev/rules.d that are not
 # RPM/dpkg-owned but are known-good (e.g. generated by local tooling). Files not
-# owned by a package and not listed here abort provisioning. Override in config.yml.
+# owned by a package and not listed here (or in system_udev_rules_d_allowlist) abort the audit
+# unowned-rules scan (auditd.yml). Prefer system_udev_rules_d_allowlist, which every udev check honours.
 system_udev_rules_whitelist: []
 
 # Locale, timezone, keymap
 system_locale: en_US.UTF-8
 system_keymap: us
 system_logind_idle_sec: 900   # seconds of inactivity before logind locks the session (CIS max 900)
-  # Set to 900 (15 min) by default to stagger with TMOUT (typically 600 s): shells time out first,
-  # giving a visible shell-exit cue before the screen locks. Lower to 600 in config.yml if you
-  # want simultaneous firing, or set equal to system_tmout for lock-then-shell-die ordering.
+  # Set to 900 (15 min) by default. When system_tmout is enabled (default 0 = off; typically 600 s),
+  # shells time out first, giving a visible shell-exit cue before the screen locks. Lower to 600 in
+  # config.yml for simultaneous firing, or set equal to system_tmout for lock-then-shell-die ordering.
 
 # AIDE file integrity monitoring
 # Pre-provisioning blind spot: files planted in monitored paths (e.g. /etc/sudoers.d)
@@ -240,7 +250,7 @@ system_aide_monitoring_etc_paths:
   - /etc/polkit-1                # polkit rules (privilege escalation backdoor vector)
 
 # AIDE check schedule
-system_aide_check_calendar: 'hourly'           # OnCalendar for aide-check.timer; override in config.yml
+system_aide_check_calendar: 'daily'            # full /usr scan; Persistent=true catches up after sleep
 system_aide_check_random_delay: 15m            # RandomizedDelaySec for aide-check.timer; override in config.yml
 
 # Systemd drop-in directory whitelist (under /etc/systemd/system/*.d)
@@ -253,7 +263,6 @@ system_systemd_dropin_whitelist:
   - tmp.mount.d            # /tmp hardening drop-in (mounts.yml)
   - dnf-automatic.service.d   # AIDE update hook for dnf-automatic (dnf_automatic.yml)
   - dnf5-automatic.service.d  # AIDE update hook for dnf5-automatic (dnf_automatic.yml)
-  - aide-check.service.d      # future AIDE check timer override slot
 
 # Setuid binary scan — runs weekly regardless of system_aide_enabled.
 # Detects new/removed setuid and setgid binaries (perm /6000) by diffing
@@ -293,7 +302,7 @@ system_disable_bluetooth: true
 system_disable_modemmanager: false
 system_disable_thunderbolt: false  # set true to blacklist thunderbolt/thunderbolt_net on machines with no Thunderbolt peripherals
 # Basenames allowed in /etc/modprobe.d; unexpected entries fail provisioning (pre-plant attack guard).
-# Fedora baseline: hardening.conf (ours) + alsa-*.conf (sound subsystem defaults).
+# Fedora baseline: hardening.conf (ours) + sound subsystem defaults (alsa-base.conf, alsa.conf, dist-*.conf).
 # Add extra basenames here (or in config.yml) for CSB/IT-managed or site-specific drop-ins.
 system_modprobed_whitelist:
   - hardening.conf
@@ -373,8 +382,9 @@ system_sysctl_extra_additional: {}
 system_disable_usb_storage: false  # kernel-blocks usb_storage/uas when true; authoritative in group_vars/all/vars.yml
 system_disable_udf: true          # kernel-blocks udf module; set false if UDF media needed; authoritative in group_vars/all/vars.yml
 # Core dump handling: systemd-coredump (Fedora default) routes crashes to journalctl -b 0 -u systemd-coredump
-# and stores compressed in /var/lib/systemd/coredump/. Set to '|/bin/false' in config.yml to discard all
-# core dumps (CIS strict), or '' to use kernel default (%e.%p.%s.core in cwd). fs.suid_dumpable=0 prevents
+# and stores compressed in /var/lib/systemd/coredump/. Config.yml overrides must be plain file paths
+# (sysctl.yml rejects any pipe, so '|/bin/false' fails); '' uses the kernel default (%e.%p.%s.core in cwd).
+# To discard dumps use system_coredump_storage: none. fs.suid_dumpable=0 prevents
 # SUID processes from dumping regardless of core_pattern.
 # The default value duplicates /usr/lib/sysctl.d/50-coredump.conf intentionally — writing it to
 # 90-hardening.conf anchors it against third-party drop-ins that might modify core_pattern
@@ -547,8 +557,8 @@ system_chrony_authselectmode: require  # NTS-KE failure surfaces as a chrony sta
   # Set 'prefer' in config.yml if this host must sync on networks where TCP 4460 (NTS-KE) is blocked;
   # also set system_chrony_authselectmode_prefer_confirmed: true to acknowledge the security trade-off.
 system_chrony_authselectmode_prefer_confirmed: false  # set true in config.yml alongside authselectmode: prefer
-system_chrony_makestep: "1.0 3"  # step on first 3 updates only, then slew; use '-1' only when clock may be wildly wrong at boot
-  # Security: '-1' means chrony steps on every sync cycle where offset >1.0 s — an attacker controlling
+system_chrony_makestep: "1.0 3"  # step on first 3 updates only, then slew; use '1.0 -1' only when clock may be wildly wrong at boot
+  # Security: '1.0 -1' means chrony steps on every sync cycle where offset >1.0 s — an attacker controlling
   # any chrony source can cause an arbitrarily large clock step on any update, bypassing Kerberos
   # (5-min window), TOTP (30-s window), and TLS certificate validity guards. '1.0 3' restricts
   # stepping to the first three updates (boot convergence), then switches to slewing permanently.
@@ -609,13 +619,20 @@ system_gid0_allowed_accounts:     # accounts exempt from the GID-0 primary-group
   - shutdown
   - halt
   - operator
-system_crond_whitelist:            # filenames (not paths) permitted in /etc/cron.d; unknown files abort provisioning
+system_crond_whitelist:            # filenames (not paths) permitted in /etc/cron.d; unknown files abort provisioning (CSB: warn only)
   - 0hourly                        # cronie base package
   - dailyjobs                      # cronie-noanacron
   - sysstat                        # sysstat package
+  - e2scrub_all                    # Debian e2fsprogs
+  - anacron                        # Debian anacron
 system_sudoersd_whitelist:         # filenames (not paths) permitted in /etc/sudoers.d; unknown files abort provisioning
   - 99-hardening                   # sudo Defaults hardening drop-in (managed by this role)
   - go-env                         # GOTMPDIR env_keep drop-in (managed by this role)
+  - README                         # Debian sudo package
+# Extra names allowed only on CSB hosts, where IT's automation deploys them (not added globally:
+# an attacker-planted file with the same name must still be reported elsewhere).
+system_csb_profiled_whitelist: [redhat-internal-infosec-config.sh]
+system_csb_systemd_dropin_whitelist: [orbit.service.d, osqueryd.service.d, netbird.service.d, httpd.service.d]
 system_profiled_whitelist:         # filenames (not paths) permitted in /etc/profile.d; unknown files abort provisioning
   - lang.sh                        # glibc-common locale setup
   - less.sh                        # less pager env
@@ -632,7 +649,7 @@ system_auditd_num_logs: 5          # rotated files to keep (auditd.conf num_logs
 system_umask: "027"                # default umask for login shells (login.defs UMASK)
 system_home_mode: "0700"           # CIS: new home directory permissions (login.defs HOME_MODE; Fedora 38+ shadow-utils)
 # With these values, a kernel panic does not reboot and a kernel oops does not halt — the system
-# continues running in an undefined state. Set panic=10 and panic_on_oops=1 in config.yml for
+# continues running in an undefined state. Set system_kernel_panic: 10 and system_kernel_panic_on_oops: 1 in config.yml for
 # unattended or production hosts.
 system_kernel_panic: 0             # dev: preserve panic for kdump/KASAN/UBSAN; CIS: 10 (auto-reboot); kernel default=0
 system_kernel_panic_on_oops: 0     # dev: log-and-continue on OOPS; CIS 1.5.3: 1=halt; kernel default=0
@@ -648,7 +665,9 @@ system_kexec_load_disabled: 1      # kdump uses kexec_file_load() (unaffected by
                                    # machines kexec_file_load() enforces kernel signatures even pre-reboot,
                                    # closing the window; on non-Secure-Boot machines the window is open until
                                    # reboot activates lockdown (smoke-test secure-boot check is FAIL in that case).
-system_modules_disabled: 1        # ONE-WAY RATCHET: blocks ALL kernel module loads (incl. legitimate ones) until
+# Opt-in (default 0): on a laptop the lock breaks USB storage (vfat/exfat), Bluetooth, docks,
+# webcams and container networking (veth/bridge/nft) for anything not loaded before it engaged.
+system_modules_disabled: 0        # 1 = ONE-WAY RATCHET: blocks ALL kernel module loads (incl. legitimate ones) until
                                    # reboot. Closes the pre-reboot init_module() window where lockdown=integrity
                                    # has not yet activated — an LPE-to-root exploit in that window could otherwise
                                    # load an unsigned rootkit via init_module(). kexec_load_disabled=1 does not
@@ -679,7 +698,7 @@ system_logrotated_whitelist:
 # udev rules audit allowlist (SECURITY: pre-plant attack mitigation)
 # Basenames of files permitted in /etc/udev/rules.d/ — default empty because packages install
 # rules in /usr/lib/udev/rules.d/, not /etc/udev/rules.d/ (which is for local overrides only).
-# Provisioning fails if an unexpected file is found (pre-planted rule indicator).
+# Provisioning fails if an unexpected file is found (CSB: the main.yml scan only warns) (pre-planted rule indicator).
 # To allow a legitimate file, add its basename to this list in config.yml.
 system_udev_rules_d_allowlist: []
 
@@ -702,3 +721,5 @@ system_dnf_automatic_apply_updates: true
 # by the unauthorised-drop-in purge tasks. Add IT-managed filenames here when present.
 # Example: system_dnf_automatic_dropin_whitelist: [satellite-hook.conf]
 system_dnf_automatic_dropin_whitelist: []
+# systemd error text for a unit that is not installed (tolerated by masking/disable tasks)
+_system_unit_absent_re: 'Could not find the requested service|not found|does not exist'

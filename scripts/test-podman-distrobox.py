@@ -3,12 +3,14 @@
 from pathlib import Path
 import configparser
 import os
+import runpy
 import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import yaml
 
@@ -50,6 +52,17 @@ class PodmanRuntimeTests(unittest.TestCase):
                     if flag.startswith('--network='):
                         networks.append(flag.split('=', 1)[1])
                 self.assertEqual(networks, ['host' if host_network else 'pasta'])
+
+    def test_helper_moves_runtime_first_and_drops_remote_settings(self):
+        remote = {'CONTAINER_HOST': '', 'CONTAINER_CONNECTION': 'untrusted-fixture',
+                  'CONTAINER_SSHKEY': '/fixture/key', 'DOCKER_HOST': 'tcp://fixture'}
+        with mock.patch.dict(os.environ, remote), \
+                mock.patch.object(sys, 'argv', [str(HELPER), 'create', '--runtime=crun', '--name', 'x']), \
+                mock.patch('os.execv') as execv:
+            runpy.run_path(str(HELPER), run_name='__main__')
+            for name in remote:
+                self.assertNotIn(name, os.environ)
+        execv.assert_called_once_with('/usr/bin/podman', ['/usr/bin/podman', '--runtime=crun', 'create', '--name', 'x'])
 
     @unittest.skipUnless(shutil.which('podman') and Path('/usr/bin/podman').exists(), 'Native Podman unavailable')
     def test_real_global_runtime_option(self):

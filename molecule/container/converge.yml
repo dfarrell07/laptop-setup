@@ -20,11 +20,9 @@
   vars:
     # Empty — dnf installs with become:true trigger daemon-reload inside the
     # privileged systemd container, crashing PID 1 before the symlink task runs.
-    # Package installation is tested by the fedora/rocky/debian molecule scenarios.
+    # Container package installation is not exercised by any molecule scenario.
     distrobox_packages: []
-    # Explicit test context; production container provisioning still writes system paths.
-    system_is_container: true
-    # Single command to exercise the flatpak-spawn wrapper creation path.
+    # Single command; with the distrobox-host-exec stub present it gets a symlink (not a flatpak-spawn wrapper).
     distrobox_host_exec_commands:
       - podman
     distrobox_oc_version: "4.22.8"  # keep in sync with packages_oc_version in roles/packages/defaults/main.yml

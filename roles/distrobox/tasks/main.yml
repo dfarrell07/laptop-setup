@@ -16,9 +16,19 @@
         (container_image | default('') is
         match('^(registry\.fedoraproject\.org/|quay\.io/|registry\.access\.redhat\.com/|registry\.redhat\.io/)'))
       - container_image | default('') == '' or '@sha256:' in (container_image | default(''))
+      # Resolved image (also reachable by setting distrobox_container_image directly,
+      # which would otherwise skip the container_image checks above).
+      - distrobox_container_image | string is match('^[a-zA-Z0-9:/@._-]+$')
+      - distrobox_container_image is
+        match('^(registry\.fedoraproject\.org/|quay\.io/|registry\.access\.redhat\.com/|registry\.redhat\.io/)')
+      - "'@sha256:' in distrobox_container_image"
       - container_name | default('') | string is match('^[a-zA-Z0-9_-]*$|^$')
       - distrobox_container_name | default('') | string is match('^[a-zA-Z0-9_-]*$|^$')
       - distrobox_packages | default([]) | map('string') | select('search', '[^a-zA-Z0-9_.+-]') | list | length == 0
+      - distrobox_packages | default([]) | map('string') | select('match', '^-') | list | length == 0
+      - distrobox_oc_version | string is match('^[0-9]+[.][0-9]+[.][0-9]+([-.][a-zA-Z0-9.]+)*$')
+      - distrobox_oc_mirror_url | string is match('^https://[a-zA-Z0-9._-]+(:[0-9]+)?(/[a-zA-Z0-9._-]+)*$')
+      - "'..' not in distrobox_oc_mirror_url | string"
     fail_msg: >-
       SECURITY: distrobox variable contains unsafe value. This check is duplicated in
       pre_flight_checks.yml; it runs again here to protect against --start-at-task
@@ -26,7 +36,7 @@
       distrobox_host_exec_commands={{ distrobox_host_exec_commands | default([]) }} --
         entries must be alphanumeric/underscore/hyphen (newline injects shell commands into
         flatpak-spawn wrapper scripts and init_hooks in distrobox.ini via container-provision.yml);
-      container_image={{ container_image | default('') }} --
+      container_image={{ container_image | default('') }} distrobox_container_image={{ distrobox_container_image }} --
         must be from a trusted registry with a pinned @sha256: digest; mutable tags let the
         registry serve arbitrary content (CAP_BPF+CAP_PERFMON, $HOME bind-mounted —
         vault-pass.sh/.ssh/.gnupg accessible); use registry/image:tag@sha256:<64-hex>;
@@ -38,6 +48,9 @@
       distrobox_packages={{ distrobox_packages | default([]) }} --
         entries must be alphanumeric/dot/underscore/plus/hyphen; a newline in any entry injects
         an arbitrary INI key into distrobox.ini (init_hooks RCE via flatpak-spawn --host).
+      distrobox_oc_version={{ distrobox_oc_version }} distrobox_oc_mirror_url={{ distrobox_oc_mirror_url }} --
+        version must be dotted numeric; mirror must be a plain https URL (no query, no '..' path
+        segments, no userinfo) because both build the download URLs for the oc tarball and checksum.
 
 - name: SECURITY assert distrobox_host_exec_commands allowlist
   # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always.
@@ -55,24 +68,22 @@
       A shell name (bash, sh, zsh) creates a trivial host-shell escape from the container.
       Fix: remove unlisted entries from distrobox_host_exec_commands in config.yml.
 
-- name: SECURITY assert vault SSH keys are populated for container provisioning
-  # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always.
-  # Duplicates the vault healthcheck in site.yml pre_tasks to protect against
-  # --start-at-task bypassing play-level pre_tasks (documented bypass in CLAUDE.md).
-  # _pf_is_molecule is set by pre_flight_checks.yml; default(false) ensures the
-  # assertion fires when pre_tasks are skipped via --start-at-task.
-  ansible.builtin.assert:
-    that:
-      - vault_ssh_auth_key is defined
-      - vault_ssh_auth_key | length > 0
-      - vault_ssh_auth_key_pub is defined
-      - vault_ssh_auth_key_pub | length > 0
-    fail_msg: >-
-      Container provisioning requires populated vault SSH keys. vault_ssh_auth_key
-      and vault_ssh_auth_key_pub cannot be empty when distrobox_enabled: true.
-      Run 'make setup-yubikeys' to populate vault, or set distrobox_enabled: false
-      in config.yml to skip container provisioning.
-  when: not (_pf_is_molecule | default(false))
+# The container is provisioned with the vault SSH keys; without them, defer it rather than
+# failing the whole run. 'make container' completes it once the vault is populated.
+- name: Defer container provisioning until vault SSH keys exist
+  when:
+    - not (_pf_is_molecule | default(false))
+    - (vault_ssh_auth_key | default('') | length == 0) or (vault_ssh_auth_key_pub | default('') | length == 0)
+  block:
+    - name: Notice — container provisioning deferred
+      ansible.builtin.debug:
+        msg: >-
+          NOTICE: skipping dev container provisioning — vault_ssh_auth_key(_pub) is empty.
+          Run 'make setup-yubikeys', populate the vault, then 'make container'.
+          (Or set distrobox_enabled: false in config.yml to stop this notice.)
+
+    - name: End the distrobox role for this run
+      ansible.builtin.meta: end_role
 
 # --- Detect container tool ---
 - name: Warn when container_release overrides but digest may be stale
@@ -157,6 +168,10 @@
 - name: Check Podman socket is active  # noqa: command-instead-of-module
   ansible.builtin.command:  # user-scope systemd requires command; service_facts uses system scope
     cmd: systemctl --user is-active podman.socket
+  # verify-ansible-args.sh clears XDG_RUNTIME_DIR, without which systemctl --user cannot
+  # find the user bus and always reports inactive.
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
   register: distrobox_podman_socket_active
   changed_when: false
   failed_when: false
@@ -245,6 +260,17 @@
 
 # uses distrobox_check.rc directly (not distrobox_use_distrobox) — the ini should persist when
 # distrobox is installed but temporarily disabled (offline/fapolicyd); only remove when the binary is gone
+- name: Find a role-written distrobox.ini (starts with the Ansible managed header)
+  ansible.builtin.find:
+    paths: "{{ distrobox_ini_path | dirname }}"
+    patterns: "{{ distrobox_ini_path | basename }}"
+    contains: '^# Ansible managed'
+    read_whole_file: false
+  register: _distrobox_ini_managed
+  when:
+    - distrobox_check.rc != 0
+    - is_linux
+
 - name: Remove stale distrobox.ini when distrobox is not installed
   ansible.builtin.file:
     path: "{{ distrobox_ini_path }}"
@@ -252,15 +278,19 @@
   when:
     - distrobox_check.rc != 0
     - is_linux
+    - _distrobox_ini_managed.files | default([]) | length > 0  # a hand-written ini is kept
 
+# rmdir, not file state=absent: the latter deletes recursively, which would also remove a
+# user's own distrobox.conf. Only an empty directory is removed.
 - name: Remove stale distrobox config dir when distrobox is not installed
-  ansible.builtin.file:
-    path: "{{ distrobox_ini_path | dirname }}"
-    state: absent
+  ansible.builtin.command:
+    argv: [rmdir, "{{ distrobox_ini_path | dirname }}"]
+  register: _distrobox_rmdir
+  changed_when: _distrobox_rmdir.rc == 0
+  failed_when: false  # intentional: non-empty or absent dir is not an error
   when:
     - distrobox_check.rc != 0
     - is_linux
-  failed_when: false  # intentional: non-empty or absent dir is not an error
 
 - name: Warn container_replace ignored under fapolicyd enforcement
   ansible.builtin.debug:
@@ -306,10 +336,10 @@
 
     - name: Create container with distrobox assemble
       ansible.builtin.command:
-        cmd: >-
-          distrobox assemble create
-          {{ '--replace' if distrobox_container_replace | bool else '' }}
-          --file {{ distrobox_ini_path }}
+        argv: >-
+          {{ ['distrobox', 'assemble', 'create']
+          + (['--replace'] if distrobox_container_replace | bool else [])
+          + ['--file', distrobox_ini_path] }}
       environment:
         DBX_CONTAINER_MANAGER: podman
         PATH: "{{ ansible_facts['user_dir'] }}/.local/libexec/laptop-setup:/usr/local/bin:/usr/bin:/bin"
@@ -318,7 +348,6 @@
         REGISTRY_AUTH_FILE: ""  # prevent attacker-set auth file from redirecting podman pull credentials
         DOCKER_CONFIG: ""  # prevent attacker-set config dir from overriding registry auth
       timeout: "{{ distrobox_create_timeout }}"
-      register: distrobox_create_result
       changed_when: true  # outer when guard ensures container is absent or replace=true; create always constitutes a change
   rescue:
     - name: Record distrobox create failure for CSB report
@@ -409,7 +438,6 @@
         REGISTRY_AUTH_FILE: ""  # prevent attacker-set auth file from redirecting podman pull credentials
         DOCKER_CONFIG: ""  # prevent attacker-set config dir from overriding registry auth
       timeout: "{{ distrobox_create_timeout }}"
-      register: distrobox_toolbox_create
       changed_when: true  # outer when guard ensures container is absent or replace=true; create always constitutes a change
   rescue:
     - name: Record toolbox create failure for CSB report
@@ -495,6 +523,21 @@
     - distrobox_tool != 'none'
     - distrobox_start_result.rc | default(0) == 0
 
+# Runs here (role context) rather than in container-provision.yml: Play 3 includes that file by
+# path, so this role's filter_plugins are not loaded there.
+- name: Validate Go checksum exceptions do not bypass public modules
+  ansible.builtin.assert:
+    that:
+      - >-
+        ((dotfiles_gonosumdb | default('')) or (dotfiles_goprivate | default('')))
+        | go_checksum_exceptions_safe(['github.com/golangci/golangci-lint/v2/cmd/golangci-lint',
+                                       'github.com/submariner-io/subctl/cmd'])
+    fail_msg: >-
+      The effective checksum exception (GONOSUMDB or its GOPRIVATE fallback) contains a public pattern that bypasses Go checksum-database
+      verification, or uses unsupported pattern syntax. Use private domain prefixes
+      (e.g. '*.redhat.com') or literal private owners; only literals and '*' globs are supported.
+    quiet: true
+
 - name: Register container as Ansible host for Play 3
   ansible.builtin.add_host:
     name: "{{ distrobox_container_name }}"
@@ -511,6 +554,12 @@
     distrobox_oc_fetch_retries: "{{ distrobox_oc_fetch_retries }}"
     distrobox_oc_fetch_delay: "{{ distrobox_oc_fetch_delay }}"
     distrobox_oc_mirror_url: "{{ distrobox_oc_mirror_url }}"
+    # Play 3 includes pre_flight_checks.yml (identity asserts) and container-provision.yml
+    # (proxy branches); these are set on localhost only and must travel with the new host.
+    real_user_home: "{{ real_user_home | default(ansible_facts['user_dir']) }}"
+    real_user_id: "{{ real_user_id | default(ansible_facts['user_id']) }}"
+    network_proxied: "{{ network_proxied | default(false) }}"
+    proxy_url: "{{ proxy_url | default('') }}"
   changed_when: false  # only updates the controller inventory for this playbook invocation
   when:
     - distrobox_tool != 'none'

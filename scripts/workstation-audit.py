@@ -11,7 +11,6 @@ import re
 import shutil
 import stat
 import subprocess
-import sys
 from urllib.parse import urlsplit, urlunsplit
 
 TOOLS = ['aws', 'go', 'golangci-lint', 'ansible', 'python3', 'node', 'npm', 'codex',
@@ -33,9 +32,31 @@ SYSTEM_DIRS = ['/etc/modprobe.d', '/etc/udev/rules.d', '/etc/sysctl.d',
                '/etc/profile.d', '/etc/tmpfiles.d', '/etc/NetworkManager/conf.d']
 
 
+def resolved(path):
+    try:
+        return path.resolve()
+    except (OSError, RuntimeError):  # RuntimeError: symlink loop on Python < 3.13
+        return path.absolute()
+
+
 def private_path(path, home):
     path = str(path)
-    return '~' + path[len(str(home)):] if path == str(home) or path.startswith(str(home) + '/') else path
+    # Also match the resolved home so symlinked homes (for example /home -> /var/home) stay redacted.
+    for root in dict.fromkeys([str(home), str(resolved(Path(home)))]):
+        if path == root or path.startswith(root + '/'):
+            return '~' + path[len(root):]
+    # Per-user mount points name the account, drive labels or remote hosts.
+    return re.sub(r'^(/run/(?:media|user))/[^/]+(?:/.*)?$', r'\1/<redacted>', path)
+
+
+def private_mounts(data, home):
+    """Rewrite findmnt targets under the home directory as ~ paths."""
+    if isinstance(data, dict):
+        return {k: (private_path(v, home) if k == 'target' and isinstance(v, str) else private_mounts(v, home))
+                for k, v in data.items()}
+    if isinstance(data, list):
+        return [private_mounts(v, home) for v in data]
+    return data
 
 
 def safe_spec(value, home):
@@ -48,22 +69,41 @@ def safe_spec(value, home):
         reference = re.match(r'^([A-Za-z0-9_.-]+(?:\[[^\]]+\])?\s*@\s*)([A-Za-z][A-Za-z0-9+.-]*://.*)$', value)
         if reference:
             prefix, uri = reference.groups()
-        parsed = urlsplit(uri)
-        authority = parsed.hostname or ''
-        if ':' in authority:
-            authority = '[' + authority + ']'
-        if parsed.port:
-            authority += ':' + str(parsed.port)
+        # A password holding "/", "?" or "#" ends urlsplit's netloc early and would
+        # leak its tail through the path: drop everything up to the first "@".
+        scheme, _, rest = uri.partition('://')
+        first = re.split(r'[/?#]', rest, maxsplit=1)[0]
+        if '@' not in first and '@' in rest and ':' in first and not re.fullmatch(r'[^:@]*:\d*', first):
+            uri = scheme + '://' + rest.split('@', 1)[1]
+        try:
+            parsed = urlsplit(uri)
+            authority = parsed.hostname or ''
+            if ':' in authority:
+                authority = '[' + authority + ']'
+            if parsed.port:
+                authority += ':' + str(parsed.port)
+        except ValueError:  # malformed port or IPv6 literal: never echo the raw value
+            return prefix + '<unparseable url>'
         value = prefix + urlunsplit((parsed.scheme, authority, parsed.path, '', ''))
     return private_path(value, home)
 
 
-def probe(command, errors, label):
-    if not shutil.which(command[0]):
+def safe_path():
+    # Empty and relative PATH entries mean the current directory: never resolve or run tools from there.
+    return os.pathsep.join(entry for entry in os.environ.get('PATH', os.defpath).split(os.pathsep)
+                           if entry and os.path.isabs(entry))
+
+
+def probe(command, errors, label, accept_output_on_error=False):
+    binary = shutil.which(command[0], path=safe_path())
+    if not binary:
         return None  # platform/tool unavailable is different from a failed installed tool
     try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=45,
-                                env=dict(os.environ, HOMEBREW_NO_AUTO_UPDATE='1'))
+        result = subprocess.run([binary] + command[1:], capture_output=True,
+                                text=True, errors='replace', timeout=45,
+                                env=dict(os.environ, HOMEBREW_NO_AUTO_UPDATE='1', PATH=safe_path()))
+        if result.returncode and accept_output_on_error and result.stdout.strip():
+            return result.stdout  # e.g. npm ls exits 1 for extraneous packages but still prints the tree
         if result.returncode:
             errors.append({'probe': label, 'reason': 'command failed', 'exit_code': result.returncode})
             return None
@@ -79,12 +119,12 @@ def command_paths(names, path_value, home):
     for name in names:
         candidates = []
         for directory in directories:
-            if not directory:
-                continue  # never probe implicit current-directory PATH entries
+            if not directory or not os.path.isabs(directory):
+                continue  # never probe implicit or relative (cwd-based) PATH entries
             path = Path(directory) / name
             if path.is_file() and os.access(path, os.X_OK):
                 candidates.append({'path': private_path(path.absolute(), home),
-                                   'target': private_path(path.resolve(), home)})
+                                   'target': private_path(resolved(path), home)})
         result[name] = {'selected': candidates[0]['path'] if candidates else None,
                         'candidates': candidates, 'shadowed': len({item['target'] for item in candidates}) > 1}
     return result
@@ -118,7 +158,7 @@ def pipx_state(home, errors):
                 result.append({'name': venv.name, 'version': package.get('package_version'),
                                'source': safe_spec(package.get('package_or_url'), home),
                                'interpreter_exists': python.exists(),
-                               'interpreter_target': private_path(python.resolve(), home)})
+                               'interpreter_target': private_path(resolved(python), home)})
             except FileNotFoundError:
                 continue  # environments without optional metadata are not probe failures
             except (OSError, ValueError):
@@ -146,7 +186,8 @@ def collect(home=None, path_value=None):
     report['brew_casks'] = [{'name': row.split()[0], 'versions': row.split()[1:]} for row in (casks or '').splitlines() if row.split()]
     flatpak = probe(['flatpak', 'list', '--app', '--columns=application,version,origin'], errors, 'flatpak')
     report['flatpak_apps'] = [dict(zip(['application', 'version', 'origin'], row.split('\t'))) for row in (flatpak or '').splitlines()]
-    npm = probe(['npm', 'ls', '--global', '--depth=0', '--json', '--ignore-scripts'], errors, 'npm')
+    npm = probe(['npm', 'ls', '--global', '--depth=0', '--json', '--ignore-scripts'], errors, 'npm',
+                accept_output_on_error=True)
     try:
         dependencies = json.loads(npm or '{}').get('dependencies', {})
         report['npm_global'] = [{'name': name, 'version': item.get('version')} for name, item in sorted(dependencies.items())]
@@ -165,9 +206,14 @@ def collect(home=None, path_value=None):
     for label, output in [('system_units', services), ('user_units', user)]:
         report[label] = [{'name': row.split()[0], 'state': row.split()[1]} for row in (output or '').splitlines() if len(row.split()) >= 2]
     mounts = probe(['findmnt', '--json', '--output', 'TARGET,FSTYPE'], errors, 'mounts')
-    report['mounts'] = json.loads(mounts) if mounts else None
+    report['mounts'] = None
+    if mounts:
+        try:
+            report['mounts'] = private_mounts(json.loads(mounts), home)
+        except (ValueError, AttributeError, TypeError):
+            errors.append({'probe': 'mounts', 'reason': 'invalid metadata JSON'})
     report['gnome_preferences'] = []
-    if shutil.which('gsettings'):
+    if shutil.which('gsettings', path=safe_path()):
         schemas = set((probe(['gsettings', 'list-schemas'], errors, 'gnome-schemas') or '').splitlines())
         for schema, keys in GNOME.items():
             if schema not in schemas:
@@ -182,10 +228,10 @@ def collect(home=None, path_value=None):
     configs = []
     for relative in CONFIG_PATHS:
         path = home / relative
-        if not path.exists() and not path.is_symlink():
+        if not os.path.lexists(path):
             continue
         configs.append({'path': relative, 'symlink': path.is_symlink(),
-                        'target': private_path(path.resolve(), home), 'exists': path.exists()})
+                        'target': private_path(resolved(path), home), 'exists': path.exists()})
     report['config_paths'] = configs
     # Only publish policy flags from Go's persistent config, never proxy credentials.
     go_env = home / '.config/go/env'
@@ -196,7 +242,7 @@ def collect(home=None, path_value=None):
                 key, separator, value = line.partition('=')
                 if separator and key in ['GOSUMDB', 'GONOSUMDB', 'GOPRIVATE', 'GOPROXY', 'GOTOOLCHAIN']:
                     go_values[key] = value
-        except OSError:
+        except (OSError, ValueError):
             errors.append({'probe': 'go-config', 'reason': 'configuration unreadable'})
     toolchain = go_values.get('GOTOOLCHAIN', '')
     credentialed_proxy = False
@@ -214,6 +260,8 @@ def collect(home=None, path_value=None):
         'credentialed_proxy': credentialed_proxy,
     }
     local_files = []
+    has_rpm = bool(shutil.which('rpm', path=safe_path()))
+    has_dpkg = bool(shutil.which('dpkg-query', path=safe_path()))
     for directory in SYSTEM_DIRS:
         base = Path(directory)
         if not base.is_dir():
@@ -227,10 +275,12 @@ def collect(home=None, path_value=None):
             if not path.is_file():
                 continue
             manager, owner = None, None
-            if shutil.which('rpm'):
+            if has_rpm:
                 manager = 'rpm'
-                owner = probe(['rpm', '-qf', '--qf', '%{NAME}', str(path)], [], 'file-owner')
-            elif shutil.which('dpkg-query'):
+                # errors list is discarded: rpm/dpkg exit nonzero for files no package owns, which is expected here
+                owner = probe(['rpm', '-qf', '--qf', '%{NAME}\\n', str(path)], [], 'file-owner')
+                owner = ','.join(dict.fromkeys(owner.split())) if owner else owner  # several kernel versions can own one file
+            elif has_dpkg:
                 manager = 'dpkg'
                 owner = probe(['dpkg-query', '-S', str(path)], [], 'file-owner')
                 if owner:
@@ -251,10 +301,14 @@ def main():
     parser.add_argument('--output', type=Path, required=True, help='New report file, created exclusively with mode 0600')
     args = parser.parse_args()
     fd = os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, 'w') as stream:
-        report = collect()
-        json.dump(report, stream, indent=2)
-        stream.write('\n')
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            report = collect()
+            json.dump(report, stream, indent=2)
+            stream.write('\n')
+    except BaseException:
+        args.output.unlink(missing_ok=True)
+        raise
     print(f"Report: {args.output}; {len(report['findings']['shadowed_commands'])} shadowed commands; "
           f"{len(report['findings']['broken_pipx_environments'])} broken pipx environments; "
           f"{len(report['errors'])} probe errors")

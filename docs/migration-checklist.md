@@ -75,7 +75,7 @@ all acceptance checks below pass.
    the native default unless the destination needs that change. See
    [transition limits](old-laptop-second-pass.md#power-transition-limits).
 4. Connect RH VPN and configure `ssh_work_keyscan_hosts` for
-   `gitlab.cee.redhat.com` with an independently verified fingerprint before work
+   the internal Git host with an independently verified fingerprint before work
    provisioning. Optionally set `git_repos_vpn_check_host` to that host; its check
    warns about connectivity and does not supply authentication. Existing internal
    access grants and the RH key are still required.
@@ -119,8 +119,9 @@ all acceptance checks below pass.
    provider; `gper` launches the separate Antigravity `agy` vendor CLI.
 5. Reinstall jinjanator, pipeline-migration-tool and CHIRP from their original
    specs with the new Python; rebuild the two broken source pipx environments. Restore needed ACLI/Jira/GCP/release config
-   selectively. Reinstall vendor desktop apps and browser PWAs; Slack uses the
-   supported Flatpak path on Linux and the work Homebrew cask on macOS. Avoid old
+   selectively. Reinstall vendor desktop apps and browser PWAs; Slack is
+   installed manually on Linux (no Flatpak install is provisioned) and via the
+   work Homebrew cask on macOS. Avoid old
    Homebrew Cellars/toolchains and the source
    `.local/bin/aws` link that shadowed the native AWS package.
 
@@ -180,7 +181,7 @@ The shared [working agreements](../roles/common/files/agent-baseline.md) are cop
 into Codex homes and rendered into managed Claude instructions. Keep project facts
 in project instructions rather than restoring machine-path-specific memory folders.
 Review MCP/trusted-project paths in any restored preferences. Managed
-Claude `settings.local.json` is reapplied, so put intended policy changes in
+Claude `settings.json` is reapplied, so put intended policy changes in
 Ansible config. Reinstall bundled Codex plugins and desktop-dependent servers
 through the app; register ai-helpers from its durable checkout. Existing Claude
 settings are not merged with new defaults: add missing repository declarations

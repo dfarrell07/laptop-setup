@@ -103,16 +103,18 @@ jobs:
       - name: Create drift issue (scheduled run only)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           TITLE="Galaxy collection drift detected"
           RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           BODY="Monthly drift check found version mismatch or verification error. See run: $RUN_URL"
           EXISTING=$(gh issue list --label dependencies --state open \
             --search "$TITLE in:title" --json number \
-            --jq '.[0].number' 2>/dev/null || echo "")
+            --jq '.[0].number // empty' 2>/dev/null || echo "")
           if [ -n "$EXISTING" ]; then
             gh issue edit "$EXISTING" --body "$BODY"
           else
             gh issue create --title "$TITLE" --body "$BODY" --label "dependencies" \
+              || gh issue create --title "$TITLE" --body "$BODY" \
               || echo '::warning::gh issue create failed — check token permissions and label existence'
           fi

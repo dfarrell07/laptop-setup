@@ -5,7 +5,7 @@ Description=AIDE failure notification for %i
 [Service]
 Type=oneshot
 # Write to the system wall so it surfaces on all TTYs at next interactive login.
-ExecStart=/usr/bin/wall "AIDE ALERT: File integrity violations detected. Run: systemctl status %i"
+ExecStart=/usr/bin/wall "AIDE ALERT: File integrity violations detected. Review: systemctl status %i (expected changes, e.g. after dnf upgrade: make aide-rebaseline in laptop-setup)"
 # Also log a prominent journal entry so it appears in 'journalctl -p warning'.
 ExecStart=/usr/bin/logger -p auth.warning -t aide-notify "AIDE file integrity violations detected — check: systemctl status %i or /var/log/aide/aide.log"
 NoNewPrivileges=true

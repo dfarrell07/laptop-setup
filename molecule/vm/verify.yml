@@ -30,9 +30,12 @@
         system_disable_usb_storage: true     # converge.yml sets this; enables usb_storage blacklist assertions
         system_disable_fingerprint: true     # converge.yml sets this (role default=true); verify asserts fprintd masked
         system_tmout: 600                    # converge.yml sets this; enables session timeout assertions
+        desktop_deploy_chrome_policies: true # converge.yml sets this; enables Chrome policy assertions
         profile: personal                    # converge.yml sets personal profile; sos (work-only) must be guarded
         ssh_port: 722                        # matches default; parameterizes sshd port assertions
-        system_ssh_unused_connection_timeout: 600  # role default; absent here silences verify trim_blocks guard
+        system_ssh_unused_connection_timeout: >-
+          {{ (lookup('file', lookup('env', 'MOLECULE_PROJECT_DIRECTORY') ~ '/roles/system/defaults/main.yml')
+              | from_yaml).system_ssh_unused_connection_timeout }}
         system_dot_mode: opportunistic       # matches role default; parameterizes DNSOverTLS assertions
 
   tasks:
@@ -51,9 +54,8 @@
       ansible.builtin.import_tasks: ../shared/verify-common.yml
 
     # NOTE: verify-smoke.yml hardcodes --user-only. A second play below (become: true)
-    # runs smoke-test.sh without --user-only as root to cover system-level checks
-    # (auditd watch keys, pwquality details, chrony NTS cookies, pwhistory, yescrypt,
-    # TMOUT bounds, /var/tmp bind-mount) that the user-only run cannot reach.
+    # runs smoke-test.sh --system-only as root to cover system-level checks
+    # (e.g. auditd watch keys, chrony NTS cookies) that the user-only run cannot reach.
     - name: Include smoke-test verification
       ansible.builtin.import_tasks: ../shared/verify-smoke.yml
 
@@ -243,7 +245,7 @@
     - name: Assert reverse path filtering
       ansible.builtin.assert:
         # hardcoded: no system_rp_filter var exists;
-        # must match _system_sysctl_hardening_defaults net.ipv4.conf.all.rp_filter = 2
+        # must match system_sysctl_hardening net.ipv4.conf.all.rp_filter = 2
         that: verify_rp_filter.stdout | int == 2
         fail_msg: "Reverse path filtering is '{{ verify_rp_filter.stdout }}', expected '2' (loose mode required for Tailscale)"
 
@@ -272,7 +274,7 @@
           net.bridge.bridge-nf-call-iptables is '{{ verify_bridge_nf.stdout }}',
           expected '1' (required for Kubernetes NetworkPolicy)
 
-    - name: Verify ip_tables, br_netfilter, overlay modules loaded at runtime
+    - name: Verify at least one of ip_tables, br_netfilter, overlay is loaded at runtime
       ansible.builtin.command: sh -c "lsmod | grep -qE 'ip_tables|br_netfilter|overlay'"
       changed_when: false
       become: true
@@ -323,11 +325,13 @@
 
     - name: Assert kernel lockdown integrity
       ansible.builtin.assert:
-        that: "'lockdown=' ~ (system_kernel_lockdown | default('integrity')) in verify_lockdown.stdout"
-        fail_msg: "Kernel lockdown={{ system_kernel_lockdown | default('integrity') }} not found in boot args"
-      when:
-        - verify_lockdown.rc == 0
-        - system_kernel_lockdown | default('integrity') | length > 0
+        that:
+          - verify_lockdown.rc == 0
+          - "'lockdown=' ~ (system_kernel_lockdown | default('integrity')) in verify_lockdown.stdout"
+        fail_msg: >-
+          Kernel lockdown={{ system_kernel_lockdown | default('integrity') }} not found in boot args
+          (grubby rc={{ verify_lockdown.rc }})
+      when: system_kernel_lockdown | default('integrity') | length > 0
 
     - name: Verify port 722 is labeled ssh_port_t
       ansible.builtin.command:
@@ -404,12 +408,13 @@
       when: verify_home.rc | default(1) == 0  # skip if /home is not a separate mountpoint
 
     - name: Check /home fstab entry contains nosuid (system role fstab hardening)
-      # The Fedora installer writes a /home entry in /etc/fstab even when /home is on
-      # the root partition (subvol= btrfs). The system role adds nosuid to that line.
+      # The system role adds nosuid to the /home fstab line only when /home is a
+      # separate mountpoint (mounts.yml); skipped otherwise, as for the live check above.
       ansible.builtin.command: findmnt -n -o OPTIONS --fstab /home
       changed_when: false
       become: true
       failed_when: false
+      when: verify_home.rc | default(1) == 0  # role only edits fstab for a separate /home mountpoint
       register: verify_home_fstab_nosuid
 
     - name: Assert /home fstab entry has nosuid
@@ -418,6 +423,7 @@
           - verify_home_fstab_nosuid.rc == 0
           - "'nosuid' in verify_home_fstab_nosuid.stdout.split(',')"
         fail_msg: "/home fstab entry missing nosuid — system role fstab lineinfile task may have failed"
+      when: verify_home.rc | default(1) == 0  # skip if /home is not a separate mountpoint
 
     - name: Check /boot mount options
       ansible.builtin.command: findmnt -n -o OPTIONS /boot
@@ -548,7 +554,7 @@
       when: system_aide_enabled | default(false)
 
     - name: Check AIDE conf includes security-critical paths
-      ansible.builtin.command: grep -q '{{ item.path }}' /etc/aide.conf
+      ansible.builtin.command: grep -qE '^{{ item.path }}(/[^[:space:]]*)?[$]?[[:space:]]' /etc/aide.conf
       loop:
         - path: /etc/audit
         - path: /etc/bpfman
@@ -570,7 +576,7 @@
       changed_when: false
       become: true
 
-    # pwquality minlen=14 covered by verify-dnf.yml (included at line 35)
+    # pwquality minlen (system_pwquality_minlen) covered by shared/verify-dnf.yml
 
     # --- Journald persistence ---
     - name: Verify /var/log/journal exists for persistent logging
@@ -730,18 +736,13 @@
     - name: Check sos is installed (sosreport diagnostic bundle tool)
       ansible.builtin.command: rpm -q sos  # noqa: command-instead-of-module
       changed_when: false
-      when: profile | default('personal') == 'work'  # sos is in packages_support_work (work-profile only)
+      when: profile | default('personal') == 'work'  # sos is work-profile only; skipped here (profile forced personal)
 
     # --- distrobox role ---
     - name: Check for distrobox binary
       ansible.builtin.stat:
         path: /usr/bin/distrobox
       register: verify_distrobox_bin
-
-    - name: Check for toolbox binary
-      ansible.builtin.stat:
-        path: /usr/bin/toolbox
-      register: verify_toolbox_bin
 
     - name: Assert distrobox binary is present (installed by packages role)
       ansible.builtin.assert:
@@ -762,7 +763,7 @@
           distrobox role template was not deployed
       when: verify_distrobox_bin.stat.exists
 
-    # --- Notes role (private repo, clone expected to fail gracefully in CI) ---
+    # --- Notes role (converge pre-creates a mock checkout via ci-mock-notes.yml; the clone is skipped) ---
     - name: Verify notes role
       ansible.builtin.import_tasks: ../shared/verify-notes.yml
 

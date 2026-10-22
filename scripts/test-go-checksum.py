@@ -21,7 +21,7 @@ class GoChecksumTests(unittest.TestCase):
                 self.assertFalse(policy.go_checksum_exceptions_safe(pattern, TOOLS))
 
     def test_private_domains_and_literal_owners_are_allowed(self):
-        for pattern in ['', 'none', '*.redhat.com,*.engineering.redhat.com',
+        for pattern in ['', 'none', '*.redhat.com,*.example.internal',
                         'corp.invalid/', 'github.com/private-owner',
                         'github.com/private-owner/*', 'github.com/private-owner/project']:
             with self.subTest(pattern=pattern):
@@ -49,13 +49,18 @@ class GoChecksumTests(unittest.TestCase):
         for pattern, target, expected in [
                 ('github.com/*', 'github.com/owner/repo', True),
                 ('github.*', 'github.com/owner/repo', True),
-                ('*.redhat.com', 'gitlab.cee.redhat.com/owner/repo', True),
+                ('*.example.internal', 'git.example.internal/owner/repo', True),
                 ('github.com/private-owner', 'github.com/private-owner/repo', True),
                 ('github.com/private-owner', 'github.com/private-owner-other/repo', False),
                 ('github.com/*/cmd', 'github.com/owner/repo/cmd', False),
                 ('github.com/*/*', 'github.com/owner', False)]:
             with self.subTest(pattern=pattern, target=target):
                 self.assertEqual(policy.prefix_matches(pattern, target), expected)
+
+
+    def test_distrobox_copy_is_identical(self):
+        self.assertEqual((ROOT / 'roles/packages/filter_plugins/go_checksum.py').read_bytes(),
+                         (ROOT / 'roles/distrobox/filter_plugins/go_checksum.py').read_bytes())
 
 
 if __name__ == '__main__':

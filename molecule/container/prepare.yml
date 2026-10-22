@@ -1,7 +1,7 @@
 ---
 # Prepare: stub out binaries that require internet downloads so converge stays
-# fast and deterministic. The stubs satisfy the 'creates:' and rc-check guards
-# in container-provision-tasks.yml, letting the surrounding task logic execute
+# fast and deterministic. The stubs satisfy the rc-check and version guards
+# in container-provision.yml, letting the surrounding task logic execute
 # without hitting mirror.openshift.com or pkg.go.dev.
 - name: Prepare (container provisioning)
   hosts: all
@@ -25,7 +25,7 @@
         dest: /usr/local/bin/kubectl
         content: |
           #!/bin/sh
-          # Molecule stub — satisfies verify assertion so the download block is skipped.
+          # Molecule stub — source file for the kubectl distrobox-export (verified via ~/.local/bin/kubectl).
           echo "Client Version: stub-4.22.6 (molecule test)"
           exit 0
         mode: "0755"

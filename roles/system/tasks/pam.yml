@@ -184,6 +184,8 @@
       changed_when: false
       check_mode: false
       failed_when: _pam_authselect_preauth_count.stdout | int != 1
+      # check mode: enable-feature is simulated, so the real file lacks the stanzas yet
+      when: not ansible_check_mode or system_authselect_faillock_check.rc | default(0) == 0
 
     - name: Verify pam_faillock.so control flags in system-auth (functional guard)
       ansible.builtin.shell:
@@ -201,6 +203,8 @@
       check_mode: false
       register: _pam_faillock_control_flags_check
       failed_when: false
+      # check mode: enable-feature is simulated, so the real file lacks the stanzas yet
+      when: not ansible_check_mode or system_authselect_faillock_check.rc | default(0) == 0
 
     - name: Fail if pam_faillock.so control flags are incorrect (functional guard)
       ansible.builtin.fail:
@@ -222,6 +226,7 @@
         dest: /etc/pam.d/system-auth
         remote_src: true
         mode: preserve
+        follow: true  # system-auth is a symlink into /etc/authselect; replacing it breaks authselect check
       when: not (ansible_check_mode | bool)
 
     - name: Fail with clear rollback message
@@ -263,34 +268,27 @@
         cmd: |
           set -euo pipefail
           path=/etc/pam.d/common-auth
-          preauth='auth    required                        pam_faillock.so preauth'
-          authfail='auth    [default=die]                  pam_faillock.so authfail'
-          # Idempotency: skip when both lines are already present in correct order
-          if awk '/pam_faillock\.so preauth/{p=NR} /^auth.*pam_unix\.so/ && !u {u=NR} /pam_faillock\.so authfail/{f=NR} \
-                   END{exit !(p>0 && u>0 && f>0 && p<u && u<f)}' "$path"; then
-            exit 0
-          fi
-          # Atomic rewrite: remove any stale faillock lines, re-insert both in one pass,
-          # write to a temp file in the same directory, validate, then rename (atomic on Linux).
+          # pam-faillock-debian.py inserts preauth/authfail and widens the numeric jumps
+          # ([success=N]) that cross the new rules; a plain insertion made a successful
+          # pam_unix land on pam_deny (every login failed). It is idempotent and repairs a
+          # file converted by the earlier awk version.
           tmp=$(mktemp "${path}.XXXXXX")
           chmod 0644 "$tmp"
           trap 'rm -f "$tmp"' EXIT
-          awk -v preauth="$preauth" -v authfail="$authfail" '
-            /pam_faillock\.so preauth/ || /pam_faillock\.so authfail/ { next }
-            /^auth/ && !pre { print preauth; pre=1 }
-            { print }
-            /^auth.*pam_unix\.so/ { print authfail }
-          ' "$path" > "$tmp"
+          result=$(/usr/bin/python3 -I -c "$PAM_FAILLOCK_CONVERT" "$path" "$tmp")
           # Validate temp file BEFORE committing
           if ! awk '/pam_faillock\.so preauth/{p=NR} /^auth.*pam_unix\.so/ && !u {u=NR} /pam_faillock\.so authfail/{f=NR} \
                      END{exit !(p>0 && u>0 && f>0 && p<u && u<f)}' "$tmp"; then
-            rm -f "$tmp"
             echo "ERROR: Generated PAM config missing required faillock lines or incorrect ordering" >&2
             exit 1
           fi
-          trap - EXIT
-          mv -f "$tmp" "$path"
-          echo changed
+          if [ "$result" = changed ]; then
+            trap - EXIT
+            mv -f "$tmp" "$path"
+            echo changed
+          fi
+      environment:
+        PAM_FAILLOCK_CONVERT: "{{ lookup('file', role_path ~ '/files/pam-faillock-debian.py') }}"
       register: _pam_common_auth_atomic
       changed_when: "'changed' in _pam_common_auth_atomic.stdout"
 
@@ -311,6 +309,7 @@
       changed_when: false
       register: system_pam_faillock_order_check
       failed_when: false
+      check_mode: false  # read-only probe; a skipped result has no rc and would trip the fail below
 
     - name: Fail if pam_faillock.so authfail is not ordered after pam_unix.so in common-auth (Debian)
       ansible.builtin.fail:
@@ -383,6 +382,7 @@
   when:
     - is_apt
     - not system_is_container
+    - not ansible_check_mode  # the insertions above are only simulated in check mode
 
 - name: Assert exactly one pam_faillock.so authfail line in common-auth (Debian)
   ansible.builtin.command:
@@ -394,6 +394,7 @@
   when:
     - is_apt
     - not system_is_container
+    - not ansible_check_mode  # the insertions above are only simulated in check mode
 
 - name: Assert exactly one pam_faillock.so line in common-account (Debian)
   ansible.builtin.command:
@@ -405,6 +406,7 @@
   when:
     - is_apt
     - not system_is_container
+    - not ansible_check_mode  # the insertions above are only simulated in check mode
 
 - name: Assert exactly one pam_pwhistory.so line in common-password (Debian)
   ansible.builtin.command:
@@ -416,6 +418,7 @@
   when:
     - is_apt
     - not system_is_container
+    - not ansible_check_mode  # the insertions above are only simulated in check mode
 
 # --- Debian PAM pwquality (password complexity) ---
 # On Debian, pam_pwquality.so is active in common-password by default (via
@@ -431,21 +434,21 @@
     mode: "0644"
   loop:
     - key: minlen
-      value: "{{ system_pwquality_minlen }}"
+      value: "{{ system_pwquality_minlen | int }}"
     - key: dcredit
-      value: "{{ system_pwquality_dcredit }}"
+      value: "{{ system_pwquality_dcredit | int }}"
     - key: ucredit
-      value: "{{ system_pwquality_ucredit }}"
+      value: "{{ system_pwquality_ucredit | int }}"
     - key: lcredit
-      value: "{{ system_pwquality_lcredit }}"
+      value: "{{ system_pwquality_lcredit | int }}"
     - key: ocredit
-      value: "{{ system_pwquality_ocredit }}"
+      value: "{{ system_pwquality_ocredit | int }}"
     - key: difok
-      value: "{{ system_pwquality_difok }}"
+      value: "{{ system_pwquality_difok | int }}"
     - key: maxrepeat
-      value: "{{ system_pwquality_maxrepeat }}"
+      value: "{{ system_pwquality_maxrepeat | int }}"
     - key: maxsequence
-      value: "{{ system_pwquality_maxsequence }}"
+      value: "{{ system_pwquality_maxsequence | int }}"
   loop_control:
     label: "{{ item.key }}"
   when:
@@ -537,6 +540,7 @@
     - (system_authselect_bin.stat | default({})).exists | default(false)
     - not csb_rhel
     - not system_is_container
+    - not ansible_check_mode or system_authselect_pwhistory_check.rc | default(0) == 0  # enable-feature simulated in check mode
 
 - name: Verify pam_pwhistory.so control flag in system-auth (functional guard)
   ansible.builtin.shell:
@@ -552,6 +556,7 @@
     - (system_authselect_bin.stat | default({})).exists | default(false)
     - not csb_rhel
     - not system_is_container
+    - not ansible_check_mode or system_authselect_pwhistory_check.rc | default(0) == 0  # enable-feature simulated in check mode
 
 - name: Fail if pam_pwhistory.so control flag is incorrect (functional guard)
   ansible.builtin.fail:
@@ -604,21 +609,21 @@
     mode: "0644"
   loop:
     - key: minlen
-      value: "{{ system_pwquality_minlen }}"
+      value: "{{ system_pwquality_minlen | int }}"
     - key: dcredit
-      value: "{{ system_pwquality_dcredit }}"
+      value: "{{ system_pwquality_dcredit | int }}"
     - key: ucredit
-      value: "{{ system_pwquality_ucredit }}"
+      value: "{{ system_pwquality_ucredit | int }}"
     - key: lcredit
-      value: "{{ system_pwquality_lcredit }}"
+      value: "{{ system_pwquality_lcredit | int }}"
     - key: ocredit
-      value: "{{ system_pwquality_ocredit }}"
+      value: "{{ system_pwquality_ocredit | int }}"
     - key: difok
-      value: "{{ system_pwquality_difok }}"
+      value: "{{ system_pwquality_difok | int }}"
     - key: maxrepeat
-      value: "{{ system_pwquality_maxrepeat }}"
+      value: "{{ system_pwquality_maxrepeat | int }}"
     - key: maxsequence
-      value: "{{ system_pwquality_maxsequence }}"
+      value: "{{ system_pwquality_maxsequence | int }}"
   loop_control:
     label: "{{ item.key }}"
   when:

@@ -7,7 +7,7 @@
 # (GOSUMDB) is the correct integrity mechanism — it's validated below. See 812cd185.
 #
 # SUPPLY CHAIN MODEL: GOSUMDB prevents tampered modules; this file fails on checksum
-# mismatches and never retries them (retry logic stops on 'checksum mismatch' in stderr).
+# mismatches and never retries them (only 'permission denied' is retried).
 # Known gap: maintainer compromise passes GOSUMDB (same as XZ Utils 2024 vector).
 
 - name: Compute effective GOSUMDB proxy environment
@@ -64,16 +64,30 @@
     return_content: false
   changed_when: false
   register: gosumdb_reachability
-  failed_when: gosumdb_reachability.status != 200
+  failed_when: false  # offline is handled below: warn and skip go install
   retries: 2
   delay: 3
-  until: gosumdb_reachability.status == 200
+  until: gosumdb_reachability.status | default(-1) == 200
+  # nothing to verify (personal profile or empty lists): a sum.golang.org blip must not fail the play
+  when: (packages_go_install + (packages_go_install_work | default([]) if profile == 'work' else [])) | length > 0
   environment:
     # omit preserves inherited proxy; only override when explicitly configured
     HTTPS_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"
     # omit preserves inherited proxy; only override when explicitly configured
     HTTP_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"
 
+- name: Record whether the Go checksum database is reachable
+  ansible.builtin.set_fact:
+    _packages_go_online: >-
+      {{ gosumdb_reachability is skipped or (gosumdb_reachability.status | default(-1)) == 200 }}
+
+- name: Warn that Go tool installs are skipped (GOSUMDB unreachable)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: {{ packages_gosumdb | default('sum.golang.org') }} is unreachable
+      ({{ gosumdb_reachability.msg | default('no response') | string | truncate(120) }});
+      skipping Go tool installs (optional tooling). Re-run `make packages` when online.
+  when: not _packages_go_online
 
 - name: "Validate GOTOOLCHAIN=auto: probe proxy.golang.org for toolchain reachability"
   # When GOTOOLCHAIN=auto and the installed Go is older than work tools require (1.26+
@@ -96,6 +110,7 @@
     - packages_gotoolchain == 'auto'
     - profile == 'work'
     - _golang_available | default(false)
+    - _packages_go_online
     - _golang_installed_version is defined
     - _golang_installed_version is version('1.26', '<')
 
@@ -115,6 +130,7 @@
     - packages_gotoolchain == 'auto'
     - profile == 'work'
     - _golang_available | default(false)
+    - _packages_go_online
     - _golang_installed_version is defined
     - _golang_installed_version is version('1.26', '<')
     - _gotoolchain_proxy_probe is defined
@@ -127,7 +143,7 @@
     mode: "0700"
 
 - name: Assert Go version sufficient for work tools when GOTOOLCHAIN=local
-  # gopls requires Go 1.26+; gofumpt/govulncheck require Go 1.25+. Fedora 44 ships Go 1.24.
+  # gopls requires Go 1.26+; gofumpt/govulncheck require Go 1.25+ (Fedora 44 ships 1.26; Debian 13 ships 1.24).
   # With GOTOOLCHAIN=local, go install exits non-zero for modules requiring a newer toolchain,
   # causing an opaque "Go tool install failed" error.  Fail early with an actionable message.
   ansible.builtin.assert:
@@ -197,7 +213,9 @@
              + [item] }}
       timeout: "{{ 600 if item in _packages_subctl_go_modules else 300 }}"
       changed_when: true
-      when: _golang_available | default(false)
+      when:
+        - _golang_available | default(false)
+        - _packages_go_online
       environment:
         GOPATH: "{{ ansible_facts['user_dir'] }}/go"
         GOBIN: >-
@@ -223,12 +241,11 @@
       loop_control:
         label: "{{ item | regex_replace('@.*', '') | basename }}"
       register: packages_go_results
-      # PERMISSION-DENIED IS TRANSIENT: Retried (not task failure). All other errors
-      # (checksum mismatch, GOSUMDB timeout) halt immediately to prevent TOCTOU bypass.
-      # Do NOT set failed_when: false — masks checksum mismatches (init() injection risk).
-      failed_when: |-
-        packages_go_results.rc != 0 and
-        'permission denied' not in (packages_go_results.stderr | default(''))
+      # PERMISSION-DENIED IS TRANSIENT: retried via until. Failures are not raised here; the
+      # tasks below fail the play on checksum mismatches (after the loop) and on any non-network
+      # error, and only network errors degrade to a warning. A task-level failure here would
+      # abort the play before that classification could run.
+      failed_when: false
       retries: 3
       delay: 5
       until: |-
@@ -239,6 +256,12 @@
       when:
         - _golang_available | default(false)
         - _packages_subctl_go_modules | length > 0
+        - _packages_go_online
+        # copy only after a successful build; skipped (check mode), failed or timed-out builds
+        # leave no binary and are classified after the block
+        - >-
+          packages_go_results.results | default([]) | selectattr('rc', 'defined') | selectattr('rc', '==', 0)
+          | selectattr('item', 'in', _packages_subctl_go_modules) | list | length > 0
       block:
         - name: Copy compiled subctl main package to Go bin directory
           ansible.builtin.copy:
@@ -254,12 +277,14 @@
       when: _packages_subctl_go_tmpdir.path is defined
 
 - name: Collect failed Go tool names (checksum or permission errors)
+  vars:
+    _packages_go_ran: "{{ packages_go_results.results | default([]) | rejectattr('skipped', 'defined') | list }}"
   ansible.builtin.set_fact:
+    # Items without an rc (task timeout) count as failed; skipped items do not.
     _packages_go_failed: >-
       {{
-        packages_go_results.results | default([])
-        | selectattr('rc', 'defined')
-        | selectattr('rc', '!=', 0)
+        ((_packages_go_ran | rejectattr('rc', 'defined') | list)
+         + (_packages_go_ran | selectattr('rc', 'defined') | rejectattr('rc', 'eq', 0) | list))
         | map(attribute='item')
         | list
       }}
@@ -274,7 +299,7 @@
         | list
       }}
 
-- name: Fail immediately on checksum verification errors (init() injection risk)
+- name: Fail on checksum verification errors (init() injection risk)
   ansible.builtin.fail:
     msg: >-
       Go module checksum verification failed for: {{ _packages_go_checksum_errors | join(', ') }}.
@@ -302,9 +327,48 @@
     - _packages_go_failed | length > 0
     - _packages_go_checksum_errors | length == 0
 
-- name: Fail on Go tool install errors (non-CSB)
-  ansible.builtin.fail:
-    msg: "Go tool install failed: {{ _packages_go_failed | join(', ') }}"
+- name: Classify Go tool failures (network vs other)
+  ansible.builtin.set_fact:
+    # a task timeout carries no rc/stderr; it is treated as a network failure
+    _packages_go_network_failed: >-
+      {{
+        (packages_go_results.results | default([])
+         | rejectattr('skipped', 'defined')
+         | rejectattr('rc', 'defined')
+         | map(attribute='item') | list)
+        + (packages_go_results.results | default([])
+           | selectattr('rc', 'defined')
+           | selectattr('rc', '!=', 0)
+           | selectattr('stderr', 'defined')
+           | selectattr('stderr', 'search', _packages_go_network_re)
+           | map(attribute='item') | list)
+      }}
+  vars:
+    _packages_go_network_re: "{{ _packages_go_network_errors | join('|') }}"
+    _packages_go_network_errors:
+      - dial tcp
+      - no such host
+      - i/o timeout
+      - Client.Timeout
+      - proxyconnect
+      - connection refused
+      - network is unreachable
+      - TLS handshake timeout
+      - temporary failure in name resolution
+
+- name: Warn about Go tools skipped due to network errors
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Go tool install failed due to network errors (optional tooling; continuing):
+      {{ _packages_go_network_failed | join(', ') }}. Re-run `make packages` when online.
   when:
     - not csb_rhel | bool
-    - _packages_go_failed | length > 0
+    - _packages_go_network_failed | length > 0
+
+- name: Fail on Go tool install errors (non-CSB)
+  ansible.builtin.fail:
+    msg: >-
+      Go tool install failed: {{ _packages_go_failed | difference(_packages_go_network_failed) | join(', ') }}
+  when:
+    - not csb_rhel | bool
+    - _packages_go_failed | difference(_packages_go_network_failed) | length > 0

@@ -1,23 +1,9 @@
 # {{ ansible_managed }}
 [{{ distrobox_container_name | regex_replace('[\r\n]', '') }}]
 image={{ distrobox_container_image | regex_replace('[\r\n]', '') }}
-{% if distrobox_use_host_network %}
-# Host networking: container shares the host network namespace.
-# CAP_NET_ADMIN grants full iptables/nftables/routing control over the host stack.
-# Required for OVN-K/bpfman scenarios; set distrobox_use_host_network: false for general dev.
-# --cgroupns=private: container sees only its own cgroup subtree, not host service/PID metadata.
-# ACCEPTED RISK: systemd-in-container may behave unexpectedly under a private cgroup namespace
-# if the container runtime assigns a deep slice path that systemd cannot fully introspect.
-# Tested with Podman rootless + crun; if systemd fails to start, remove --cgroupns=private
-# and document the specific runtime version as a known exception.
-# Distrobox supplies --network=host itself; a second network flag conflicts.
-additional_flags=--cap-add CAP_BPF --cap-add CAP_NET_ADMIN --cap-add CAP_PERFMON --cgroupns=private
-{% else %}
-# Isolated network (pasta): container has its own network namespace; CAP_NET_ADMIN omitted.
-# Set distrobox_use_host_network: true in config.yml only for OVN-K/bpfman host-network scenarios.
 # CAP_BPF + CAP_PERFMON: inert when kernel.unprivileged_bpf_disabled=2 (write-locked default) because
 # the kernel rejects bpf() from non-root processes regardless of container capabilities.
-# WARNING: lowering system_unprivileged_bpf_disabled to 0 or 1 in config.yml activates bpf() access
+# WARNING: lowering system_unprivileged_bpf_disabled to 0 (or 1 on a custom kernel) in config.yml activates bpf() access
 # for ALL container processes holding CAP_BPF (including transitive npm/cargo/pip dependencies).
 # Any malicious package inside the container can then load eBPF programs attaching to host kprobes
 # or tracepoints. Only lower that sysctl if you understand this trade-off.
@@ -27,6 +13,15 @@ additional_flags=--cap-add CAP_BPF --cap-add CAP_NET_ADMIN --cap-add CAP_PERFMON
 # if the container runtime assigns a deep slice path that systemd cannot fully introspect.
 # Tested with Podman rootless + crun; if systemd fails to start, remove --cgroupns=private
 # and document the specific runtime version as a known exception.
+{% if distrobox_use_host_network %}
+# Host networking: container shares the host network namespace.
+# CAP_NET_ADMIN grants full iptables/nftables/routing control over the host stack.
+# Required for OVN-K/bpfman scenarios; set distrobox_use_host_network: false for general dev.
+# Distrobox supplies --network=host itself; a second network flag conflicts.
+additional_flags=--cap-add CAP_BPF --cap-add CAP_NET_ADMIN --cap-add CAP_PERFMON --cgroupns=private
+{% else %}
+# Isolated network (pasta): container has its own network namespace; CAP_NET_ADMIN omitted.
+# Set distrobox_use_host_network: true in config.yml only for OVN-K/bpfman host-network scenarios.
 # Disable Distrobox's implicit host network before choosing pasta.
 unshare_netns=true
 additional_flags=--network=pasta --cap-add CAP_BPF --cap-add CAP_PERFMON --cgroupns=private

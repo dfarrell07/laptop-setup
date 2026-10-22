@@ -92,18 +92,20 @@
   ansible.builtin.getent:
     database: group
 
+# gpasswd resolves the user through NSS, so it also works for SSSD/IdM accounts that are not
+# in /etc/passwd; usermod (ansible.builtin.user) exits "user does not exist in /etc/passwd".
 - name: Add user to libvirt and kvm groups (Play 2 — groups exist after install)
-  ansible.builtin.user:
-    name: "{{ real_user_id }}"
-    groups: [libvirt, kvm]
-    append: true
+  ansible.builtin.command:
+    argv: [gpasswd, -a, "{{ real_user_id }}", "{{ item }}"]
+  loop: [libvirt, kvm]
   become: true
   tags: [become]
+  changed_when: true
   when:
     - real_user_id is defined
     - real_user_id | length > 0
-    - "'libvirt' in ansible_facts.getent_group"
-    - "'kvm' in ansible_facts.getent_group"
+    - item in ansible_facts.getent_group
+    - real_user_id not in (ansible_facts.getent_group[item][2] | default('', true)).split(',')
   # No failed_when:false — groups are confirmed present, failures are real errors.
   register: _virt_group_add
 

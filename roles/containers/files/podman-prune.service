@@ -8,15 +8,11 @@ Type=oneshot
 # skips non-dangling images regardless of the label filter
 ExecStart=/usr/bin/podman system prune --force --filter label!=manager=distrobox
 
-# Systemd sandbox options to limit privilege escalation via setuid helpers
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-# Rootless podman container storage and runtime directories
-ReadWritePaths=%h/.local/share/containers
-ReadWritePaths=%t/containers
-ProtectHostname=true
-ProtectClock=true
+# Seccomp-only hardening; no NoNewPrivileges (newuidmap needs its file capabilities when
+# no rootless pause process exists yet). Namespacing options (PrivateTmp, ProtectSystem, ProtectHostname,
+# ProtectClock) make the user manager run the unit in its own user namespace, and rootless
+# podman then cannot join its existing one ("cannot re-exec process to join the existing
+# user namespace"), so every prune failed.
 LockPersonality=true
 RestrictRealtime=true
 # podman communicates over Unix sockets only (no network needed for prune)

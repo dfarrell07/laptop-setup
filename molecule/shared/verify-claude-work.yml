@@ -19,26 +19,43 @@
       mode={{ verify_claude_work.stat.mode | default('absent') }},
       expected isdir+0700)
 
-- name: Verify Claude work settings.local.json exists
+- name: Verify Claude work settings.json exists
   ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/.claude-work/settings.local.json"
+    path: "{{ ansible_user_dir }}/.claude-work/settings.json"
   register: verify_claude_work_settings
 
-- name: Assert Claude work settings.local.json exists with mode 0600
+- name: Assert Claude work settings.json exists with mode 0600
   ansible.builtin.assert:
     that:
       - verify_claude_work_settings.stat.exists
       - verify_claude_work_settings.stat.mode == '0600'
-    fail_msg: "Claude work settings.local.json not deployed or wrong permissions"
+    fail_msg: "Claude work settings.json not deployed or wrong permissions"
+
+- name: Verify Claude work legacy settings.local.json is not used
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.claude-work/settings.local.json"
+  register: verify_claude_work_legacy
+
+- name: Assert Claude work legacy settings.local.json is absent
+  ansible.builtin.assert:
+    that: not verify_claude_work_legacy.stat.exists
+    fail_msg: "Role-written settings.local.json still present; the CLI does not read it from the config dir"
 
 - name: Read Claude work settings for structural verification
   ansible.builtin.slurp:
-    src: "{{ ansible_user_dir }}/.claude-work/settings.local.json"
+    src: "{{ ansible_user_dir }}/.claude-work/settings.json"
   register: verify_claude_work_content
   no_log: true
   when: verify_claude_work_settings.stat.exists
 
-- name: Validate Claude work settings.local.json sandbox and deny config
+- name: Assert Claude work settings are readable before deny-rule checks
+  ansible.builtin.assert:
+    that:
+      - verify_claude_work_settings.stat.exists
+      - verify_claude_work_content.content is defined
+    fail_msg: "settings.json missing — deny-rule assertions would be skipped"
+
+- name: Validate Claude work settings.json sandbox and deny config
   vars:
     _work_settings: "{{ verify_claude_work_content.content | b64decode | from_json }}"
   ansible.builtin.assert:
@@ -47,8 +64,13 @@
       - _work_settings.sandbox.failIfUnavailable | default(false) == true
       - _work_settings.sandbox.allowUnsandboxedCommands | default(true) == false
       - _work_settings.enableAllProjectMcpServers | default(true) == false
-      - "'Write(**/.git/hooks/**)' in _work_settings.permissions.deny"
       - "'Edit(**/.git/hooks/**)' in _work_settings.permissions.deny"
+      - "'Edit(**/.githooks/**)' in _work_settings.permissions.deny"
+      # Write(path) rules are ignored by the CLI (with a startup warning); Edit(path) covers Write
+      - _work_settings.permissions.deny | select('match', 'Write\\(') | list | length == 0
+      # Each instance isolates the others but keeps its own memory and plans readable
+      - "'Read(~/.claude-work/**)' not in _work_settings.permissions.deny"
+      - "'Read(~/.claude-work/.credentials.json)' in _work_settings.permissions.deny"
   when: verify_claude_work_settings.stat.exists
 
 - name: Verify Claude work CLAUDE.md exists

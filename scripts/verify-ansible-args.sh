@@ -28,16 +28,81 @@ IFS=$'\n\t'  # SECURITY: reset IFS to safe value; prevents word-splitting bypass
 # NOTE: By the time this line runs the BASH_ENV payload has already executed if the
 # variable was somehow inherited; this guard is strictly for child-process containment.
 unset BASH_ENV ZDOTDIR ENV
+# SECURITY: shell-trace vectors. Turn tracing off and drop the variables that re-enable it
+# in child bash processes (vault-pass.sh) or redirect trace output to an attacker fd.
+{ set +x; } 2>/dev/null
+unset BASH_XTRACEFD PS4 2>/dev/null || true
+# SHELLOPTS is readonly in bash; unset fails there, so also strip it from the exported env.
+if ! unset SHELLOPTS 2>/dev/null; then export -n SHELLOPTS; fi
+unset BASHOPTS 2>/dev/null || export -n BASHOPTS
 unset CDPATH  # CDPATH injection: cd "scripts/.." searches CDPATH before CWD; poisons _repo_root and all downstream exports
 
 # Collect all command-line arguments after the script name
 args=("$@")
+# --run-log=NAME (wrapper option, consumed here): log this run to a private file under the
+# invoking user's validated home. Only the name is caller-controlled; the directory is fixed.
+_run_log_name=""
+if [[ ${#args[@]} -gt 0 && "${args[0]}" == --run-log=* ]]; then
+    _run_log_name="${args[0]#--run-log=}"
+    args=("${args[@]:1}")
+    if [[ ! "$_run_log_name" =~ ^[a-z][a-z0-9-]{0,31}$ ]]; then
+        echo "ERROR: --run-log name must match ^[a-z][a-z0-9-]{0,31}\$" >&2
+        exit 1
+    fi
+fi
+
+# Canonicalize guarded long options before scanning: argparse accepts any unambiguous prefix
+# (--ext, --vault-i, --skip) and the --vault-pass-file alias, none of which the exact-match
+# guards below would see. The rewritten spelling is also what reaches ansible-playbook.
+for ((_ci=0; _ci<${#args[@]}; _ci++)); do
+    _ca="${args[$_ci]}"
+    [[ "$_ca" == --?* ]] || continue
+    _cn="${_ca%%=*}"; _cr="${_ca#"$_cn"}"
+    [[ ${#_cn} -ge 3 ]] || continue
+    for _cg in --start-at-task --extra-vars --vault-id --vault-password-file --vault-pass-file --skip-tags; do
+        if [[ "$_cg" == "$_cn"* ]]; then
+            [[ "$_cg" == --vault-pass-file ]] && _cg=--vault-password-file
+            args[_ci]="${_cg}${_cr}"
+            break
+        fi
+    done
+done
+unset _ci _ca _cn _cr _cg
+
+# YAML/JSON extra-vars with backslash escapes ("\x63sb_rhel") decode to protected key names after the
+# literal-substring guards below have run; no legitimate caller passes escaped structured values.
+for ((_ci=0; _ci<${#args[@]}; _ci++)); do
+    _ca="${args[$_ci]}"
+    _cv=""
+    case "$_ca" in
+        --extra-vars=*) _cv="${_ca#--extra-vars=}" ;;
+        -e?*)           _cv="${_ca#-e}" ;;
+        -e|--extra-vars) _cv="${args[$((_ci+1))]:-}" ;;
+    esac
+    if [[ "$_cv" == [\{\[]* && "$_cv" == *\\* ]]; then
+        echo "ERROR: backslash escapes in structured extra-vars rejected by VERIFY_AND_RUN (could hide protected variable names)" >&2
+        exit 1
+    fi
+done
+unset _ci _ca _cv
 
 # Reject specific dangerous flags only
 # NOTE: --tags and --skip-tags are NOT blocked globally — they're needed for role-specific
 # make targets (make claude, make system, etc.). Only --start-at-task and --skip-tags always
 # are blocked, as they specifically bypass pre-flight security checks.
 for arg in "${args[@]}"; do
+    # Abbreviated long options (argparse accepts any unambiguous prefix): reject every
+    # --start-at*/--start-t* spelling and every --skip-t* spelling that is not exactly
+    # handled below (legitimate callers pass --skip-tags only via the checked forms).
+    if [[ "$arg" == --start-at* || "$arg" == --start-t* || "$arg" == --start ]]; then
+        echo "ERROR: --start-at-task (or abbreviation '$arg') rejected by VERIFY_AND_RUN" >&2
+        exit 1
+    fi
+    if [[ "$arg" == --skip-tag || "$arg" == --skip-tag=* || "$arg" == --skip-ta || "$arg" == --skip-ta=* \
+          || "$arg" == --skip-t || "$arg" == --skip-t=* || "$arg" == --skip-tags=*always* ]]; then
+        echo "ERROR: --skip-tags abbreviation or always-skip '$arg' rejected by VERIFY_AND_RUN" >&2
+        exit 1
+    fi
     # Block --start-at-task: skips pre_tasks entirely, bypassing all Play 0 security checks
     if [[ "$arg" == '--start-at-task' || "$arg" == --start-at-task=* || "$arg" == '--start-task' ]]; then
         cat >&2 <<EOF
@@ -298,6 +363,40 @@ EOF
     fi
 done
 
+# Generic extra-vars scan: argparse accepts abbreviated long options (--extra=, --extra-v=)
+# and attached short forms (-ecsb_rhel=true), none of which match the exact-form checks
+# above. Normalise every extra-vars spelling (attached or separate value) and test the
+# value against every protected key.
+_protected_keys='csb_rhel|_csb_molecule_force|_pf_[A-Za-z0-9_]*|system_sysctl_hardening|common_project_root'
+_check_extra_value() {
+    local v="$1"
+    if [[ "$v" == @* ]]; then
+        echo "ERROR: @file extra-vars rejected by VERIFY_AND_RUN" >&2
+        exit 1
+    fi
+    if [[ "$v" =~ ($_protected_keys) ]]; then
+        echo "ERROR: extra-vars containing protected key '${BASH_REMATCH[1]}' rejected by VERIFY_AND_RUN" >&2
+        exit 1
+    fi
+}
+for ((i=0; i<${#args[@]}; i++)); do
+    _a="${args[$i]}"
+    if [[ "$_a" == --extra* ]]; then
+        if [[ "$_a" == *=* ]]; then
+            _check_extra_value "${_a#*=}"
+        elif (( i+1 < ${#args[@]} )); then
+            _check_extra_value "${args[$((i+1))]}"
+        fi
+    elif [[ "$_a" == -e* ]]; then
+        if [[ "$_a" == -e ]]; then
+            (( i+1 < ${#args[@]} )) && _check_extra_value "${args[$((i+1))]}"
+        else
+            _check_extra_value "${_a#-e}"
+        fi
+    fi
+done
+unset _a
+
 # Override or clear critical env vars to prevent environment-injection attacks.
 # Key high-risk vectors (see also inline comments below for ANSIBLE_LIBRARY, ANSIBLE_FORCE_HANDLERS, ANSIBLE_BECOME_*, NSS_WRAPPER_*, TMPDIR, MOLECULE_*): — SET known-safe values; UNSET those that must be clean:
 #   ANSIBLE_CONFIG              — evil cfg replaces all plugin paths + vault_password_file
@@ -360,19 +459,26 @@ _repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 # These shadow the real binaries and defeat the HOME and USER identity checks below.
 # `unset NSS_WRAPPER_PASSWD` above only guards libc-level interception; it does NOT remove
 # bash function definitions injected via BASH_ENV.
-unset -f id getent cut awk command
+# Unset EVERY inherited function (exported BASH_FUNC_* imports can shadow grep, sed, ...), not a fixed list.
+while IFS= read -r _fn; do unset -f "$_fn"; done < <(compgen -A function)
+unset _fn
+# Resolve identity tools from the system directories only, so a caller-supplied PATH cannot spoof them.
+_sp() { PATH=/usr/bin:/bin:/usr/sbin:/sbin command "$@"; }
 
 # SECURITY: Validate HOME matches /etc/passwd to prevent home directory hijacking.
 # An attacker setting HOME=/home/victim causes account_hardening.yml to chmod victim's home
 # as root (become: true) and routes ANSIBLE_COLLECTIONS_PATH through victim's ~/.ansible.
-_invoking_user="$(id -un)"
+_invoking_user="$(_sp id -un)"
 _passwd_home=""
-if command -v getent &>/dev/null; then
-    _passwd_home="$(getent passwd "${_invoking_user}" 2>/dev/null | cut -d: -f6)"
-elif command -v dscl &>/dev/null; then
-    _passwd_home="$(dscl . -read "/Users/${_invoking_user}" NFSHomeDirectory 2>/dev/null | awk '{print $2}')"
+if _sp getent --help &>/dev/null || [[ -x /usr/bin/getent ]]; then
+    _passwd_home="$(_sp getent passwd "${_invoking_user}" 2>/dev/null | _sp cut -d: -f6 || true)"
+elif [[ -x /usr/bin/dscl ]]; then
+    _passwd_home="$(_sp dscl . -read "/Users/${_invoking_user}" NFSHomeDirectory 2>/dev/null | _sp awk '{print $2}' || true)"
 fi
-if [[ -n "${_passwd_home}" && "${HOME}" != "${_passwd_home}" ]]; then
+# Compare resolved paths: a trailing slash or a symlinked home (ostree /home -> /var/home) is the
+# same directory; a different directory still fails.
+_canon_dir() { (cd "$1" 2>/dev/null && pwd -P) || printf '%s' "$1"; }
+if [[ -n "${_passwd_home}" && "$(_canon_dir "${HOME}")" != "$(_canon_dir "${_passwd_home}")" ]]; then
     cat >&2 <<EOF
 ERROR: HOME mismatch — possible home directory hijack attempt
   HOME env var : ${HOME}
@@ -399,6 +505,23 @@ unset _invoking_user _passwd_home
 unset LANG LC_ALL LC_CTYPE LC_MESSAGES LC_COLLATE LC_NUMERIC LC_TIME LC_MONETARY LANGUAGE NLSPATH
 export LC_ALL=C.UTF-8  # pin locale to C.UTF-8: ASCII-compatible ordering and English output for grep/gpg pattern matching, while satisfying Ansible's UTF-8 encoding requirement; bare 'C' locale yields ANSI_X3.4-1968 encoding which Ansible rejects at startup
 
+# SECURITY: clear EVERY exported ANSIBLE_* variable before the pinned set below is exported,
+# so only the pinned values survive. A denylist cannot keep up with new settings
+# (ANSIBLE_VAULT_IDENTITY_LIST, ANSIBLE_*_PLUGINS, ANSIBLE_DEBUG, ANSIBLE_PRIVATE_KEY_FILE...).
+# Allowlist: the two cosmetic Makefile-exported output settings, re-exported only when valid.
+# Molecule does not need inherited ANSIBLE_*: its provisioner env comes from molecule.yml and
+# is set by molecule itself after this wrapper has exec'd it.
+_keep_ok_hosts=""
+_keep_result_format=""
+[[ "${ANSIBLE_DISPLAY_OK_HOSTS:-}" =~ ^(true|false)$ ]] && _keep_ok_hosts="$ANSIBLE_DISPLAY_OK_HOSTS"
+[[ "${ANSIBLE_CALLBACK_RESULT_FORMAT:-}" =~ ^(json|yaml)$ ]] && _keep_result_format="$ANSIBLE_CALLBACK_RESULT_FORMAT"
+while IFS= read -r _v; do
+    unset "$_v"
+done < <(compgen -e | grep '^ANSIBLE_' || true)
+[[ -z "$_keep_ok_hosts" ]] || export ANSIBLE_DISPLAY_OK_HOSTS="$_keep_ok_hosts"
+[[ -z "$_keep_result_format" ]] || export ANSIBLE_CALLBACK_RESULT_FORMAT="$_keep_result_format"
+unset _v _keep_ok_hosts _keep_result_format
+
 export ANSIBLE_CONFIG="${_repo_root}/ansible.cfg"
 export ANSIBLE_VAULT_PASSWORD_FILE="${_repo_root}/scripts/vault-pass.sh"
 export ANSIBLE_VAULT_ID_MATCH=False  # prevent ANSIBLE_VAULT_ID_MATCH=true lockout: default encryption (ansible-vault encrypt) uses @default label; if an attacker sets ID_MATCH=true and label mismatches, all vault-sourced vars (SSH keys, authorized_keys, registry tokens) fail to decrypt — post-reboot host becomes SSH-inaccessible on port 722
@@ -409,7 +532,7 @@ export ANSIBLE_ACTION_PLUGINS="${_repo_root}/action_plugins"
 export ANSIBLE_STRATEGY_PLUGINS="${_repo_root}/strategy_plugins"
 export ANSIBLE_HOME="${_repo_root}"  # pin ANSIBLE_HOME — ANSIBLE_HOME=/tmp/evil shifts DEFAULT_MODULE_UTILS_PATH to include /tmp/evil/plugins/module_utils before the installed package; Ansible's module loader searches that path first so a malicious basic.py at /tmp/evil/plugins/module_utils/ansible/module_utils/basic.py executes in root context (Play 1, become:true) for every ansible.builtin.* module across all 13 roles; pinning to _repo_root (validated, non-attacker-writable) prevents this prepend
 export ANSIBLE_MODULE_UTILS=/dev/null       # clear ANSIBLE_MODULE_UTILS — direct env var for module_utils search path; an attacker-set value prepends /tmp/evil/module_utils before built-in paths at PluginLoader resolution time; clearing forces Ansible to use only compiled-in module_utils from the installed package, regardless of ANSIBLE_HOME
-export ANSIBLE_LIBRARY=""         # prevent ANSIBLE_LIBRARY=/tmp/evil hijacking short-name module resolution (runs before builtins, become: true = root)
+export ANSIBLE_LIBRARY=/dev/null  # an empty value means the current directory; prevent ANSIBLE_LIBRARY=/tmp/evil hijacking short-name module resolution (runs before builtins, become: true = root)
 # Empty path strings are resolved as the current directory by Ansible 2.21.
 # /dev/null supplies no custom plugin directory while retaining built-in plugins.
 export ANSIBLE_FILTER_PLUGINS=/dev/null  # no local filter plugins; prevent shadowing built-ins (e.g. from_yaml) via env injection
@@ -429,6 +552,9 @@ unset ANSIBLE_PYTHON_INTERPRETER  # attacker-controlled interpreter runs arbitra
 # become:true, the evil interpreter controls AnsiballZ content fed to sudo → root RCE.
 unset ANSIBLE_INTERPRETER_PYTHON_FALLBACK
 unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT LD_DEBUG LD_DEBUG_OUTPUT LD_ORIGIN_PATH GLIBC_TUNABLES MALLOC_CONF  # linker injection — .so hijacks user-context ansible-playbook before sudo strips it from become; GLIBC_TUNABLES/MALLOC_CONF inherited by SUID sudo (CVE-2023-4911 class)
+unset NODE_TLS_REJECT_UNAUTHORIZED NODE_EXTRA_CA_CERTS npm_config_registry npm_config_cache npm_config_prefix SSH_SK_PROVIDER GIT_ASKPASS GIT_PROXY_COMMAND PIP_FIND_LINKS PIPX_HOME GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS GIT_CONFIG_SYSTEM  # tool-control vars (SSH FIDO provider, git askpass/proxy/config injection, pip/pipx sources, node TLS)
+while IFS= read -r _gv; do unset "$_gv"; done < <(compgen -e | grep -E '^GIT_CONFIG_(KEY|VALUE)_')
+unset _gv
 unset NODE_OPTIONS NODE_PATH NPM_CONFIG_REGISTRY NPM_CONFIG_CACHE NPM_CONFIG_PREFIX  # Node/npm injection — NODE_OPTIONS=--require /tmp/evil.js loads into any npm/node child process (e.g. npx commitlint, future node tooling); NPM_CONFIG_REGISTRY/CACHE/PREFIX redirect package fetches or writes to attacker-controlled paths; defense-in-depth for ansible-playbook child processes (Makefile unexport is the load-bearing fix)
 unset TMPDIR TEMP TMP  # TMPDIR redirection attack: attacker sets TMPDIR=/tmp/evil; Python tempfile.gettempdir() checks TMPDIR first, so Ansible AnsiballZ module staging writes .py files into attacker-controlled dir; inotifywait race replaces module between write and sudo exec, achieving root code execution
 unset ANSIBLE_LOCAL_TEMP ANSIBLE_REMOTE_TEMP  # Ansible-specific tmp overrides: these env vars take precedence over local_tmp/remote_tmp ini pins in ansible.cfg (confirmed via ansible-config list); attacker sets ANSIBLE_LOCAL_TEMP=/var/tmp (exec-capable) to redirect AnsiballZ module staging to an attacker-writable path, enabling the same inotifywait race-condition root RCE described above — unset TMPDIR/TEMP/TMP does NOT guard against these Ansible-specific vars
@@ -449,6 +575,26 @@ unset ANSIBLE_CALLBACK_WHITELIST  # pre-2.15 alias for ANSIBLE_CALLBACKS_ENABLED
 unset ANSIBLE_ENABLE_TASK_DEBUGGER  # ANSIBLE_ENABLE_TASK_DEBUGGER=true drops into interactive task debugger on any failure; 'p task.args' in the debugger prints all task arguments including vault-decrypted SSH keys, registry tokens, and passwords
 unset ANSIBLE_LOG_FOLDER  # log_plays output directory control — log_plays reads ANSIBLE_LOG_FOLDER (default /var/log/ansible/hosts/); without this unset an attacker sets ANSIBLE_LOG_FOLDER=/tmp/evil/ to make the log_plays callback write to an attacker-controlled writable path
 unset ANSIBLE_LOG_PATH  # general Ansible run log — note: ANSIBLE_LOG_PATH is separate from ANSIBLE_LOG_FOLDER (log_plays); Ansible core reads this env var as ansible.cfg log_path; if set by an attacker, all task output (including debug output of vault-decrypted vars) is written to the specified path
+if [[ -n "$_run_log_name" ]]; then
+    # HOME was validated against the passwd database above. Ansible's log_path records the
+    # terminal output with no_log values censored; files are 0600 in a 0700 directory.
+    _run_log_dir="${HOME}/.cache/laptop-setup/logs"
+    if [[ -L "$_run_log_dir" ]]; then
+        echo "ERROR: ${_run_log_dir} is a symlink; refusing to log there" >&2
+        exit 1
+    fi
+    install -d -m 0700 "$_run_log_dir"
+    _run_log="${_run_log_dir}/${_run_log_name}-$(date +%Y%m%d-%H%M%S).log"
+    install -m 0600 /dev/null "$_run_log"
+    ln -sfn "${_run_log##*/}" "${_run_log_dir}/${_run_log_name}-latest.log"
+    # keep the newest 20 logs per name (generated names contain no whitespace)
+    # shellcheck disable=SC2012
+    ls -1t "${_run_log_dir}/${_run_log_name}-"[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9].log | tail -n +21 | while IFS= read -r _old; do
+        rm -f -- "$_old"
+    done
+    export ANSIBLE_LOG_PATH="$_run_log"
+    echo "Logging this run to ${_run_log} (also ${_run_log_name}-latest.log)" >&2
+fi
 unset ANSIBLE_COW_PATH ANSIBLE_COW_SELECTION ANSIBLE_COW_ACCEPTLIST  # cowsay binary/template injection
 export ANSIBLE_NOCOWS=1  # ANSIBLE_NOCOWS causes set_cowsay_info() to return before reading ANSIBLE_COW_PATH; load-bearing mitigation; unset above is defense-in-depth for child processes
 # ansible.cfg sets display_args_to_stdout=false, but ANSIBLE_DISPLAY_ARGS_TO_STDOUT env var
@@ -460,7 +606,7 @@ export ANSIBLE_NOCOWS=1  # ANSIBLE_NOCOWS causes set_cowsay_info() to return bef
 unset ANSIBLE_DISPLAY_ARGS_TO_STDOUT
 export ANSIBLE_HASH_BEHAVIOUR=replace  # pin dict merge semantics — ANSIBLE_HASH_BEHAVIOUR=merge lets attacker-supplied -e dicts merge key-by-key with role-default security dicts instead of replacing them, potentially injecting keys without triggering replacement-based detection; 'replace' is the Ansible default and the only safe mode
 export ANSIBLE_INJECT_FACT_VARS=True  # pin fact injection — ANSIBLE_INJECT_FACT_VARS=False disables injection of ansible_facts dict keys as bare vars (ansible_distribution, ansible_user_dir, etc.); bare-var references in install_dnf_packages.yml (lines 13,19) and csb-report.yml (lines 98,108) evaluate as Undefined when injection is off; Undefined != 'Fedora' is True in Jinja2 so packages_security_rhel is appended on Fedora and repo_gh_cli guard evaluates incorrectly; bare ansible_user_dir in csb-report.yml becomes Undefined causing a template error; dict-form ansible_facts['key'] references used in pre_flight_checks.yml and csb_detect.yml are immune but the bare-var paths are not
-export ANSIBLE_BECOME_FLAGS=  # strip injected become flags — ANSIBLE_BECOME_FLAGS='-l' constructs 'sudo -l -u root ...' which prints allowed commands and exits without running the play; other flags can alter sudo behavior per policy in subtle ways; the playbook requires no non-default become flags so forcing empty is safe
+export ANSIBLE_BECOME_FLAGS='-H -S -n'  # pin to the sudo plugin default (empty drops -S, so sudo ignores the piped --ask-become-pass password and every become task fails); strips injected become flags — ANSIBLE_BECOME_FLAGS='-l' constructs 'sudo -l -u root ...' which prints allowed commands and exits without running the play; other flags can alter sudo behavior per policy in subtle ways; the playbook requires no non-default become flags so forcing empty is safe
 export ANSIBLE_BECOME_ASK_PASS=False  # prevent interactive become-password prompt — ANSIBLE_BECOME_ASK_PASS=True forces Ansible to open /dev/tty for the sudo password; in tmux sessions without a controlling tty or in CI this hangs or errors immediately, blocking all Play 1 become tasks (provisioning DoS); playbook uses vault or the invoking user's cached sudo credentials, so ask-pass is never needed
 export ANSIBLE_DIFF_ALWAYS=False  # suppress forced diff output — ANSIBLE_DIFF_ALWAYS=1 enables --diff globally for every file-writing task; in a logged tmux session or with stdout piped to tee/CI artifact this prints vault-derived content: authorized_keys (vault_ssh_public_keys), SSH private key material written to ~/.ssh/, registry token files, sshd drop-in contents, PAM config; False matches Ansible's default and ensures no caller-set value forces diff mode
 export ANSIBLE_VERBOSITY=0  # suppress caller-set verbosity — ANSIBLE_VERBOSITY=4 (equivalent to -vvvv) dumps full connection parameters, task variable dictionaries, and module argument payloads to stdout; this path is separate from no_log: true result suppression and bypasses it entirely, exposing sysctl hardening dict contents, authorized_keys payloads, SSH private key material, and registry token parameters in tmux scrollback or any stdout-logging pipeline; 0 matches Ansible's default and overrides any caller-set value
@@ -490,6 +636,11 @@ unset SSH_AUTH_SOCK  # prevent agent socket proxy attack — with GIT_SSH/GIT_SS
 unset GIT_CONFIG_GLOBAL  # attacker-controlled global git config — GIT_CONFIG_GLOBAL=/tmp/evil.gitconfig can inject url.insteadOf to silently redirect all HTTPS GitHub clones to an attacker server, or inject core.fsmonitor=/tmp/evil_script to execute arbitrary code on every git-status call (fsmonitor is separate from core.hooksPath and bypasses the hooks guard)
 unset XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME XDG_STATE_HOME XDG_RUNTIME_DIR  # XDG base-dir hijack — git reads $XDG_CONFIG_HOME/git/config as user-level config when GIT_CONFIG_GLOBAL is unset (git-config fallback order: GIT_CONFIG_GLOBAL → $XDG_CONFIG_HOME/git/config → ~/.gitconfig); an attacker who sets XDG_CONFIG_HOME=/tmp/evil before invoking make all causes every git clone/fetch in the git_repos role to read /tmp/evil/git/config, enabling url.insteadOf HTTPS redirect to attacker server and core.fsmonitor RCE on every git-status call; GIT_CONFIG_NOSYSTEM=1 in git_repos role env blocks only blocks /etc/gitconfig, not the XDG user config path; clearing all XDG dirs is defense-in-depth (XDG_CACHE_HOME/XDG_DATA_HOME/XDG_STATE_HOME used by other tools that may read config from those paths)
 export XDG_CONFIG_HOME="${HOME}/.config"  # pin podman config dir — podman reads storage.conf, registries.conf, policy.json, and auth.json from $XDG_CONFIG_HOME/containers/; attacker sets XDG_CONFIG_HOME=/tmp/evil and pre-plants /tmp/evil/containers/storage.conf redirecting graphRoot to an attacker-controlled path, corrupting container provisioning (distrobox assemble create silently writes to /tmp/evil/graph); auth.json hijack also possible (routes podman pull/login to attacker registry); explicitly pinning to ${HOME}/.config (validated above against /etc/passwd) prevents both attacks without relying on fallback behaviour; placed after unset block so the pin takes effect last (clear attacker value, then set safe value)
+# Re-pin XDG_RUNTIME_DIR to the canonical per-user path (root-created, user-owned) so `systemctl --user`
+# (ansible systemd scope: user in containers/claude roles) works; the caller-supplied value stays discarded.
+_xrd="/run/user/$(id -u)"
+if [[ -d "$_xrd" && -O "$_xrd" ]]; then export XDG_RUNTIME_DIR="$_xrd"; fi
+unset _xrd
 # NOTE: GIT_CONFIG_NOSYSTEM is NOT unset here — GIT_CONFIG_NOSYSTEM=1 is explicitly set in the
 # clone and pull task environment blocks in roles/git_repos/tasks/main.yml, which prevents
 # /etc/gitconfig from being read during provisioning clones (core.fsmonitor RCE, url.insteadOf
@@ -567,6 +718,8 @@ fi
 # Using exec replaces this script's process with the command, preserving exit codes and
 # signals. The Makefile uses: scripts/verify-ansible-args.sh ansible-playbook site.yml ...
 # which passes the full command as $@.
-if [[ ${#args[@]} -gt 0 ]]; then
-    exec "${args[@]}"
+if [[ ${#args[@]} -eq 0 ]]; then
+    echo "ERROR: no command given to VERIFY_AND_RUN (usage: verify-ansible-args.sh [--run-log=NAME] <command> [args...])" >&2
+    exit 2
 fi
+exec "${args[@]}"

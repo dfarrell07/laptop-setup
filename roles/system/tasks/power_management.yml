@@ -25,9 +25,9 @@
         _system_power_previous_packages: >-
           {{ ['tuned', 'tuned-ppd', 'power-profiles-daemon'] | intersect(ansible_facts.packages.keys() | list) }}
         _system_power_previous_services: >-
-          {{ ansible_facts.services | dict2items
+          {{ (ansible_facts.services | default({})) | dict2items
              | selectattr('key', 'in', ['tuned.service', 'tuned-ppd.service', 'power-profiles-daemon.service']) | list }}
-        _system_power_previous_tlp_service: "{{ ansible_facts.services.get('tlp.service', {}) }}"
+        _system_power_previous_tlp_service: "{{ (ansible_facts.services | default({})).get('tlp.service', {}) }}"
 
     - name: Inspect TLP configuration before replacing it
       ansible.builtin.stat:
@@ -66,7 +66,7 @@
           ansible.builtin.systemd:
             name: "{{ item }}"
             masked: true
-            state: "{{ 'stopped' if ansible_facts.services.get(item, {}).get('state') == 'running' else omit }}"
+            state: "{{ 'stopped' if (ansible_facts.services | default({})).get(item, {}).get('state') == 'running' else omit }}"
             daemon_reload: true
           loop: [tuned.service, tuned-ppd.service, power-profiles-daemon.service]
 
@@ -223,9 +223,9 @@
           ansible.builtin.set_fact:
             _system_previous_tlp_packages: >-
               {{ ['tlp', 'tlp-rdw', 'tlp-pd'] | intersect(ansible_facts.packages.keys() | list) }}
-            _system_previous_tlp_service: "{{ ansible_facts.services.get('tlp.service', {}) }}"
+            _system_previous_tlp_service: "{{ (ansible_facts.services | default({})).get('tlp.service', {}) }}"
             _system_previous_native_services: >-
-              {{ ansible_facts.services | dict2items
+              {{ (ansible_facts.services | default({})) | dict2items
                  | selectattr('key', 'in', ['tuned.service', 'tuned-ppd.service', 'power-profiles-daemon.service']) | items2dict }}
             _system_native_power_packages: >-
               {{ ['tuned', 'tuned-ppd']

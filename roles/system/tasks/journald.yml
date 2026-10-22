@@ -7,13 +7,11 @@
 # /var/log/journal triggers persistent behavior; the explicit Storage=persistent drop-in
 # makes intent unambiguous and independent of directory state.
 # NOTE: 99-hardening.conf sorts last; if IT deploys a journald drop-in on hybrid Fedora
-# with a lower-numbered name, this config wins. If IT tuning
-# must take precedence on hybrid CSB, add a csb_detected guard or rename the drop-in
-# to a lower sort-order name. If they use an older systemd with Storage=auto, persistent logging is a security
-# benefit (logs survive reboots).
+# with a lower-numbered name, this config wins (csb-fedora automation does not manage journald).
+# If IT tuning must take precedence on hybrid CSB, rename the drop-in to a lower sort-order name.
 # journald persistence does NOT interfere with SIEM forwarding — CSB's SIEM pipeline uses
 # audisp-remote (auditd), a completely separate subsystem.
-# The opinionated config (rate limits, disk quota) is also CSB-guarded because those specific
+# The opinionated config (rate limits, disk quota) is skipped on RHEL CSB because those specific
 # numbers may conflict with IT's journald tuning or centralized log management.
 - name: Configure journald (skip in containers)
   when: not system_is_container
@@ -34,11 +32,11 @@
         group: systemd-journal
         mode: "2755"
 
-    - name: Remove journald hardening config on CSB
+    - name: Remove journald hardening config on RHEL CSB
       ansible.builtin.file:
         path: /etc/systemd/journald.conf.d/99-hardening.conf
         state: absent
-      when: csb_detected
+      when: csb_rhel
       notify: Restart systemd-journald
 
     - name: Deploy journald hardening config
@@ -46,5 +44,5 @@
         src: journald-99-hardening.conf.j2
         dest: /etc/systemd/journald.conf.d/99-hardening.conf
         mode: "0644"
-      when: not csb_detected
+      when: not csb_rhel
       notify: Restart systemd-journald

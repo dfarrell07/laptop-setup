@@ -34,10 +34,19 @@
       failed_when: _install_tarball_check.rc not in [0, 1, 127]
       check_mode: false
 
+    - name: Report check mode skips install of {{ binary_name }}
+      ansible.builtin.debug:
+        msg: "CHECK MODE: {{ binary_name }} {{ version_string }} would be downloaded, verified and installed; not simulated."
+      when:
+        - ansible_check_mode
+        - >-
+          version_string not in (_install_tarball_check.stdout + _install_tarball_check.stderr)
+
     - name: "Download and extract {{ binary_name }}"
-      when: >-
-        version_string not in (_install_tarball_check.stdout + _install_tarball_check.stderr)
-        or attest_repo | default('') | length > 0
+      when:
+        - not ansible_check_mode  # downloads into a temp dir that check mode never creates
+        - >-
+          version_string not in (_install_tarball_check.stdout + _install_tarball_check.stderr)
       block:
         - name: "Create atomic temporary directory for {{ binary_name }}"
           ansible.builtin.tempfile:
@@ -133,7 +142,9 @@
           Cannot install {{ binary_name }} with verified GitHub provenance.
           Authenticate gh on the target or supply GH_TOKEN on the controller, then retry.
           The release archive must match its pinned checksum and official signing workflow.
-      when: attest_repo | default('') | length > 0
+      when:
+        - attest_repo | default('') | length > 0
+        - version_string not in (_install_tarball_check.stdout | default('') + _install_tarball_check.stderr | default(''))
 
     - name: "CSB failure record: {{ binary_name }}"
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"

@@ -1,7 +1,7 @@
 ---
 - name: Remount /tmp  # noqa: command-instead-of-module
   ansible.builtin.command:
-    cmd: "mount -o remount,nosuid,nodev{{ ',noexec' if system_tmp_noexec | bool else '' }} /tmp"
+    cmd: "mount -o remount,nosuid,nodev{{ ',noexec' if (system_tmp_noexec | bool and not csb_rhel) else '' }} /tmp"
   become: true
   register: _tmp_remount_handler_result
   until: _tmp_remount_handler_result.rc == 0
@@ -17,7 +17,6 @@
     state: reloaded
   become: true
   when: not system_is_container  # firewalld reload crashes privileged Podman containers
-  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Apply sysctl  # noqa: command-instead-of-module
   listen: Sysctl config changed
@@ -28,7 +27,8 @@
   changed_when: false
   # Keys absent if module not yet loaded (ENOENT) or kernel too old (EINVAL) — tolerate both;
   # write-once keys (EPERM, e.g. kernel.unprivileged_bpf_disabled on Fedora 44) also tolerated
-  # Sole expected EPERM source: kernel.unprivileged_bpf_disabled
+  # Any EPERM line is tolerated; the only expected source is kernel.unprivileged_bpf_disabled
+  # (checked and warned about by the handlers below)
   # (Fedora 44 CONFIG_BPF_UNPRIV_DEFAULT_OFF=y locks this to 2 before sysctl.d runs)
   failed_when: >
     sysctl_system_result.rc != 0 and
@@ -38,41 +38,28 @@
     list | length > 0)
   when: not system_is_container
 
-- name: Verify critical sysctl values
-  ansible.builtin.shell:
-    cmd: |
-      set -o pipefail
-      set -e
-      # Verify sysctl keys that are vulnerable to EPERM on hardened kernels
-      declare -A intended_values
-      intended_values[kernel.unprivileged_bpf_disabled]="{{ system_unprivileged_bpf_disabled | default(2) }}"
-
-      errors=()
-      for key in "${!intended_values[@]}"; do
-        if [ -f "/proc/sys/${key//./\/}" ]; then
-          actual=$(cat "/proc/sys/${key//./\/}" | tr -d '\n')
-          intended="${intended_values[$key]}"
-          if [ "$actual" != "$intended" ]; then
-            errors+=("$key: intended=$intended, actual=$actual")
-          fi
-        fi
-      done
-
-      if [[ -v errors[0] ]]; then
-        echo "WARNING: Kernel sysctl values differ from intended config:" >&2
-        for error in "${errors[@]}"; do
-          echo "  $error" >&2
-        done
-        echo "This may indicate CONFIG_BPF_UNPRIV_DEFAULT_OFF or similar kernel-locking features." >&2
-      fi
-      exit 0
-    executable: /bin/bash
+# kernel.unprivileged_bpf_disabled can be write-locked by the kernel (CONFIG_BPF_UNPRIV_DEFAULT_OFF
+# or a prior value of 1), so sysctl --system may leave it different from the intended value.
+- name: Read kernel.unprivileged_bpf_disabled after applying sysctl
+  ansible.builtin.slurp:
+    src: /proc/sys/kernel/unprivileged_bpf_disabled
+  register: _handler_bpf_unpriv
   listen: Sysctl config changed
   become: true
+  failed_when: false
+  when: not system_is_container
+
+- name: Warn when kernel.unprivileged_bpf_disabled differs from the intended value
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: kernel.unprivileged_bpf_disabled is
+      {{ _handler_bpf_unpriv.content | b64decode | trim }}, intended {{ system_unprivileged_bpf_disabled }};
+      the kernel may lock this value until reboot.
+  listen: Sysctl config changed
   when:
     - not system_is_container
-    - system_unprivileged_bpf_disabled is defined
-  changed_when: false
+    - _handler_bpf_unpriv.content is defined
+    - (_handler_bpf_unpriv.content | b64decode | trim) != (system_unprivileged_bpf_disabled | string)
 
 - name: Restart NetworkManager
   ansible.builtin.systemd:
@@ -80,7 +67,6 @@
     state: reloaded
   become: true
   when: not system_is_container  # NM reload crashes privileged Podman containers
-  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Restart bluetooth
   ansible.builtin.systemd:
@@ -100,8 +86,8 @@
   become: true
   when:
     - not system_is_container
-    - ansible_facts.services['tailscaled.service'] is defined
-    - ansible_facts.services['tailscaled.service'].state == 'running'
+    - (ansible_facts.services | default({}))['tailscaled.service'] is defined
+    - (ansible_facts.services | default({}))['tailscaled.service'].state == 'running'
 
 - name: Reload systemd daemon
   ansible.builtin.systemd:
@@ -120,8 +106,23 @@
   ansible.builtin.command:
     cmd: augenrules --load
   become: true
+  register: _auditd_reload
   changed_when: true
+  # With '-e 2' (immutable) loaded at boot, rule changes are refused until the next reboot;
+  # the new rules are already in /etc/audit/rules.d and load then.
+  failed_when:
+    - _auditd_reload.rc != 0
+    - _auditd_reload.stderr is not search('(?i)immutable|Operation not permitted')
   when: not system_is_container  # kernel audit control is unavailable in container scenarios
+
+- name: Report audit rules pending reboot (immutable mode)
+  ansible.builtin.debug:
+    msg: "NOTE: audit rules are immutable until reboot; the updated rules load at the next boot."
+  listen: Restart auditd
+  when:
+    - not system_is_container
+    - _auditd_reload is defined
+    - _auditd_reload.rc | default(0) != 0
 
 - name: Reload auditd configuration  # noqa: command-instead-of-module
   ansible.builtin.command:
@@ -136,7 +137,11 @@
     state: restarted
   become: true
   when: not system_is_container  # USBGuard not applicable in containers
-  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
+  register: _handler_usbguard_restart
+  # check mode never writes the unit or installs its package, so a missing unit is expected there
+  failed_when:
+    - _handler_usbguard_restart is failed
+    - not (ansible_check_mode and 'Could not find the requested service' in (_handler_usbguard_restart.msg | default('')))
 
 - name: Restart sshd
   ansible.builtin.systemd:
@@ -150,9 +155,8 @@
       lookup('env', 'TMUX') != '' or
       lookup('env', 'STY') != ''
       # SSH-based provisioning: sshd reload on port change kills Ansible connection mid-play.
-      # tmux/screen sessions survive sshd restart (preflight allows these at sshd.yml:339-340).
+      # tmux/screen sessions survive sshd restart (sshd.yml fails fast on bare SSH port-22 sessions; same TMUX/STY check).
       # Bare SSH sessions block reload to prevent mid-play connection loss.
-  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Warn on sshd handler skip
   ansible.builtin.debug:
@@ -183,7 +187,6 @@
   become: true
   changed_when: true
   when: not system_is_container  # logind SIGHUP crashes privileged Podman containers
-  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Restart chronyd
   ansible.builtin.systemd:
@@ -201,7 +204,11 @@
   when:
     - system_setuid_scan_enabled | bool
     - not system_is_container  # daemon_reload: true crashes privileged Podman container PID 1
-  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
+  register: _handler_setuid_timer_restart
+  # check mode never writes the unit or installs its package, so a missing unit is expected there
+  failed_when:
+    - _handler_setuid_timer_restart is failed
+    - not (ansible_check_mode and 'Could not find the requested service' in (_handler_setuid_timer_restart.msg | default('')))
 
 - name: Restart aide-check timer
   ansible.builtin.systemd:
@@ -209,10 +216,14 @@
     state: restarted
     daemon_reload: true
   become: true
-  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
   when:
     - system_aide_enabled | bool
     - not system_is_container  # daemon_reload: true crashes privileged Podman container PID 1; ignore_errors cannot catch a process death
+  register: _handler_aide_timer_restart
+  # check mode never writes the unit, so a missing unit is expected there
+  failed_when:
+    - _handler_aide_timer_restart is failed
+    - not (ansible_check_mode and 'Could not find the requested service' in (_handler_aide_timer_restart.msg | default('')))
 
 - name: Restart systemd-journald
   ansible.builtin.systemd:
@@ -220,7 +231,6 @@
     state: restarted
   become: true
   when: not system_is_container  # journald restart crashes privileged Podman containers
-  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Apply dconf schema database  # noqa: command-instead-of-module
   ansible.builtin.command:
@@ -228,7 +238,7 @@
   become: true
   changed_when: true
   # No failed_when: false — handler is only notified from dconf.yml which is
-  # guarded by '"gdm.service" in ansible_facts.services', so dconf is always
+  # included from main.yml only when '"gdm.service" in ansible_facts.services', so dconf is always
   # present when this runs. Surface real failures.
 
 - name: Restart dnf-automatic timer
@@ -238,6 +248,11 @@
     daemon_reload: true
   become: true
   when: not system_is_container  # dnf-automatic not applicable in containers; daemon_reload: true crashes Podman containers
+  register: _handler_dnf_automatic_restart
+  # check mode never writes the unit or installs its package, so a missing unit is expected there
+  failed_when:
+    - _handler_dnf_automatic_restart is failed
+    - not (ansible_check_mode and 'Could not find the requested service' in (_handler_dnf_automatic_restart.msg | default('')))
 
 - name: Regenerate GRUB configuration  # noqa: command-instead-of-module
   ansible.builtin.shell: |

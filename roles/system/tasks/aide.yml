@@ -45,6 +45,16 @@
     - not system_is_container
   notify: Restart setuid-scan timer
 
+- name: Check for the setuid scan timer unit
+  ansible.builtin.stat:
+    path: /etc/systemd/system/setuid-scan.timer
+  register: _system_setuid_timer_unit
+  when:
+    - is_dnf
+    - system_setuid_scan_enabled | bool
+    - not csb_rhel
+    - not system_is_container
+
 - name: Setuid binary scan — enable and start timer
   ansible.builtin.systemd:
     name: setuid-scan.timer
@@ -55,6 +65,18 @@
     - is_dnf
     - system_setuid_scan_enabled | bool
     - not csb_rhel
+    - not system_is_container
+    - not ansible_check_mode or _system_setuid_timer_unit.stat.exists  # unit only simulated in check mode
+
+- name: Setuid binary scan — stop and disable the timer before removing it
+  ansible.builtin.systemd:
+    name: setuid-scan.timer
+    state: stopped
+    enabled: false
+  failed_when: false  # absent unit (never installed) is the normal case
+  when:
+    - is_dnf
+    - not (system_setuid_scan_enabled | bool)
     - not system_is_container
 
 - name: Setuid binary scan — remove when disabled
@@ -92,12 +114,33 @@
     - system_aide_enabled | bool
     - not system_is_container
 
+- name: Check whether AIDE is installed
+  ansible.builtin.command: rpm -q aide  # noqa: command-instead-of-module
+  register: _system_aide_rpm
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - is_dnf
+    - system_aide_enabled | bool
+    - not csb_rhel
+    - not system_is_container
+
+- name: Report AIDE setup not simulated in check mode
+  ansible.builtin.debug:
+    msg: "CHECK MODE: aide is not installed yet; install, aide.conf edits and database init not simulated."
+  when:
+    - ansible_check_mode
+    - _system_aide_rpm.rc | default(0) != 0
+
 - name: AIDE file integrity monitoring
   when:
     - is_dnf
     - system_aide_enabled | bool
     - not csb_rhel  # CSB IT manages AIDE baseline; don't overwrite
     - not system_is_container
+    # check mode only simulates the install, so /etc/aide.conf does not exist yet
+    - not (ansible_check_mode and _system_aide_rpm.rc | default(0) != 0)
   block:
     - name: Install AIDE
       ansible.builtin.dnf:
@@ -223,45 +266,51 @@
         state: present
       register: _aide_conf_r6c
 
-    - name: Remove NetworkManager system-connections exclusion (blindspot fix)
-      ansible.builtin.lineinfile:
-        path: /etc/aide.conf
-        regexp: '^!/etc/NetworkManager/system-connections'
-        state: absent
-      register: _aide_conf_r6d
-
-    - name: Add /etc/NetworkManager/system-connections to AIDE monitoring (PERMS)
+    # Connection profiles are data that changes whenever a Wi-Fi network or VPN is added, so
+    # monitoring them alerted (and broadcast via wall) on every check until a rebaseline. The
+    # code NetworkManager runs as root (dispatcher.d) stays monitored. Hosts provisioned with
+    # the old rule get it removed and the stock exclusion restored.
+    - name: Stop monitoring NetworkManager connection profiles
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
         regexp: '^/etc/NetworkManager/system-connections\s'
-        line: '/etc/NetworkManager/system-connections PERMS'
+        state: absent
+      register: _aide_conf_r6d
+
+    - name: Exclude NetworkManager connection profiles from AIDE
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        line: '!/etc/NetworkManager/system-connections'
         insertbefore: '^/etc/NetworkManager\s'
         state: present
       register: _aide_conf_r6e
 
-    - name: Add /var/log/audit/audit.log to AIDE monitoring (content hash — override LOG group)
+    # Content hashes (NORMAL) changed on every append, so each hourly check alerted. These
+    # are the LOG-group attributes spelled out: growing+s reports a log that shrank (truncation or
+    # replacement), plus owner/mode/link-count/ACL/SELinux/xattr changes.
+    - name: Add /var/log/audit/audit.log to AIDE monitoring (growing-log attributes)
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
         regexp: '^/var/log/audit/audit\.log\s'
-        line: '/var/log/audit/audit.log NORMAL'
-        insertbefore: '^/var/log\s'
+        line: '/var/log/audit/audit.log p+u+g+n+growing+s+acl+selinux+xattrs'
+        insertbefore: '^/var/log/audit\s'  # ahead of the stock /var/log/audit PERMS rule
         state: present
       register: _aide_conf_r6f
 
-    - name: Add /var/log/secure to AIDE monitoring (content hash — override LOG group)
+    - name: Add /var/log/secure to AIDE monitoring (growing-log attributes)
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
         regexp: '^/var/log/secure\s'
-        line: '/var/log/secure NORMAL'
+        line: '/var/log/secure p+u+g+n+growing+s+acl+selinux+xattrs'
         insertbefore: '^/var/log\s'
         state: present
       register: _aide_conf_r6g
 
-    - name: Add /var/log/sudo.log to AIDE monitoring (content hash — override LOG group)
+    - name: Add /var/log/sudo.log to AIDE monitoring (growing-log attributes)
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
         regexp: '^/var/log/sudo\.log\s'
-        line: '/var/log/sudo.log NORMAL'
+        line: '/var/log/sudo.log p+u+g+n+growing+s+acl+selinux+xattrs'
         insertbefore: '^/var/log\s'
         state: present
       register: _aide_conf_r6h
@@ -292,6 +341,32 @@
         path: /var/lib/aide/aide.db.new.gz
       register: system_aide_db_new
 
+    # A Ctrl-C during aide --init leaves a truncated aide.db.new.gz (no rescue runs on SIGINT);
+    # promoting it would make every later aide --check fail. Only an intact gzip is promoted.
+    - name: Test a leftover aide.db.new.gz for truncation
+      ansible.builtin.command:
+        argv: [gzip, -t, /var/lib/aide/aide.db.new.gz]
+      register: _aide_db_new_gzip
+      changed_when: false
+      failed_when: false
+      check_mode: false  # read-only probe
+      when: system_aide_db_new.stat.exists
+
+    - name: Discard a truncated aide.db.new.gz from an interrupted init
+      ansible.builtin.file:
+        path: /var/lib/aide/aide.db.new.gz
+        state: absent
+      when:
+        - system_aide_db_new.stat.exists
+        - _aide_db_new_gzip.rc | default(0) != 0
+
+    - name: Treat a discarded aide.db.new.gz as absent
+      ansible.builtin.set_fact:
+        system_aide_db_new: {stat: {exists: false}}
+      when:
+        - system_aide_db_new.stat.exists
+        - _aide_db_new_gzip.rc | default(0) != 0
+
     - name: Set fact — AIDE config changed (consolidates lineinfile registers)
       ansible.builtin.set_fact:
         _aide_conf_changed: >-
@@ -316,6 +391,8 @@
              or _aide_conf_r6i is changed
              or _aide_conf_r6j is changed }}
 
+    # .rebaseline-pending asks site.yml's user-play post task to rebuild the baseline once later
+    # roles have run; a marker (not a registered result) survives a failed run until it succeeds.
     - name: Reinitialize AIDE database on config change
       when: _aide_conf_changed
       block:
@@ -351,7 +428,7 @@
 
         - name: Reinitialize AIDE database and promote to active baseline
           ansible.builtin.shell:  # noqa: command-instead-of-module
-            cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+            cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz && touch /var/lib/aide/.rebaseline-pending
           timeout: 1800  # 30 min ceiling; normal init is 5-10 min; surfaces hung I/O as a clean error
           changed_when: true
           register: system_aide_reinit_result
@@ -412,7 +489,7 @@
 
         - name: Initialize AIDE database and promote to active baseline
           ansible.builtin.shell:  # noqa: command-instead-of-module
-            cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+            cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz && touch /var/lib/aide/.rebaseline-pending
           timeout: 1800  # 30 min ceiling; normal init is 5-10 min; surfaces hung I/O as a clean error
           changed_when: true
 
@@ -421,7 +498,6 @@
         src: aide-notify@.service
         dest: /etc/systemd/system/aide-notify@.service
         mode: "0644"
-      register: _aide_conf_r7
       notify: Restart aide-check timer
 
     - name: Deploy AIDE check service
@@ -429,7 +505,6 @@
         src: aide-check.service
         dest: /etc/systemd/system/aide-check.service
         mode: "0644"
-      register: _aide_conf_r8
       notify: Restart aide-check timer
 
     - name: Deploy AIDE check timer
@@ -437,7 +512,6 @@
         src: aide-check.timer.j2
         dest: /etc/systemd/system/aide-check.timer
         mode: "0644"
-      register: _aide_conf_r9
       notify: Restart aide-check timer
 
     - name: Enable AIDE check timer

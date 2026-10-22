@@ -8,18 +8,23 @@ in molecule (which generates a temp inventory that does not load project group_v
 
 Also verifies that pipx version pins in roles/packages/defaults/main.yml satisfy
 the specifier ranges in requirements-test.txt, keeping the two files in sync.
+
+Further checks: cross-role mirror vars (CROSS_ROLE_MIRROR_KEYS) match vars.yml in
+each listed role defaults file; distrobox_* tool versions in molecule/ match the
+packages defaults (oc, golangci-lint, subctl, plus the oc stub in container/prepare.yml);
+every system_* key in vars.yml is listed in REQUIRED_KEYS; and gitleaks/actionlint/zizmor versions and SHA256s in
+linting.yml match the packages defaults.
 """
 import re
 import sys
 import pathlib
 import yaml
 from packaging.version import Version
-from packaging.specifiers import SpecifierSet
+from packaging.requirements import InvalidRequirement, Requirement
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 VARS_FILE = REPO_ROOT / "group_vars/all/vars.yml"
 SYSTEM_DEFAULTS_FILE = REPO_ROOT / "roles/system/defaults/main.yml"
-SSH_DEFAULTS_FILE = REPO_ROOT / "roles/ssh/defaults/main.yml"
 PACKAGES_DEFAULTS_FILE = REPO_ROOT / "roles/packages/defaults/main.yml"
 REQUIREMENTS_FILE = REPO_ROOT / "requirements-test.txt"
 MOLECULE_DIR = REPO_ROOT / "molecule"
@@ -28,6 +33,8 @@ LINTING_CI_FILE = REPO_ROOT / ".github/workflows/linting.yml"
 # Cross-role mirror: vars.yml is authoritative; these role defaults must match.
 # Checked so standalone molecule invocations use the same defaults as full playbook runs.
 CROSS_ROLE_MIRROR_KEYS = {
+    # Standalone ssh role invocation needs the same accepted-algorithms list.
+    "ssh_pubkey_accepted_algorithms": [REPO_ROOT / "roles/ssh/defaults/main.yml"],
     "profile": [
         REPO_ROOT / "roles/claude/defaults/main.yml",
         REPO_ROOT / "roles/dotfiles/defaults/main.yml",
@@ -55,6 +62,7 @@ CROSS_ROLE_MIRROR_KEYS = {
         REPO_ROOT / "roles/claude/defaults/main.yml",
         REPO_ROOT / "roles/containers/defaults/main.yml",
         REPO_ROOT / "roles/desktop/defaults/main.yml",
+        REPO_ROOT / "roles/distrobox/defaults/main.yml",
         REPO_ROOT / "roles/dotfiles/defaults/main.yml",
         REPO_ROOT / "roles/packages/defaults/main.yml",
     ],
@@ -65,6 +73,7 @@ CROSS_ROLE_MIRROR_KEYS = {
         REPO_ROOT / "roles/packages/defaults/main.yml",
     ],
     "is_dnf": [
+        REPO_ROOT / "roles/containers/defaults/main.yml",
         REPO_ROOT / "roles/packages/defaults/main.yml",
         REPO_ROOT / "roles/system/defaults/main.yml",
         REPO_ROOT / "roles/desktop/defaults/main.yml",
@@ -248,7 +257,7 @@ REQUIRED_KEYS = {
 
 def load_yaml(path):
     with open(path) as f:
-        return yaml.safe_load(f)
+        return yaml.safe_load(f) or {}
 
 
 def parse_requirements(path):
@@ -259,13 +268,15 @@ def parse_requirements(path):
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
-            # Split on first specifier character to get the package name.
-            for i, ch in enumerate(line):
-                if ch in (">", "<", "=", "!"):
-                    pkg_name = line[:i].strip()
-                    specifier_str = line[i:].strip()
-                    result[pkg_name] = SpecifierSet(specifier_str)
-                    break
+            # Drop inline comments, environment markers and line continuations.
+            line = line.split(" #")[0].split(";")[0].rstrip(" \\").strip()
+            if not line:
+                continue
+            try:
+                req = Requirement(line)
+            except InvalidRequirement:
+                continue
+            result[req.name] = req.specifier
     return result
 
 
@@ -321,23 +332,33 @@ def check_oc_version_sync(packages_data):
         return ["  MISSING: packages_oc_version not found in roles/packages/defaults/main.yml"]
 
     errors = []
+    checked = 0
 
     for yml_file in sorted(MOLECULE_DIR.rglob("*.yml")):
         if yml_file in _OC_VERSION_SKIP:
             continue
         content = yml_file.read_text()
-        for match in re.finditer(r'distrobox_oc_version:\s*["\']([^"\']+)["\']', content):
+        for match in re.finditer(r'distrobox_oc_version:[ \t]*["\']?([^"\'\s#]+)["\']?', content):
+            checked += 1
             found = match.group(1)
             if found != expected:
                 errors.append(
                     f"  MISMATCH: {yml_file.relative_to(REPO_ROOT)}: "
                     f"distrobox_oc_version={found!r} != packages_oc_version={expected!r}"
                 )
+        unparsed = content.count("distrobox_oc_version:") - len(
+            re.findall(r'distrobox_oc_version:[ \t]*["\']?[^"\'\s#]+', content))
+        if unparsed:
+            errors.append(f"  MISSING: {yml_file.relative_to(REPO_ROOT)}: distrobox_oc_version has no value")
 
-    # Also check the stub shell script in container/prepare.yml: the echo output
+    if not checked:
+        errors.append("  MISSING: no distrobox_oc_version entries found under molecule/ (regex drift?)")
+
+    # Also check the oc stub script in container/prepare.yml: its "Client Version"
+    # echo (digit-first only; the kubectl stub is intentionally unversioned)
     # must match so comments stay accurate when packages_oc_version is bumped.
     prepare_file = MOLECULE_DIR / "container" / "prepare.yml"
-    if prepare_file.exists() and prepare_file not in _OC_VERSION_SKIP:
+    if prepare_file.exists():
         content = prepare_file.read_text()
         for match in re.finditer(r'Client Version:\s*(\d+\.\d+\.\d+)', content):
             found = match.group(1)
@@ -371,16 +392,22 @@ def check_distrobox_version_sync(packages_data):
             )
             continue
 
+        seen = 0
         for yml_file in sorted(MOLECULE_DIR.rglob("*.yml")):
             content = yml_file.read_text()
-            pattern = rf'{re.escape(distrobox_var)}:\s*["\']([^"\']+)["\']'
+            pattern = rf'{re.escape(distrobox_var)}:[ \t]*["\']?([^"\'\s#]+)["\']?'
             for match in re.finditer(pattern, content):
+                seen += 1
                 found = match.group(1).lstrip("v")
                 if found != expected:
                     errors.append(
                         f"  MISMATCH: {yml_file.relative_to(REPO_ROOT)}: "
                         f"{distrobox_var}={match.group(1)!r} != {packages_var}={expected!r}"
                     )
+            if content.count(distrobox_var + ":") != len(re.findall(pattern, content)):
+                errors.append(f"  MISSING: {yml_file.relative_to(REPO_ROOT)}: {distrobox_var} has no value")
+        if not seen:
+            errors.append(f"  MISSING: no {distrobox_var} entries found under molecule/ (regex drift?)")
 
     return errors
 
@@ -426,21 +453,33 @@ def check_linting_ci_sync(packages_data):
     for check in checks:
         tool = check["tool"]
 
-        ver_match = re.search(check["version_pattern"], content)
-        if not ver_match:
+        ci_versions = set(re.findall(check["version_pattern"], content))
+        if not ci_versions:
             errors.append(
                 f"  MISSING: could not find {tool} version in {ci_rel}"
             )
             continue
-        ci_version = ver_match.group(1)
+        if len(ci_versions) > 1:
+            errors.append(
+                f"  MISMATCH: {tool} has differing versions in {ci_rel}:"
+                f" {sorted(ci_versions)!r}"
+            )
+            continue
+        ci_version = next(iter(ci_versions))
 
-        sha_match = re.search(check["sha256_pattern"], content)
-        if not sha_match:
+        ci_shas = set(re.findall(check["sha256_pattern"], content))
+        if not ci_shas:
             errors.append(
                 f"  MISSING: could not find {tool} SHA256 in {ci_rel}"
             )
             continue
-        ci_sha256 = sha_match.group(1)
+        if len(ci_shas) > 1:
+            errors.append(
+                f"  MISMATCH: {tool} has differing SHA256 values in {ci_rel}:"
+                f" {sorted(ci_shas)!r}"
+            )
+            continue
+        ci_sha256 = next(iter(ci_shas))
 
         pkg_version = str(packages_data.get(check["packages_version_var"], ""))
         pkg_sha256 = str(packages_data.get(check["packages_sha256_var"], ""))
@@ -485,7 +524,7 @@ def check_cross_role_mirror_keys(vars_data):
                     f"  MISSING: {var_name} not found in"
                     f" {role_file.relative_to(REPO_ROOT)}"
                 )
-            elif role_data[var_name] != expected:
+            elif role_data[var_name] != expected or type(role_data[var_name]) is not type(expected):
                 errors.append(
                     f"  MISMATCH: {var_name}:"
                     f" vars.yml={expected!r}"
@@ -503,7 +542,7 @@ def main():
         val = vars_data.get(key)
         if val is None:
             errors.append(f"  MISSING: {key} not found in vars.yml")
-        elif not isinstance(val, expected_type):
+        elif not isinstance(val, expected_type) or (isinstance(val, bool) and expected_type is not bool):
             errors.append(
                 f"  WRONG TYPE: {key}={val!r} expected {expected_type.__name__},"
                 f" got {type(val).__name__}"
@@ -521,7 +560,7 @@ def main():
     for key in REQUIRED_KEYS:
         if key not in defaults_data:
             defaults_errors.append(f"  MISSING: {key} not found in roles/system/defaults/main.yml")
-        elif defaults_data[key] != vars_data[key]:
+        elif defaults_data[key] != vars_data[key] or type(defaults_data[key]) is not type(vars_data[key]):
             defaults_errors.append(
                 f"  MISMATCH: {key}: vars.yml={vars_data[key]!r}"
                 f" != roles/system/defaults/main.yml={defaults_data[key]!r}"
@@ -539,8 +578,8 @@ def main():
 
     # The GRUB hash is vault-sourced in vars.yml but empty in standalone defaults.
     vault_sourced_keys = {"system_grub_password_hash"}
-    # Only shared baselines belong in REQUIRED_KEYS; role-only tunables remain
-    # in roles/system/defaults/main.yml and do not need a vars.yml mirror.
+    # Every system_* key in vars.yml must be in REQUIRED_KEYS (shared baselines);
+    # role-only tunables remain in roles/system/defaults/main.yml and need no mirror.
     uncovered = sorted(
         k for k in vars_data
         if k.startswith("system_") and k not in REQUIRED_KEYS and k not in vault_sourced_keys
@@ -551,30 +590,6 @@ def main():
         "Add each shared baseline and its type to REQUIRED_KEYS so its role mirror is verified.",
     )
 
-    ssh_defaults_data = load_yaml(SSH_DEFAULTS_FILE)
-    ssh_defaults_errors = []
-    _SSH_MIRROR_KEYS = ["ssh_pubkey_accepted_algorithms"]
-    for _SSH_MIRROR_KEY in _SSH_MIRROR_KEYS:
-        if _SSH_MIRROR_KEY not in ssh_defaults_data:
-            ssh_defaults_errors.append(
-                f"  MISSING: {_SSH_MIRROR_KEY} not found in roles/ssh/defaults/main.yml"
-            )
-        elif ssh_defaults_data[_SSH_MIRROR_KEY] != vars_data[_SSH_MIRROR_KEY]:
-            ssh_defaults_errors.append(
-                f"  MISMATCH: {_SSH_MIRROR_KEY}: vars.yml={vars_data[_SSH_MIRROR_KEY]!r}"
-                f" != roles/ssh/defaults/main.yml={ssh_defaults_data[_SSH_MIRROR_KEY]!r}"
-            )
-    _fail_on_errors(
-        ssh_defaults_errors,
-        "roles/ssh/defaults/main.yml missing or mismatched ssh mirror keys"
-        " (required mirror for standalone ssh role invocation):",
-        "Update roles/ssh/defaults/main.yml to match vars.yml.",
-    )
-    print(
-        "OK: ssh_pubkey_accepted_algorithms present and matching in"
-        " roles/ssh/defaults/main.yml (standalone ssh role mirror)"
-    )
-
     _fail_on_errors(
         check_cross_role_mirror_keys(vars_data),
         "cross-role mirror vars in role defaults do not match vars.yml:",
@@ -583,7 +598,7 @@ def main():
     total_cross = sum(len(files) for files in CROSS_ROLE_MIRROR_KEYS.values())
     print(
         f"OK: {len(CROSS_ROLE_MIRROR_KEYS)} cross-role vars verified across"
-        f" {total_cross} role defaults files"
+        f" {total_cross} var/file pairs"
     )
 
     _fail_on_errors(

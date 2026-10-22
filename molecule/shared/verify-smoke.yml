@@ -2,7 +2,7 @@
 # molecule/shared/verify-smoke.yml
 # Runs scripts/smoke-test.sh --user-only on the provisioned molecule host so
 # that smoke checks and inline verify assertions share CI coverage.
-# --user-only skips root-requiring checks that container scenarios cannot satisfy.
+# --user-only skips root-requiring checks (the VM scenario runs smoke-test.sh --system-only as root separately).
 # Include from each scenario's verify.yml after verify-common.yml.
 
 - name: Run smoke-test.sh --user-only
@@ -24,7 +24,6 @@
     msg: >-
       warns={{ (smoke_result.stdout | from_json).warns }}
       results={{ (smoke_result.stdout | from_json).results | rejectattr('status', 'equalto', 'PASS') | list }}
-  when: smoke_result.stdout | length > 0
 
 - name: Assert smoke-test.sh --user-only passed
   ansible.builtin.assert:
@@ -32,12 +31,11 @@
     fail_msg: >-
       smoke-test.sh exited {{ smoke_result.rc }}:
       {{ (smoke_result.stdout | from_json).results | selectattr('status', 'equalto', 'FAIL') | list | to_nice_json }}
-  when: smoke_result.stdout | length > 0
 
 # --- USBGuard inline assertions ---
-# Gated on package presence so these fire in VM/bare-metal scenarios where the
-# system role installs usbguard, and are skipped in container scenarios where
-# the system role is not included in converge.
+# Gated on usbguard_expected (set only by the VM scenario) and package presence,
+# so they fire where the system role really installs usbguard and are skipped in
+# scenarios where usbguard_expected is unset (systemd and USB are unavailable in containers).
 - name: Check usbguard package presence (shared)
   ansible.builtin.command: rpm -q usbguard  # noqa: command-instead-of-module
   register: verify_usbguard_pkg_shared
@@ -54,7 +52,7 @@
     - usbguard_expected | default(false)
 
 - name: Check ImplicitPolicyTarget=block in usbguard-daemon.conf (shared)
-  ansible.builtin.command: grep -q 'ImplicitPolicyTarget=block' /etc/usbguard/usbguard-daemon.conf
+  ansible.builtin.command: grep -q '^ImplicitPolicyTarget=block' /etc/usbguard/usbguard-daemon.conf
   changed_when: false
   become: true
   when:
@@ -63,7 +61,7 @@
     - verify_usbguard_pkg_shared.rc == 0
 
 - name: Check AuditBackend=LinuxAudit in usbguard-daemon.conf (shared)
-  ansible.builtin.command: grep -q 'AuditBackend=LinuxAudit' /etc/usbguard/usbguard-daemon.conf
+  ansible.builtin.command: grep -q '^AuditBackend=LinuxAudit' /etc/usbguard/usbguard-daemon.conf
   changed_when: false
   become: true
   when:
@@ -101,8 +99,8 @@
 
 # --- sshd hardening inline assertions ---
 # Gated on config file presence so these fire only when the system role deployed
-# sshd hardening (the deploy task itself is gated on sshd.service being defined).
-# Silently skipped in container scenarios where sshd-server is not installed.
+# sshd hardening (the deploy task itself is gated on the sshd binary existing and not csb_rhel).
+# Silently skipped where the drop-in does not exist (Debian CI: no openssh-server; Rocky: csb_rhel skips sshd hardening).
 # systemctl is-enabled assertion intentionally omitted — systemd is mocked in
 # Podman containers (see usbguard note above); service enablement is verified by
 # the VM scenario which runs a full root smoke-test.
@@ -110,10 +108,10 @@
 - name: sshd hardening assertions (Linux only)
   when: ansible_system == 'Linux'
   block:
-    - name: Check AllowAgentForwarding no in 00-hardening.conf (shared)
+    - name: Check AllowAgentForwarding matches system_ssh_allow_agent_forwarding in 00-hardening.conf (shared)
       ansible.builtin.command:  # noqa: command-instead-of-module
         cmd: >-
-          grep -qF
+          grep -qxF
           'AllowAgentForwarding {{ system_ssh_allow_agent_forwarding | default("no") }}'
           /etc/ssh/sshd_config.d/00-hardening.conf
       changed_when: false
@@ -122,9 +120,9 @@
         - verify_sshd_dropin is not skipped
         - verify_sshd_dropin.stat.exists
 
-    - name: Check AllowTcpForwarding set to valid value (shared)
+    - name: Check AllowTcpForwarding matches system_ssh_allow_tcp_forwarding (shared)
       ansible.builtin.command: >-
-        grep -qE '^AllowTcpForwarding (no|local|remote|all|yes)$'
+        grep -qxF 'AllowTcpForwarding {{ system_ssh_allow_tcp_forwarding | default("local") }}'
         /etc/ssh/sshd_config.d/00-hardening.conf  # noqa: command-instead-of-module
       changed_when: false
       become: true
@@ -173,9 +171,9 @@
 # Gated on UnitFileState being non-empty so these are silently skipped when the
 # unit is completely unknown to systemd (failed_when: false absorbs the module
 # error; the when guard skips the assert when status.UnitFileState is absent).
-# Fires in Fedora, Rocky, and Debian CI (all include this file and all run the
-# system role in converge). Does not fire in the container scenario (its
-# verify.yml does not include verify-smoke.yml) or on macOS (systemd absent).
+# Effective only where the unit is installed and the role masks it (Fedora CI,
+# VM); on Rocky (csb_rhel skips masking) and Debian (units not installed) the
+# asserts skip. Not included by the container scenario; macOS includes it but the Linux gate skips it.
 - name: Service masking assertions (Linux only)
   when: ansible_system == 'Linux'
   block:
@@ -328,8 +326,8 @@
       when: verify_passim_shared.status.UnitFileState | default('') != ''
 
 # --- BlueZ inline assertions ---
-# Stat-gated so these skip in container scenarios where /etc/bluetooth/main.conf
-# does not exist. When the file exists, assert the Privacy and Name lines were
+# Block-gated on system_disable_bluetooth being false (no scenario sets that today) and
+# stat-gated on /etc/bluetooth/main.conf existing. When the file exists, assert the Privacy and Name lines were
 # written by the system role lineinfile tasks (regexp/insertafter regression guard).
 - name: BlueZ config assertions (Linux + dnf only)
   when:

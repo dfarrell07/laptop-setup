@@ -2,65 +2,6 @@
 # Security: remove any pre-existing drop-in directories for units this file manages as masked.
 # An attacker can pre-create /etc/systemd/system/<unit>.service.d/persist.conf before provisioning;
 # the masking symlink prevents startup but the drop-in survives and activates if ever unmasked.
-- name: Probe drop-in dirs for content before removal (csb_detected advisory)
-  ansible.builtin.find:
-    paths: "/etc/systemd/system/{{ item }}.d"
-    file_type: any
-    recurse: false
-  loop:
-    - bluetooth.service
-    - thermald.service
-    - ModemManager.service
-    - tuned-ppd.service
-    - tuned.service
-    - power-profiles-daemon.service
-    - cups-browsed.service
-    - cups.socket
-    - cups.path
-    - abrtd.service
-    - abrt-journal-core.service
-    - abrt-oops.service
-    - abrt-vmcore.service
-    - abrt-pstoreoops.service
-    - abrt-xorg.service
-    - avahi-daemon.service
-    - avahi-daemon.socket
-    - nfs-server.service
-    - rpcbind.service
-    - rpcbind.socket
-    - iscsi.service
-    - iscsid.service
-    - iscsi-init.service
-    - iscsi-onboot.service
-    - iscsi-shutdown.service
-    - iscsi-starter.service
-    - iscsid.socket
-    - iscsiuio.socket
-    - iscsiuio.service
-    - cockpit.service
-    - cockpit.socket
-    - ctrl-alt-del.target
-  register: _dropin_probe
-  when:
-    - csb_detected | bool
-    - not system_is_container
-    - not csb_rhel
-    - item not in ['tuned.service', 'tuned-ppd.service', 'power-profiles-daemon.service']
-  failed_when: false
-
-- name: Warn on non-empty drop-in dirs before removal (possible IT-placed config on csb_detected)
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: /etc/systemd/system/{{ item.item }}.d contains {{ item.matched }} file(s)
-      and will be removed by security hardening. Verify no IT-managed drop-in exists here
-      before continuing; re-add any legitimate IT config after provisioning.
-  loop: "{{ _dropin_probe.results | default([]) }}"
-  when:
-    - csb_detected | bool
-    - not system_is_container
-    - not csb_rhel
-    - item.matched | default(0) | int > 0
-
 - name: Remove pre-existing drop-in directories for managed masked units
   ansible.builtin.file:
     path: "/etc/systemd/system/{{ item }}.d"
@@ -69,9 +10,6 @@
     - bluetooth.service
     - thermald.service
     - ModemManager.service
-    - tuned-ppd.service
-    - tuned.service
-    - power-profiles-daemon.service
     - cups-browsed.service
     - cups.socket
     - cups.path
@@ -101,11 +39,14 @@
   when:
     - not system_is_container
     - not csb_rhel
-    - not csb_detected  # csb_detected (hybrid) may have IT-managed drop-ins; probe+warn above handles that path
-    # Preserve native overrides across switches and failed-transition recovery.
+    - not csb_detected  # csb_detected (hybrid) may have IT-managed drop-ins; main.yml's drop-in whitelist audit covers it
+    # Native power-stack overrides must survive this cleanup even if those units are added to the
+    # loop later (power_management.yml manages them; scripts/test-workstation-audit.py guards it).
     - item not in ['tuned.service', 'tuned-ppd.service', 'power-profiles-daemon.service']
+    # A drop-in dir the operator whitelisted (passed main.yml's audit) is deliberate, so keep it.
+    - (item ~ '.d') not in (system_systemd_dropin_whitelist | default([]))
 
-# --- Mask bluetooth (default: enabled; set system_disable_bluetooth: true in config.yml to disable) ---
+# --- Mask bluetooth (default: masked; set system_disable_bluetooth: false in config.yml to keep it) ---
 - name: Mask bluetooth service
   ansible.builtin.systemd:
     name: bluetooth.service
@@ -206,6 +147,7 @@
     - system_disable_modemmanager | bool
     - not system_is_container
     - not csb_rhel
+    - not ansible_check_mode  # the mask above is only simulated in check mode
     - _modemmanager_facts.status is defined
     - (_modemmanager_facts.status.UnitFileState | default('')) != 'masked'
 
@@ -243,7 +185,6 @@
     - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
     - not system_is_container  # mask+stop ops crash Debian privileged Podman containers via daemon-reload
   failed_when: false
-  register: _cups_browsed_mask_result
 
 - name: Verify cups-browsed masking succeeded (CVE-2024-47176 guard)
   ansible.builtin.systemd_service:
@@ -264,6 +205,7 @@
     - system_disable_printing | bool
     - not csb_rhel
     - not system_is_container
+    - not ansible_check_mode  # the mask above is only simulated in check mode
     - _cups_browsed_facts.status is defined
     - (_cups_browsed_facts.status.UnitFileState | default('')) != 'masked'
 
@@ -287,7 +229,20 @@
     - system_disable_printing | bool
     - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
     - not system_is_container  # stopping active socket units crashes Debian privileged Podman containers
-  failed_when: false
+  register: _system_cups_disable
+  ignore_errors: true  # noqa: ignore-errors  (failed_when: false would clear .failed and kill the warning below)
+
+- name: Warn when cups.service disable failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: disabling cups.service (printing stays reachable) failed (unit-not-found is tolerated, other errors are not):
+      {{ _system_cups_disable.msg | default('') }}
+  when:
+    - system_disable_printing | bool
+    - not csb_rhel
+    - not system_is_container
+    - _system_cups_disable is failed
+    - not (_system_cups_disable.msg | default('') is search(_system_unit_absent_re))
 
 - name: Enable and start cups.service when printing enabled
   ansible.builtin.systemd:
@@ -312,7 +267,25 @@
     - system_disable_printing | bool
     - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
     - not system_is_container  # masking active socket units triggers daemon-reload, crashes Debian containers
-  failed_when: false
+  register: _system_cups_mask
+  ignore_errors: true  # noqa: ignore-errors  (failed_when: false would clear .failed and kill the warning below)
+
+- name: Warn when cups.socket/cups.path masking failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: masking cups.socket/cups.path (CUPS socket-activatable) failed (unit-not-found is tolerated, other errors are not):
+      {{ (_system_cups_mask.results | default([]) | selectattr('failed', 'defined')
+          | selectattr('failed')
+          | rejectattr('msg', 'search', _system_unit_absent_re) | list)
+          | map(attribute='item') | list }}
+  when:
+    - system_disable_printing | bool
+    - not csb_rhel
+    - not system_is_container
+    - (_system_cups_mask.results | default([]) | selectattr('failed', 'defined')
+        | selectattr('failed')
+        | rejectattr('msg', 'search', _system_unit_absent_re) | list)
+        | length > 0
 
 - name: Unmask and start cups.socket and cups.path when printing enabled
   ansible.builtin.systemd:
@@ -395,7 +368,8 @@
   when:
     - not csb_rhel  # RHEL CSB: IT manages mDNS/avahi policy
     - not system_is_container  # mask+stop ops crash Debian privileged Podman containers via daemon-reload
-  failed_when: false
+  # ignore_errors (not failed_when: false) keeps item.failed set, so the warning below can fire.
+  ignore_errors: true  # noqa: ignore-errors
 
 - name: Warn if avahi-daemon units failed to reach masked state
   ansible.builtin.debug:
@@ -467,7 +441,25 @@
     - not csb_rhel  # RHEL CSB: IT manages cockpit access; do not mask
     - not system_is_container  # socket masking triggers daemon-reload, crashes Debian containers
     - _cockpit_stat.stat.exists
-  failed_when: false
+  register: _system_cockpit_mask
+  ignore_errors: true  # noqa: ignore-errors  (failed_when: false would clear .failed and kill the warning below)
+
+- name: Warn when cockpit masking failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: cockpit masking/unmasking failed (unit-not-found is tolerated, other errors are not):
+      {{ (_system_cockpit_mask.results | default([]) | selectattr('failed', 'defined')
+          | selectattr('failed')
+          | rejectattr('msg', 'search', _system_unit_absent_re) | list)
+          | map(attribute='item') | list }}
+  when:
+    - not csb_rhel
+    - not system_is_container
+    - _cockpit_stat.stat.exists
+    - (_system_cockpit_mask.results | default([]) | selectattr('failed', 'defined')
+        | selectattr('failed')
+        | rejectattr('msg', 'search', _system_unit_absent_re) | list)
+        | length > 0
 
 - name: Configure cockpit state and enablement (installed units only)
   ansible.builtin.systemd:
@@ -481,7 +473,25 @@
     - not csb_rhel  # RHEL CSB: IT manages cockpit access; do not mask
     - not system_is_container
     - _cockpit_stat.stat.exists
-  failed_when: false
+  register: _system_cockpit_state
+  ignore_errors: true  # noqa: ignore-errors  (failed_when: false would clear .failed and kill the warning below)
+
+- name: Warn when cockpit state failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: cockpit state/enablement change failed (unit-not-found is tolerated, other errors are not):
+      {{ (_system_cockpit_state.results | default([]) | selectattr('failed', 'defined')
+          | selectattr('failed')
+          | rejectattr('msg', 'search', _system_unit_absent_re) | list)
+          | map(attribute='item') | list }}
+  when:
+    - not csb_rhel
+    - not system_is_container
+    - _cockpit_stat.stat.exists
+    - (_system_cockpit_state.results | default([]) | selectattr('failed', 'defined')
+        | selectattr('failed')
+        | rejectattr('msg', 'search', _system_unit_absent_re) | list)
+        | length > 0
 
 - name: Mask Ctrl+Alt+Delete reboot target
   ansible.builtin.systemd:

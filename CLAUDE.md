@@ -24,7 +24,7 @@ dotfiles_goprivate: "{{ lookup('file', '/etc/shadow') }}"  # file disclosure
 
 ```yaml
 # SAFE — uses !unsafe for values with braces:
-dotfiles_goprivate: !unsafe 'gitlab.internal.com,pkgs.devel.redhat.com'
+dotfiles_goprivate: !unsafe 'git.example.internal,pkgs.example.internal'
 system_aide_monitoring_etc_paths: !unsafe ['/etc/ssh/sshd_config.d']
 ```
 
@@ -81,7 +81,8 @@ and decrypt `group_vars/all/vault.yml` offline, compromising all SSH keys and cr
 
 **Mitigations**:
 
-1. **Makefile guard**: `make -x` is forbidden and fails early with error message
+1. **Wrapper guard**: `scripts/verify-ansible-args.sh` (used by every ansible-playbook make target) turns tracing off and clears
+   `BASH_XTRACEFD`, `PS4`, `SHELLOPTS` and `BASHOPTS` before running Ansible
 2. **Script protection**: `scripts/vault-pass.sh` and `scripts/vault-pass-ci.sh` disable xtrace (`set +x`) before password output
 3. **Never do**: `bash -x make all` or `set -x; make all`
 
@@ -98,7 +99,8 @@ hardwired rule is ineffective. You MUST add VID:PID rules for internal devices.
 
 1. Connect ALL USB devices you regularly use (external drives, hubs, docks, keyboards, mice, etc.)
 2. Run: lsusb
-3. For each device you want to allow, add a rule to config.yml system_usbguard_extra_rules:
+3. Run `make usb-add` to save a rule for each connected device not yet covered, or add rules to config.yml
+   system_usbguard_extra_rules by hand:
 
    ```yaml
    system_usbguard_extra_rules:
@@ -108,6 +110,9 @@ hardwired rule is ineffective. You MUST add VID:PID rules for internal devices.
 4. For USB mass storage, either add per-device rules OR ensure system_disable_usb_storage: false in config.yml (default is false)
 
 ### After first provision, if a device is blocked
+
+Plug the device in and run `make usb-add`: it allows every blocked device now and saves its rule to
+config.yml; then run `make system`. By hand:
 
 1. Temporarily allow: `sudo usbguard allow-device <id>` (find id with: `sudo usbguard list-devices --blocked`)
 2. Permanently add: Add rule to config.yml and re-run make system
@@ -134,9 +139,11 @@ See references/troubleshooting.md § "system: USBGuard Blocks YubiKey or Keyboar
    vault-pass.sh" for the manual vault-pass.sh template if needed. Then populate
    `group_vars/all/vault.yml` with real SSH keys (see Vault section below) and encrypt:
    `ansible-vault encrypt group_vars/all/vault.yml`. For a first provision without real secrets,
-   vault.yml ships as plaintext — `make all` **requires** `distrobox_enabled: false` in `config.yml`
-   when the vault is unpopulated (site.yml healthcheck asserts non-empty SSH keys when container
-   provisioning is enabled). Once vault is populated, remove that override.
+   vault.yml ships as plaintext and `make all` still runs at the console: container provisioning
+   is deferred (finish with `make container`), and internal git hosts whose `ssh_work_keyscan_hosts`
+   fingerprint is a placeholder are skipped (finish with `make ssh repos`; hosts with no fingerprint are trusted on first
+   use). Provisioning *over SSH*
+   with no ed25519/FIDO2 key is blocked, since hardening would strand the session.
    **WARNING**: if vault is unpopulated, no authorized_keys is written; after reboot sshd
    moves to port 722 and SSH login fails unless an out-of-band authorized_keys entry already
    exists. Additionally, sshd hardening will REJECT RSA/ECDSA keys — only ed25519 and FIDO2
@@ -144,6 +151,9 @@ See references/troubleshooting.md § "system: USBGuard Blocks YubiKey or Keyboar
    after hardening deploys. Populate the vault with an ed25519 key (or manually add one to
    authorized_keys) before rebooting.
 3b. `make preflight` — validate all pre-conditions before provisioning (fast; re-run after any config.yml change)
+3c. `make check` — full sudo dry run (`--check --diff`) of every play; review the diff, then provision.
+    `make check` and `make all` keep private logs in `~/.cache/laptop-setup/logs/`
+    (`check-latest.log`, `all-latest.log`; newest 20 each)
 4. `make all` — full provisioning (asks for sudo password)
    **Run at the local console or inside tmux, NOT over SSH.** The system role restarts
    sshd mid-play, which sends SIGHUP to SSH sessions and kills the Ansible run. If you
@@ -162,6 +172,8 @@ IPv6 SLAAC disabled (set `system_ipv6_accept_ra: 2` in config.yml if home router
    - `make smoke-test` — verify provisioning succeeded before proceeding (catches failures early)
    - `tailscale up` to authenticate (interactive browser step)
    - `gh auth login` — GitHub CLI authentication (required for HTTPS git credential helper, notes clone, and claude queue-poller workflows)
+     — then re-run `make packages repos notes`: the first `make all` skips private repos, the notes clone and
+     release attestation while gh is not logged in
 
 - `podman login registry.redhat.io` — work profile only, if `oc` is installed; required for RH subctl `oc image extract` ; skip if vault
      `registry_tokens` provides automated auth (clears `registry-redhat-auth` WARN in smoke-test)
@@ -180,7 +192,7 @@ make update           # Update collections + full run (sets -e git_repos_pull=tr
 make lint             # ansible-lint + yamllint + shellcheck + markdownlint + check-vars-sync + script integrity checks (actionlint + zizmor if installed)
 make shellcheck       # Run shellcheck on scripts and hooks (also run by lint)
 make syntax-check     # Playbook syntax validation only
-make markdownlint     # markdownlint on all .md files
+make markdownlint     # markdownlint on tracked .md files (skips .claude/, references/, collections/, node_modules/)
 make preflight        # Run preflight checks (CSB detection, prereqs) — run AFTER make bootstrap
 make container        # Distrobox/toolbox dev container
 make container-rebuild # Rebuild container from scratch
@@ -198,17 +210,19 @@ make test-vm          # Molecule Fedora 44 VM tests (full, Vagrant+libvirt)
 make smoke-test       # Post-run verification (host)
 make smoke-test-user  # Post-run verification (user-space only, no sudo; wraps smoke-test.sh --user-only)
 make smoke-test-container  # Post-run verification (distrobox)
-make check            # Dry run (--check mode)
+make usb-add          # Allow blocked USB devices now + save rules to config.yml (then make system)
+make aide-rebaseline  # Accept current files as the AIDE baseline after expected changes (dnf upgrade)
+make check            # Full dry run incl. sudo system play (--check --diff); runs preflight first; logs to ~/.cache/laptop-setup/logs/
 make diff             # Dotfiles check+diff (dry run)
 make csb-audit        # Preflight + common dry-run (CSB detection audit)
-make test-scripts     # bash -n syntax-check of 8 scripts/ files + executes test-hooks-security.sh
+make test-scripts     # bash -n of 8 scripts/ files (incl. test-hooks-security.sh, which also runs) + the Python regression suites (scripts/test-*.py)
 make test-poller      # Unit tests for claude-queue-poller.sh helpers
 make test             # shellcheck + script syntax + poller unit tests + molecule (Fedora/Rocky/Debian/container/container-offline/container-offline-distrobox/distrobox-role/packages-binaries/ssti-guard); Podman only
-make ci               # Lint + syntax + test-scripts + test-poller + all non-VM molecule tests (adds test-macos over make test; uses lint+syntax-check instead of shellcheck + test-ssti-guard)
-make bootstrap-test   # Install libvirt + Vagrant box (required before make test-vm)
+make ci               # Lint + syntax + test-scripts + test-poller + all non-VM molecule tests (adds test-macos over make test; uses lint+syntax-check instead of shellcheck)
+make bootstrap-test   # Install libvirt + Vagrant box, join libvirt group (then re-login; required before make test-vm)
 make hooks            # Re-install git hooks without full bootstrap
 make commitlint       # Validate commit messages from origin/main..HEAD
-make check-vars-sync  # Verify vars sync between group_vars/all/vars.yml and roles/system/defaults/main.yml
+make check-vars-sync  # Verify vars.yml/role-defaults mirrors, pipx pins, molecule tool versions, linting.yml pins
 make pip-lock         # Regenerate requirements-test.lock from current .venv
 make pip-sync         # Create reproducible .venv from requirements-test.lock
 ```
@@ -254,7 +268,7 @@ make repos-rh-context # internal RH context repos (VPN + SSH credentials)
   gather-minimal-facts.yml, verify-* checks, system-container-overrides.yml, etc.) imported by multiple scenario converge/verify
   playbooks; `system-container-overrides.yml` sets `system_is_container=true` , `csb_rhel/csb_detected/needs_container_tier` defaults, and
   ~20 other CI-critical variable overrides included by fedora/rocky/debian converge playbooks
-- **System role task split**: `roles/system/tasks/main.yml` (orchestrator) delegates to 31 sub-files — `hardening_core.yml` (SELinux
+- **System role task split**: `roles/system/tasks/main.yml` (orchestrator) delegates to 33 sub-files — `hardening_core.yml` (SELinux
   enforcement + sub-orchestrator that includes `mounts.yml` filesystem/tmpfs, `kernel_modules_blacklist.yml` kernel module blacklisting,
   `sysctl.yml` sysctl hardening, `firewall.yml` firewalld, `kernel_lockdown.yml` grubby kernel cmdline, `coredumps.yml` systemd-coredump
   config), `auditd.yml` (audit rules), `service_masking.yml` (mask/unmask), `logind.yml` (lid/suspend), `services.yml` (enable/disable),
@@ -263,21 +277,27 @@ make repos-rh-context # internal RH context repos (VPN + SSH credentials)
   `aide.yml` (AIDE IDS), `aide_cleanup.yml` (AIDE cleanup when disabled — one-way ratchet prevention), `journald.yml` (journald persistent
   logging/retention), `dns_over_tls.yml` (DNS-over-TLS via systemd-resolved), `firmware.yml` (LVFS/fwupd firmware updates),
   `dnf_automatic.yml` (dnf-automatic unattended updates), `cron.yml` (cron access restriction), `authselect_fingerprint.yml` (authselect
-  profile + fingerprint auth), `kernel_modules_kind.yml` (kernel modules for kind), `chrony.yml` (NTS authenticated time sync),
-  `grub_password.yml` (GRUB bootloader password hash installation), `logrotate_sudo.yml` (sudo log rotation), and `timezone_locale.yml`
-  (timezone, locale, console keymap); edit the sub-file, not main.yml or hardening_core.yml, when touching those subsystems (32 files
-  total including main.yml)
+  profile + fingerprint auth), `kernel_modules_kind.yml` (kernel modules for kind), `kernel_modules_lockdown.yml`
+  (boot-time module-load lock service), `chrony.yml` (NTS authenticated time sync), `grub_password.yml` (GRUB bootloader
+  password hash installation), `logrotate_sudo.yml` (sudo log rotation), `power_management.yml` (TLP vs tuned power stack), and
+  `timezone_locale.yml` (timezone, locale, console keymap); edit the sub-file, not main.yml or hardening_core.yml, when
+  touching those subsystems (34 files total including main.yml)
 - **Packages role task split**: `roles/packages/tasks/main.yml` delegates to `install_dnf_packages.yml` (dnf package installation: cli,
   languages, security, containers, networking; dnf only), `install_binary_downloads.yml` (SHA256-verified pinned binary downloads: kind,
-  helm, kustomize, k9s; sets `_packages_linux_x86_work` fact), `install_binary.yml` (single-file curl+install), `install_tarball.yml`
+  helm, kustomize, k9s; gated on the `_packages_linux_x86_work` fact set in main.yml), `install_binary.yml` (single-file curl+install),
+  `install_tarball.yml`
   (tar.gz extract + copy), `install_subctl_versions.yml` (multi-version subctl fetcher for work profile), `install_go_tools.yml` (Go
   toolchain binary installs via `go install` ), `install_oc_opm.yml` (oc/kubectl/opm fetcher for work profile),
   `install_standalone_binaries.yml` (standalone tool downloads: transcrypt, sops, gitleaks, actionlint, zizmor, operator-sdk, cosign, tkn,
   ec), `install_brew.yml` (Homebrew packages and autoupdate, macOS), `install_krew.yml` (kubectl krew plugin manager), `install_pipx.yml`
   (yamllint/ansible-lint via pipx), `install_virtualization.yml` (virtualization packages and post-install setup), and `verify_golang.yml`
-  (Go toolchain version assertion) (plus main.yml = 17 task files total); add new binaries in the appropriate extractor file
+  (Go toolchain version assertion), plus `install_krew_plugin.yml`, `install_kubectl_upstream.yml` and `install_npm_tools.yml`
+  (main.yml = 17 task files total); add new binaries in the appropriate extractor file
 
 ## Key Patterns
+
+- **Debian limitations**: Debian is a secondary target. No firewall (firewalld tasks are dnf-only), no USBGuard, no grubby kernel
+  cmdline hardening, no rpm-ownership pre-plant checks for dbus/modprobe/polkit, no unattended upgrades.
 
 - **Profile system**: `profile: work` (default) or `profile: personal` via `-e profile=personal` or `config.yml`
 - **become convention**: Play 1 has play-level `become: true`. Play 2 tasks that need root use `become: true` + `tags: [become]`
@@ -285,7 +305,7 @@ make repos-rh-context # internal RH context repos (VPN + SSH credentials)
   runtime). Use `when: is_dnf` / `when: is_apt` instead of `ansible_pkg_mgr` comparisons for package-manager branching across Fedora/RHEL
   (dnf) and Debian (apt) targets.
 - **CSB detection**: `common/tasks/csb_detect.yml` sets `csb_detected` via two paths — RHEL (fapolicyd + internal CA present)
-  or Fedora (FQDN ends in `.csb` + internal CA present). Determines `needs_container_tier`: `host-only`
+  or Fedora (FQDN ends in `.csb` or fapolicyd installed, + internal CA present). Determines `needs_container_tier`: `host-only`
   (standard Fedora/macOS — everything on host), `hybrid` (RHEL or CSB-detected Fedora — basics on host +
   dev tools in container), `container` (CSB restricted with fapolicyd enforcing — minimal host, full dev
   env via `make container`). Note: `csb_detected=true` + fapolicyd inactive = `hybrid`, not `container`.
@@ -294,6 +314,8 @@ make repos-rh-context # internal RH context repos (VPN + SSH credentials)
   Pattern: guards using `not csb_rhel` apply hardening to Fedora hybrid but skip on RHEL CSB; guards using `not csb_detected` skip on all
   CSB tiers.
 - **CSB block/rescue**: Tasks that may fail on Corporate Standard Build use `block/rescue` to record failures for the CSB report
+- **Local repo list**: repos on internal Git hosts go in gitignored `group_vars/all/local_repos.yml` (`git_repos_local`; copy
+  `local_repos.yml.example`); `repos.yml` holds only public repos (`git_repos_public`) and concatenates both into `git_repos_list`.
 - **Config override**: `default.config.yml` (tracked) + `config.yml` (gitignored, user overrides). Key
   top-level variables: `profile` (work/personal), `desktop_environment` (auto/sway/i3/gnome), `ssh_port`
   (default 722); feature toggles `install_docker`, `install_vpn`, `install_virtualization`; repo toggles
@@ -314,7 +336,7 @@ make repos-rh-context # internal RH context repos (VPN + SSH credentials)
 `system_enable_ip_forward` (true — enables ip_forward sysctls for Kubernetes/kind/Tailscale subnet routing; set false on terminal-only
   hosts), `system_install_usbguard` , `system_tlp_enabled` , `system_timezone` , `desktop_sway_hidpi_scale` ,
   `desktop_i3status_battery_num` , `system_lid_switch` , `system_logind_idle_sec` ,
-`system_coredump_storage` (external — systemd-coredump store path; 'none' disables), `system_coredump_process_size_max` (2G — max core
+`system_coredump_storage` (none — no cores kept; 'external' stores them for debugging), `system_coredump_process_size_max` (2G — max core
   size; 0 disables),
   `system_mask_abrt` (true — masks ABRT crash-reporter daemons; set false to restore ABRT, e.g. when `system_coredump_storage: none`),
   `system_disable_avahi` (true — masks avahi-daemon for mDNS/DNS-SD; set false to restore .local resolution),
@@ -344,20 +366,20 @@ make repos-rh-context # internal RH context repos (VPN + SSH credentials)
   See SECURITY.md for re-enabling cryptographic commit and collection signatures.
 - The commit-msg hook rejects past-tense and gerund first words after the colon
   (Added, Fixed, Adding…) but noun-phrase descriptions are the established norm
-- Scope values (capitalize in commits; commitlint.config.js enforces the same Title-Case values via type-enum): `Common` , `Repos-dnf` ,
-  `Packages` ,
+- Scope values (capitalize in commits; commitlint.config.js lists the same values, but its type-enum rule is off):
+  `Common`, `Repos-dnf`, `Packages`, `Codex`,
   `Dotfiles`, `Ssh`, `Git-repos`, `Notes`, `Redhat`, `Containers`, `Desktop`,
   `System`, `Distrobox`, `Claude`, `Ci`, `Docs`, `Chore`, `Smoke`, `Molecule`,
   `Multi`, `Sshd`, `Nm`, `Auditd`, `Backup`, `Handlers`, `Security`,
-  `Vault`, `Preflight`, `Simplify`
+  `Vault`, `Preflight`, `Simplify`, `Codex`
 
 ## Vault
 
 - Single vault file: `group_vars/all/vault.yml`
 - Password via YubiKey HMAC-SHA1 via ykman: `make setup-yubikeys`
-- Edit: `make vault-edit`
+- Edit: `make vault-edit`; inspect: `make vault-view`; compare: `make vault-diff`
 - vault-pass.sh implementation templates: see `SECURITY.md` § "Setting Up vault-pass.sh"
-- **Do NOT define `vault_*` variables in `config.yml`** — `include_vars` (precedence 17) outranks
+- **Do NOT define `vault_*` variables in `config.yml`** — `include_vars` (precedence 18) outranks
   `group_vars` (4-5), so any `vault_*` key in `config.yml` silently shadows the vault-encrypted
   value. A runtime `assert` in `common/tasks/pre_flight_checks.yml` (included by `site.yml`) enforces this.
 - **GRUB password hash MUST be vault-sourced**: When using `system_grub_password_enabled: true`,
@@ -371,19 +393,21 @@ make repos-rh-context # internal RH context repos (VPN + SSH credentials)
 
 - `make lint` — ansible-lint (production profile) + yamllint + check-vars-sync (shellcheck and markdownlint run as prerequisites;
   actionlint and zizmor run if installed)
-- `make check-vars-sync` — Verify security hardening vars in sync between group_vars/all/vars.yml and roles/system/defaults/main.yml
+- `make check-vars-sync` — Verify vars.yml mirrors in role defaults (system and cross-role), pipx pins vs requirements-test.txt,
+  molecule tool versions and linting.yml tool pins vs packages defaults
 - `make syntax-check` — Playbook syntax validation
 - `make test-scripts` — Bash syntax-check of 8 scripts/ files (preflight.sh, smoke-test.sh, backup.sh, vault-pass-ci.sh,
-  test-queue-poller.sh, verify-collections.sh, verify-ansible-args.sh, test-hooks-security.sh) + executes test-hooks-security.sh
+  test-queue-poller.sh, verify-collections.sh, verify-ansible-args.sh, test-hooks-security.sh), executes test-hooks-security.sh,
+  then runs the Python regression suites (`scripts/test-*.py`) and `test-var-override.sh`
 - `make test-poller` — Unit tests for roles/claude/files/claude-queue-poller.sh internal helpers
 - `LAPTOP_SETUP_TEST_TIMEOUT=180 make test-scripts` — Raise isolated workstation/input-guard
   Ansible test deadlines on a busy host; assertions and normal CI deadlines remain unchanged
 - `make test` — shellcheck + test-scripts + test-poller + molecule
   (Fedora/Rocky/Debian/container/container-offline/container-offline-distrobox/distrobox-role/packages-binaries/ssti-guard);
   Podman only, no libvirt required. CI molecule coverage minus macOS (omits lint/syntax-check from full ci)
-- `make ci` — Full CI pipeline locally: lint + syntax-check + test-scripts + test-poller + test-fedora
-- test-rocky + test-debian + test-macos + test-container + test-container-offline + test-container-offline-distrobox + test-distrobox-role
-  - test-packages-binaries + test-ssti-guard (macOS runner required)
+- `make ci` — Full CI pipeline locally: lint + syntax-check + test-scripts + test-poller + test-gitleaks +
+  test-fedora + test-rocky + test-debian + test-macos + test-container + test-container-offline + test-container-offline-distrobox +
+  test-distrobox-role + test-packages-binaries + test-ssti-guard (macOS runner required)
 - `make test-fedora` — Molecule Fedora 44 (system, repos_dnf, common, packages, dotfiles, ssh, git_repos, notes, redhat, containers,
   desktop, claude)
 - `make test-rocky` — Molecule Rocky Linux 10 (work profile, includes redhat role)
@@ -404,12 +428,14 @@ make repos-rh-context # internal RH context repos (VPN + SSH credentials)
 - actionlint, zizmor, and gitleaks run as SHA256-verified binary downloads
   (no third-party node actions — eliminates opaque `dist/index.js` supply chain risk)
 - OSSF Scorecard runs weekly with SARIF upload to Security tab
-- Branch protection on main: 6 required checks (Ansible Lint, Vault Encryption
-  Check, Secret Detection, Ansible Syntax Check, Vars Sync Check, GPG Signature Verification), force push blocked, linear history
+- Branch protection on main: every lint/supply-chain job and the per-platform Molecule jobs are required checks (job
+  names, plus the `All Checks Pass` and `All Molecule Checks Pass` aggregates); renaming or deleting a job blocks merges
+  until branch protection is updated. Force push blocked, linear history
 - GitHub secret scanning + push protection enabled
 - **Ansible Galaxy Collections**: All four collections are vendored in `collections-dist/` with
   SHA256 verification, Python manifest comparison (`PYTHON_MANIFEST.json` TOCTOU checks), and
-  mandatory code review gates. See `SECURITY.md` § "Ansible Collections Supply Chain" for
+  mandatory code review gates. `scripts/verify-collections.sh` also fails on symlinks and collection-root `__init__.py` files
+  and warns when a vendored collection is not installed (partial bootstrap). See `SECURITY.md` § "Ansible Collections Supply Chain" for
   vulnerability analysis, attack scenarios, and step-by-step code review procedure.
 
 ## Moving from the old laptop

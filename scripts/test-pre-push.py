@@ -86,7 +86,7 @@ class PrePushTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("valid signature", result.stderr)
 
-    def test_signature_covers_bootstrap_keys_and_ci_configuration(self):
+    def test_signature_covers_bootstrap_requirements_and_ci_configuration(self):
         self.env["TEST_VERIFY_RESULT"] = "1"
         for filename in (
             ".github/actions/ci-setup/action.yml",
@@ -125,7 +125,8 @@ class PrePushTests(unittest.TestCase):
         self.assertIn("enabled or disabled", result.stderr)
 
     def test_vault_template_is_allowed_but_plaintext_values_are_blocked(self):
-        template = (HOOK.parent.parent / "group_vars/all/vault.yml").read_text()
+        # Inline stub: the tracked vault.yml may be encrypted once real secrets are added.
+        template = "---\n# placeholder template\nvault_placeholder: encrypt-me\nvault_ssh_auth_key: ''\nvault_registry_tokens: []\n"
         vault = self.repo / "vault.yml"
         for content, accepted in [(template, True),
                                   (template + "other_key: plaintext-value\n", False),
@@ -139,6 +140,32 @@ class PrePushTests(unittest.TestCase):
                 if not accepted:
                     self.assertIn("not encrypted", result.stderr)
 
+    def test_vault_check_reads_pushed_commit_not_working_tree(self):
+        template = "---\nvault_placeholder: encrypt-me\nvault_key: []\n"
+        vault = self.repo / "vault.yml"
+        vault.write_text(template + "vault_key2: plaintext-value\n")
+        self.git("add", "vault.yml")
+        tip = self.commit()
+        # The working tree is clean (stub) but the pushed commit holds plaintext.
+        vault.write_text(template)
+        result = self.run_hook([self.update(tip)])
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("not encrypted", result.stderr)
+        # An earlier pushed commit with plaintext is also caught.
+        self.git("add", "vault.yml")
+        tip2 = self.commit(filename="more.txt")
+        result = self.run_hook([self.update(tip2)])
+        self.assertEqual(result.returncode, 1, result.stderr)
+        # Deleting the file is fine.
+        self.git("reset", "--hard", self.base)
+        vault.write_text(template)
+        self.git("add", "vault.yml")
+        self.commit()
+        self.git("rm", "-q", "vault.yml")
+        self.git("-c", "commit.gpgsign=false", "commit", "-qsm", "Remove vault")
+        result = self.run_hook([self.update(self.git("rev-parse", "HEAD").strip())])
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_secret_scanner_failure_blocks_push(self):
         self.env["TEST_SCAN_RESULT"] = "1"
         result = self.run_hook([self.update(self.commit())])
@@ -146,12 +173,15 @@ class PrePushTests(unittest.TestCase):
         self.assertIn("Secret scanning failed", result.stderr)
 
     def test_checks_every_ref_and_uses_correct_base(self):
+        pushed = self.commit(filename="already-pushed.txt")
         tip = self.commit(critical=True)
-        result = self.run_hook([self.update(tip), self.update(tip, name="second", remote=self.base)])
+        result = self.run_hook([self.update(tip), self.update(tip, name="second", remote=pushed)])
         self.assertEqual(result.returncode, 0, result.stderr)
         scans = Path(self.env["TEST_GITLEAKS_LOG"]).read_text().splitlines()
         self.assertEqual(len(scans), 2)
-        self.assertTrue(all(self.base + ".." + tip in scan for scan in scans))
+        # A new branch scans from the merge-base; an existing one from its remote tip.
+        self.assertIn(self.base + ".." + tip, scans[0])
+        self.assertIn(pushed + ".." + tip, scans[1])
 
     def test_branch_deletion_does_not_inspect_commits(self):
         result = self.run_hook([self.update(ZERO, remote=self.base)])

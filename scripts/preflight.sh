@@ -26,17 +26,16 @@ fi
 RESULTS=() FAILURES=0
 record() {
   local name="$1" status="$2" detail="${3:-}"
+  [[ "$status" =~ ^(pass|fail|warn|skip)$ ]] || { echo "BUG: unknown status '$status' for '$name'" >&2; exit 99; }
   RESULTS+=("${name}|${status}|${detail}")
+  [[ "$status" != fail ]] || FAILURES=$((FAILURES+1))
   if [[ "$JSON" == false ]]; then
     case "$status" in
       pass) printf "${GRN}[PASS]${NC} %s\n" "$name" ;;
-      fail) FAILURES=$((FAILURES+1)); printf "${RED}[FAIL]${NC} %s — %s\n" "$name" "$detail" ;;
-      warn|skip) printf "${YLW}[%s]${NC} %s — %s\n" "${status^^}" "$name" "$detail" ;;
-      *) printf "${RED}[BUG]${NC} unknown status '%s' for check '%s'\n" "$status" "$name" >&2; exit 99 ;;
+      fail) printf "${RED}[FAIL]${NC} %s — %s\n" "$name" "$detail" ;;
+      warn) printf "${YLW}[WARN]${NC} %s — %s\n" "$name" "$detail" ;;
+      skip) printf "${YLW}[SKIP]${NC} %s — %s\n" "$name" "$detail" ;;
     esac
-  else
-    [[ "$status" =~ ^(pass|fail|warn|skip)$ ]] || { echo "BUG: unknown status '$status' for '$name'" >&2; exit 99; }
-    [[ "$status" == fail ]] && FAILURES=$((FAILURES+1))
   fi
   return 0  # recording a successful check must not trigger set -e
 }
@@ -50,11 +49,12 @@ if [[ -f /etc/os-release ]]; then
   . /etc/os-release
   case "${ID:-}" in
     fedora) OS_FAMILY="fedora" ;; rhel|centos|rocky|almalinux) OS_FAMILY="rhel" ;;
+    debian) OS_FAMILY="debian" ;;
   esac
 elif [[ "$(uname -s)" == "Darwin" ]]; then OS_FAMILY="darwin"; fi
 IS_RHEL=false; [[ "${ID:-}" == "rhel" ]] && IS_RHEL=true
 if [[ "$OS_FAMILY" == "unknown" ]]; then
-  record "os_family" "warn" "unrecognized OS: $(uname -s) — playbook supports fedora/rhel/darwin"
+  record "os_family" "warn" "unrecognized OS: $(uname -s) — playbook supports fedora/rhel/debian/darwin"
 else
   record "os_family" "pass" "$OS_FAMILY"
 fi
@@ -68,9 +68,9 @@ if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
   if [[ "$IS_RHEL" == true ]]; then
     [[ "$has_certs" == true && "$fapolicyd_installed" == true ]] && IS_CSB=true
   else
-    # Fedora CSB: FQDN ends in .csb AND internal CA present (fapolicyd not required)
-    fqdn=$(hostname -f 2>/dev/null || hostname)
-    [[ "$fqdn" == *.csb && "$has_certs" == true ]] && IS_CSB=true
+    # Fedora CSB (mirrors csb_detect.yml): internal CA present AND (FQDN ends in .csb OR fapolicyd installed)
+    fqdn=$(hostname -f 2>/dev/null || hostname 2>/dev/null || true)
+    [[ "$has_certs" == true && ( "$fqdn" == *.csb || "$fapolicyd_installed" == true ) ]] && IS_CSB=true
   fi
 fi
 if [[ "$IS_CSB" == true ]]; then
@@ -84,7 +84,7 @@ else
 fi
 CONFIG_FILE="$SCRIPT_DIR/../config.yml"
 if [[ -z "$PROFILE" ]]; then
-  PROFILE="work"  # default matches default.config.yml; overridden by macOS detection or config.yml profile: line below
+  PROFILE="work"  # default matches group_vars/all/vars.yml; overridden by macOS detection or config.yml profile: line below
   [[ "$OS_FAMILY" == "darwin" ]] && PROFILE="personal"
   # Apply config.yml profile override in both directions
   if [[ -f "$CONFIG_FILE" ]]; then
@@ -128,15 +128,15 @@ for tool in ansible-playbook git python3 curl make ssh; do
   else
     # Keep this elif chain in sync with the for-loop tools list above; else at the bottom catches any tool added without an explicit branch
     if [[ "$tool" == "make" ]]; then
-      record "required_${tool}" "fail" "not installed — install first: sudo dnf install make (Fedora/RHEL) | brew install make (macOS), then: make bootstrap"
+      record "required_${tool}" "fail" "not installed — install first: sudo dnf install make (Fedora/RHEL) | sudo apt install make (Debian) | brew install make (macOS), then: make bootstrap"
     elif [[ "$tool" == "ssh" ]]; then
-      record "required_${tool}" "fail" "not installed — run: sudo dnf install openssh-clients (Fedora/RHEL) | brew install openssh (macOS)"
+      record "required_${tool}" "fail" "not installed — run: sudo dnf install openssh-clients (Fedora/RHEL) | sudo apt install openssh-client (Debian) | brew install openssh (macOS)"
     elif [[ "$tool" == "curl" ]]; then
-      record "required_${tool}" "fail" "not installed — run: sudo dnf install curl (Fedora/RHEL) | brew install curl (macOS)"
+      record "required_${tool}" "fail" "not installed — run: sudo dnf install curl (Fedora/RHEL) | sudo apt install curl (Debian) | brew install curl (macOS)"
     elif [[ "$tool" == "python3" ]]; then
-      record "required_${tool}" "fail" "not installed — run: sudo dnf install python3 (Fedora/RHEL) | brew install python3 (macOS)"
+      record "required_${tool}" "fail" "not installed — run: sudo dnf install python3 (Fedora/RHEL) | sudo apt install python3 (Debian) | brew install python3 (macOS)"
     elif [[ "$tool" == "git" ]]; then
-      record "required_${tool}" "fail" "not installed — run: sudo dnf install git (Fedora/RHEL) | brew install git (macOS)"
+      record "required_${tool}" "fail" "not installed — run: sudo dnf install git (Fedora/RHEL) | sudo apt install git (Debian) | brew install git (macOS)"
     elif [[ "$tool" == "ansible-playbook" ]]; then
       if command -v make &>/dev/null; then
         record "required_${tool}" "fail" "not installed — run: make bootstrap"
@@ -172,7 +172,7 @@ fi
 # --- GitHub CLI authentication (required for attestation verification) ---
 if [[ "$PROFILE" == "work" ]]; then
   if command -v gh &>/dev/null; then
-    if gh auth status &>/dev/null 2>&1; then
+    if gh auth status &>/dev/null; then
       record "gh_cli_auth" "pass" "GitHub CLI authenticated"
     else
       record "gh_cli_auth" "warn" "GitHub CLI installed but not authenticated — run 'gh auth login'"
@@ -187,7 +187,7 @@ fi
 # --- YubiKey presence ---
 yk_found=false
 yk_detect_possible=true
-if command -v lsusb &>/dev/null && lsusb 2>/dev/null | grep -qiE "yubico|1050:"; then
+if command -v lsusb &>/dev/null && lsusb 2>/dev/null | grep -iE "yubico|1050:" >/dev/null; then
   yk_found=true; yk_detect_method="lsusb"
 elif command -v ykman &>/dev/null && ykman info &>/dev/null; then
   yk_found=true; yk_detect_method="ykman"
@@ -201,7 +201,7 @@ if [[ "$yk_found" == true ]]; then
   if command -v ykman &>/dev/null; then
     if [[ "$JSON" == false ]]; then
       if ! command -v timeout &>/dev/null; then
-        record "yubikey_chalresp" "skip" "timeout not available (install gnu-coreutils on macOS)"
+        record "yubikey_chalresp" "skip" "timeout not available (brew install coreutils on macOS)"
       else
         _yk_timeout=15
         echo "Touch your YubiKey for HMAC-SHA1 challenge-response test..." >&2
@@ -229,11 +229,18 @@ fi
 vscript="${SCRIPT_DIR}/vault-pass.sh"
 if [[ -x "$vscript" ]]; then
   if [[ "$JSON" == false ]]; then
-    output=$("$vscript" 2>/dev/null) || true
+    # The password must not reach an xtrace log (bash -x): trace off while it is held
+    _xtrace=false
+    [[ $- != *x* ]] || _xtrace=true
+    set +x
+    _vrc=0
+    output=$("$vscript" 2>/dev/null) || _vrc=$?
     len=${#output}
-    if [[ $len -ge 8 ]]; then
-      if [[ "$output" == *ci-dummy-vault-password* ]]; then
-        record "vault" "warn" "vault-pass.sh is still the CI dummy stub — run: make setup-yubikeys (or see SECURITY.md 'Setting Up vault-pass.sh')"
+    if [[ $_vrc -ne 0 ]]; then
+      record "vault" "fail" "vault-pass.sh exited with status ${_vrc}"
+    elif [[ $len -ge 8 ]]; then
+      if [[ "$output" == *ci-dummy-vault-password* || "$output" == CHANGE_ME ]]; then
+        record "vault" "warn" "vault-pass.sh is still a placeholder stub — run: make setup-yubikeys (or see SECURITY.md 'Setting Up vault-pass.sh')"
       else
         record "vault" "pass" "script returned valid password"
       fi
@@ -242,6 +249,8 @@ if [[ -x "$vscript" ]]; then
     else
       record "vault" "fail" "script returned empty output"
     fi
+    output=""
+    if [[ "$_xtrace" == true ]]; then set -x; fi
   else
     record "vault" "skip" "skipped in --json mode (interactive)"
   fi
@@ -261,14 +270,14 @@ if [[ -f "$VAULT_FILE" ]]; then
   if head -1 "$VAULT_FILE" | grep -q '^\$ANSIBLE_VAULT'; then
     record "vault_encrypted" "pass" "vault.yml is encrypted"
   else
-    if grep -q 'vault_placeholder' "$VAULT_FILE" 2>/dev/null; then
-      record "vault_encrypted" "warn" "vault.yml is plaintext stub — vault_ssh_auth_key will be empty; 'make container' aborts mid-play at SECURITY assert. Run: make setup-yubikeys (see CLAUDE.md step 3)"
+    if grep -q 'vault_placeholder' "$VAULT_FILE"; then
+      record "vault_encrypted" "warn" "vault.yml is plaintext stub — vault_ssh_auth_key will be empty; 'make container' skips dev container provisioning. Run: make setup-yubikeys (see CLAUDE.md step 3)"
     else
       record "vault_encrypted" "warn" "vault.yml is plaintext without vault_placeholder sentinel — encrypt or add vault_placeholder stub"
     fi
   fi
 else
-  record "vault_encrypted" "fail" "group_vars/all/vault.yml missing — create from vault.yml.example or decrypt from backup"
+  record "vault_encrypted" "fail" "group_vars/all/vault.yml missing — restore it with: git checkout group_vars/all/vault.yml"
 fi
 
 # --- config.yml ---
@@ -279,15 +288,15 @@ elif ! grep -q '^desktop_environment:' "$CONFIG_FILE"; then
 # Intentional: 'auto' subset of the generic check below; gives a more actionable error for the common mistake
 elif grep -qE '^desktop_environment:[[:space:]]*["'"'"']?auto["'"'"']?([[:space:]]|$)' "$CONFIG_FILE"; then
   record "config_yml" "fail" "desktop_environment is 'auto' — auto-detection requires an active XDG session and will fail on first provision; set 'desktop_environment: sway' (or i3/gnome) in config.yml"
-elif ! grep -qE '^desktop_environment:[[:space:]]*["'"'"']?(sway|i3|gnome)["'"'"']?([[:space:]]|$)' "$CONFIG_FILE"; then
-  record "config_yml" "fail" "desktop_environment must be sway, i3, or gnome — got: $(grep '^desktop_environment:' "$CONFIG_FILE")"
+elif ! grep -qE '^desktop_environment:[[:space:]]*["'"'"']?('"$([[ "$OS_FAMILY" == darwin ]] && echo aerospace || echo 'sway|i3|gnome')"')["'"'"']?([[:space:]]|$)' "$CONFIG_FILE"; then
+  record "config_yml" "fail" "desktop_environment must be $([[ "$OS_FAMILY" == darwin ]] && echo aerospace || echo 'sway, i3, or gnome') — got: $(grep '^desktop_environment:' "$CONFIG_FILE")"
 else
   record "config_yml" "pass" "desktop_environment is set"
   # HiDPI warning: Sway on a HiDPI display without scale set produces microscopic fonts.
   # No assertion can know the display resolution, but if sway is chosen and scale is absent/1.0
   # we remind the user to check. This is a WARN not a FAIL — non-HiDPI users are unaffected.
   if grep -qE '^desktop_environment:[[:space:]]*["'"'"']?sway["'"'"']?' "$CONFIG_FILE"; then
-    if ! grep -qE '^desktop_sway_hidpi_scale:[[:space:]]*["'"'"']?[^1]' "$CONFIG_FILE" && \
+    if ! grep -qE '^desktop_sway_hidpi_scale:[[:space:]]*["'"'"']?[^[:space:]"'"'"'#1]' "$CONFIG_FILE" && \
        ! grep -qE '^desktop_sway_hidpi_scale:[[:space:]]*["'"'"']?1\.[1-9]' "$CONFIG_FILE"; then
       record "config_sway_hidpi" "warn" "desktop_sway_hidpi_scale not set above 1.0 — if this is a HiDPI display (e.g. ThinkPad P16v 2560x1600) add 'desktop_sway_hidpi_scale: \"1.5\"' to config.yml to avoid microscopic fonts"
     else
@@ -306,7 +315,7 @@ if [[ -f "$CONFIG_FILE" ]]; then
       else
         record "identity_${_ivar}" "fail" "${_ivar} not set in config.yml — provisioning uses 'CHANGE_ME' placeholder, producing wrong gitconfig/zshrc"
       fi
-    elif grep -qE "^${_ivar}:[[:space:]]*['\"]?CHANGE_ME" "$CONFIG_FILE"; then
+    elif grep -qE "^${_ivar}:[[:space:]]*(!unsafe[[:space:]]+)?['\"]?CHANGE_ME" "$CONFIG_FILE"; then
       record "identity_${_ivar}" "fail" "${_ivar} is still 'CHANGE_ME' in config.yml — set a real value before running make all"
     else
       record "identity_${_ivar}" "pass" "${_ivar}=$(grep "^${_ivar}:" "$CONFIG_FILE" | cut -d: -f2- | sed 's/^[[:space:]]*//')"
@@ -316,23 +325,48 @@ fi
 
 # --- vault_* key guard (mirrors pre_flight_checks.yml assert) ---
 if [[ -f "$CONFIG_FILE" ]]; then
-  if grep -qE '^vault_[^:]*:' "$CONFIG_FILE"; then
-    record "config_vault_keys" "fail" "config.yml defines vault_* key(s) — include_vars outranks group_vars (precedence 17 > 4), silently shadowing the encrypted vault value; remove vault_* keys from config.yml"
+  if grep -qE '^["'"'"']?vault_[^:]*:' "$CONFIG_FILE"; then
+    record "config_vault_keys" "fail" "config.yml defines vault_* key(s) — include_vars outranks group_vars (precedence 18 > 4-5), silently shadowing the encrypted vault value; remove vault_* keys from config.yml"
   else
     record "config_vault_keys" "pass" "no vault_* keys in config.yml"
   fi
 fi
 
+# --- keyscan fingerprint guard (mirrors pre_flight_checks.yml; warns before the sudo prompt) ---
+if [[ -f "$CONFIG_FILE" ]]; then
+  _bad_fp=$(python3 -I -c '
+import re, sys, yaml
+class L(yaml.SafeLoader): pass
+L.add_multi_constructor("!", lambda loader, tag, node: loader.construct_scalar(node) if isinstance(node, yaml.ScalarNode) else loader.construct_mapping(node, deep=True) if isinstance(node, yaml.MappingNode) else loader.construct_sequence(node, deep=True))
+hosts = (yaml.load(open(sys.argv[1]), Loader=L) or {}).get("ssh_work_keyscan_hosts") or []
+for h in hosts:
+    if isinstance(h, dict) and "fingerprint" in h and not re.fullmatch(r"SHA256:[A-Za-z0-9+/]{43}", str(h["fingerprint"])):
+        print(h.get("host", "?"))
+' "$CONFIG_FILE" 2>/dev/null | paste -sd' ' -) || _fp_unchecked=true
+  if [[ "${_fp_unchecked:-false}" == true ]]; then
+    record "config_keyscan_fingerprints" "warn" "could not parse config.yml (python3 with PyYAML required) — fingerprints unchecked"
+  elif [[ -n "$_bad_fp" ]]; then
+    record "config_keyscan_fingerprints" "warn" "fingerprint not pinned for: $_bad_fp — these hosts and their SSH repos are skipped until the full SHA256 (ssh-keygen -lf) is set"
+  else
+    record "config_keyscan_fingerprints" "pass" "keyscan fingerprints well-formed or unset"
+  fi
+  unset _bad_fp _fp_unchecked
+fi
+
 # --- Network connectivity ---
 net_urls=("github=https://github.com" "galaxy=https://galaxy.ansible.com")
-[[ "$PROFILE" == "work" ]] && net_urls+=("registry=https://registry.redhat.io")
+# Registry API root: 401 means reachable (auth required); the bare host returns 404
+[[ "$PROFILE" == "work" ]] && net_urls+=("registry=https://registry.redhat.io/v2/")
 for netlabel_url in "${net_urls[@]}"; do
   nlabel="${netlabel_url%%=*}" nurl="${netlabel_url#*=}"
   if [[ "$_curl_ok" == true ]]; then
-    _http_code=$(curl -sSL --max-time 10 -o /dev/null -w '%{http_code}' "$nurl" 2>/dev/null)
-    if [[ "$_http_code" =~ ^[23] ]]; then
+    _http_code=$(curl -sSL --max-time 10 -o /dev/null -w '%{http_code}' "$nurl" 2>/dev/null) || _http_code=000
+    if [[ "$_http_code" =~ ^[23] || ( "$nlabel" == registry && "$_http_code" == 401 ) ]]; then
       record "net_${nlabel}" "pass" "$nurl reachable (HTTP $_http_code)"
-    else record "net_${nlabel}" "fail" "$nurl unreachable (HTTP ${_http_code:-000})"; fi
+    # Only GitHub is required (binary downloads); collections are vendored and the registry is
+    # used for image pulls (RH subctl extraction needs a login), so those are warnings
+    elif [[ "$nlabel" == github ]]; then record "net_${nlabel}" "fail" "$nurl unreachable (HTTP ${_http_code:-000})"
+    else record "net_${nlabel}" "warn" "$nurl unreachable (HTTP ${_http_code:-000})"; fi
   else
     record "net_${nlabel}" "skip" "curl not installed"
   fi
@@ -397,7 +431,7 @@ fi
 
 # --- Sudo scope ---
 if sudo_out=$(sudo -n -l 2>/dev/null); then
-  if grep -qE '\(ALL[^)]*\)[[:space:]]+NOPASSWD:[[:space:]]*ALL' <<< "$sudo_out"; then
+  if grep -qE '\(ALL[^)]*\)[[:space:]]+NOPASSWD:[[:space:]]*ALL([^A-Za-z0-9_]|$)' <<< "$sudo_out"; then
     record "sudo" "pass" "full sudo available"
   else
     record "sudo" "warn" "scoped sudo — some system tasks may fail"
@@ -409,9 +443,9 @@ fi
 # --- Desktop X11 trackpoint configuration (XDG template injection guard) ---
 if [[ -f "$CONFIG_FILE" ]]; then
   if grep -qE '^desktop_i3_trackpoint_id:' "$CONFIG_FILE" 2>/dev/null; then
-    trackpoint_value=$(grep '^desktop_i3_trackpoint_id:' "$CONFIG_FILE" | cut -d: -f2- | sed "s/^[[:space:]]*//;s/[[:space:]]*$//" | tr -d "'" | tr -d '"')
+    trackpoint_value=$(grep '^desktop_i3_trackpoint_id:' "$CONFIG_FILE" | cut -d: -f2- | sed "s/^[[:space:]]*//;s/[[:space:]][[:space:]]*#.*$//;s/[[:space:]]*$//" | tr -d "'" | tr -d '"')
     if [[ -n "$trackpoint_value" ]]; then
-      if [[ "$trackpoint_value" =~ [^a-zA-Z0-9\ \-_] ]]; then
+      if [[ "$trackpoint_value" =~ [^a-zA-Z0-9_./\ -] ]]; then
         record "config_trackpoint_id" "fail" "desktop_i3_trackpoint_id contains unsafe characters — alphanumeric, spaces, hyphens, underscores only"
       else
         record "config_trackpoint_id" "pass" "desktop_i3_trackpoint_id is safe"
@@ -427,7 +461,7 @@ else
 fi
 
 # --- Disk space (need 5GB free in $HOME) ---
-avail_kb=$(df -Pk "$HOME" 2>/dev/null | awk 'NR==2 {print $4}'); if [[ -z "$avail_kb" ]]; then
+avail_kb=$(df -Pk "$HOME" 2>/dev/null | awk 'NR==2 {print $4}') || avail_kb=""; if [[ -z "$avail_kb" ]]; then
   record "disk_space" "warn" "df failed on $HOME — cannot measure free space"
 else
   avail_gb=$((avail_kb / 1048576))
@@ -440,9 +474,9 @@ fi
 if [[ "$OS_FAMILY" == "unknown" ]]; then record 'ram' 'skip' 'unknown OS — cannot read RAM'
 else
   if [[ "$OS_FAMILY" == "darwin" ]]; then
-    _raw_ram_bytes=$(sysctl -n hw.memsize 2>/dev/null)
+    _raw_ram_bytes=$(sysctl -n hw.memsize 2>/dev/null) || _raw_ram_bytes=""
     [[ -n "$_raw_ram_bytes" ]] && ram_gb=$(( _raw_ram_bytes / 1073741824 ))
-  else _raw_ram_gib=$(awk '/MemTotal/ {print int(($2 + 1048575) / 1048576)}' /proc/meminfo 2>/dev/null); ram_gb=$_raw_ram_gib; fi
+  else _raw_ram_gib=$(awk '/MemTotal/ {print int(($2 + 1048575) / 1048576)}' /proc/meminfo 2>/dev/null) || _raw_ram_gib=""; ram_gb=$_raw_ram_gib; fi
   ram_gb=${ram_gb:-0}  # guard: awk exits 0 with empty output when MemTotal absent
   if [[ -z "${_raw_ram_bytes:-}${_raw_ram_gib:-}" ]]; then record "ram" "warn" "could not read RAM — measurement tool returned empty output"
   elif [[ $ram_gb -ge 8 ]]; then record "ram" "pass" "${ram_gb}GiB"
@@ -468,11 +502,11 @@ fi
 # Warn when /proc/sys/kernel/yama/ptrace_scope is 0 so the user knows secrets
 # are unprotected before sysctl.yml runs and applies system_ptrace_scope.
 if [[ -f /proc/sys/kernel/yama/ptrace_scope ]]; then
-  _live_ptrace=$(< /proc/sys/kernel/yama/ptrace_scope)
+  _live_ptrace=$(< /proc/sys/kernel/yama/ptrace_scope) || _live_ptrace=""
   if [[ "$_live_ptrace" == "0" ]]; then
     _cfg_ptrace_zero=false
     if [[ -f "$CONFIG_FILE" ]]; then
-      grep -qE '^system_ptrace_scope:[[:space:]]*0([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null \
+      grep -qE '^system_ptrace_scope:[[:space:]]*["'"'"']?0["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null \
         && _cfg_ptrace_zero=true
     fi
     if [[ "$_cfg_ptrace_zero" == true ]]; then

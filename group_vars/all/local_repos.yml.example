@@ -1,0 +1,9 @@
+---
+# Copy to local_repos.yml (gitignored) and list repos on internal git hosts.
+# Concatenated onto git_repos_public by group_vars/all/repos.yml.
+# Hosts must also appear in ssh_work_keyscan_hosts in config.yml.
+git_repos_local:
+  - url: "git@git.example.internal:group/repo.git"
+    dest: "rh-context/group/repo"
+    category: rh-context
+    depth: 1

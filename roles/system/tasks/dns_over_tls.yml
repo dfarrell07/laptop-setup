@@ -1,6 +1,15 @@
 ---
 # roles/system/tasks/dns_over_tls.yml
 # --- DNS-over-TLS ---
+# Debian ships systemd-resolved as a separate package (systemd only Suggests it).
+- name: Install systemd-resolved (Debian)
+  ansible.builtin.apt:
+    name: systemd-resolved
+    state: present
+  when:
+    - is_apt
+    - not system_is_container
+
 - name: Enable systemd-resolved
   ansible.builtin.systemd:
     name: systemd-resolved

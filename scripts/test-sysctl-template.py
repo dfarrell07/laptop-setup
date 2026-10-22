@@ -16,6 +16,8 @@ ANSIBLE = ROOT / '.venv/bin/ansible-playbook'
 if not ANSIBLE.exists():
     ANSIBLE = Path(shutil.which('ansible-playbook'))
 
+INJECTED_CORE_PATTERN = '|/usr/lib/systemd/systemd-coredump %P;`touch x`$(id)&<>'
+
 
 class SysctlTemplateTests(unittest.TestCase):
     def test_firewall_readiness_waits_and_times_out(self):
@@ -55,7 +57,9 @@ class SysctlTemplateTests(unittest.TestCase):
                      'vars_files': [str(ROOT / path) for path in [
                          'default.config.yml', 'group_vars/all/vars.yml', 'roles/system/defaults/main.yml']],
                      'vars': {'profile': 'work', 'ansible_managed': 'Ansible managed'},
-                     'tasks': [{'name': 'Resolve the merged production policy',
+                     'tasks': [{'name': 'Inject shell metacharacters into the core pattern',
+                                'ansible.builtin.set_fact': {'system_core_pattern': INJECTED_CORE_PATTERN}},
+                               {'name': 'Resolve the merged production policy',
                                 'ansible.builtin.set_fact': {'system_sysctl_hardening':
                                     '{{ system_sysctl_hardening | combine(_system_sysctl_work_defaults) | combine(_system_sysctl_performance_defaults) | combine({"kernel.core_pattern": system_core_pattern, "kernel.modules_disabled": system_modules_disabled | int}) }}'}},
                                {'name': 'Render complete production sysctl template',
@@ -87,7 +91,7 @@ class SysctlTemplateTests(unittest.TestCase):
                 if key == 'kernel.core_pattern':
                     value = ''.join(c for c in str(value) if c not in '`$();&<>')
                 self.assertEqual(assignments[key], str(value), key)
-            self.assertTrue(assignments['kernel.core_pattern'].startswith('|/usr/lib/systemd/systemd-coredump '))
+            self.assertEqual(assignments['kernel.core_pattern'], '|/usr/lib/systemd/systemd-coredump %Ptouch xid')
 
 
 if __name__ == '__main__':

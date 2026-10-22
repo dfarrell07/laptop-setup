@@ -51,6 +51,10 @@
       become: false
       tags: [always]
 
+    - name: Verify sudo authentication (Play 1)
+      ansible.builtin.import_tasks: common/tasks/become_probe.yml
+      tags: [repos_dnf, system]
+
     # SECURITY: Close pre-hardening cron window.
     # cronie is installed by default on Fedora and may already be running when provisioning
     # begins. cron.yml runs at import position 21 of 25 in the system role (~10-20 min
@@ -67,9 +71,11 @@
         - /etc/cron.allow
         - /etc/at.allow
       when:
+        - ansible_facts['system'] == 'Linux'  # macOS cron uses /usr/lib/cron; these files would be inert
         - not system_is_container
         - not csb_detected
-      tags: [always]
+      # Not 'always': no-sudo targets (make dotfiles, ...) must not attempt become here
+      tags: [repos_dnf, system]
 
   roles:
     - role: repos_dnf
@@ -131,6 +137,10 @@
              | default(playbook_dir, true) }}
       tags: [always]
 
+    - name: Verify sudo authentication (Play 2 targets run with --ask-become-pass)
+      ansible.builtin.import_tasks: common/tasks/become_probe.yml
+      tags: [packages, desktop, redhat, containers, claude]
+
     - name: Set OS family facts (is_macos, is_linux)
       ansible.builtin.set_fact:
         is_macos: "{{ ansible_facts['os_family'] == 'Darwin' }}"
@@ -169,11 +179,8 @@
       when: not _pf_is_molecule
       tags: [always]
 
-    # NOTE: vault SSH key population check for distrobox is enforced inside
-    # roles/distrobox/tasks/main.yml (lines 63-74) as defense-in-depth against
-    # --start-at-task bypasses. Keeping the check there (not here) limits the
-    # blast radius to the distrobox role on first provision with an empty vault,
-    # allowing dotfiles, ssh, git_repos, notes, and claude roles to succeed.
+    # NOTE: an empty vault is handled inside roles/distrobox/tasks/main.yml, which defers
+    # container provisioning (until 'make container') so the other roles still succeed.
 
     # REQUIRED GUARD — DO NOT REMOVE: Play 1 applies SSH port change + kernel
     # hardening before Play 2, so users who skip 'make preflight' get no other
@@ -246,10 +253,37 @@
       when: ansible_facts['system'] | default('Linux') == 'Linux' and distrobox_enabled | bool
 
   post_tasks:
+    # AIDE's first baseline is built in the system play; packages and later roles then add
+    # binaries under /usr/local/bin and edit monitored /etc paths, so the first hourly check
+    # would report all of it. The system role leaves a marker when it (re)initializes the
+    # baseline; it is rebuilt here once and the marker removed, so a run that fails before
+    # this point is caught up by the next successful one.
+    - name: Check for a pending AIDE baseline rebuild
+      ansible.builtin.stat:
+        path: /var/lib/aide/.rebaseline-pending
+      become: true
+      register: _aide_rebaseline_marker
+      when: ansible_facts['system'] == 'Linux'  # no AIDE (and no reason to escalate) on macOS
+      tags: [always, become]
+
+    - name: Rebuild the AIDE baseline after provisioning
+      ansible.builtin.shell:  # noqa: command-instead-of-module
+        cmd: >-
+          aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+          && rm -f /var/lib/aide/.rebaseline-pending
+      become: true
+      timeout: 1800
+      changed_when: true
+      when: _aide_rebaseline_marker.stat.exists | default(false)
+      tags: [always, become]
+
+    # Only a full run supersedes the report: a single-role target (make ssh) knows nothing of
+    # failures recorded by other roles, and the report is only written when it has failures.
     - name: Remove stale CSB report
       ansible.builtin.file:
         path: "{{ ansible_user_dir }}/csb-report.md"
         state: absent
+      when: "'all' in ansible_run_tags"
       tags: [always]
 
     - name: Generate CSB compatibility report
@@ -318,6 +352,7 @@
           - "!min"
           - distribution
           - env
+          - user  # container-provision.yml's become expressions read ansible_facts['user_id']
       tags: [always]
 
   tasks:

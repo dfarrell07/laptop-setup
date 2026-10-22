@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class CommitMessageTests(unittest.TestCase):
+    @unittest.skipUnless((ROOT / 'node_modules/.bin/commitlint').exists(),
+                         'commitlint is installed by npm ci --ignore-scripts')
     def test_scope_parser(self):
         for header, accepted in [('Desktop: repair terminal setup', True),
                                  ('Molecule/Desktop: repair terminal setup', True),
@@ -22,14 +24,13 @@ class CommitMessageTests(unittest.TestCase):
                                         cwd=ROOT, capture_output=True, text=True)
                 self.assertEqual(result.returncode == 0, accepted, result.stdout + result.stderr)
 
-    def test_effective_signing_configuration_and_empty_private_module_exclusions(self):
+    def test_effective_signing_configuration_and_policy_follows_index(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)
             subprocess.run(['git', 'init', '-q', str(repo)], check=True)
             (repo / 'scripts').mkdir()
             shutil.copy2(ROOT / 'scripts/gpg-policy.sh', repo / 'scripts/gpg-policy.sh')
             (repo / 'scripts/verify-collections.sh').write_text('fixture')
-            (repo / 'config.yml').write_text('dotfiles_gonosumdb: ""\n')
             subprocess.run(['git', '-C', str(repo), 'add', '.'], check=True)
             message = repo / 'message'
             message.write_text('Security: repair verifier\n\nSigned-off-by: Test <test@ci.invalid>\n')

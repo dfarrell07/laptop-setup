@@ -1,6 +1,27 @@
 ---
 # --- Services ---
 
+- name: Detect pcscd.socket (installed with the YubiKey packages; absent if disabled)
+  ansible.builtin.command: # noqa: command-instead-of-module
+    cmd: systemctl cat pcscd.socket
+  register: system_pcscd_check
+  failed_when: false
+  changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - is_dnf or is_apt
+    - not system_is_container
+
+- name: Enable pcscd.socket for ykman PIV/OATH (skipped if pcscd not installed)
+  ansible.builtin.systemd:
+    name: pcscd.socket
+    state: started
+    enabled: true
+  when:
+    - is_dnf or is_apt
+    - not system_is_container
+    - (system_pcscd_check.rc | default(-1)) == 0
+
 - name: Detect bpfman.socket (may not be installed yet on first provision)
   ansible.builtin.command: # noqa: command-instead-of-module
     cmd: systemctl cat bpfman.socket
@@ -34,29 +55,18 @@
     - not system_is_container
     - (system_bpfman_check.rc | default(-1)) == 0
 
-- name: Add user to libvirt and kvm groups
-  ansible.builtin.user:
-    name: "{{ real_user_id }}"
-    groups: [libvirt, kvm]
-    append: true
-  when:
-    - install_virtualization | bool
-    - not system_is_container
-  register: _system_libvirt_group_result
-  # best-effort pre-add; packages role (install_virtualization.yml) is authoritative
-  failed_when: >-
-    _system_libvirt_group_result is failed and
-    'does not exist' not in (_system_libvirt_group_result.msg | default(''))
-  # libvirt/kvm groups are created by package install in Play 2 (packages role).
-  # On first provision this task runs in Play 1 before the packages exist — usermod
-  # fails with "group does not exist". failed_when: false prevents play abort;
-  # the packages role re-runs this after installing libvirt, completing membership.
+# libvirt/kvm group membership is handled by the packages role (install_virtualization.yml)
+# after the groups exist.
 
+# Same gate as the repos_dnf Mullvad repo: personal Fedora only, never on CSB.
 - name: Install and enable Mullvad VPN
   when:
     - install_vpn | bool
     - is_dnf
     - is_fedora
+    - repo_mullvad | bool
+    - profile == 'personal'
+    - not csb_detected | bool
 
   block:
     - name: Install Mullvad VPN
@@ -66,13 +76,20 @@
       register: _system_mullvad_install
       notify: Reload systemd daemon
       when: not system_is_container
-      failed_when: _system_mullvad_install.failed and 'No match for argument' not in (_system_mullvad_install.msg | default(''))
+      # Missing package (repo not added, or only simulated in check mode) warns below instead of failing;
+      # dnf4 reports 'No match for argument', dnf5 'No package <name> available'.
+      failed_when: >-
+        _system_mullvad_install.failed and not
+        ((_system_mullvad_install.msg | default('')) is search('No match for argument')
+         or (_system_mullvad_install.failures | default([]) | join(' ')) is search('No package mullvad-vpn available'))
 
     - name: Warn if Mullvad VPN package install failed
       ansible.builtin.debug:
         msg: >-
-          WARNING: Mullvad VPN package install failed (rc={{ _system_mullvad_install.rc | default('n/a') }});
-          mullvad-daemon will not be enabled and VPN protection is not active on this host
+          {{ 'CHECK MODE: mullvad-vpn is not available until its repo is really added; the install
+          was not simulated' if ansible_check_mode else
+          'WARNING: Mullvad VPN package install failed (rc=' ~ (_system_mullvad_install.rc | default('n/a'))
+          ~ '); mullvad-daemon will not be enabled and VPN protection is not active on this host' }}
       when: _system_mullvad_install.rc | default(0) != 0
 
     - name: Enable Mullvad VPN service
@@ -83,6 +100,7 @@
       when:
         - not system_is_container
         - _system_mullvad_install.rc == 0
+        - not (ansible_check_mode and _system_mullvad_install is changed)  # install only simulated in check mode
 - name: Detect mullvad-daemon (may not be installed)
   ansible.builtin.command: # noqa: command-instead-of-module
     cmd: systemctl cat mullvad-daemon
@@ -154,6 +172,24 @@
         state: present
       register: _system_usbguard_install
 
+    - name: Note USBGuard config steps wait for the real install in check mode
+      ansible.builtin.set_fact:
+        # check mode only simulates the install, so usbguard-daemon.conf and the unit do not exist yet
+        _system_usbguard_pending: "{{ ansible_check_mode and _system_usbguard_install is changed }}"
+
+    - name: Report USBGuard configuration not simulated in check mode
+      ansible.builtin.debug:
+        msg: "CHECK MODE: usbguard is not installed yet; daemon config edits and service enable not simulated."
+      when: _system_usbguard_pending | bool
+
+    - name: Warn about USBGuard rules whose name contains '*' (matched literally)
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: USBGuard compares name/serial strings exactly ('*' is a wildcard only in
+          id and interface types), so this rule never matches a real device: {{ item }}.
+          Use the exact product string (make usb-add writes it) or drop the name clause.
+      loop: "{{ (system_usbguard_whitelist + system_usbguard_extra_rules) | select('search', '(name|serial) \"[^\"]*\\*') | list }}"
+
     - name: Deploy USBGuard whitelist rules
       ansible.builtin.template:
         src: usbguard-rules.conf.j2
@@ -189,6 +225,7 @@
         line: 'ImplicitPolicyTarget=block'
         state: present
       notify: Restart usbguard
+      when: not _system_usbguard_pending | bool
 
     - name: Enforce AuditBackend=LinuxAudit in usbguard-daemon.conf
       ansible.builtin.lineinfile:
@@ -197,6 +234,7 @@
         line: 'AuditBackend=LinuxAudit'
         state: present
       notify: Restart usbguard
+      when: not _system_usbguard_pending | bool
 
     - name: Enforce IPCAllowedGroups=wheel in usbguard-daemon.conf
       ansible.builtin.lineinfile:
@@ -205,6 +243,7 @@
         line: 'IPCAllowedGroups=wheel'
         state: present
       notify: Restart usbguard
+      when: not _system_usbguard_pending | bool
 
     - name: Enforce PresentDevicePolicy=keep in usbguard-daemon.conf
       ansible.builtin.lineinfile:
@@ -213,6 +252,7 @@
         line: 'PresentDevicePolicy={{ system_usbguard_present_device_policy }}'
         state: present
       notify: Restart usbguard
+      when: not _system_usbguard_pending | bool
 
     - name: Enforce InsertedDevicePolicy in usbguard-daemon.conf
       ansible.builtin.lineinfile:
@@ -221,6 +261,7 @@
         line: 'InsertedDevicePolicy={{ system_usbguard_inserted_device_policy }}'
         state: present
       notify: Restart usbguard
+      when: not _system_usbguard_pending | bool
 
     - name: Enable USBGuard service
       ansible.builtin.systemd:
@@ -228,3 +269,4 @@
         state: started
         enabled: true
         daemon_reload: "{{ _system_usbguard_install.changed }}"
+      when: not _system_usbguard_pending | bool

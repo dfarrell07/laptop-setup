@@ -153,6 +153,7 @@
   check_mode: false
   failed_when: fprintd_mask_verify.stdout | trim != 'masked'
   when:
+    - not ansible_check_mode  # the mask above is only simulated in check mode
     - system_disable_fingerprint | bool
     - not csb_rhel
     - not csb_detected
@@ -183,6 +184,7 @@
   changed_when: false
   check_mode: false  # read-only probe — must run in check mode
   when:
+    - not ansible_check_mode  # the disable-feature command is skipped in check mode
     - system_disable_fingerprint | bool
     - system_authselect_bin.stat.exists
     - not csb_rhel
@@ -196,6 +198,7 @@
       Fingerprint auth bypasses pam_faillock deny counting entirely.
       Fix the authselect profile (must be sssd without with-fingerprint) and re-run.
   when:
+    - not ansible_check_mode  # the disable-feature command is skipped in check mode
     - system_disable_fingerprint | bool
     - system_authselect_bin.stat.exists
     - not csb_rhel

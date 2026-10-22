@@ -1,7 +1,7 @@
 ---
 # molecule/shared/verify-common.yml
 # Universal assertions that should pass on every platform.
-# Include from each scenario's verify.yml via include_tasks.
+# Imported from each scenario's verify.yml via import_tasks.
 
 # --- Dotfiles ---
 - name: Verify .zshrc exists
@@ -129,9 +129,9 @@
       - verify_ssh_dir.stat.mode == '0700'
     fail_msg: "SSH directory has wrong permissions (mode={{ verify_ssh_dir.stat.mode | default('absent') }}, expected 0700)"
 
-- name: Check SSH config has KexAlgorithms directive
+- name: Check SSH config has uncommented KexAlgorithms with curve25519
   ansible.builtin.command:
-    cmd: grep -q 'KexAlgorithms' "{{ ansible_user_dir }}/.ssh/config"
+    cmd: grep -qE '^[[:space:]]*KexAlgorithms[[:space:]].*curve25519' "{{ ansible_user_dir }}/.ssh/config"
   changed_when: false
   failed_when: false
   register: verify_ssh_kex
@@ -143,7 +143,7 @@
 
 - name: Check SSH config has Ciphers directive
   ansible.builtin.command:
-    cmd: grep -q 'Ciphers' "{{ ansible_user_dir }}/.ssh/config"
+    cmd: grep -qE '^[[:space:]]*Ciphers[[:space:]]' "{{ ansible_user_dir }}/.ssh/config"
   changed_when: false
   failed_when: false
   register: verify_ssh_ciphers
@@ -283,39 +283,39 @@
       mode={{ verify_claude_dir.stat.mode | default('absent') }},
       expected 0700)
 
-- name: Verify Claude default settings.local.json exists (~/.claude)
+- name: Verify Claude default settings.json exists (~/.claude)
   ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/.claude/settings.local.json"
+    path: "{{ ansible_user_dir }}/.claude/settings.json"
   register: verify_claude_default_settings
 
-- name: Assert Claude default settings.local.json deployed (0600)
+- name: Assert Claude default settings.json deployed (0600)
   ansible.builtin.assert:
     that:
       - verify_claude_default_settings.stat.exists
       - verify_claude_default_settings.stat.mode == '0600'
     fail_msg: >-
-      ~/.claude/settings.local.json missing or wrong permissions
+      ~/.claude/settings.json missing or wrong permissions
       (exists={{ verify_claude_default_settings.stat.exists | default(false) }},
       mode={{ verify_claude_default_settings.stat.mode | default('absent') }},
       expected 0600)
 
-- name: Verify Claude personal settings.local.json exists
+- name: Verify Claude personal settings.json exists
   ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/.claude-personal/settings.local.json"
+    path: "{{ ansible_user_dir }}/.claude-personal/settings.json"
   register: verify_claude_settings
 
-- name: Assert Claude personal settings.local.json has mode 0600
+- name: Assert Claude personal settings.json has mode 0600
   ansible.builtin.assert:
     that:
       - verify_claude_settings.stat.exists
       - verify_claude_settings.stat.mode == '0600'
     fail_msg: >-
-      Claude settings.local.json wrong permissions
+      Claude settings.json wrong permissions
       (exists={{ verify_claude_settings.stat.exists | default(false) }},
       mode={{ verify_claude_settings.stat.mode | default('absent') }},
       expected 0600)
 
-- name: Validate Claude settings.local.json sandbox and deny config
+- name: Validate Claude settings.json sandbox and deny config
   ansible.builtin.command:
     cmd: >-
       python3 -c "import json, sys;
@@ -324,11 +324,11 @@
       assert d.get('sandbox', {}).get('failIfUnavailable'), 'sandbox.failIfUnavailable is not true (allows sandbox bypass)';
       assert not d.get('sandbox', {}).get('allowUnsandboxedCommands'), 'sandbox.allowUnsandboxedCommands is not false';
       assert d.get('enableAllProjectMcpServers', True) == False, 'enableAllProjectMcpServers is missing or not false';
-      assert len(d.get('permissions', {}).get('deny', [])) > 0, 'deny list is empty'"
+      assert 'Edit(**/.githooks/**)' in d.get('permissions', {}).get('deny', []), 'githooks deny rule missing'"
   changed_when: false
   loop:
-    - "{{ ansible_user_dir }}/.claude/settings.local.json"
-    - "{{ ansible_user_dir }}/.claude-personal/settings.local.json"
+    - "{{ ansible_user_dir }}/.claude/settings.json"
+    - "{{ ansible_user_dir }}/.claude-personal/settings.json"
 
 - name: Verify claude-privacy tmpfiles config deployed (Linux)
   ansible.builtin.stat:
@@ -552,7 +552,7 @@
   when: ansible_system == 'Linux'
 
 # These assertions catch regressions in csb_detect.yml that would silently misclassify
-# all Fedora/Debian/Rocky molecule runs as CSB, suppressing repo tasks and container-tier logic.
+# all Fedora/Debian molecule runs (Rocky is forced csb_detected=true) as CSB, suppressing repo tasks and container-tier logic.
 # Guard-logic regression tests only — they catch future false-positive bugs in csb_detect.yml, not gaps in coverage today.
 - name: Assert csb_detected is false on non-CSB test host
   ansible.builtin.assert:
@@ -570,7 +570,7 @@
     - ansible_distribution in ['Fedora', 'Debian']
     - ansible_system == 'Linux'
 
-- name: Assert fapolicyd is not running on non-CSB molecule host
+- name: Assert fapolicyd.service is not installed on non-CSB molecule host
   ansible.builtin.assert:
     that: not (fapolicyd_installed | default(false))
     fail_msg: "fapolicyd_installed is true on non-CSB molecule host — CSB detection false positive"
@@ -644,6 +644,7 @@
       expected: tmpfs /dev/shm tmpfs defaults,nosuid,nodev,noexec
       (rc={{ verify_fstab_shm_noexec.rc | default('skipped') }})
   when:
+    - system_devshm_noexec | default(true) | bool
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
     - not csb_rhel
@@ -681,10 +682,10 @@
     - kernel.kexec_load_disabled = {{ system_kexec_load_disabled | default(1) }}
     - net.core.bpf_jit_harden = {{ system_bpf_jit_harden | default(1) }}
     - net.bridge.bridge-nf-call-iptables = 1  # work-profile policy in _system_sysctl_work_defaults
-    - net.ipv6.conf.all.use_tempaddr = 2  # hardcoded: no system_ipv6_use_tempaddr var; matches _system_sysctl_hardening_defaults dict
-    - net.ipv4.conf.all.rp_filter = 2  # hardcoded: no system_rp_filter var; matches _system_sysctl_hardening_defaults dict
-    - net.ipv4.conf.default.rp_filter = 2  # hardcoded: no system_rp_filter_default var; matches _system_sysctl_hardening_defaults dict
-    - vm.max_map_count = 1048576  # hardcoded: no system_max_map_count var; matches _system_sysctl_hardening_defaults dict
+    - net.ipv6.conf.all.use_tempaddr = 2  # hardcoded: no system_ipv6_use_tempaddr var; matches system_sysctl_hardening dict
+    - net.ipv4.conf.all.rp_filter = 2  # hardcoded: no system_rp_filter var; matches system_sysctl_hardening dict
+    - net.ipv4.conf.default.rp_filter = 2  # hardcoded: no system_rp_filter_default var; matches system_sysctl_hardening dict
+    - vm.max_map_count = 1048576  # hardcoded: no system_max_map_count var; matches _system_sysctl_performance_defaults
   loop_control:
     label: "{{ item | split(' ') | first }}"
   changed_when: false
@@ -948,6 +949,7 @@
     - "^AllowUsers "
   loop_control:
     label: "{{ item | split(' ') | first }}"
+  changed_when: false  # read-only grep
   failed_when: false
   register: verify_sshd_directives
   become: true
@@ -1069,7 +1071,7 @@
 - name: Assert DNSOverTLS= value matches deployed variable
   ansible.builtin.assert:
     that: >-
-      ('DNSOverTLS=' ~ (system_dot_mode | default('opportunistic')))
+      ('DNSOverTLS=' ~ (system_dot_mode | default('opportunistic') | string | lower | replace('true', 'yes') | replace('false', 'no')))
       in (verify_dot_conf_content.content | b64decode)
     fail_msg: >-
       99-dot.conf missing expected DNSOverTLS={{ system_dot_mode | default('opportunistic') }}, got: {{ verify_dot_conf_content.content |
@@ -1191,7 +1193,7 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
 
 - name: Assert sudoers hardening drop-in deployed
   ansible.builtin.assert:
@@ -1202,7 +1204,7 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
 
 - name: Assert sudoers drop-in is mode 0440
   ansible.builtin.assert:
@@ -1211,7 +1213,7 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
     - verify_sudoers_conf is not skipped
     - verify_sudoers_conf.stat.exists
 
@@ -1275,10 +1277,11 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
+    - system_go_env_sudoers | default(true) | bool
 
-- name: Check sudoers go-env contains Defaults env_keep
-  ansible.builtin.command: grep 'Defaults env_keep' /etc/sudoers.d/go-env
+- name: Check sudoers go-env contains Defaults env_keep += GOTMPDIR
+  ansible.builtin.command: grep -F 'Defaults env_keep += GOTMPDIR' /etc/sudoers.d/go-env
   register: verify_sudoers_go_env_content
   changed_when: false
   failed_when: false
@@ -1298,7 +1301,8 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
+    - system_go_env_sudoers | default(true) | bool
 
 - name: Assert sudoers go-env drop-in is mode 0440
   ansible.builtin.assert:
@@ -1309,7 +1313,8 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
+    - system_go_env_sudoers | default(true) | bool
     - verify_sudoers_go_env is not skipped
     - verify_sudoers_go_env.stat.exists
 
@@ -1321,13 +1326,26 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
 
 - name: Check logrotate sudo config references sudo.log
   ansible.builtin.command: grep '/var/log/sudo.log' /etc/logrotate.d/sudo
   register: verify_logrotate_sudo_content
   changed_when: false
   failed_when: false
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - verify_logrotate_sudo.stat.exists | default(false)
+
+- name: Check logrotate sudo config rotation settings
+  ansible.builtin.command: grep -qxE '[[:space:]]*{{ item }}' /etc/logrotate.d/sudo
+  loop:
+    - weekly
+    - rotate 26
+    - compress
+    - create 0600 root root
+  changed_when: false
   become: true
   when:
     - not (system_is_container | default(false))
@@ -1345,7 +1363,7 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
 
 - name: Stat journald hardening drop-in (system role deploys it on non-CSB Linux)
   ansible.builtin.stat:
@@ -1381,7 +1399,7 @@
   ansible.builtin.assert:
     that: >-
       (journald_conf_content.content | b64decode).splitlines()
-      | select('match', item) | list | length > 0
+      | select('match', item ~ '$') | list | length > 0
     fail_msg: >-
       Missing journald directive: {{ item }} — file has:
       {{ (journald_conf_content.content | b64decode).splitlines()
@@ -1393,6 +1411,7 @@
     - "SystemKeepFree={{ system_journald_keep_free | default('1G') }}"
     - "RateLimitIntervalSec={{ system_journald_rate_interval | default('30s') }}"
     - "RateLimitBurst={{ system_journald_rate_burst | default(10000) }}"
+    - "Compress={{ system_journald_compress | default('yes') }}"
   loop_control:
     label: "{{ item | split(' ') | first }}"
   when:
@@ -1410,7 +1429,7 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
     - verify_sudoers_conf is not skipped
     - verify_sudoers_conf.stat.exists
 
@@ -1423,10 +1442,36 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
     - verify_sudoers_conf is not skipped
     - verify_sudoers_conf.stat.exists
     - verify_sudoers_logfile is not skipped
+
+- name: Check sudoers drop-in has full hardening directive set
+  ansible.builtin.command: grep -qxF '{{ item }}' /etc/sudoers.d/99-hardening
+  loop:
+    - Defaults log_input,log_output
+    - Defaults passwd_timeout=5
+    - Defaults passwd_tries=3
+    - Defaults umask=0027
+    - Defaults use_pty
+  changed_when: false
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_detected
+    - verify_sudoers_conf is not skipped
+    - verify_sudoers_conf.stat.exists
+
+- name: Check sudo I/O session log expiry tmpfiles.d entry
+  ansible.builtin.command: grep -qxF 'e /var/log/sudo-io - - - 30d' /etc/tmpfiles.d/sudo-io.conf
+  changed_when: false
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_detected
 
 - name: Stat auditd rules file (system role deploys it on non-RHEL-CSB Linux, including Fedora hybrid CSB)
   ansible.builtin.stat:
@@ -1510,6 +1555,18 @@
     - actions
     - audit-config
     - claude-sensitive-write
+    - claude-sensitive-read
+    - claude-settings
+    - bpf-syscall
+    - kernel-module-unload
+    - kernel-modules
+    - kernel-params
+    - network-config
+    - polkit-rules
+    - udev-rules
+    - auth-config
+    - user-persistence
+    - shell-persistence
   loop_control:
     label: "{{ item | split(' ') | first }}"
   changed_when: false
@@ -1564,10 +1621,9 @@
     - verify_auditd_rules.stat.exists
     - item.split('exe=')[-1] not in ((verify_audit_policy_receipt.content | b64decode | from_json).omitted_executables)
 
-# --- auditd.conf coverage (deployed by system role on non-RHEL-CSB Linux) ---
-# auditd.conf is deployed on Fedora hybrid CSB (csb_detected=true, csb_rhel=false) but NOT
-# on RHEL CSB (csb_rhel=true) where IT manages auditd.conf via SCAP policies.
-# Guard is 'not csb_rhel' (matches auditd.yml when: not csb_rhel).
+# --- auditd.conf coverage (deployed by system role on non-CSB Linux) ---
+# auditd.yml deploys auditd.conf only when not csb_detected: IT owns it on every CSB tier
+# (RHEL CSB via SCAP, hybrid Fedora CSB via osquery/Kolide Fleet).
 - name: Stat /etc/audit/auditd.conf
   ansible.builtin.stat:
     path: /etc/audit/auditd.conf
@@ -1576,7 +1632,7 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel  # RHEL CSB IT manages auditd.conf; Fedora hybrid is user-managed
+    - not csb_detected  # IT manages auditd.conf on all CSB tiers
 
 - name: Assert auditd.conf deployed with mode 0640
   ansible.builtin.assert:
@@ -1593,7 +1649,7 @@
     - not csb_detected
 
 - name: Check auditd.conf max_log_file={{ system_auditd_max_log_file }}
-  ansible.builtin.command: grep -E '^max_log_file = {{ system_auditd_max_log_file | default(8) }}' /etc/audit/auditd.conf
+  ansible.builtin.command: grep -E '^max_log_file = {{ system_auditd_max_log_file | default(8) }}$' /etc/audit/auditd.conf
   changed_when: false
   failed_when: false
   register: _auditd_max_log_file_check
@@ -1610,6 +1666,21 @@
     fail_msg: >-
       auditd.conf max_log_file mismatch — expected '{{ system_auditd_max_log_file | default(8) }}';
       found: {{ _auditd_max_log_file_check.stdout | default('(no match)') }}
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_detected
+    - verify_auditd_conf.stat.exists
+
+- name: Check auditd.conf disk-space actions and rotation settings
+  ansible.builtin.command: grep -qxF '{{ item }}' /etc/audit/auditd.conf
+  loop:
+    - max_log_file_action = ROTATE
+    - space_left_action = SYSLOG
+    - admin_space_left_action = SUSPEND
+    - disk_full_action = SUSPEND
+  changed_when: false
+  become: true
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
@@ -1641,7 +1712,8 @@
     - verify_auditd_conf.stat.exists
 
 # --- dconf hardening (CIS 1.8.x — GNOME/GDM only, stat-gated) ---
-# Only fires when the system role's dconf.yml ran (gdm.service present on target).
+# Fires when the GDM binary is present, the signal that the system role's dconf.yml
+# (gated on the gdm.service fact) ran.
 # Skips cleanly on Sway/i3 and all Podman container CI scenarios where GDM is absent.
 - name: Stat /usr/sbin/gdm (GDM display manager binary)
   ansible.builtin.stat:
@@ -1746,8 +1818,10 @@
     - system_chrony_service_enabled | default(true) | bool
     - verify_chronyd is not skipped
 
-- name: Check /etc/chrony.conf has NTS-enabled server directive (^server.*nts)
-  ansible.builtin.command: grep -qE '^server.*[[:space:]]nts' /etc/chrony.conf
+- name: Check chrony config has NTS-enabled server directive (^server.*nts)
+  ansible.builtin.command: >-
+    grep -qE '^server.*[[:space:]]nts'
+    {{ '/etc/chrony/chrony.conf' if ansible_pkg_mgr == 'apt' else '/etc/chrony.conf' }}
   changed_when: false
   failed_when: false
   register: verify_chrony_nts
@@ -1763,7 +1837,7 @@
 - name: Assert chrony NTS config is present
   ansible.builtin.assert:
     that: verify_chrony_nts.rc == 0
-    fail_msg: "NTS not configured in /etc/chrony.conf — NTS deployment regression (rc={{ verify_chrony_nts.rc }})"
+    fail_msg: "NTS not configured in chrony config — NTS deployment regression (rc={{ verify_chrony_nts.rc }})"
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
@@ -1814,6 +1888,16 @@
     - ansible_system == 'Linux'
     - not csb_rhel
 
+- name: Verify chrony NTS template pins the configured authselectmode
+  ansible.builtin.command: >-
+    grep -qxF 'authselectmode
+    {{ hostvars[inventory_hostname].system_chrony_authselectmode | default(_chrony_render_defaults.system_chrony_authselectmode) }}'
+    /tmp/molecule-chrony-nts-render-check.conf
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
 - name: Verify chrony NTS template contains at least one NTS server line
   ansible.builtin.command: grep -qE '^server.*nts' /tmp/molecule-chrony-nts-render-check.conf
   changed_when: false
@@ -1828,6 +1912,7 @@
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
     - ansible_os_family != 'Debian'
+    - not csb_detected  # session_timeout.yml skips TMOUT on all CSB tiers
     - system_tmout | int > 0
 
 # No system_is_container guard: session_timeout.yml writes /etc/zshrc in containers (unlike profile.d which crashes PID 1)
@@ -1837,6 +1922,7 @@
   when:
     - ansible_system == 'Linux'
     - ansible_os_family != 'Debian'
+    - not csb_detected  # session_timeout.yml skips TMOUT on all CSB tiers
     - system_tmout | int > 0
 
 - name: Check TMOUT typeset -xr in /etc/zsh/zshrc (CIS 5.5.5 — zsh, Debian GLOBAL_ZSHRC)
@@ -1864,7 +1950,7 @@
     - system_tmout | int > 0
 
 # --- System role: service masking (Linux container CI) ---
-# Uses systemctl show to query UnitFileState — same pattern as smoke-test.sh lines 526-530.
+# Uses systemctl show to query UnitFileState — same pattern as the sshd.socket check in scripts/smoke-test.sh.
 # failed_when: false + item.rc/stdout guards skip cleanly when a unit is absent from a
 # minimal image (e.g. cups-browsed not installed on debian slim).
 - name: Check UnitFileState for sshd.socket (must be masked — socket activation bypasses port 722)
@@ -1890,11 +1976,10 @@
     - masked_sshd_socket_state.rc == 0
     - masked_sshd_socket_state.stdout | length > 0
 
-# --- USBGuard config content verification (system role, DNF Linux, system_install_usbguard only) ---
-# Gated on system_install_usbguard — verification skips on hosts where USBGuard is not installed.
+# --- USBGuard config content verification (system role, DNF Linux) ---
+# Content asserts are gated on usbguard_expected (set only by the VM scenario); other scenarios skip them.
 # rules.conf is deployed mode 0600 — become: true required to read.
-# usbguard-daemon.conf checks verify ImplicitPolicyTarget=block (prevents silent policy downgrade)
-# and AuditBackend=LinuxAudit (ensures USB events flow through the audit subsystem).
+# usbguard-daemon.conf ImplicitPolicyTarget/AuditBackend are asserted in verify-smoke.yml.
 - name: Stat /etc/usbguard/rules.conf
   ansible.builtin.stat:
     path: /etc/usbguard/rules.conf
@@ -1968,9 +2053,13 @@
       git lfs install has not been run — global LFS filter drivers not registered;
       run: git lfs install --skip-repo
 
-- name: Check zshrc has GONOSUMDB (profile=work)
+- name: Check zshrc has non-empty GONOSUMDB export (profile=work)
   ansible.builtin.command:
-    cmd: grep -q 'GONOSUMDB' "{{ ansible_user_dir }}/.zshrc"
+    argv:
+      - grep
+      - -qE
+      - "^export GONOSUMDB='[^']+'$"
+      - "{{ ansible_user_dir }}/.zshrc"
   changed_when: false
   failed_when: false
   register: verify_gonosumdb
@@ -1988,7 +2077,11 @@
 
 - name: Check zshrc has GOPRIVATE on separate line (profile=work, trim_blocks regression guard)
   ansible.builtin.command:
-    cmd: grep -q '^export GOPRIVATE=' "{{ ansible_user_dir }}/.zshrc"
+    argv:
+      - grep
+      - -qE
+      - "^export GOPRIVATE='[^']+'$"
+      - "{{ ansible_user_dir }}/.zshrc"
   changed_when: false
   failed_when: false
   register: verify_goprivate
@@ -2027,7 +2120,7 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
 
 - name: Assert /etc/issue contains authorized-users-only notice
   ansible.builtin.assert:
@@ -2036,7 +2129,7 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
 
 # --- Locale and console keymap (system role, Linux only) ---
 - name: Stat /etc/locale.conf (system role deploys it)

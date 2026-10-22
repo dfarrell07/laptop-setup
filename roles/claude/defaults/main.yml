@@ -11,7 +11,7 @@ claude_install_method: native  # native (recommended) or skip (CI/testing — by
 claude_install_url: "https://claude.ai/install.sh"  # Fetches latest at provision time; post-install upgrades use `claude update`
 # SECURITY: SHA256 integrity verification is MANDATORY — set in config.yml before make all
 claude_install_sha256: ""
-claude_pinned_version: ""  # pin in config.yml (e.g. "1.0.3"); empty = installs latest (role debug advisory only — no smoke-test WARN)
+claude_pinned_version: ""  # minimum version, pin in config.yml (e.g. "1.0.3"); installed when missing or older; empty = latest
 claude_bin_path: "{{ ansible_facts['user_dir'] }}/.local/bin/claude"
 claude_queue_poller_path: "{{ ansible_facts['user_dir'] }}/.local/bin/claude-queue-poller.sh"
 
@@ -33,8 +33,9 @@ claude_sandbox_config:
   enabled: true
   allowUnsandboxedCommands: false
   failIfUnavailable: true
-  # use weaker nested sandbox when Claude runs inside a sandboxed context (devcontainer, CSB restricted shell)
-  enableWeakerNestedSandbox: true
+# The weaker nested sandbox is added by settings-policy.json.j2 only when this instance runs inside a
+# container (system_is_container, distrobox, CSB container tier); it is false on normal hosts.
+claude_nested_sandbox: "{{ (system_is_container | default(false)) or (needs_container_tier | default('host-only')) == 'container' }}"
 
 # Seed-only user preferences; CLI edits remain user-owned.
 claude_user_preferences:
@@ -68,7 +69,7 @@ claude_cleanup_period_days: 7
 claude_enable_all_project_mcp_servers: false  # true = auto-trust all project-local MCP servers; false = prompt (more secure)
 
 claude_queue_enabled: false
-claude_queue_allowed_authors: []  # GitHub logins allowed to trigger queue; MUST set when enabled — empty = auth disabled
+claude_queue_allowed_authors: []  # GitHub logins allowed to trigger queue; MUST set when enabled — empty makes the poller refuse to run
 claude_log_dir: "{{ ansible_facts['user_dir'] }}/.local/state/claude/logs"
 claude_queue_runtime_config_dir: "{{ ansible_facts['user_dir'] }}/.config/claude"
 claude_queue_repo: ""
@@ -85,6 +86,7 @@ claude_remote_control_enabled: false  # macOS-only (launchd); Linux emits warnin
 claude_remote_control_config_dir: "{{ claude_personal_config_dir }}"  # config dir for remote-control; override to use a different instance
 
 claude_deny_sensitive:
+  - "~/.claude.json"  # default instance's account state and MCP servers (other instances keep it in their dir)
   - "~/.codex/**"
   - "~/.codex-personal/**"
   - "~/.gemini/**"
@@ -109,15 +111,18 @@ claude_deny_sensitive:
   - "~/.config/git/config"
   - "~/.vault_pass*"
   - "~/.netrc"
+  - "~/.git-credentials"
+  - "~/.pypirc"
+  - "~/.cargo/credentials.toml"
   - "~/.npmrc"
   - "**/.env"
   - "**/.git/config"
-  - "/proc/*/environ"
-  - "/proc/*/cmdline"
-  - "/proc/*/mem"
-  - "/proc/*/maps"
-  - "/proc/*/smaps"
-  - "/proc/*/fd/**"
+  - "//proc/*/environ"
+  - "//proc/*/cmdline"
+  - "//proc/*/mem"
+  - "//proc/*/maps"
+  - "//proc/*/smaps"
+  - "//proc/*/fd/**"
   - "~/.password-store/**"
   - "~/.mozilla/**"
   - "~/.config/google-chrome/**"
@@ -127,22 +132,57 @@ claude_deny_sensitive:
   - "~/.Xauthority"
   - "~/.local/state/zsh/history"
   - "~/.bash_history"
-  - "/run/host/**"
-  - "/etc/shadow"
-  - "/etc/sudoers"
-  - "/etc/sudoers.d/**"
+  - "//run/host/**"
+  - "//etc/shadow"
+  - "//etc/sudoers"
+  - "//etc/sudoers.d/**"
+
+# Paths inside the running instance's own config dir (other instances are denied wholesale).
+claude_own_instance_deny_read:
+  - ".credentials.json"
+  - "history.jsonl"
+  - "shell-snapshots/**"
+  - "file-history/**"
+  - "session-env/**"
+  - ".claude.json"  # account state and MCP server definitions (may hold tokens)
+# Paths Claude Code loads as code or configuration on its next start are not agent-writable:
+# a prompt-injected session (e.g. the queue poller) must not persist hooks, MCP servers,
+# plugins, commands, agents, skills or output styles outside the sandbox. projects/** (memory,
+# plans) stays writable.
+claude_own_instance_deny_write:
+  - ".credentials.json"
+  - ".claude.json"
+  - "settings.json"
+  - "settings.local.json"
+  - "CLAUDE.md"  # Ansible-managed; local edits belong in CLAUDE.local.md
+  - "hooks/**"
+  - "plugins/**"
+  - "commands/**"
+  - "agents/**"
+  - "skills/**"
+  - "output-styles/**"
 
 claude_deny_write_only:
-  - "~/.config/claude/**"  # Write/Edit denied; Read also denied via claude_deny_sensitive entry below — defense-in-depth
+  - "~/.config/claude/**"  # Edit denied (covers Write); Read also denied via claude_deny_sensitive entry below — defense-in-depth
   - "~/.config/systemd/user/**"  # Claude-the-agent only; Ansible deploys claude-queue.service/timer here
   - "~/.bashrc"
   - "~/.zshrc"
   - "~/.profile"
   - "~/.bash_profile"
   - "~/.zshenv"
+  - "~/.zprofile"
+  - "~/.config/zsh/**"  # zshrc sources local.zsh from here on every interactive shell; a write is code execution outside the sandbox
   - "~/.local/bin/**"  # Claude-the-agent only; Ansible deploys claude-queue-poller.sh here
   - "~/.config/autostart/**"
   - "~/Library/LaunchAgents/**"
   - "~/.config/git/template/hooks/**"  # Git hooks deployed by dotfiles; must not be overwritten by Claude
+  - "**/.githooks/**"  # Repos here use core.hooksPath=.githooks; a planted hook runs on the next git command
   - "**/.git/hooks/**"  # Per-repo hook files; Write + git config --local core.hooksPath enables hook injection
+  - "**/.claude/settings.json"  # Project settings load hooks, MCP servers and permissions on the next start
+  - "**/.claude/settings.local.json"  # Same, per-checkout local override
+  - "**/.mcp.json"  # Project MCP server definitions run commands on the next start
   - "~/.config/environment.d/**"  # DOCKER_HOST + KIND_EXPERIMENTAL_PROVIDER; overwrite breaks Makefile-based kind/Podman workflows
+  - "~/.local/share/oh-my-zsh/**"  # oh-my-zsh sources custom/*.zsh on every interactive zsh
+  - "~/.config/direnv/**"  # direnvrc is sourced before every .envrc without a direnv allow
+  - "~/.config/tmux/**"  # tmux.conf run-shell executes on server start
+  - "~/.vimrc"  # vimscript can run system() on every vim start

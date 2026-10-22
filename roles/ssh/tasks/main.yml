@@ -72,6 +72,11 @@
     ssh_github_ok: false
   when: _ssh_github_mitm_guard
 
+- name: Seed only API keys that match the pinned fallback (extra keys in the response are not trusted)
+  ansible.builtin.set_fact:
+    ssh_github_ed25519_keys: "{{ ssh_github_ed25519_keys | intersect(ssh_github_known_hosts_fallback) }}"
+  when: ssh_github_ok
+
 - name: Check known_hosts exists before the read-only probe (including check mode)
   ansible.builtin.stat:
     path: "{{ ansible_facts['user_dir'] }}/.ssh/known_hosts"
@@ -207,6 +212,7 @@
     - ansible_facts['system'] == 'Linux'  # macOS setup configures an SSH client, not sshd
     - ssh_auth_key_pub | trim | length == 0
     - not _ssh_authkeys_stat.stat.exists
+    - lookup('env', 'SSH_CONNECTION') | length > 0  # console runs: pre-flight prints a notice instead
   tags: [always]
 
 - name: Validate existing authorized_keys key types when vault is empty
@@ -233,7 +239,9 @@
       ansible.builtin.assert:
         that:
           - _existing_key_lines | reject('match', _ssh_authorized_key_pattern) | list | length == 0
-          - _existing_key_lines | length > 0 or ssh_allow_empty_authorized_keys | default(false)
+          - >-
+            _existing_key_lines | length > 0 or ssh_allow_empty_authorized_keys | default(false)
+            or lookup('env', 'SSH_CONNECTION') | length == 0
         fail_msg: >-
           SECURITY: authorized_keys is empty or contains an unrecognized entry.
           Supply a compatible Ed25519/FIDO2 key before enabling SSH hardening.
@@ -260,7 +268,9 @@
           (2) Add to authorized_keys: cat ~/.ssh/id_ed25519_bootstrap.pub >> ~/.ssh/authorized_keys
           (3) Test login with ed25519 key before rebooting
           OR populate vault with vault_ssh_auth_key_pub (ed25519) and re-run.
-      when: _existing_key_types | length > 0
+      when:
+        - _existing_key_types | length > 0
+        - lookup('env', 'SSH_CONNECTION') | length > 0  # console runs: pre-flight prints a notice instead
 
 - name: Slurp authorized_keys to detect backup keys that exclusive write will remove
   ansible.builtin.slurp:
@@ -282,7 +292,7 @@
     - ssh_auth_key_pub | trim | length > 0
     - _ssh_authkeys_stat.stat.exists
     - >-
-      (_pre_excl_authkeys_slurp.content | b64decode).split('\n')
+      (_pre_excl_authkeys_slurp.content | b64decode).splitlines()
       | map('trim') | reject('eq', '') | reject('match', '^#')
       | reject('eq', ssh_auth_key_pub | trim)
       | list | length > 0
@@ -320,9 +330,3 @@
   when:
     - rh_git_key | trim | length > 0
     - profile == 'work'
-
-- name: Remove Red Hat internal git key when not work profile
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.ssh/{{ dotfiles_ssh_redhat_key_basename }}"
-    state: absent
-  when: profile != 'work'

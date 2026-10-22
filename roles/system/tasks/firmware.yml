@@ -12,6 +12,15 @@
     - not system_is_container  # RPM post-install calls systemctl preset + daemon-reload, crashes Podman container systemd
   # No failed_when: false — fwupd install failure means no firmware updates; surface as hard error.
 
+- name: Install fwupd (Debian)
+  ansible.builtin.apt:
+    name: fwupd
+    state: present
+  register: _system_fwupd_apt_install
+  when:
+    - is_apt
+    - not system_is_container
+
 - name: Pin LVFS MetadataURI and FirmwareBaseURI to known-good CDN values
   community.general.ini_file:
     path: /etc/fwupd/remotes.d/lvfs.conf
@@ -36,15 +45,36 @@
         name: fwupd-refresh.timer
         state: started
         enabled: true
+      register: _fwupd_timer
+      # check mode only simulates the fwupd install on hosts without it, so the unit is absent
+      failed_when:
+        - _fwupd_timer is failed
+        - not (ansible_check_mode and 'Could not find the requested service' in (_fwupd_timer.msg | default('')))
       when:
         - not csb_rhel  # CSB: IT manages firmware; LVFS timer not needed
         - not system_is_container
 
+    # A metadata download failure (offline, CDN hiccup) must not abort provisioning: the
+    # fwupd-refresh.timer enabled above retries on its own schedule.
     - name: Refresh LVFS firmware metadata  # noqa: no-handler — one-shot refresh after install; handler would defer to play end
       ansible.builtin.command:
         cmd: fwupdmgr refresh
-      when: system_fwupd_install_result is changed
+      register: _system_fwupd_refresh
+      retries: 2
+      delay: 10
+      until: _system_fwupd_refresh.rc == 0
+      when: system_fwupd_install_result is changed or _system_fwupd_apt_install is changed
       changed_when: false
+      failed_when: false
+
+    - name: Warn that the LVFS metadata refresh failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: fwupdmgr refresh failed (rc={{ _system_fwupd_refresh.rc }}); fwupd-refresh.timer will
+          retry. Run 'sudo fwupdmgr refresh' to fetch firmware metadata now.
+      when:
+        - _system_fwupd_refresh.rc is defined
+        - _system_fwupd_refresh.rc != 0
   rescue:
     - name: Warn on fwupd timer/metadata failure
       ansible.builtin.debug:
@@ -63,6 +93,10 @@
     masked: true
     state: stopped
     daemon_reload: true
+  register: _passim_mask
+  failed_when:
+    - _passim_mask is failed
+    - not (ansible_check_mode and 'Could not find the requested service' in (_passim_mask.msg | default('')))
   when: not csb_rhel and not system_is_container  # daemon_reload crashes container systemd; passim only installed alongside fwupd
   # No failed_when: false — passim masking failure leaves an unauthenticated HTTP service (port 27500)
   # reachable by any Tailscale peer (tailscale0 is in the 'trusted' firewall zone); surface as hard error.
@@ -84,7 +118,19 @@
   when:
     - not csb_rhel
     - not system_is_container
+  register: _system_fwupd_harden
   failed_when: false
+
+- name: Warn when fwupd hardening failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: failed to harden /etc/fwupd/fwupd.conf (OnlyTrusted/UriSchemes):
+      {{ _system_fwupd_harden.results | selectattr('failed', 'defined') | selectattr('failed')
+         | map(attribute='msg') | list }}. fwupd may accept unsigned/non-https firmware sources.
+  when:
+    - not csb_rhel
+    - not system_is_container
+    - _system_fwupd_harden.results | default([]) | selectattr('failed', 'defined') | selectattr('failed') | list | length > 0
 
 - name: Check for firmware updates
   ansible.builtin.command:

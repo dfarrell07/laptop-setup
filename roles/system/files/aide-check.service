@@ -22,8 +22,9 @@ IOSchedulingPriority=7
 # making them visible via 'systemctl --failed' and journalctl.
 SyslogIdentifier=aide-check
 
-# Systemd sandbox options compatible with full-filesystem read access:
-NoNewPrivileges=true
+# Systemd sandbox options compatible with full-filesystem read access.
+# No NoNewPrivileges=: /usr/bin/aide transitions init_t -> aide_t, and the SELinux policy
+# grants no nnp_transition for that, so the exec would be denied. aide_t confines it instead.
 # AIDE needs CAP_DAC_READ_SEARCH to read mode-0000 files (shadow, gshadow) as root
 CapabilityBoundingSet=CAP_DAC_READ_SEARCH
 # aide --check is read-only; prevent any writes to /usr, /boot, /etc

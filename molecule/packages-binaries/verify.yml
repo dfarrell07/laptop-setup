@@ -8,12 +8,6 @@
       ansible.builtin.include_vars:
         file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/roles/packages/defaults/main.yml"
 
-    - name: Match the Go tool scope used by converge
-      ansible.builtin.set_fact:
-        packages_go_install:
-          - "github.com/submariner-io/subctl/cmd@v{{ packages_subctl_version }}"
-        packages_go_install_work: []
-
   tasks:
     # --- /usr/local/bin binaries ---
 
@@ -148,7 +142,7 @@
         fail_msg: "/usr/local/bin/zizmor missing or not executable — packages_install_binaries=true regression"
       when: ansible_facts['architecture'] == 'x86_64'
 
-    # --- work-profile OCP + toolchain binaries ---
+    # --- work-profile OCP + toolchain binaries (oc, kubectl, opm, operator-sdk, cosign, tkn, ec) and krew ---
 
     - name: Stat /usr/local/bin/oc
       ansible.builtin.stat:
@@ -175,7 +169,7 @@
         that:
           - verify_kubectl.stat.exists
           - verify_kubectl.stat.executable
-        fail_msg: "/usr/local/bin/kubectl missing or not executable — OCP tarball extraction regression"
+        fail_msg: "/usr/local/bin/kubectl missing or not executable — oc/kubectl install regression"
       when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Stat /usr/local/bin/opm
@@ -275,7 +269,9 @@
 
     - name: Assert yamllint is installed and runnable
       ansible.builtin.assert:
-        that: verify_yamllint_ver.rc == 0
+        that:
+          - verify_yamllint_ver.rc == 0
+          - packages_yamllint_version in verify_yamllint_ver.stdout
         fail_msg: "yamllint --version failed (rc={{ verify_yamllint_ver.rc }}) — pipx install regression"
 
     - name: Check ansible-lint version output
@@ -286,94 +282,13 @@
 
     - name: Assert ansible-lint is installed and runnable
       ansible.builtin.assert:
-        that: verify_ansible_lint_ver.rc == 0
+        that:
+          - verify_ansible_lint_ver.rc == 0
+          - packages_ansible_lint_version in verify_ansible_lint_ver.stdout
         fail_msg: "ansible-lint --version failed (rc={{ verify_ansible_lint_ver.rc }}) — pipx install regression"
 
-    # --- go install binaries ---
-
-    - name: Stat gofumpt binary
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/go/bin/gofumpt"
-      register: verify_gofumpt
-
-    - name: Assert gofumpt exists and is executable
-      ansible.builtin.assert:
-        that:
-          - verify_gofumpt.stat.exists
-          - verify_gofumpt.stat.executable
-        fail_msg: "{{ ansible_user_dir }}/go/bin/gofumpt missing or not executable — packages_go_install_work regression"
-      when: packages_go_install_work | default([]) | length > 0
-
-    - name: Stat golangci-lint binary
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/go/bin/golangci-lint"
-      register: verify_golangci_lint
-
-    - name: Assert golangci-lint exists and is executable
-      ansible.builtin.assert:
-        that:
-          - verify_golangci_lint.stat.exists
-          - verify_golangci_lint.stat.executable
-        fail_msg: >-
-          golangci-lint missing at ~/go/bin/golangci-lint —
-          packages_go_install_work empty or go install failed
-          (check install_go_tools.yml loop)
-      when: packages_go_install_work | default([]) | length > 0
-
-    - name: Stat govulncheck binary
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/go/bin/govulncheck"
-      register: verify_govulncheck
-
-    - name: Assert govulncheck exists and is executable
-      ansible.builtin.assert:
-        that:
-          - verify_govulncheck.stat.exists
-          - verify_govulncheck.stat.executable
-        fail_msg: "{{ ansible_user_dir }}/go/bin/govulncheck missing — packages_go_install_work regression"
-      when: packages_go_install_work | default([]) | length > 0
-
-    - name: Stat gci binary
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/go/bin/gci"
-      register: verify_gci
-
-    - name: Assert gci exists and is executable
-      ansible.builtin.assert:
-        that:
-          - verify_gci.stat.exists
-          - verify_gci.stat.executable
-        fail_msg: "{{ ansible_user_dir }}/go/bin/gci missing — packages_go_install_work regression"
-      when: packages_go_install_work | default([]) | length > 0
-
-    - name: Stat gopls binary
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/go/bin/gopls"
-      register: verify_gopls
-
-    - name: Assert gopls exists and is executable
-      ansible.builtin.assert:
-        that:
-          - verify_gopls.stat.exists
-          - verify_gopls.stat.executable
-        fail_msg: "{{ ansible_user_dir }}/go/bin/gopls missing — packages_go_install_work regression (needs GOTOOLCHAIN=auto for Go 1.26+)"
-      when: packages_go_install_work | default([]) | length > 0
-
-    - name: Stat subctl18 binary
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.local/bin/subctl18"
-      register: verify_subctl18
-      when: ansible_facts['architecture'] == 'x86_64'
-
-    - name: Assert subctl18 exists and is executable
-      ansible.builtin.assert:
-        that:
-          - verify_subctl18.stat.exists
-          - verify_subctl18.stat.executable
-        fail_msg: "{{ ansible_user_dir }}/.local/bin/subctl18 missing or not executable — packages_subctl_versioned regression"
-      when: ansible_facts['architecture'] == 'x86_64'
-
-    # --- Version-pin assertions: each binary must report the pinned version ---
+    # go install binaries (gofumpt, golangci-lint, govulncheck, gci, gopls, code generators, stern) are not
+    # verified here: converge clears packages_go_install_work to avoid slow go builds.
 
     - name: Check kind version output
       ansible.builtin.command:
@@ -423,7 +338,7 @@
 
     - name: Check sops version output
       ansible.builtin.command:
-        cmd: /usr/local/bin/sops --version
+        cmd: /usr/local/bin/sops --disable-version-check --version
       register: verify_sops_ver
       changed_when: false
       when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
@@ -549,76 +464,6 @@
         that: packages_krew_bootstrap_version in verify_krew_ver.stdout
         fail_msg: "krew version mismatch — expected {{ packages_krew_bootstrap_version }}, got: {{ verify_krew_ver.stdout }}"
       when: ansible_facts['architecture'] == 'x86_64'
-
-    - name: Check golangci-lint version output
-      ansible.builtin.command:
-        cmd: "{{ ansible_user_dir }}/go/bin/golangci-lint --version"
-      register: verify_golangci_lint_ver
-      changed_when: false
-      when: packages_go_install_work | default([]) | length > 0
-
-    - name: Assert golangci-lint version matches packages_golangci_lint_version
-      ansible.builtin.assert:
-        that: packages_golangci_lint_version in verify_golangci_lint_ver.stdout
-        fail_msg: >-
-          golangci-lint version mismatch — expected {{ packages_golangci_lint_version }},
-          got: {{ verify_golangci_lint_ver.stdout }}
-      when: packages_go_install_work | default([]) | length > 0
-
-    - name: Check gofumpt version output
-      ansible.builtin.command:
-        cmd: "{{ ansible_user_dir }}/go/bin/gofumpt --version"
-      register: verify_gofumpt_ver
-      changed_when: false
-      when: packages_go_install_work | default([]) | length > 0
-
-    - name: Assert gofumpt version matches packages_gofumpt_version
-      ansible.builtin.assert:
-        that: packages_gofumpt_version in verify_gofumpt_ver.stdout
-        fail_msg: "gofumpt version mismatch — expected {{ packages_gofumpt_version }}, got: {{ verify_gofumpt_ver.stdout }}"
-      when: packages_go_install_work | default([]) | length > 0
-
-    - name: Check govulncheck version output
-      ansible.builtin.command:
-        cmd: "{{ ansible_user_dir }}/go/bin/govulncheck -version"
-      register: verify_govulncheck_ver
-      changed_when: false
-      failed_when: false
-      when: packages_go_install_work | default([]) | length > 0
-
-    - name: Assert govulncheck version matches packages_govulncheck_version
-      ansible.builtin.assert:
-        that: packages_govulncheck_version in (verify_govulncheck_ver.stdout + verify_govulncheck_ver.stderr)
-        fail_msg: >-
-          govulncheck version mismatch — expected {{ packages_govulncheck_version }},
-          got: {{ verify_govulncheck_ver.stdout + verify_govulncheck_ver.stderr }}
-      when: packages_go_install_work | default([]) | length > 0
-
-    - name: Check gci version output
-      ansible.builtin.command:
-        cmd: "{{ ansible_user_dir }}/go/bin/gci --version"
-      register: verify_gci_ver
-      changed_when: false
-      when: packages_go_install_work | default([]) | length > 0
-
-    - name: Assert gci version matches packages_gci_version
-      ansible.builtin.assert:
-        that: packages_gci_version in verify_gci_ver.stdout
-        fail_msg: "gci version mismatch — expected {{ packages_gci_version }}, got: {{ verify_gci_ver.stdout }}"
-      when: packages_go_install_work | default([]) | length > 0
-
-    - name: Check gopls version output
-      ansible.builtin.command:
-        cmd: "{{ ansible_user_dir }}/go/bin/gopls version"
-      register: verify_gopls_ver
-      changed_when: false
-      when: packages_go_install_work | default([]) | length > 0
-
-    - name: Assert gopls version matches packages_gopls_version
-      ansible.builtin.assert:
-        that: packages_gopls_version in verify_gopls_ver.stdout
-        fail_msg: "gopls version mismatch — expected {{ packages_gopls_version }}, got: {{ verify_gopls_ver.stdout }}"
-      when: packages_go_install_work | default([]) | length > 0
 
     - name: Check current subctl release metadata
       ansible.builtin.command:

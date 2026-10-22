@@ -60,9 +60,11 @@ packages_bpfman_enabled: false
 
 packages_security_yubikey:
   - yubikey-manager
+  - pcsc-lite  # pcscd smart-card daemon; ykman PIV/OATH talk to the key through it
 
 packages_apt_yubikey:
   - yubikey-manager
+  - pcscd  # smart-card daemon; ykman PIV/OATH talk to the key through it
   - yubikey-personalization  # legacy: provides ykpersonalize (EOL Feb 2026);
                               # setup-yubikeys.sh uses yubikey-manager only
 
@@ -90,7 +92,7 @@ packages_containers_work:
 # non-x86_64, or packages_install_binaries=false). On work+x86_64 with
 # packages_install_binaries=true, the OCP tarball provides /usr/local/bin/kubectl,
 # which shadows /usr/bin/kubectl in PATH; the dnf install is unused and wastes disk.
-# tasks/main.yml merges this list conditionally. Override to [] to suppress.
+# tasks/install_dnf_packages.yml merges this list conditionally. Override to [] to suppress.
 packages_containers_kubectl:
   - kubectl
 
@@ -161,11 +163,14 @@ packages_apt:
   - ripgrep
   - fd-find
   - bat
+  - gh
+  - podman
+  - distrobox
   - shfmt
   - nodejs             # runtime for commitlint and markdownlint (make ci/lint)
   - npm                # package manager for commitlint/markdownlint node_modules
   # wl-clipboard moved to desktop_apt_packages (Wayland-only; belongs with desktop packages)
-  # gh (GitHub CLI) is not in Debian standard repos; requires cli.github.com/packages apt source
+  # gh, podman and distrobox are in Debian 13 (trixie) main
   # yq: Debian 13 ships a Python-based yq (jq wrapper) incompatible with the Go-based yq here
 
 # Work-profile-only apt packages (Debian/Ubuntu).
@@ -180,7 +185,7 @@ packages_apt_work:
   - socat   # socket relay; work-only (mirrors packages_networking_work on Fedora)
   - iperf3  # network bandwidth measurement — mirrors packages_networking_work on Fedora
   - tshark  # scripting-safe CLI capture; mirrors packages_networking_work wireshark-cli on Fedora
-  - conntrack-tools  # netfilter connection tracking — mirrors packages_networking_work on Fedora
+  - conntrack  # netfilter connection tracking (Debian binary package of conntrack-tools); mirrors Fedora
   - buildah  # OCI image builder; mirrors packages_containers_work on Fedora
   - skopeo  # container image inspection/copy; mirrors packages_containers_work on Fedora
 
@@ -253,8 +258,8 @@ packages_ansible_lint_version: "26.6.0"
 # kubectl is extracted from the same OCP tarball (openshift-client-linux.tar.gz)
 # and therefore tracks the OCP release cadence, not upstream Kubernetes.  OCP 4.22
 # ships Kubernetes 1.35 (OCP 4.x → k8s 1.(x+13); update this line when
-# packages_oc_version changes).  If you need a newer kubectl for upstream clusters, replace
-# the Extract task in tasks/main.yml with a standalone dl.k8s.io download and pin
+# packages_oc_version changes).  If you need a newer kubectl for upstream clusters,
+# set packages_kubectl_source: upstream (tasks/install_kubectl_upstream.yml, dl.k8s.io) and pin
 # packages_kubectl_version independently.
 packages_oc_version: "4.22.8"
 # packages_oc_sha256 and packages_opm_sha256 must be updated together whenever packages_oc_version is bumped.
@@ -269,13 +274,14 @@ packages_kubectl_source: ocp
 # Used only when packages_kubectl_source: upstream; ignored when source is 'ocp'.
 # Fetch latest: curl -L -s https://dl.k8s.io/release/stable.txt
 packages_kubectl_version: "1.36.3"
-packages_kubectl_sha256: "096dd0c0c6e169f8476d9cfb1eb5c5ac23a929fa5f84a22ccd00231c0b82f6a2"  # x86_64 Linux
-packages_kubectl_sha256_arm64: "5fe5855e815d13e8e4c76e4c0a71cffc23befa21a47e81c5ad25a9975fb77c66"  # arm64 Linux
+packages_kubectl_sha256: "ebbd080e7c2e275093b55915722043257eb24004363e20acb3c4d71919f88336"  # x86_64 Linux
+packages_kubectl_sha256_arm64: "3d86f24401c41ae5a46ac50eef8865fe891d3647d324a0836f6c63757a126e62"  # arm64 Linux
 
 packages_go_install: []  # no universal Go tools; all dev tools are profile-scoped below
 # GOTOOLCHAIN env for go install; 'local' prevents runtime toolchain downloads (aligns with SHA256-pinned pattern).
 packages_gotoolchain: local
-  # Set 'auto' in config.yml only when intentionally allowing toolchain self-replacement (Fedora 44 Go 1.24 < gofumpt/gopls needs).
+  # Set 'auto' in config.yml only when intentionally allowing toolchain self-replacement
+  # (only needed where the distro Go is older than the tools need, e.g. Debian 13).
 
 # Work-profile-only Go tools (OVN-K codegen + Submariner + Kubernetes + Go IDE/CI toolchain)
 # Integrity via GOSUMDB (sum.golang.org) — not post-compilation SHA256. Go binary SHA256 is
@@ -449,7 +455,7 @@ packages_brew_work:
   - transcrypt  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_transcrypt_version pin
   - sops  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_sops_version pin
   - iperf3
-  - tshark  # CLI-only formula; mirrors packages_networking_work wireshark-cli (no Qt GUI libs)
+  - wireshark  # Homebrew formula is the CLI build (provides tshark); the GUI is a separate cask
   - k9s   # NOTE: unversioned on macOS (brew tracks latest); Linux uses pinned binary via install_binary_downloads.yml
   - krew  # NOTE: unversioned on macOS (brew tracks latest); Linux pins bootstrap via packages_krew_bootstrap_version; self-manages updates
   - mtr  # requires sudo on macOS for ICMP (raw socket); on Linux, capabilities handle it

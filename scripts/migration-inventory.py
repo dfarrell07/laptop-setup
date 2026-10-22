@@ -113,10 +113,14 @@ def main():
     args = parser.parse_args()
     # Reserve the destination before a potentially long scan; never overwrite a report.
     fd = os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, 'w') as stream:
-        report = inventory([root.absolute() for root in args.roots])
-        json.dump(report, stream, indent=2)
-        stream.write('\n')
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            report = inventory([root.absolute() for root in args.roots])
+            json.dump(report, stream, indent=2)
+            stream.write('\n')
+    except BaseException:
+        args.output.unlink(missing_ok=True)
+        raise
     print(f"Inventoried {len(report['repositories'])} repositories; "
           f"{len(report['errors'])} probe errors. Report: {args.output}")
     return 1 if report['errors'] else 0

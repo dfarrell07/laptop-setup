@@ -31,6 +31,36 @@ class SmokeTests(unittest.TestCase):
             self.assertEqual(result.stdout.strip(), 'tlp-service SKIP')
             self.assertEqual(result.stderr, '')
 
+    def test_vault_pass_stub_is_inspected_never_executed(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('  _vp="$SCRIPT_DIR/vault-pass.sh"')
+        end = source.index('\n  unset _vp', start)
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / 'executed'
+            script = Path(directory) / 'vault-pass.sh'
+            for body, expect in [("pass='CHANGE_ME'\n", 'WARN'), ('echo real\n', 'PASS')]:
+                script.write_text('#!/bin/sh\ntouch %s\n%s' % (marker, body))
+                script.chmod(0o700)
+                result = subprocess.run(['bash', '-eu', '-c',
+                    'record() { printf "%s %s\\n" "$1" "$2"; }; SCRIPT_DIR=' + directory + ';\n' + source[start:end]],
+                    capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(result.stdout.startswith('vault-pass-stub ' + expect), result.stdout)
+                self.assertFalse(marker.exists(), 'vault-pass.sh must not be executed')
+
+    def test_aide_monitor_match_needs_an_exact_entry(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        line = next(l for l in source.splitlines() if 'grep -qE "^${_path//./' in l)
+        with tempfile.TemporaryDirectory() as directory:
+            conf = Path(directory) / 'aide.conf'
+            for text, expect in [('/etc/sysctl.d NORMAL\n', 0), ('/etc/sysctl.d$ NORMAL\n', 0),
+                                 ('# /etc/sysctl.d NORMAL\n', 1), ('/etc/sysctl.dx NORMAL\n', 1),
+                                 ('/etc/sysctlxd NORMAL\n', 1), ('/etc/sysctl.d.bak NORMAL\n', 1)]:
+                conf.write_text(text)
+                pattern = line.strip().split('if ', 1)[1].split(' /etc/aide.conf', 1)[0]
+                result = subprocess.run(['bash', '-c', '_path=/etc/sysctl.d; ' + pattern + ' ' + str(conf)])
+                self.assertEqual(result.returncode, expect, text)
+
     def test_home_tmp_probe_uses_a_binary_available_on_macos_and_linux(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
         start = source.index('if [[ ! -d "$HOME/tmp" ]]')
@@ -78,7 +108,7 @@ class SmokeTests(unittest.TestCase):
             executable = Path(directory) / 'chronyc'
             executable.write_text('#!/bin/sh\n[ "$CHRONY_QUERY_FAIL" = 1 ] && exit 4\n'
                                   'case "$*" in\n  "-c sources") echo "^,*,time.example";;\n'
-                                  '  "-c authdata") echo "time.example,NTS,1,2,3";;\nesac\n')
+                                  '  "-c authdata") echo "time.example,NTS,1,15,256,135,0,0,8,100";;\nesac\n')
             executable.chmod(0o755)
             for fails, expected in [('0', 'PASS'), ('1', 'FAIL')]:
                 result = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c',
@@ -87,6 +117,13 @@ class SmokeTests(unittest.TestCase):
                                         capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout.strip(), 'chrony-nts-active ' + expected)
+            denied = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c',
+                                     'record() { printf "%s %s\\n" "$1" "$2"; }; CSB_HOST=false; _chrony_auth_denied=true;\n'
+                                     + source[start:end]],
+                                    env=dict(os.environ, PATH=directory + ':' + os.environ['PATH'], CHRONY_QUERY_FAIL='0'),
+                                    capture_output=True, text=True)
+            self.assertEqual(denied.returncode, 0, denied.stderr)
+            self.assertEqual(denied.stdout.strip(), 'chrony-nts-active WARN')
 
     def test_pam_record_parsing_preserves_posix_classes_and_keys(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
@@ -124,6 +161,9 @@ class SmokeTests(unittest.TestCase):
             chronyc = home / 'chronyc'
             chronyc.write_text('#!/bin/sh\nexit 4\n')
             chronyc.chmod(0o755)
+            hostname = home / 'hostname'  # a real *.csb host would skip the chrony checks
+            hostname.write_text('#!/bin/sh\necho fixture.example\n')
+            hostname.chmod(0o755)
             result = subprocess.run(
                 ['bash', '-E', '-c',
                  'trap \'printf "smoke command failed at line %s\\n" "$LINENO" >&2\' ERR; source "$1" "${@:2}"',
@@ -225,6 +265,14 @@ class SmokeTests(unittest.TestCase):
                     home.chmod(0o700)
                     self.assertEqual(data['failures'], sum(status == 'FAIL' for status in checks.values()))
 
+
+    def test_scripts_run_on_macos_bash_3(self):
+        """macOS /bin/bash is 3.2: no ${var,,}/${var^^} case conversion, declare -A or mapfile."""
+        import re
+        for name in ('smoke-test.sh', 'preflight.sh'):
+            text = (ROOT / 'scripts' / name).read_text()
+            for pattern in (r'\$\{[A-Za-z_][A-Za-z0-9_]*(,,|\^\^)\}', r'\bdeclare -A\b', r'\b(mapfile|readarray)\b'):
+                self.assertIsNone(re.search(pattern, text), f'{name}: bash 4 construct {pattern}')
 
 if __name__ == '__main__':
     unittest.main()

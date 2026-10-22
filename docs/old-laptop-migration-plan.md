@@ -1,6 +1,6 @@
 # Old laptop migration plan
 
-Audit: 2026-10-13, Fedora 43 source laptop, branch `feat/old-laptop-migration`.
+Audit: 2026-10-13, Fedora 43 source laptop.
 **Portable baseline capture and verification are complete; destination setup is pending.**
 Provisioning will run later from the destination side for Linux and macOS.
 The source laptop's packages and running services were not provisioned.
@@ -42,7 +42,7 @@ retained; both EVPN project repos and active Submariner/release repos use full h
 Codex seeds model/effort and global instructions while preserving user files. Installation is skipped
 when `codex_install_method: skip` or `packages_install_binaries: false`; the latter
 is not an air-gapped provisioning mode. Claude user preferences are seed-only;
-managed `settings.local.json` is reapplied. Default familiar launchers retain the
+managed `settings.json` is reapplied. Default familiar launchers retain the
 observed permission-bypass arguments; configured sandbox/deny settings must not
 be described as guaranteed enforcement under those arguments.
 
@@ -111,7 +111,8 @@ Private source snapshots (not acceptance counts):
 
 This work captures automation for later destination setup; it does not provision
 the source or create migration backups. Keep existing launcher arguments.
-Do not transfer AI transcripts/session history or raw memory databases. Skills belong in their owning repositories;
+Do not transfer AI transcripts/session history or raw memory databases
+(`scripts/backup.sh` copies them only with the opt-in `--ai-history`). Skills belong in their owning repositories;
 retain useful cross-project lessons as concise tracked instructions, while
 project facts and repository-specific publishing rules stay with their projects.
 

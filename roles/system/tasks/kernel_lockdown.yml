@@ -13,8 +13,9 @@
     msg: >-
       grubby --info=DEFAULT failed (rc={{ system_grubby_info.rc }}) — all grubby-based kernel cmdline
       hardening tasks (lockdown, vsyscall, IOMMU, init_on_free, page_alloc.shuffle) are being skipped
-      for the current boot entry. The /etc/kernel/cmdline shell fallback still runs but only takes
-      effect for future kernel installs, not the currently running boot entry.
+      for the current boot entry.{{ ' The /etc/kernel/cmdline fallback still runs but only takes
+      effect for future kernel installs.' if is_dnf else ' Non-dnf hosts (Debian) get no kernel
+      cmdline hardening from this role; add the arguments to GRUB_CMDLINE_LINUX manually.' }}
   when: system_grubby_info.rc != 0 and not csb_rhel
 
 # On RHEL CSB, IT manages the boot configuration — grubby --update-kernel=ALL and
@@ -261,11 +262,11 @@
 
     - name: Remove rd.luks.options=discard grub parameter (SSD wear-pattern)
       ansible.builtin.command:
-        cmd: grubby --remove-args='rd.luks.options' --update-kernel=ALL
+        cmd: grubby --remove-args='rd.luks.options=discard' --update-kernel=ALL
       register: system_luks_options_discard_remove
       when:
         - system_grubby_info.rc == 0
-        - "'rd.luks.options' in (system_grubby_info.stdout)"
+        - "'rd.luks.options=discard' in (system_grubby_info.stdout)"
         - not (system_luks_discards_enabled | bool)
       changed_when: system_luks_options_discard_remove.rc == 0
       failed_when: false
@@ -286,6 +287,7 @@
           init_on_free: "{{ system_init_on_free | bool }}"
           passthrough: "{{ system_iommu_passthrough | bool }}"
           remove_luks_key: "{{ system_remove_luks_key | bool }}"
+          luks_discards: "{{ system_luks_discards_enabled | bool }}"
           amd: "{{ ansible_facts['processor'] | join(' ') | lower is search('amd') }}"
           intel: "{{ ansible_facts['processor'] | join(' ') | lower is search('intel') }}"
       register: system_boot_sources
@@ -295,6 +297,21 @@
       when:
         - is_dnf
         - not system_is_container
+
+    # The copy tasks below use no_log (boot args can reference key material), which also
+    # hides their diff; this redacted summary keeps boot changes reviewable in make check.
+    - name: Show kernel boot argument changes
+      ansible.builtin.debug:
+        msg: >-
+          Boot arguments to add: {{ _boot_summary.added | join(' ') | default('none', true) }};
+          to remove: {{ _boot_summary.removed | join(' ') | default('none', true) }}.
+          Applied to /etc/kernel/cmdline, /etc/default/grub and existing boot entries; active after reboot.
+      vars:
+        _boot_summary: "{{ (system_boot_sources.stdout | from_json).summary }}"
+      when:
+        - is_dnf
+        - not system_is_container
+        - (_boot_summary.added + _boot_summary.removed) | length > 0
 
     - name: Persist hardening arguments for future kernel installation
       ansible.builtin.copy:
@@ -379,7 +396,7 @@
   failed_when: false
   changed_when: false
   when:
-    - system_kernel_lockdown | length > 0
+    - system_kernel_lockdown not in ['', 'none']
     - not system_is_container
 
 - name: Write MOTD reboot notice when lockdown is configured but not active on running kernel
@@ -392,7 +409,8 @@
     dest: /etc/motd.d/30-reboot-required
     mode: "0644"
   when:
-    - system_kernel_lockdown | length > 0
+    - is_dnf  # only dnf hosts write the boot cmdline (grubby); Debian has no /etc/motd.d by default
+    - system_kernel_lockdown not in ['', 'none']
     - not system_is_container
     - not csb_rhel
     - _system_lockdown_active_raw is not failed
@@ -405,11 +423,11 @@
     state: absent
   when: >-
     system_is_container or
-    (system_kernel_lockdown | length > 0 and
+    (system_kernel_lockdown not in ['', 'none'] and
      _system_lockdown_active_raw is not failed and
      _system_lockdown_active_raw.content is defined and
      (_system_lockdown_active_raw.content | b64decode) is search('\[(integrity|confidentiality)\]')) or
-    system_kernel_lockdown | length == 0
+    system_kernel_lockdown in ['', 'none']
   failed_when: false
 
 # Write /etc/motd.d/31-iommu-pending when IOMMU cmdline params have been written
@@ -453,6 +471,7 @@
     dest: /etc/motd.d/31-iommu-pending
     mode: "0644"
   when:
+    - is_dnf  # only dnf hosts write the boot cmdline (grubby); Debian has no /etc/motd.d by default
     - not system_is_container
     - not csb_rhel
     - _system_iommu_runtime_raw is not failed

@@ -16,11 +16,12 @@
     - name: Set work profile for verify context
       ansible.builtin.set_fact:
         profile: work
-        dotfiles_user_email_work: "molecule-test@ci.invalid"  # matches converge set_fact; undefined otherwise
+        dotfiles_user_email_work: "molecule-test@ci.invalid"  # matches shared/ci-default-vars.yml; undefined otherwise
         system_is_container: true  # converge forces true; verify must match or not-system_is_container guards run against absent files
         system_ssh_unused_connection_timeout: >-
           {{ (lookup('file', lookup('env', 'MOLECULE_PROJECT_DIRECTORY') ~ '/roles/system/defaults/main.yml')
               | from_yaml).system_ssh_unused_connection_timeout }}
+        system_tmout: 300  # system-container-overrides.yml sets this in converge; enables TMOUT assertions
         real_user_id: molecule  # ansible_user_id=root in container; subuid/subgid provisioned for molecule
         claude_queue_enabled: true  # re-state so verify-claude-queue.yml assertions execute (service/timer skipped — test-vm only)
 
@@ -31,6 +32,27 @@
 
     - name: Include smoke-test verification
       ansible.builtin.import_tasks: ../shared/verify-smoke.yml
+
+    # --- Dotfiles quarantine of unmanaged git template hooks (planted in prepare.yml) ---
+    - name: Stat planted unmanaged hook at its original path
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.config/git/template/hooks/post-checkout"
+      register: verify_planted_hook
+
+    - name: Find quarantined git template hook
+      ansible.builtin.find:
+        paths: "{{ ansible_user_dir }}/.local/state/laptop-setup/quarantine/git-template-hooks"
+        patterns: 'post-checkout.*'
+      register: verify_quarantined_hook
+
+    - name: Assert unmanaged git template hook was quarantined, not left or deleted
+      ansible.builtin.assert:
+        that:
+          - not verify_planted_hook.stat.exists
+          - verify_quarantined_hook.matched == 1
+        fail_msg: >-
+          unmanaged ~/.config/git/template/hooks/post-checkout was not moved to
+          ~/.local/state/laptop-setup/quarantine/git-template-hooks/ by the dotfiles role
 
     # --- Shared assertions (dnf platforms) ---
     - name: Include dnf verify assertions
@@ -43,19 +65,20 @@
       ansible.builtin.import_tasks: ../shared/verify-notes.yml
 
     # --- Desktop role ---
-    - name: "Include Alacritty assertions (Chrome policy CI gap: not system_is_container)"
+    - name: "Include desktop common assertions (Alacritty; Chrome policy skipped when system_is_container)"
       ansible.builtin.import_tasks: ../shared/verify-desktop-common.yml
 
     # --- Desktop WM configs (converge sets desktop_environment: sway) ---
     - name: Include sway config assertions
       ansible.builtin.import_tasks: ../shared/verify-sway.yml
 
-    # --- Desktop WM configs (second converge run sets desktop_environment: i3) ---
+    # --- Desktop WM configs (second desktop include in converge sets desktop_environment: i3) ---
     - name: Include i3 config assertions
       ansible.builtin.import_tasks: ../shared/verify-i3.yml
 
     # --- System role: usbguard ---
-    # usbguard assertions are handled by molecule/shared/verify-smoke.yml.
+    # usbguard assertions in shared/verify-smoke.yml are gated on usbguard_expected, set only by
+    # the VM scenario, so they do not run here.
 
     # --- Work profile: Claude work instance directory ---
     - name: Include Claude work instance directory and settings assertions

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile audit policy for the target filesystem, preserving immutable repeats."""
+"""Compile audit policy for the target filesystem, preserving immutable repeats, and create missing watch directories."""
 import hashlib
 import json
 import os
@@ -30,7 +30,13 @@ def compile_policy(policy, exists=os.path.exists):
 
 def select_policy(policy, current, receipt, exists=os.path.exists):
     digest = hashlib.sha256(policy.encode()).hexdigest()
-    if receipt and receipt['policy_sha256'] == digest:
+    # Recompile once an executable that was missing at compile time appears (packages are
+    # installed after the system play), so its exclusion rule is no longer left out. An
+    # immutable policy (-e 2) is kept as is: the kernel refuses rule changes until reboot.
+    immutable = any(line.split() == ['-e', '2'] for line in policy.splitlines())
+    newly_present = not immutable and any(
+        exists(path) for path in (receipt or {}).get('omitted_executables', []))
+    if receipt and receipt['policy_sha256'] == digest and not newly_present:
         if hashlib.sha256(current.encode()).hexdigest() != receipt['compiled_sha256']:
             raise ValueError('Installed audit policy does not match its root-owned receipt')
         return current, receipt
@@ -71,9 +77,11 @@ def prepare_watch_directories(policy, home, uid, gid, apply=True):
             # Walk the resolved path through directory FDs so a user cannot
             # swap a parent for an external symlink during privileged creation.
             descriptor = os.open(home, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            walked = home
             try:
                 for part in canonical.relative_to(home).parts:
                     made = False
+                    walked = walked / part
                     try:
                         child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
                     except FileNotFoundError:
@@ -87,7 +95,7 @@ def prepare_watch_directories(policy, home, uid, gid, apply=True):
                     descriptor = child
                     if made:
                         os.fchown(descriptor, uid, gid)
-                        created.append(str(canonical))
+                        created.append(str(walked))
             finally:
                 os.close(descriptor)
         else:
@@ -113,10 +121,13 @@ def main():
         if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != 0 or metadata.st_mode & 0o077:
             raise ValueError('Audit receipt must be a private root-owned regular file')
         receipt = json.loads(receipt_path.read_text())
-        metadata = destination.lstat()
-        if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != 0 or metadata.st_mode & 0o022:
-            raise ValueError('Installed audit policy must be root-owned and non-writable by others')
-        current = destination.read_text()
+        if not destination.exists() and not destination.is_symlink():
+            receipt = None  # rules file deleted: recompile instead of failing on every run
+        else:
+            metadata = destination.lstat()
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != 0 or metadata.st_mode & 0o022:
+                raise ValueError('Installed audit policy must be root-owned and non-writable by others')
+            current = destination.read_text()
     compiled, receipt = select_policy(policy, current, receipt)
     print(json.dumps({'content': compiled, 'receipt': receipt, 'created_directories': created}))
 
