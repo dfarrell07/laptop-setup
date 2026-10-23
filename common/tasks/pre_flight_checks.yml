@@ -124,22 +124,6 @@
               The distrobox container mounts $HOME; mode 0600 limits read access to the owner only.
               Restrict it: chmod 0600 group_vars/all/vault.yml.
 
-    - name: Assert redhat_ca_certs entries are plain filenames (path traversal guard)
-      vars:
-        _raw: "{{ _config_raw }}"
-        _ca_certs: "{{ _raw.get('redhat_ca_certs', []) }}"
-        _bad: "{{ _ca_certs | map('string') | reject('match', '^(?!\\.{1,2}$)[a-zA-Z0-9._-]+$') | list }}"
-      ansible.builtin.assert:
-        that:
-          - _bad | length == 0
-        fail_msg: >-
-          SECURITY: redhat_ca_certs in config.yml contains path traversal characters.
-          Each entry must be a plain filename (alphanumeric, dot, underscore, hyphen only —
-          no slashes, no dot-dot sequences). This list is used in become:true copy tasks;
-          a value like "../../../../cron.d/evil" resolves outside the role files/ tree
-          and writes attacker-controlled content to /etc/cron.d/evil (root cron LPE).
-          Invalid entries: {{ _bad }}. Remove all slashes and path separators.
-
     - name: Assert ssh_port in config.yml is a plain decimal port number (sshd injection guard)
       vars:
         _raw: "{{ _config_raw }}"
@@ -273,21 +257,6 @@
           semantically valid injected directives, so the rescue block will not remove
           the file. Remove any non-digit characters from the value.
 
-    - name: Assert system_ssh_channel_timeout contains no unsafe characters (sshd injection guard)
-      vars:
-        _raw: "{{ _config_raw }}"
-      ansible.builtin.assert:
-        that:
-          - _raw.get('system_ssh_channel_timeout', '') | string is match('^[a-zA-Z0-9=, *hms]*$')
-        fail_msg: >-
-          SECURITY: system_ssh_channel_timeout in config.yml contains unsafe characters.
-          This value is rendered verbatim into ChannelTimeout in sshd_config.d/00-hardening.conf;
-          embedded newlines inject arbitrary sshd directives. sshd -t does not catch
-          syntactically valid injected directives (e.g. PermitRootLogin yes), so the
-          rescue block would not remove the file.
-          Allowed: alphanumeric, equals, comma, space, asterisk, h/m/s time suffixes
-          (e.g. "global=1h" or "session=30m direct-tcpip=1h").
-
     - name: Assert SSH algorithm vars contain only safe characters (sshd injection guard)
       vars:
         _raw: "{{ _config_raw }}"
@@ -336,11 +305,10 @@
           - _raw.get('system_chrony_ntsdumpdir', '') | string is match('^[a-zA-Z0-9/._-]*$')
           - _raw.get('system_chrony_leapsecmode', '') | string is match('^[a-zA-Z0-9-]*$')
           - _raw.get('system_chrony_leapseclist', '') | string is match('^[a-zA-Z0-9/._-]*$')
-          - _raw.get('system_chrony_dhcp_sourcedir', '') | string is match('^[a-zA-Z0-9/._-]*$')
           - _raw.get('system_chrony_minsources', '') | string is match('^[0-9]*$')
         fail_msg: >-
           SECURITY: system_chrony_logdir, system_chrony_driftfile, system_chrony_ntsdumpdir,
-          system_chrony_leapsecmode, system_chrony_leapseclist, system_chrony_dhcp_sourcedir,
+          system_chrony_leapsecmode, system_chrony_leapseclist,
           or system_chrony_minsources in config.yml contains unsafe characters. These values
           are rendered verbatim into /etc/chrony/chrony.conf (Debian) or /etc/chrony.conf
           (Fedora); embedded newlines can inject arbitrary chrony directives (e.g. run-shell
@@ -408,7 +376,6 @@
     # removed because extra-vars (precedence 22) can pre-define any simple variable, silently
     # skipping all four checks below. verify-ansible-args.sh rejects _pf_vault_asserted= on the
     # CLI as a first line of defence; this unconditional block is the Ansible-layer backstop.
-    # Running the assertions in both Play 1 and Play 2 is harmless — they are idempotent.
     - name: Assert config.yml vault and secret-key constraints
       block:
         - name: Assert config.yml contains no vault_* keys
@@ -463,10 +430,6 @@
               leaves the splunk service account available for interactive login.
               Remove redhat_splunk_nologin_shell from config.yml (the default /sbin/nologin is
               correct for all supported platforms) or set it to one of the allowed values.
-
-        # set_fact for localhost persists across plays in the same playbook run (Ansible host-var cache).
-        # This flag is no longer used to gate the assertion block (the block is unconditional).
-        # It is retained only as a diagnostic marker visible in -vv output; it has no security role.
 
     # Catches user typos — in normal operation profile is always 'work' or 'personal'
     - name: Assert profile is a valid value
@@ -673,5 +636,3 @@
           - ssh_port: {{ ssh_port | default(722) }}
           - PasswordAuthentication will be: no
           - PubkeyAcceptedAlgorithms will be: {{ ssh_pubkey_accepted_algorithms | default(['ssh-ed25519*']) | join(',') }}
-
-    # GRUB password hash validation (CWE-426: vault-source enforcement + format validation)

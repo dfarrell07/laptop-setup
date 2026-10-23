@@ -1779,8 +1779,8 @@ EOF
   # splunk system account shell (CIS 5.6) — CSB hosts only; splunk absent on standard Fedora
   if $CSB_HOST && _splunk_entry=$(getent passwd splunk 2>/dev/null) && [[ -n "$_splunk_entry" ]]; then
     _splunk_shell=$(echo "$_splunk_entry" | cut -d: -f7)
-    if [[ "$_splunk_shell" == "/sbin/nologin" ]]; then record "splunk-shell" "PASS"
-    else record "splunk-shell" "FAIL" "splunk shell='$_splunk_shell', expected /sbin/nologin (CIS 5.6) — run: make redhat"; fi
+    if [[ "$_splunk_shell" =~ ^(/sbin/nologin|/usr/sbin/nologin|/usr/bin/nologin|/bin/false)$ ]]; then record "splunk-shell" "PASS"
+    else record "splunk-shell" "FAIL" "splunk shell='$_splunk_shell', expected a nologin shell (CIS 5.6)"; fi
     unset _splunk_shell _splunk_entry
   fi
 

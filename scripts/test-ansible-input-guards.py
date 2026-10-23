@@ -118,7 +118,7 @@ class InputGuardTests(unittest.TestCase):
         template = (ROOT / 'roles/claude/templates/claude-queue-poller-logrotate.j2').read_text()
         content = (template.replace('{{ ansible_managed }}', 'Ansible managed')
                    .replace('{{ claude_log_dir }}', '/home/fixture/old-logs')
-                   .replace("{{ ansible_facts['user_id'] }}", 'fixture')
+                   .replace("{{ real_user_id | default(ansible_facts['user_id']) }}", 'fixture')
                    .replace('{{ _primary_group_name.stdout | trim }}', 'fixture-group'))
         cases = [(content, 0, '0644', True, True),
                  (content.replace('    copytruncate', '    postrotate\n        /fixture/rogue\n    endscript'), 0, '0644', True, False),
@@ -129,7 +129,7 @@ class InputGuardTests(unittest.TestCase):
             with self.subTest(uid=uid, mode=mode, regular=regular, accepted=accepted):
                 self.check([recognize, reject], {
                     'role_path': str(ROOT / 'roles/system'), 'is_dnf': True,
-                    'ansible_facts': {'user_id': 'fixture', 'user_uid': 1000},
+                    'real_user_id': 'fixture',
                     'claude_log_dir': '/home/fixture/new-logs',
                     'system_logrotated_whitelist': [],
                     '_logrotated_unowned': {'stdout_lines': ['/etc/logrotate.d/claude-queue-poller']},

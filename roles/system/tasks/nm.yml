@@ -31,18 +31,6 @@
   when: not system_is_container  # NM conf.d write triggers NM reload via inotify, can crash container
   notify: Restart NetworkManager
 
-- name: Warn that system_wifi_mac_rand is ignored on CSB-detected machines
-  ansible.builtin.debug:
-    msg: >-
-      system_wifi_mac_rand=true is set in config.yml, but CSB-detected machines enforce
-      preserve (hardware MAC) for 802.1X RADIUS NAC compatibility regardless of this variable.
-      stable-ssid MAC randomization is NOT active. Remove system_wifi_mac_rand from config.yml
-      or accept that the hardware MAC is used on all WiFi associations.
-  when:
-    - system_wifi_mac_rand | bool
-    - csb_detected
-    - not system_is_container
-
 - name: NM Tailscale-unmanaged and systemd-resolved DNS deployed (non-CSB)
   when:
     - not csb_rhel  # IT may use wg* for managed WireGuard VPN; do not mark unmanaged on RHEL CSB

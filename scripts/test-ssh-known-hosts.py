@@ -36,8 +36,7 @@ class KnownHostsTests(unittest.TestCase):
         playbook.write_text(yaml.safe_dump([{
             'name': 'Isolated production known_hosts tasks', 'hosts': 'localhost',
             'gather_facts': False,
-            'vars': {'ansible_facts': {'user_dir': str(home)}, 'ssh_github_ok': False,
-                     'ssh_github_ed25519_keys': [], 'ssh_github_known_hosts_fallback': [KEY]},
+            'vars': {'ansible_facts': {'user_dir': str(home)}, 'ssh_github_known_hosts_fallback': [KEY]},
             'tasks': TASKS,
         }]))
         result = subprocess.run(

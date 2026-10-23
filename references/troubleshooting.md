@@ -141,7 +141,7 @@ The system role deploys `/etc/systemd/resolved.conf.d/99-dot.conf` (Cloudflare, 
   sudo systemctl start ovsdb-server.service ovs-vswitchd.service
   ```
 
-  The next `make system` re-masks them. More detail: `~/.local/share/ansible-packages/ovn-services-README.txt`.
+  The next `make system` re-masks them.
 - **`nf_conntrack: table full`:** the playbook sets `net.netfilter.nf_conntrack_max` to 524288. Check `sysctl
   net.netfilter.nf_conntrack_max`; if lower, `sudo modprobe nf_conntrack && sudo sysctl --system` (modprobe fails while
   `system_modules_disabled: 1` is active until reboot).

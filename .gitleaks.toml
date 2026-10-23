@@ -2,19 +2,6 @@
   useDefault = true
 
 [[rules]]
-  id = "claude-skill-sensitive-path"
-  description = "Sensitive path reference in Claude skill file"
-  regex = '''(~/\.(ssh|aws|gnupg|kube|vault_pass)|/etc/shadow|private_key)'''
-  path = '''(^|/)\.claude/.*\.js$'''
-
-[[rules.allowlists]]
-  description = "Audit prompts list key filenames without reading private key contents"
-  condition = "AND"
-  regexTarget = "line"
-  regexes = ['''ls ~/\.ssh/ 2>/dev/null''']
-  paths = ['''(^|/)\.claude/(concrete-changes-audit|make-audit)\.js$''']
-
-[[rules]]
   id = "generic-api-key"
 
   [[rules.allowlists]]

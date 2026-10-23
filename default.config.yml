@@ -35,7 +35,7 @@ dotfiles_user_email_personal: !unsafe 'CHANGE_ME'
 system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago, Europe/London; run: timedatectl list-timezones
 
 # Additional toggles (authoritative source in parentheses; override in config.yml):
-#   install_docker: false              (group_vars/all/vars.yml) — mask docker.socket; set true when repo_docker_ce installs Docker CE
+#   install_docker: false              (group_vars/all/vars.yml) — set true when repo_docker_ce installs Docker CE
 #   install_vpn: true                  (group_vars/all/vars.yml) — Mullvad on Fedora + corporate VPN packages on RHEL/CSB
 #   install_virtualization: true       (group_vars/all/vars.yml) — libvirt, KVM, Vagrant; set false to skip
 #   packages_yubikey_enabled: true     (roles/packages/defaults) — yubikey-manager + ykpers; set false on machines without a YubiKey
@@ -53,7 +53,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   repo_rpmfusion_free: true          (group_vars/all/vars.yml) — Fedora-only; multimedia codecs (H.264/AAC), ffmpeg, VLC
 #   repo_rpmfusion_nonfree: false      (group_vars/all/vars.yml) — Fedora-only; NVIDIA drivers, non-free firmware; opt in explicitly
 #   repo_tailscale: true               (group_vars/all/vars.yml) — VPN mesh; skip on air-gapped machines or when using a different VPN
-#   repo_docker_ce: false              (group_vars/all/vars.yml) — prefer Podman; also set install_docker: true to unmask docker.socket
+#   repo_docker_ce: false              (group_vars/all/vars.yml) — prefer Podman; also set install_docker: true
 #   repo_mullvad: true                 (group_vars/all/vars.yml) — personal profile, non-CSB Fedora only (skipped on work, RHEL/Rocky, CSB)
 #   repo_redhat: true                  (group_vars/all/vars.yml) — internal Red Hat RPM mirror; needs repos_dnf_redhat_baseurl set
 #   system_install_usbguard: true      (group_vars/all/vars.yml) — USBGuard USB device authorization; set false on VM/USB-less machines
@@ -118,7 +118,6 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     work-profile-only Go IDE/CI tools + OVN-K codegen + Submariner tools; entries need full module paths
 #     (go install MODULE@VERSION); pin versions match OVN-K update-codegen.sh (not go.mod —
 #     controller-tools is not a go.mod dep) — bump together when OVN-K upgrades k8s
-#   desktop_deploy_chrome_policies: false (roles/desktop/defaults) — set true to deploy managed Chrome policy JSON
 #   system_locale: en_US.UTF-8        (roles/system/defaults) — set system locale
 #   system_disable_printing: false     (roles/system/defaults) — set true to mask cups.socket/path,
 #                                        disable cups.service, and mask cups-browsed (CVE-2024-47176)
@@ -236,8 +235,6 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #                                        (VS Code Remote needs >=10)
 #   system_ssh_allow_tcp_forwarding: "local" (roles/system/defaults) — 'local' for VS Code port panel/ssh -L,
 #                                            'remote' for ssh -R, 'yes' for both
-#   system_ssh_channel_timeout: ""             (roles/system/defaults) — disabled (bz3827: sshd 10.2p1 drops VS Code on
-#                                                ChannelTimeout+UnusedConnectionTimeout); set "session=60m" once openssh >= 10.3
 #   system_ssh_unused_connection_timeout: 3600 (roles/system/defaults) — seconds before idle connection with no open channels is
 #     closed; 3600 (1h) tolerates VS Code Remote SSH and Claude Code idle control masters; set "" to disable (omits directive)
 #   system_ssh_allow_agent_forwarding: "no" (roles/system/defaults) — set 'yes' to forward ssh-agent to remote hosts
@@ -356,7 +353,6 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #                                        (24 * desktop_sway_hidpi_scale | float) | int; override only if formula is wrong
 #   desktop_sway_cursor_theme: Adwaita (roles/desktop/defaults) — cursor theme name (propagated to seat config and XCURSOR_THEME)
 #   desktop_sway_libva_driver: ""       (roles/desktop/defaults) — VA-API driver; "" = auto-detect; radeonsi (AMD) or iHD (Intel)
-#   desktop_sway_vdpau_driver: ""       (roles/desktop/defaults) — VDPAU driver; "" = auto-detect; radeonsi (AMD) or va_gl/nvidia
 #   desktop_sway_xwayland: ''           (roles/desktop/defaults) — '' = on (default); "disable" = pure-Wayland (breaks XWayland apps)
 #   desktop_wm_idle_lock_timeout: 300  (roles/desktop/defaults) — idle seconds before lock; avoid 0 (GNOME: off; Sway: at once; i3: 1 min)
 #   desktop_wm_idle_display_timeout: 600  (roles/desktop/defaults) — seconds idle before display off
@@ -440,7 +436,6 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   claude_queue_cpu_quota: '80%'      (roles/claude/defaults) — CPUQuota for queue poller unit; lower when running kind clusters
 #   claude_queue_max_turns: 50  (roles/claude/defaults) — --max-turns cap passed to claude per session; limits runaway sessions
 #   claude_queue_timeout: 1800  (roles/claude/defaults) — seconds before SIGTERM is sent to claude process; increase for long-running tasks
-#   claude_remote_control_enabled: false  (roles/claude/defaults) — deploy remote-control hooks
 #     that allow external triggering of Claude sessions (macOS-only; no-op warning on Linux)
 #   claude_enable_all_project_mcp_servers: false  (roles/claude/defaults) — set true to auto-trust
 #     all project-local MCP servers; false = prompt per server (more secure)
@@ -456,15 +451,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   dotfiles_aws_profile: ""   — AWS CLI named profile (default: ""; e.g. "aws-acm-subm"); empty omits export
 #   dotfiles_laptop_tailscale_host: ""  — Tailscale hostname for laptop mosh/tmux alias (e.g. laptop.tail); empty disables
 #   dotfiles_mac_tailscale_host: ""  — Tailscale hostname for desktop mosh/tmux alias (e.g. mac-desktop.tail); empty disables
-#   dotfiles_internal_git_host: ""        — internal HTTPS git hostname (e.g. git.internal.corp); when set,
-#     gitconfig.j2 adds [http "https://<host>"] sslCAInfo pointing to dotfiles_internal_ca_path and
-#     ssh_config.j2 adds a Host stanza using id_rsa_redhat for SSH access.
 #   dotfiles_ssh_work_hosts: []  — work-profile internal git SSH Host stanzas, e.g.
 #     [{host: git.example.internal, user: git}] (user defaults to login name); pair with ssh_work_keyscan_hosts.
-#   dotfiles_internal_ca_path: (conditional: /etc/ssl/certs/ca-certificates.crt on apt,
-#     /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem on rpm)  — CA cert for internal HTTPS hosts;
-#     do not set this in config.yml to restore the default — simply remove any override;
-#     override only to pin a specific anchor, e.g. /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem
 #   dotfiles_homebrew_prefix: per-arch   — macOS Homebrew prefix: /usr/local on x86_64, /opt/homebrew on arm64 (group_vars/all/vars.yml)
 #   ssh_work_keyscan_hosts: []  (roles/ssh/defaults) — work-profile internal git hosts to pre-seed in known_hosts;
 #     set in config.yml as dicts with optional fingerprint pinning, e.g.:
@@ -524,7 +512,6 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     packages_oc_version must be a pinned version with packages_oc_sha256 (the 'stable' track is rejected).
 #     packages_subctl_version: "<see roles/packages/defaults/main.yml>"  (single source of truth; governs distrobox container)
 #     packages_subctl_versioned: [{version, suffix}]  (go install older versions as subctlXX)
-#     packages_subctl_rh_versions: [{tag, image, suffix}]  (RH downstream via oc image extract)
 
 # Internal Red Hat repo URLs — absent here intentionally (gitignored secrets).
 # Set these in config.yml to activate the acli and redhat-internal repo tasks:
@@ -544,7 +531,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   container_release: '44'
 #   distrobox_create_timeout: 600       (roles/distrobox/defaults) — seconds before container create is killed; raise on slow networks
 
-# Old-laptop migration additions (see docs/old-laptop-migration-plan.md):
+# Old-laptop migration additions:
 #   codex_enabled: true                          (roles/codex/defaults)
 #   codex_install_method: npm                    (roles/codex/defaults) — skip for config-only provisioning
 #   codex_work_model: gpt-6.1-sol                 (roles/codex/defaults) — seed-only
@@ -554,8 +541,6 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   claude_personal2_instance_enabled: true       (roles/claude/defaults)
 #   dotfiles_claude_launcher_args: [--dangerously-skip-permissions, --plugin-dir, .]
 #   dotfiles_codex_launcher_args: [--ask-for-approval=never, --sandbox=danger-full-access]
-#   packages_extra_pipx: []                      (roles/packages/defaults) — e.g. [ruff==0.15.20, skillsaw==0.17.0]
-#   packages_extra_npm: []                       (roles/packages/defaults) — e.g. [{name: '@google/gemini-cli', version: '0.60.0'}]
 #   git_repos_work_categories includes evpn + rh-context; make repos-evpn / make repos-rh-context
 #   Local zsh overrides: ~/.config/zsh/local.zsh (user owned, sourced last, backed up)
 #   claude_user_preferences: {model: opus, effortLevel: medium, alwaysThinkingEnabled: false, includeCoAuthoredBy: false}
@@ -564,7 +549,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   claude_work_plugin_settings: {}              — opt out of additional work-home plugin seeds
 #   Shared AI working agreements: roles/common/files/agent-baseline.md (Codex seed-only; Claude managed)
 
-# Wider workstation audit additions (docs/old-laptop-second-pass.md):
+# Wider workstation audit additions:
 #   packages_extra_dnf: []             (roles/packages/defaults) — additive; e.g. [ccache, git-review, openssl-devel]
 #   packages_extra_apt: []             (roles/packages/defaults) — additive; e.g. [ccache, git-review, libssl-dev]
 #   packages_extra_brew: []            (roles/packages/defaults) — additive; e.g. [ccache, git-review]
@@ -574,5 +559,4 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   desktop_gnome_dynamic_workspaces: false     (roles/desktop/defaults)
 #   desktop_gnome_workspace_count: 4   (roles/desktop/defaults)
 #   desktop_gnome_xkb_options: [lv3:ralt_switch]  (roles/desktop/defaults)
-#   dotfiles_legacy_grep_alias_enabled: false    (roles/dotfiles/defaults) — true restores old gi; overrides forgit's gi
 #   make workstation-audit            — private metadata report; no install/removal/service changes

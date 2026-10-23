@@ -4,7 +4,7 @@ Read [CLAUDE.md](CLAUDE.md) for repository conventions, Make targets and provisi
 prerequisites. Use feature branches and signed-off incremental commits.
 
 When auditing a source laptop, capture portable configuration in roles and concise
-decisions in the migration docs; run provisioning from the destination checkout.
+decisions in docs/migration-checklist.md; run provisioning from the destination checkout.
 Keep account secrets and raw AI memory/history out of Git.
 
 Use the focused regressions for changed behavior, then the repository lint,

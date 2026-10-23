@@ -200,27 +200,6 @@
 
     # sway-portals.conf applies only when XDG_CURRENT_DESKTOP=sway; a plain portals.conf would
     # also route GNOME sessions' screen sharing to the wlr backend, which fails on mutter.
-    - name: Check for an earlier desktop-agnostic portals.conf
-      ansible.builtin.stat:
-        path: "{{ ansible_facts['user_dir'] }}/.config/xdg-desktop-portal/portals.conf"
-      register: _desktop_portals_conf_stat
-
-    - name: Find the earlier desktop-agnostic portals.conf written by this role
-      ansible.builtin.find:
-        paths: "{{ ansible_facts['user_dir'] }}/.config/xdg-desktop-portal"
-        patterns: portals.conf
-        contains: '.*Ansible managed'  # find matches from the start of each line
-      register: _desktop_legacy_portals_conf
-      when: _desktop_portals_conf_stat.stat.exists
-
-    - name: Remove the earlier desktop-agnostic portals.conf
-      ansible.builtin.file:
-        path: "{{ item.path }}"
-        state: absent
-      loop: "{{ _desktop_legacy_portals_conf.files | default([]) }}"
-      loop_control:
-        label: "{{ item.path }}"
-
     - name: Deploy xdg-desktop-portal sway-portals.conf (Sway screen sharing)
       ansible.builtin.copy:
         dest: "{{ ansible_facts['user_dir'] }}/.config/xdg-desktop-portal/sway-portals.conf"
@@ -282,41 +261,6 @@
         dest: "{{ ansible_facts['user_dir'] }}/.config/i3status/config"
         mode: "0644"
         backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
-
-# --- Chrome managed policies ---
-- name: Chrome and Chromium managed policies
-  when:
-    - desktop_deploy_chrome_policies
-    - is_linux
-    - not system_is_container
-  block:
-    - name: Stat CSB Chrome managed policy file
-      ansible.builtin.stat:
-        path: /etc/opt/chrome/policies/managed/csb-chrome-policies.json
-      register: desktop_csb_chrome
-
-    - name: Deploy local Chrome policies when no CSB policy exists
-      when: not desktop_csb_chrome.stat.exists
-      become: true
-      tags: [become]
-      block:
-        - name: Create managed policies directory
-          ansible.builtin.file:
-            path: "{{ item }}/policies/managed"
-            state: directory
-            mode: "0755"
-          loop:
-            - /etc/opt/chrome
-            - /etc/chromium
-
-        - name: Deploy security policy
-          ansible.builtin.copy:
-            src: chrome-security-policy.json
-            dest: "{{ item }}/policies/managed/security.json"
-            mode: "0644"
-          loop:
-            - /etc/opt/chrome
-            - /etc/chromium
 
 # --- Shell ---
 # ansible.builtin.user calls usermod, which cannot modify SSSD/LDAP-only accounts

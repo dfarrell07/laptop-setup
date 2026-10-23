@@ -16,11 +16,10 @@
 #   • system: Hardening, SELinux, firewall, kernel params, services
 #   • Play-level become: true simplifies privilege escalation for these roles
 #   • Post-task: Validates DNS resolution after NetworkManager restart
-#     (Play 2 depends on DNS for git/binary downloads; see line 35)
+#     (Play 2 depends on DNS for git/binary downloads)
 #
 # Play 2 (User setup, become: false): User-level provisioning
-#   • Pre-tasks: CSB re-validation, pre-flight re-check (defense against
-#     --start-at-task bypass), vault healthcheck, identity var assertions
+#   • Pre-tasks: CSB re-validation, vault healthcheck, identity var assertions
 #   • Roles: packages, ssh, dotfiles, git_repos, notes, redhat, containers,
 #     desktop, distrobox, claude
 #   • Individual tasks use become: true + tags: [become] when needed
@@ -174,8 +173,7 @@
 
     # REQUIRED GUARD — DO NOT REMOVE: Play 1 applies SSH port change + kernel
     # hardening before Play 2, so users who skip 'make preflight' get no other
-    # warning. preflight.sh alone is not sufficient. This block is protected
-    # from automated modification in the audit workflow script (GITIGNORED).
+    # warning. preflight.sh alone is not sufficient.
     - name: Assert identity vars are not CHANGE_ME placeholder values
       ansible.builtin.assert:
         that:

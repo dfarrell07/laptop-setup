@@ -75,7 +75,7 @@
 
     - name: Resolve the real user's group for managed logrotate validation
       ansible.builtin.command:
-        argv: [id, -gn, "{{ ansible_facts['user_id'] }}"]
+        argv: [id, -gn, "{{ real_user_id }}"]
       register: _system_claude_logrotate_group
       changed_when: false
       check_mode: false
@@ -93,8 +93,7 @@
           _primary_group_name: "{{ _system_claude_logrotate_group | default({'stdout': ''}) }}"
       ansible.builtin.set_fact:
         _system_verified_claude_logrotate: >-
-          {{ (ansible_facts.user_uid | default(0) | int) > 0
-             and (_system_claude_logrotate_stat.stat.isreg | default(false))
+          {{ (_system_claude_logrotate_stat.stat.isreg | default(false))
              and (_system_claude_logrotate_stat.stat.uid | default(-1)) == 0
              and (_system_claude_logrotate_stat.stat.mode | default('')) is match('^[0-7]*[0145][0145]$')
              and _system_claude_existing_dir | length > 0

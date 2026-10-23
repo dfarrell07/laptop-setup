@@ -94,80 +94,13 @@
     msg: |
       WARNING: csb_detected=true but fapolicyd not enforcing (hybrid tier).
       Binary downloads to /usr/local/bin will fail if IT enables fapolicyd enforcement.
-      Persistent warning written to: /var/lib/ansible-packages/fapolicyd-binary-risk.txt
       If binaries fail with EPERM, run: make container && distrobox enter {{ container_name | default('fedora-dev') }}
-  when:
-    - needs_container_tier == 'hybrid'
-    - packages_install_binaries | bool
-
-- name: Create ansible-packages state directory for persistent warnings
-  ansible.builtin.file:
-    path: /var/lib/ansible-packages
-    state: directory
-    mode: "0755"
-  become: true
-  tags: [become]
-  when:
-    - needs_container_tier == 'hybrid'
-    - packages_install_binaries | bool
-
-- name: Write persistent fapolicyd risk warning for hybrid CSB tier
-  ansible.builtin.copy:
-    content: |
-      WARNING: Binary downloads in /usr/local/bin may fail if IT enables fapolicyd enforcement.
-
-      Current state: csb_detected=true, needs_container_tier='hybrid', fapolicyd not enforcing
-      Risk: If Red Hat IT enables fapolicyd enforcement, all binaries in /usr/local/bin will be
-      blocked at runtime with EPERM because they are not in fapolicyd's trust database.
-
-      Binaries affected (work profile): kind, helm, kustomize, k9s, oc, kubectl, opm, transcrypt,
-      sops, gitleaks, actionlint, zizmor, operator-sdk, cosign, tkn, ec, gofumpt, golangci-lint,
-      govulncheck, gci, gopls, controller-gen, stern
-
-      Migration path if binaries fail with EPERM:
-      1. Run: make container
-      2. Enter container: distrobox enter {{ container_name | default('fedora-dev') }}
-      3. All dev tools will be available inside the container
-
-      This file persists across reboots. Remove it manually if fapolicyd is disabled.
-    dest: /var/lib/ansible-packages/fapolicyd-binary-risk.txt
-    mode: "0644"
-  become: true
-  tags: [become]
   when:
     - needs_container_tier == 'hybrid'
     - packages_install_binaries | bool
 
 - name: Install dnf packages
   ansible.builtin.include_tasks: install_dnf_packages.yml
-
-- name: Check kernel lockdown state for bpftrace advisory
-  ansible.builtin.command:
-    cmd: cat /sys/kernel/security/lockdown
-  register: _packages_lockdown_state
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  when:
-    - is_dnf
-    - profile == 'work'
-    - not system_is_container
-
-- name: Advisory — bpftrace kprobe programs blocked under kernel lockdown=integrity
-  ansible.builtin.debug:
-    msg: |
-      NOTE: bpftrace installed, but kernel lockdown=integrity is active.
-      kprobe/kretprobe programs (BPF_PROG_TYPE_KPROBE) return EPERM under lockdown=integrity.
-      Use tracepoints (tracepoint:...) or uprobes instead for kernel-level tracing.
-      To enable kprobes for a debug session: set system_kernel_lockdown: '' in config.yml
-      then re-run: make system
-  when:
-    - is_dnf
-    - profile == 'work'
-    - not system_is_container
-    - _packages_lockdown_state.rc is defined
-    - _packages_lockdown_state.rc == 0
-    - "'[integrity]' in _packages_lockdown_state.stdout"
 
 # Enable bpfman.socket here (Play 2 packages role) to catch the case where bpfman
 # was just installed in this play. The system role (Play 1) also attempts this, but
@@ -225,52 +158,6 @@
       WARNING: bpfman.socket enabled but bpfman has no SELinux policy (binary labelled bin_t), so it runs unconfined.
       A compromised bpfman has CAP_SYS_ADMIN and can load arbitrary kernel eBPF programs.
       Consider manual bpftool for one-off tasks instead of persistent bpfman daemon.
-      Persistent warning written to: {{ ansible_facts['user_dir'] }}/.local/share/ansible-packages/bpfman-selinux-WARNING.txt
-  when:
-    - packages_bpfman_enabled | bool
-    - is_dnf
-    - not system_is_container
-    - profile == 'work'
-    - (_packages_bpfman_check.rc | default(-1)) == 0
-    - _bpfman_selinux_context.stdout is defined
-    - "':bin_t:' in _bpfman_selinux_context.stdout"
-
-- name: Create ansible-packages doc directory for bpfman SELinux warning
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.local/share/ansible-packages"
-    state: directory
-    mode: "0755"
-  when:
-    - packages_bpfman_enabled | bool
-    - is_dnf
-    - not system_is_container
-    - profile == 'work'
-    - (_packages_bpfman_check.rc | default(-1)) == 0
-    - _bpfman_selinux_context.stdout is defined
-    - "':bin_t:' in _bpfman_selinux_context.stdout"
-
-- name: Write persistent bpfman SELinux warning
-  ansible.builtin.copy:
-    content: |
-      WARNING: bpfman.socket enabled but bpfman has no SELinux policy (binary labelled bin_t), so it runs unconfined.
-
-      SELinux context: {{ _bpfman_selinux_context.stdout }}
-      Expected: bpfman_t (confined policy — not available in Fedora 44)
-      Actual: unconfined_t
-
-      Security impact:
-      - bpfman requires CAP_SYS_ADMIN to manage eBPF programs
-      - Without SELinux confinement, a compromised bpfman can load arbitrary kernel eBPF programs
-      - This creates a privilege escalation vector
-
-      Recommendation:
-      - For one-off eBPF tasks, use bpftool directly instead of persistent bpfman daemon
-      - Monitor for Fedora selinux-policy-targeted updates that add bpfman_t policy
-      - Check: semodule -l | grep bpfman
-
-      This file persists across reboots. Remove it manually if SELinux policy is deployed.
-    dest: "{{ ansible_facts['user_dir'] }}/.local/share/ansible-packages/bpfman-selinux-WARNING.txt"
-    mode: "0644"
   when:
     - packages_bpfman_enabled | bool
     - is_dnf
@@ -537,9 +424,3 @@
         path: "{{ _krew_plugin_tmpdir.path }}"
         state: absent
       when: _krew_plugin_tmpdir.path is defined
-
-- name: Install optional user npm tools
-  ansible.builtin.include_tasks: install_npm_tools.yml
-  when:
-    - packages_install_binaries | bool
-    - packages_extra_npm | length > 0

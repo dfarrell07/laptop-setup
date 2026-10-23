@@ -38,17 +38,6 @@ Host {{ h.host | regex_replace('[^\x20-\x7e]', '') }}
 {% endif %}
 {% endfor %}
 {% endif %}
-{% if profile == 'work' and dotfiles_internal_git_host != '' %}
-
-Host internal-git
-    HostName {{ dotfiles_internal_git_host | regex_replace('[^\x20-\x7e]', '') }}
-    User git
-    IdentityFile ~/.ssh/{{ dotfiles_ssh_redhat_key_basename }}
-    ControlMaster no
-{% if dotfiles_internal_git_host in _seeded %}
-    StrictHostKeyChecking yes
-{% endif %}
-{% endif %}
 
 {% set _ts_hosts = [dotfiles_laptop_tailscale_host, dotfiles_mac_tailscale_host] | select | list %}
 {% if _ts_hosts %}

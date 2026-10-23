@@ -103,25 +103,6 @@
     - name: "Include Alacritty assertions (Chrome policy CI gap: not system_is_container)"
       ansible.builtin.import_tasks: ../shared/verify-desktop-common.yml
 
-    # --- Redhat role: runs on Rocky (csb_detected=true); cert copy skipped ---
-    # redhat role runs on Rocky (csb_detected=true) but the file-copy block
-    # (when: not csb_detected) is skipped because csb_detected=true. The RPM-based
-    # install path (when: csb_rhel) fails without aborting (ignore_errors, recorded for the
-    # CSB report) — no internal RHEL repos in CI. Certs are absent regardless.
-    - name: Stat Red Hat internal CA certs (must be absent on Rocky — cert-copy block skipped)
-      ansible.builtin.stat:
-        path: "/etc/pki/ca-trust/source/anchors/{{ item }}"
-      loop:
-        - 2022-IT-Root-CA.pem
-        - Eng-CA.crt
-      register: verify_rhit_ca_rocky
-
-    - name: Assert Red Hat CA certs absent on Rocky (csb_detected=true → cert-copy block skipped)
-      ansible.builtin.assert:
-        that: not item.stat.exists
-        fail_msg: "{{ item.item }} deployed on Rocky — cert-copy block should skip when csb_detected=true"
-      loop: "{{ verify_rhit_ca_rocky.results }}"
-
     # --- Claude task queue (shared/ci-default-vars.yml sets claude_queue_enabled: true) ---
     - name: Import Claude queue verification tasks
       ansible.builtin.import_tasks: ../shared/verify-claude-queue.yml

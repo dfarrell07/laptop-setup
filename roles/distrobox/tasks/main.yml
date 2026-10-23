@@ -163,32 +163,6 @@
     - distrobox_tool != 'none'
     - (distrobox_subuid_check.rc != 0) or (distrobox_subgid_check.rc != 0)
 
-- name: Check Podman socket is active  # noqa: command-instead-of-module
-  ansible.builtin.command:  # user-scope systemd requires command; service_facts uses system scope
-    cmd: systemctl --user is-active podman.socket
-  # verify-ansible-args.sh clears XDG_RUNTIME_DIR, without which systemctl --user cannot
-  # find the user bus and always reports inactive.
-  environment:
-    XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
-  register: distrobox_podman_socket_active
-  changed_when: false
-  failed_when: false
-  check_mode: false  # always executes, even with --check (read-only, no state change)
-  when:
-    - distrobox_tool != 'none'
-    - not system_is_container
-
-- name: Warn if Podman socket failed
-  ansible.builtin.debug:
-    msg: >-
-      Podman socket is not active. kind will not work without it.
-      Fix: systemctl --user enable --now podman.socket.
-      If that fails, check: systemctl --user status podman.socket
-  when:
-    - distrobox_tool != 'none'
-    - not system_is_container
-    - distrobox_podman_socket_active.rc != 0
-
 # --- Check if container exists ---
 - name: Check if container exists
   ansible.builtin.command:

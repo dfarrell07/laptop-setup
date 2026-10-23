@@ -39,8 +39,7 @@
       {{ ([claude_default_config_dir]
           + ([claude_personal_config_dir] if (claude_personal_instance_enabled | bool) else [])
           + ([claude_personal2_config_dir] if (claude_personal2_instance_enabled | bool) else [])
-          + ([claude_work_config_dir] if (profile == 'work') else [])
-          + ([claude_remote_control_config_dir] if (is_macos and claude_remote_control_enabled | bool) else []))
+          + ([claude_work_config_dir] if (profile == 'work') else []))
          | unique }}
 
 - name: SECURITY assert active Claude instance paths cannot inject tmpfiles directives
@@ -67,20 +66,6 @@
     fail_msg: >-
       claude_install_method '{{ claude_install_method }}' is unrecognized; valid values: 'native', 'skip'.
 
-- name: Warn when claude_pinned_version is unset (supply chain advisory — sha256 also unset)
-  ansible.builtin.debug:
-    msg: >-
-      SUPPLY CHAIN ADVISORY: claude_pinned_version is not set in config.yml.
-      Downloading the latest installer from {{ claude_install_url }} installs
-      whatever version the CDN currently serves. Set claude_pinned_version
-      (e.g. "1.0.3") in config.yml to install that version (and upgrade
-      an older installed one); it is a minimum, not a ceiling.
-  when:
-    - claude_install_method == 'native'
-    - packages_install_binaries | bool
-    - claude_pinned_version | length == 0
-    - claude_install_sha256 | length == 0  # sha256 fail gate fires next; this is informational context
-
 - name: Fail when claude_install_sha256 is set but claude_pinned_version is unset (incomplete version pin)
   ansible.builtin.fail:
     msg: >-
@@ -96,22 +81,6 @@
     - packages_install_binaries | bool
     - claude_pinned_version | length == 0
     - claude_install_sha256 | length > 0
-
-- name: Warn when claude_install_sha256 is unset and Claude already installed (integrity gap)
-  ansible.builtin.debug:
-    msg: >-
-      SUPPLY CHAIN ADVISORY: claude_install_sha256 is not set in config.yml and Claude Code
-      is already installed. SHA256 verification is only enforced on first install or
-      version-pinned upgrades. The currently installed binary has not been hash-verified
-      by Ansible and may have been updated via 'claude update' outside Ansible control.
-      Obtain the SHA256 for the currently installed release and set claude_install_sha256
-      in config.yml, together with claude_pinned_version, so future re-provisions
-      re-verify the installer before running it.
-  when:
-    - claude_install_method == 'native'
-    - claude_install_sha256 | length == 0
-    - claude_version_check.rc == 0
-    - claude_pinned_version | length == 0
 
 - name: Fail when claude_install_sha256 is unset (hash required for integrity verification)
   ansible.builtin.fail:
@@ -359,22 +328,6 @@
 
 # --- Git safety (defense-in-depth) ---
 # core.fsmonitor, safe.bareRepository, core.hooksPath are set via gitconfig.j2
-- name: Remove unsafe safe.directory wildcard entries  # noqa: command-instead-of-module risky-shell-pipe
-  ansible.builtin.shell:
-    cmd: |
-      set -o pipefail
-      found=$(git config --global --get-all safe.directory 2>/dev/null | grep -cE '^\*{1,2}$|^/$' || true)
-      if [[ "$found" -gt 0 ]]; then
-        for pat in '^\*$' '^\*\*$' '^/$'; do
-          git config --global --unset-all safe.directory "$pat" 2>/dev/null || true
-        done
-        echo CHANGED; exit 0
-      fi
-      exit 0
-    executable: /bin/bash
-  register: claude_safe_dir
-  changed_when: "'CHANGED' in claude_safe_dir.stdout"
-
 # --- Task queue (systemd timer + poller script) ---
 - name: Assert claude_queue_repo is set when queue is enabled
   ansible.builtin.assert:
@@ -401,7 +354,7 @@
     fail_msg: "dotfiles_github_user must be set in config.yml (used in launchd reverse-DNS label)"
   when:
     - is_macos
-    - claude_queue_enabled | bool or claude_remote_control_enabled | bool
+    - claude_queue_enabled | bool
 
 - name: Install util-linux for flock (macOS, queue enabled)
   community.general.homebrew:
@@ -671,12 +624,7 @@
           'plist_path': ansible_facts['user_dir'] ~
           '/Library/LaunchAgents/com.' ~ dotfiles_github_user ~
           '.claude-queue.plist',
-          'enabled': claude_queue_enabled | bool},
-         {'label': 'remote-control',
-          'plist_path': ansible_facts['user_dir'] ~
-          '/Library/LaunchAgents/com.' ~ dotfiles_github_user ~
-          '.claude-remote-control.plist',
-          'enabled': claude_remote_control_enabled | bool}] }}
+          'enabled': claude_queue_enabled | bool}] }}
 
 # --- macOS: launchd cleanup when disabled ---
 - name: Cleanup disabled launchd agents (macOS)
@@ -690,20 +638,13 @@
     label: "{{ item.label }}"
   when: is_macos
 
-- name: Warn when Remote Control is enabled on Linux (macOS-only feature)
-  ansible.builtin.debug:
-    msg: >-
-      claude_remote_control_enabled is true but no systemd unit is configured for Linux
-      — launchd autostart is macOS-only. Run `claude --remote-control` manually on Linux if needed.
-  when: claude_remote_control_enabled | bool and is_linux
-
 # --- macOS: launchd services ---
 - name: Ensure log directory exists
   ansible.builtin.file:
     path: "{{ claude_log_dir }}"
     state: directory
     mode: "0700"  # matches the poller (umask 077); logs can contain session output
-  when: claude_queue_enabled | bool or (is_macos and claude_remote_control_enabled | bool)
+  when: claude_queue_enabled | bool
 
 - name: Manage enabled launchd agents (macOS)
   ansible.builtin.include_tasks: launchd_load.yml

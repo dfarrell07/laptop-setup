@@ -52,7 +52,7 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   module blacklist (incl. usb-storage/uas when system_disable_usb_storage: true), cups-browsed/avahi masking,
 dnf-automatic,
   /tmp nosuid/nodev (noexec opt-in via `system_tmp_noexec`; CIS 1.1.2.x),
-  /var/tmp nosuid/nodev/noexec (CIS 1.1.8, bind-mount), /dev/shm nosuid/nodev/noexec
+  /dev/shm nosuid/nodev/noexec
   (CIS 1.1.7.x), /home nosuid/nodev (CIS 1.1.9), /boot nosuid/nodev/noexec, /boot/efi nosuid/noexec (vfat — nodev not applicable), home
   directory 0700 (CIS 6.2.x, `system_home_mode`, non-RHEL-CSB), NFS server /
   rpcbind masked (CIS 2.2.7), auditd user-mgmt tool watches — chsh/chfn/newgrp/su
@@ -677,9 +677,6 @@ upgrade procedure and mandatory review checklist.
   encryption (AES-256-CTR) is quantum-safe with 128-bit effective PQ security, the password itself
   has only 80-bit effective post-quantum security (Grover's algorithm halvings). This is currently
   acceptable (quantum computers in 2025 have ~2,000 noisy qubits, insufficient for Grover attacks).
-  **Migration path:** Documented in SECURITY.md § "Quantum Security Posture" — migrate to SOPS +
-  age-plugin-yubikey (P-384, 96-bit PQ security) when hardware PQ support arrives (~2027).
-  See § "Future Migration to SOPS + age" for setup instructions.
 - **Vault + CI** — encrypting vault.yml with a real YubiKey-derived password
   will break CI syntax-check (which uses the dummy password stub); this is
   a known design tradeoff, not a bug
@@ -863,7 +860,7 @@ unavailable.
 - The `git_repos` role automatically pre-seeds host keys for SSH-based repo URLs
   (git@host:repo.git) before cloning, ensuring `known_hosts` is populated before the git
   client attempts connection.
-- GitHub SSH keys are automatically pre-seeded via the GitHub API (no manual configuration needed).
+- GitHub SSH keys are automatically pre-seeded from a pinned key (no manual configuration needed).
 
 ## SSH Key Rotation
 
@@ -913,109 +910,6 @@ state.
 
 **SSH key rotation** should also add `-O verify-required` to both keygen
 commands in the SSH Key Rotation section above.
-
-## Quantum Security Posture
-
-| Component | Algorithm | Quantum status | Effective security |
-| --- | --- | --- | --- |
-| SSH key exchange | mlkem768x25519-sha256 | **Quantum-safe** (hybrid ML-KEM + X25519) | 128-bit post-quantum |
-| SSH auth keys | ed25519-sk (FIDO2) | **Classical only** — no PQ hardware key support yet | 128-bit classical |
-| Vault encryption | AES-256-CTR (ansible-vault) | **Quantum-safe** — Grover halves bits: 128-bit effective | 128-bit post-quantum |
-| Vault password | HMAC-SHA1 (YubiKey OTP slot) | **Marginal** — Grover: 80-bit effective security | 80-bit post-quantum |
-| Vault password (migration path) | PIV P-384 | **Classical only** | 96-bit post-quantum |
-| Git commit signing | ed25519-sk (SSH signing) | **Classical only** | 128-bit classical |
-
-The vault password migration path uses age-plugin-yubikey 0.5.1, which is production-ready and recommended for migration in 2026.
-
-**SSH key exchange is already quantum-safe** — `mlkem768x25519-sha256` is
-first in `KexAlgorithms`. Data in transit is protected against harvest-now/
-decrypt-later attacks today.
-
-**The vault password (HMAC-SHA1) is the weakest link at 80-bit post-quantum
-security.** YubiKey OTP slots are hardware-limited to HMAC-SHA1; HMAC-SHA256
-is not available in firmware. 80-bit security is currently considered
-sufficient (the largest quantum computers in 2025 have ~2,000 noisy qubits,
-far short of the millions needed for Grover attacks).
-
-### August 2026 status
-
-- **YubiKey 5.8** (released July 2026): no PQ algorithms in production; a PQ
-  prototype was demonstrated Oct 2025; hardware PQ support is estimated ~2027.
-- **ykpersonalize** reached EOL in Feb 2026; new scripts should prefer `ykman`.
-  `setup-yubikeys.sh` uses `ykman otp chalresp` for HMAC-SHA1 slot programming.
-- **age-plugin-yubikey 0.5.1**: production-ready; 2026 recommended migration path
-  from `ansible-vault`. See *Future Migration to SOPS + age* below.
-- **SOPS + age-plugin-yubikey**: 2026 community consensus for hardware-key-backed
-  secrets in Ansible automation tooling.
-
-### Migration path when hardware PQ support arrives
-
-1. Yubico ships a YubiKey with HMAC-SHA256 (or ML-DSA) support
-2. Re-run `make setup-yubikeys` (new secret; new algorithm)
-3. `ansible-vault rekey group_vars/all/vault.yml`
-4. Regenerate SSH keys with PQ hardware key if available
-
-## Future Migration to SOPS + age
-
-2026 community consensus for hardware-key-backed secrets in Ansible tooling.
-Recommended when migrating away from `ansible-vault`'s HMAC-SHA1 vault password.
-
-### Prerequisites (Fedora)
-
-```bash
-sudo dnf install pcsc-lite-devel pcscd age sops
-sudo systemctl enable --now pcscd
-# age-plugin-yubikey is not in Fedora repos; build from crates.io:
-cargo install age-plugin-yubikey   # lands in ~/.cargo/bin/
-ansible-galaxy collection install community.sops
-```
-
-### PIV key setup (EC P-384, slot 9a)
-
-```bash
-ykman piv keys generate --algorithm ECCP384 9a
-ykman piv certificates generate --subject 'age-yubikey' 9a
-age-plugin-yubikey          # follow prompts to generate key and get recipient string
-age-plugin-yubikey --identity --slot 1 > yubikey-identity.txt
-age-plugin-yubikey --list   # prints age1yubikey1… recipient string
-```
-
-### Configure SOPS (`.sops.yaml` at repo root)
-
-```yaml
-creation_rules:
-  - path_regex: group_vars/.*\.sops\.ya?ml
-    key_groups:
-      - age:
-          - age1yubikey1<RECIPIENT>
-```
-
-### `ansible.cfg` update
-
-```ini
-[defaults]
-vars_plugins_enabled = host_group_vars,community.sops.sops
-```
-
-### Migrate `vault.yml` (one-way; irreversible)
-
-```bash
-ansible-vault decrypt group_vars/all/vault.yml
-mv group_vars/all/vault.yml group_vars/all/vault.sops.yml
-sops -i --encrypt group_vars/all/vault.sops.yml
-sops -d group_vars/all/vault.sops.yml   # verify decryption works
-git rm group_vars/all/vault.yml
-git add group_vars/all/vault.sops.yml
-```
-
-**Runtime:** set `SOPS_AGE_KEY_FILE=/path/to/yubikey-identity.txt` before
-running Ansible. Each decryption requires PIN entry + YubiKey touch. The
-`community.sops.sops` vars plugin auto-decrypts `*.sops.yml` files in
-`group_vars`/`host_vars`.
-
-SOPS encrypts per-value — variable names (e.g. `vault_ssh_private_key:`)
-remain plaintext in the committed file; only values are ciphertext. This
-differs from `ansible-vault`, which encrypts the entire file as a single blob.
 
 ## Go Module Supply Chain
 

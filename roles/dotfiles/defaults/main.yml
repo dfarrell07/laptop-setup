@@ -18,7 +18,6 @@ dotfiles_aws_profile: ""  # set in config.yml to your AWS CLI named profile; e.g
 # Empty config uses explicit no-match patterns; Go ignores empty exports and otherwise falls back to stale GoENV values.
 dotfiles_gonosumdb: ""  # set in config.yml for private Go module domains; e.g. "*.example.internal"
 dotfiles_goprivate: ""   # set in config.yml for private Go repos; e.g. "git.example.internal"
-dotfiles_internal_git_host: ""  # internal HTTPS git hostname; when set, adds http sslCAInfo + SSH Host stanza
 
 # Work-profile SSH Host stanzas for internal git servers (ControlMaster no, redhat key; StrictHostKeyChecking yes
 # once the host is seeded via ssh_work_keyscan_hosts). Items: {host: git.example.internal, user: git}; user
@@ -42,10 +41,6 @@ dotfiles_ssh_agent_label: "com.{% if dotfiles_github_user != 'CHANGE_ME' %}{{ do
 # GitHub repo slug for cq() alias; override in config.yml if queue repo name differs
 dotfiles_claude_queue_repo: "{{ dotfiles_github_user }}/claude-tasks"
 
-# Stable OS-managed bundle (update-ca-trust regenerates on CA install); override with a
-# specific anchor path (e.g. /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem) to pin
-# to a single CA rather than trusting the full system bundle.
-dotfiles_internal_ca_path: "{{ '/etc/ssl/certs/ca-certificates.crt' if is_apt else '/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem' }}"
 
 # Work org directory names under ~/src/ — used by gitconfig.j2 includeIf blocks and
 # the ccp() guard in zshrc.j2 to route work repos to the work git identity / block personal Claude.
@@ -60,7 +55,7 @@ dotfiles_direnv_warn_timeout: "10s"  # upstream default 5s; 10s accommodates slo
 dotfiles_direnv_strict_env: true  # enables set -euo pipefail in .envrc; upstream default false
 dotfiles_direnv_disable_stdin: true  # blocks interactive prompts in .envrc; upstream default false; set false in config.yml
 
-is_apt: false  # fallback; authoritative value in group_vars/all/vars.yml; used transitively via dotfiles_internal_ca_path in gitconfig.j2
+is_apt: false  # fallback; authoritative value in group_vars/all/vars.yml
 is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml; used in tasks/main.yml, not templates
 is_macos: false  # fallback; authoritative value in group_vars/all/vars.yml; used in tasks/main.yml and handlers/main.yml, not templates
 dotfiles_homebrew_prefix: /opt/homebrew  # fallback; authoritative value in group_vars/all/vars.yml; Intel x86 uses /usr/local (set there)
@@ -91,6 +86,3 @@ claude_personal2_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-per2"
 claude_personal2_instance_enabled: true
 codex_work_config_dir: "{{ ansible_facts['user_dir'] }}/.codex"
 codex_personal_config_dir: "{{ ansible_facts['user_dir'] }}/.codex-personal"
-
-# The old laptop uses gi for grep; default gri preserves forgit's gi alias.
-dotfiles_legacy_grep_alias_enabled: false
