@@ -21,8 +21,6 @@
 #   binary_in_archive     — path inside the tarball to extract (default: extract all)
 #   download_timeout      — get_url timeout in seconds (default: 120)
 #   version_check_timeout — version check shell timeout in seconds (default: 10)
-#   attest_repo           — GitHub repository attesting to the archive (default: none)
-#   attest_workflow       — exact upstream signing workflow; required with attest_repo
 
 - name: Fetch and install tarball — {{ binary_name }}
   block:
@@ -33,14 +31,6 @@
       changed_when: false
       failed_when: _install_tarball_check.rc not in [0, 1, 127]
       check_mode: false
-
-    - name: Report check mode skips install of {{ binary_name }}
-      ansible.builtin.debug:
-        msg: "CHECK MODE: {{ binary_name }} {{ version_string }} would be downloaded, verified and installed; not simulated."
-      when:
-        - ansible_check_mode
-        - >-
-          version_string not in (_install_tarball_check.stdout + _install_tarball_check.stderr)
 
     - name: "Download and extract {{ binary_name }}"
       when:
@@ -75,38 +65,6 @@
           become: true
           tags: [become]
 
-        - name: Read target user GitHub credentials for archive verification — {{ binary_name }}
-          ansible.builtin.command: gh auth token
-          environment:
-            GH_HOST: github.com
-          changed_when: false
-          failed_when: false
-          register: _install_tarball_gh_token
-          no_log: true
-          when:
-            - attest_repo | default('') | length > 0
-            - lookup('env', 'GH_TOKEN') | length == 0
-
-        - name: Verify release archive attestation before extraction — {{ binary_name }}
-          ansible.builtin.command:
-            argv:
-              - gh
-              - attestation
-              - verify
-              - "{{ _install_tarball_download.dest }}"
-              - --repo
-              - "{{ attest_repo }}"
-              - --signer-workflow
-              - "{{ attest_workflow }}"
-          environment:
-            GH_TOKEN: "{{ lookup('env', 'GH_TOKEN') | default(_install_tarball_gh_token.stdout | default(''), true) }}"
-            GH_HOST: github.com
-          changed_when: false
-          no_log: true  # credentials must never appear in task arguments
-          become: true  # archive is in a root-owned mode-0700 temporary directory
-          tags: [become]
-          when: attest_repo | default('') | length > 0
-
         - name: Extract binary to /usr/local/bin — {{ binary_name }}
           ansible.builtin.unarchive:
             src: "{{ _install_tarball_tmpdir.path }}/{{ binary_name }}.tar.gz"
@@ -136,16 +94,6 @@
           when: _install_tarball_tmpdir.path is defined
 
   rescue:
-    - name: Fail closed when an attested archive cannot be installed — {{ binary_name }}
-      ansible.builtin.fail:
-        msg: >-
-          Cannot install {{ binary_name }} with verified GitHub provenance.
-          Authenticate gh on the target or supply GH_TOKEN on the controller, then retry.
-          The release archive must match its pinned checksum and official signing workflow.
-      when:
-        - attest_repo | default('') | length > 0
-        - version_string not in (_install_tarball_check.stdout | default('') + _install_tarball_check.stderr | default(''))
-
     - name: "CSB failure record: {{ binary_name }}"
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
       vars:

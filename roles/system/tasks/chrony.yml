@@ -146,28 +146,6 @@
     - is_dnf or is_apt
     - not csb_rhel
 
-- name: Probe optional chrony leap-second file support
-  ansible.builtin.command:
-    argv:
-      - /usr/sbin/chronyd
-      - -p
-      - -f
-      - /dev/null
-      - leapseclist /usr/share/zoneinfo/leap-seconds.list
-  register: _chrony_leapseclist_probe
-  changed_when: false
-  check_mode: false  # read-only parse; the template diff depends on it
-  failed_when:
-    - _chrony_leapseclist_probe.rc != 0
-    - "'Invalid directive' not in _chrony_leapseclist_probe.stderr"
-    # chronyd not installed yet (fresh host under --check): treat as unsupported
-    - "'Error executing command' not in (_chrony_leapseclist_probe.msg | default(''))"
-  when:
-    - not csb_rhel
-    - system_chrony_service_enabled | bool
-    - is_dnf or is_apt
-    - not system_is_container
-
 - name: Install native chrony configuration validator
   ansible.builtin.copy:
     src: validate-chrony.py

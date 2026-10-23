@@ -25,7 +25,7 @@ ntsdumpdir {{ system_chrony_ntsdumpdir | regex_replace("[\n\r].*","") }}
 driftfile {{ system_chrony_driftfile | regex_replace("[\n\r].*","") }}
 makestep {{ system_chrony_makestep | regex_replace("[\n\r].*","") }}
 rtcsync
-{% if system_chrony_leapseclist and (_chrony_leapseclist_probe.rc | default(1)) == 0 %}
+{% if system_chrony_leapseclist %}
 leapseclist {{ system_chrony_leapseclist | regex_replace("[\n\r].*","") }}
 {% endif %}
 leapsecmode {{ system_chrony_leapsecmode | regex_replace("[\n\r].*","") }}

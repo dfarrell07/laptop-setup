@@ -14,8 +14,8 @@
       SECURITY: claude_install_url must start with https:// and use claude.ai or
       anthropic.com domain. An arbitrary URL would cause the installer to download
       and execute an arbitrary shell script during provisioning (RCE).
-      This check is duplicated in pre_flight_checks.yml; it runs again here to protect
-      against --start-at-task flag bypassing play-level pre_tasks. Allowed:
+      This check runs here to protect against --start-at-task flag bypassing
+      play-level pre_tasks. Allowed:
       https://claude.ai/* or https://anthropic.com/*.
 
 - name: SECURITY assert claude_log_dir contains only safe path characters (defense-in-depth)
@@ -31,8 +31,7 @@
       --start-at-task, bypassing pre_tasks guards. The injected postrotate
       script executes as root when logrotate.timer fires, enabling shadow
       exfiltration or arbitrary local privilege escalation.
-      This check duplicates pre_flight_checks.yml to protect against
-      --start-at-task bypass. Use only simple directory paths in claude_log_dir.
+      This check protects against --start-at-task bypass. Use only simple directory paths in claude_log_dir.
 
 - name: Set active Claude instance directories
   ansible.builtin.set_fact:

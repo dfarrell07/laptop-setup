@@ -8,14 +8,13 @@ re-run the named make target.
 | Symptom | `config.yml` override (default) | Re-run |
 | --- | --- | --- |
 | No Bluetooth adapter / `rfkill` blocked | `system_disable_bluetooth: false` (true) | `make system` |
-| USB drive does not mount | `system_disable_usb_storage: false` (false; blocks `usb_storage`/`uas` when true) | `make system` |
+| USB drive does not mount | `make usb-add` (USBGuard blocks unlisted drives); `system_disable_usb_storage: false` (false; blocks `usb_storage`/`uas` when true) | `make usb-add`, `make system` |
 | Phone tethering / USB modem missing | `system_disable_modemmanager: false` (false) | `make system` |
 | `.local` names do not resolve | `system_disable_avahi: false` (true) | `make system` |
 | ABRT units show `masked` | `system_mask_abrt: false` (true) | `make system` |
 | CUPS not running | `system_disable_printing: false` (false) | `make system` |
 | Shell exits when idle | `system_tmout: 0` (0 = off; 1-900 enforces) | `make system` |
 | `ssh -L`/VS Code port panel fails | `system_ssh_allow_tcp_forwarding: local` (local; `no` blocks all) | `make system` |
-| `pip`/`cargo`/rpm scriptlet `EPERM` in `/var/tmp` | `system_var_tmp_noexec: false` (false) | `make system` |
 | `bpftool prog dump jited` shows blinded constants | `system_bpf_jit_harden: 1` (1) | `make system` |
 | Account locked for 15 minutes | `system_faillock_unlock_time` (900) | `make system` |
 
@@ -105,7 +104,7 @@ On CSB hosts do not use `--force`; ask IT (it wipes IT-managed PAM customization
 ## DNS
 
 The system role deploys `/etc/systemd/resolved.conf.d/99-dot.conf` (Cloudflare, `system_dot_mode: opportunistic`, catch-all
-`system_dns_domains: "~."`). Skipped on RHEL CSB only. Diagnose with `resolvectl status` and `resolvectl query example.com`.
+`system_dns_domains: "~."`). Skipped on CSB hosts. Diagnose with `resolvectl status` and `resolvectl query example.com`.
 
 - **Slow or failing on a restricted network:** set `system_dot_mode: "no"` (unencrypted DNS), and optionally `system_dns_primary` to
   the local resolver. Revert when done.

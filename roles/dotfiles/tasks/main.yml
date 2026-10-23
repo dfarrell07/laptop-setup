@@ -196,31 +196,6 @@
     mode: "0700"
   when: is_macos
 
-- name: Check current login shell (zsh advisory probe)
-  ansible.builtin.shell:
-    cmd: |
-      set -o pipefail
-      getent passwd {{ ansible_facts['user_id'] }} | cut -d: -f7
-    executable: /bin/bash
-  register: _dotfiles_login_shell
-  changed_when: false
-  failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
-  when: is_linux
-
-- name: Warn if login shell is not zsh (zshrc will be deployed but not reached on login)
-  ansible.builtin.debug:
-    msg: >-
-      ADVISORY: .zshrc is being deployed but the current login shell is
-      '{{ _dotfiles_login_shell.stdout | trim }}' (not /bin/zsh).
-      This role intentionally does not change the login shell (that is owned by the
-      desktop role). Run 'make desktop' or 'make all' to set /bin/zsh as the login
-      shell so that .zshrc is reached on login, then log out and back in.
-  when:
-    - is_linux
-    - _dotfiles_login_shell.stdout is defined
-    - _dotfiles_login_shell.stdout | trim != '/bin/zsh'
-
 - name: Deploy zshrc
   ansible.builtin.template:
     src: zshrc.j2

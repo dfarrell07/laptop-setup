@@ -203,6 +203,7 @@
           Task-wide exclusions disable managed auditing. Review these fragments:
           {{ _system_audit_remaining_task_exclusions.files | map(attribute='path') | list }}
       when: not ansible_check_mode
+      ignore_errors: "{{ csb_detected }}"  # noqa: ignore-errors -- warn only on CSB, matching the -e 0 guard below
 
     - name: Real_user_home must be a valid absolute path
       ansible.builtin.assert:

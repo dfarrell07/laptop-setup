@@ -107,7 +107,7 @@ hardwired rule is ineffective. You MUST add VID:PID rules for internal devices.
      - "allow id VVVV:PPPP"  # Replace VVVV:PPPP with VID:PID from lsusb
    ```
 
-4. For USB mass storage, either add per-device rules OR ensure system_disable_usb_storage: false in config.yml (default is false)
+4. For USB mass storage, add per-device `allow id` rules (`make usb-add`); with USBGuard on (ImplicitPolicyTarget=block, no mass-storage class rule), hot-plugged drives are blocked even when system_disable_usb_storage: false (default)
 
 ### After first provision, if a device is blocked
 
@@ -172,8 +172,8 @@ IPv6 SLAAC disabled (set `system_ipv6_accept_ra: 2` in config.yml if home router
    - `make smoke-test` — verify provisioning succeeded before proceeding (catches failures early)
    - `tailscale up` to authenticate (interactive browser step)
    - `gh auth login` — GitHub CLI authentication (required for HTTPS git credential helper, notes clone, and claude queue-poller workflows)
-     — then re-run `make packages repos notes`: the first `make all` skips private repos, the notes clone and
-     release attestation while gh is not logged in
+     — then re-run `make packages repos notes`: the first `make all` skips private repos and the notes clone
+     while gh is not logged in
 
 - `podman login registry.redhat.io` — work profile only, if `oc` is installed; required for RH subctl `oc image extract` ; skip if vault
      `registry_tokens` provides automated auth (clears `registry-redhat-auth` WARN in smoke-test)
@@ -326,7 +326,7 @@ make repos-rh-context # internal RH context repos (VPN + SSH credentials)
   `default.config.yml` for full defaults; the `Additional toggles` comment block there lists 100+
   role-defaults vars overridable in `config.yml`. Key operational ones: `system_aide_enabled` (false —
   AIDE disabled by default; enable only with a log consumer), `system_tmout` (0 — disabled; set 1–900 to enforce CIS inactivity timeout),
-  `system_disable_usb_storage` (false — USB drives allowed; set true to kernel-block usb_storage/uas), `system_kernel_lockdown`
+  `system_disable_usb_storage` (false — no kernel block of usb_storage/uas; USBGuard still blocks unlisted drives; set true to kernel-block), `system_kernel_lockdown`
 (integrity — kernel lockdown mode; set '' to disable for kdump/kgdb debugging; **note**: lockdown=integrity restricts kernel
   self-modification only — it does NOT enforce userspace binary integrity; Fedora default IMA mode is measure-only with no appraisal
   policy deployed), `system_ipv6_accept_ra`

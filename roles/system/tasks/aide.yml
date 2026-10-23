@@ -147,14 +147,6 @@
         name: aide
         state: present
 
-    - name: Ensure AIDE monitors /usr/local/bin
-      ansible.builtin.lineinfile:
-        path: /etc/aide.conf
-        regexp: '^/usr/local/bin\s'
-        line: '/usr/local/bin NORMAL'
-        state: present
-      register: _aide_conf_r1
-
     - name: Add /etc paths to AIDE monitoring
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
@@ -266,6 +258,19 @@
         state: present
       register: _aide_conf_r6c
 
+    # IT agents under /opt (logs, state, auto-updates) churn constantly; the stock '/opt CONTENT'
+    # rule would make every aide check fail.
+    - name: Exclude IT agent directories under /opt from AIDE (CSB)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^!{{ item | regex_escape }}$'
+        line: '!{{ item }}'
+        insertbefore: '^/opt\s'
+        state: present
+      loop: [/opt/CrowdStrike, /opt/orbit, /opt/splunkforwarder]
+      when: csb_detected
+      register: _aide_conf_r7
+
     # Connection profiles are data that changes whenever a Wi-Fi network or VPN is added, so
     # monitoring them alerted (and broadcast via wall) on every check until a rebaseline. The
     # code NetworkManager runs as root (dispatcher.d) stays monitored. Hosts provisioned with
@@ -370,8 +375,7 @@
     - name: Set fact — AIDE config changed (consolidates lineinfile registers)
       ansible.builtin.set_fact:
         _aide_conf_changed: >-
-          {{ _aide_conf_r1 is changed
-             or _aide_conf_r2 is changed
+          {{ _aide_conf_r2 is changed
              or _aide_conf_r2b is changed
              or _aide_conf_r2b_remove is changed
              or _aide_conf_r3 is changed
@@ -389,7 +393,8 @@
              or _aide_conf_r6g is changed
              or _aide_conf_r6h is changed
              or _aide_conf_r6i is changed
-             or _aide_conf_r6j is changed }}
+             or _aide_conf_r6j is changed
+             or _aide_conf_r7 is changed }}
 
     # .rebaseline-pending asks site.yml's user-play post task to rebuild the baseline once later
     # roles have run; a marker (not a registered result) survives a failed run until it succeeds.

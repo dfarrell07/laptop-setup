@@ -12,7 +12,6 @@ Validates:
 3. 'that' clause contains assertion conditions (actual validation logic)
 3b. Each identity condition compares against CHANGE_ME; task has tag 'always'
 4. When condition is exactly 'not _pf_is_molecule'
-5. include_tasks for pre_flight_checks.yml is present in Play 2 pre_tasks
 """
 
 import re
@@ -35,20 +34,6 @@ def iter_tasks(tasks):
     for task in tasks:
         yield task
         yield from iter_tasks(task.get('block', []))
-
-
-def verify_include_tasks(play2):
-    """Verify include_tasks for pre_flight_checks.yml is present."""
-    for task in iter_tasks(play2.get('pre_tasks', [])):
-        if 'ansible.builtin.include_tasks' in task or 'include_tasks' in task:
-            task_spec = task.get('ansible.builtin.include_tasks') or task.get('include_tasks')
-            if isinstance(task_spec, dict):
-                task_file = task_spec.get('file', '')
-            else:
-                task_file = str(task_spec)
-            if 'pre_flight_checks.yml' in task_file:
-                return True
-    return False
 
 
 def verify_identity_assertion(play2):
@@ -171,11 +156,6 @@ def main():
         print("::error::site.yml must have exactly one User setup play")
         return 1
     play2 = user_plays[0]
-
-    # Verify include_tasks
-    if not verify_include_tasks(play2):
-        print("::error::Pre-flight checks include_tasks not found in Play 2 pre_tasks")
-        return 1
 
     # Verify identity assertion
     found, errors = verify_identity_assertion(play2)

@@ -1,17 +1,8 @@
 ---
-# Shared pre-flight checks included by Play 1 and Play 2.
-# Each task carries become: false so the file is safe to include from
-# Play 1 (become: true at play level) without privilege escalation.
-# Section map (search for section name to jump):
-#   SSTI guard (config.yml template injection)
-#   Shell injection guards (Go/AWS env vars)
-#   SSH/sshd config guards
-#   System hardening vars (sysctl, chrony, journald, etc.)
-#   Packages supply chain guards (go tools, binaries, gosumdb)
-#   Shell injection guards (homebrew_prefix, macOS)
-#   Git/dotfiles guards
-#   Play-namespace validation (-e override bypass guards)
-#   Non-molecule assertions (CHANGE_ME, vault, profile)
+# Pre-flight checks, included by pre-flight.yml (Play 0) and by site.yml Play 3 (which also
+# uses it to load config vars onto the container host). Role-level copies of the per-variable
+# validators run at point of use; this file keeps config parsing, vault/identity/SSH-lockout
+# checks and the root-sink config-injection guards.
 - name: Pre-flight checks (no privilege escalation)
   become: false
   tags: [always]
@@ -20,60 +11,16 @@
     - name: Set molecule context flag
       ansible.builtin.set_fact:
         _pf_is_molecule: "{{ lookup('env', 'MOLECULE_SCENARIO_NAME') != '' }}"
-      tags: [always]
 
     - name: Scan user config for template injection
       ansible.builtin.include_tasks: config_ssti_guard.yml
-      tags: [always]
 
     - name: Load configuration
       ansible.builtin.include_vars: default.config.yml
-      tags: [always]
 
     - name: Load user overrides
       ansible.builtin.include_vars: config.yml
       failed_when: false
-      tags: [always]
-
-    - name: Load user config for vault key inspection
-      # Second load into a named dict — include_vars with name: does not populate the play
-      # namespace, so this does NOT duplicate the first load. Both loads are required: the
-      # first (above) provides overrides to the play namespace; this load provides a dict
-      # for the vault_ and secret-key assertions below that need to inspect key names.
-      # Note: include_vars resolves 'file: config.yml' relative to the playbook dir (same as
-      # the plain 'include_vars: config.yml' above). The stat probe above uses playbook_dir
-      # explicitly so both probes agree regardless of the invoker's cwd.
-      ansible.builtin.include_vars:
-        file: config.yml
-        name: _user_config
-      failed_when: false
-      tags: [always]
-
-    - name: Fail when config.yml exists but could not be parsed
-      when:
-        - _config_yml_stat.stat.exists
-        - _user_config is not defined
-      ansible.builtin.fail:
-        msg: >-
-          config.yml exists but failed to load (YAML syntax error, encoding problem, or unreadable file). Fix the issue
-          before re-running. All user overrides were silently dropped.
-      tags: [always]
-
-    - name: Assert csb_rhel is not injected on non-RedHat host via -e flag (CSB classification bypass guard)
-      when: csb_rhel | default(false) | bool
-      ansible.builtin.assert:
-        that:
-          - ansible_facts['distribution'] | default('') == 'RedHat'
-        fail_msg: >-
-          SECURITY: csb_rhel=true but distribution='{{ ansible_facts["distribution"] | default("unknown") }}' (not 'RedHat').
-          Input: csb_rhel injected via -e flag (extra-vars precedence 22 beats set_fact precedence 18).
-          Mechanism: csb_rhel=true silently skips sysctl hardening, cron restriction, authselect,
-          firmware daemon-reload, coredump config, chrony install, and kernel-modules-kind.
-          Example: make all -e csb_rhel=true skips ~10 hardening sub-tasks on a Fedora host.
-          Impact: host appears provisioned but OS hardening stack is silently bypassed.
-          Fix: do not pass -e csb_rhel=true; the value is set automatically by csb_detect.yml.
-          If provisioning a genuine RHEL CSB host, run on the actual RHEL machine (distribution=RedHat).
-      tags: [always]
 
     - name: Assert playbook is not running inside a container host (hardening bypass guard)
       ansible.builtin.assert:
@@ -89,504 +36,8 @@
           Example: podman run --privileged fedora:40 bash; make all — play succeeds, zero hardening applied.
           Impact: machine appears fully provisioned but carries no OS hardening.
           Fix: run make all on a bare-metal host, VM, or WSL target — not from inside a container.
-      tags: [always]
-
-    - name: Assert packages_gosumdb from -e flag is whitelisted (command-line bypass guard)
-      vars:
-        _packages_gosumdb_effective: "{{ packages_gosumdb | default('sum.golang.org') }}"
-      ansible.builtin.assert:
-        that:
-          - >-
-            _packages_gosumdb_effective in ['sum.golang.org', 'sum.redhat.com', 'sum.internal.redhat.com']
-        fail_msg: >-
-          SECURITY: packages_gosumdb not whitelisted (threat).
-          Input: packages_gosumdb='{{ _packages_gosumdb_effective }}' from -e flag.
-          Mechanism: -e overrides outrank config.yml; file-based check is bypassed.
-          Example: make all -e packages_gosumdb=attacker.com.
-          Impact: GOSUMDB hijack — go install accepts tampered modules; init() runs at compile time.
-          Fix: omit the -e flag; allowed values: sum.golang.org, sum.redhat.com,
-          sum.internal.redhat.com.
-
-    - name: Assert claude_log_dir contains only safe path characters (logrotate injection guard)
-      when: _config_raw is defined
-      ansible.builtin.assert:
-        that:
-          - _config_raw.get('claude_log_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
-        fail_msg: >-
-          SECURITY: claude_log_dir in config.yml contains unsafe characters. This value is
-          rendered verbatim into /etc/logrotate.d/claude-queue-poller (become: true); a
-          value with embedded newlines can inject a postrotate block that executes arbitrary
-          commands as root when the logrotate systemd timer fires. Allowed: alphanumeric,
-          slash, dot, underscore, tilde, hyphen (standard filesystem path characters).
-
-    - name: Assert claude config dir vars contain only safe path characters (systemd unit injection guard)
-      when: _config_raw is defined
-      tags: [always]
-      ansible.builtin.assert:
-        that:
-          - _config_raw.get('claude_queue_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
-          - _config_raw.get('claude_work_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
-          - _config_raw.get('claude_default_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
-          - _config_raw.get('claude_personal_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
-          - _config_raw.get('claude_personal2_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*\Z')
-        fail_msg: >-
-          SECURITY: claude_queue_config_dir, claude_work_config_dir, claude_default_config_dir,
-          claude_personal_config_dir, or claude_personal2_config_dir in config.yml contains unsafe characters. These values
-          are rendered into the Environment=CLAUDE_CONFIG_DIR= directive in claude-queue.service
-          and into claude-privacy.conf (systemd-tmpfiles); an embedded newline injects an
-          additional Environment= or other systemd [Service] directive into the deployed unit
-          file, or an additional tmpfiles.d directive into claude-privacy.conf. Allowed:
-          alphanumeric, slash, dot, underscore, tilde, hyphen (standard filesystem path
-          characters). No newlines, spaces, or shell metacharacters.
-
-    - name: SECURITY assert claude_install_sha256 is set (mandatory integrity verification)
-      when: _config_raw is defined
-      vars:
-        _install_method: "{{ _config_raw.get('claude_install_method', 'native') }}"
-        _install_sha256: "{{ _config_raw.get('claude_install_sha256', '') }}"
-      ansible.builtin.assert:
-        that:
-          - >-
-            (_install_method != 'native') or
-            (_install_sha256 | length > 0 and _install_sha256 | string is match('^[a-f0-9]{64}$'))
-        fail_msg: >-
-          SECURITY: claude_install_sha256 in config.yml is missing or invalid.
-          Must be a 64-char lowercase hex SHA256 of the Claude installer.
-          Obtain from Anthropic release notes.
-          To skip Claude install entirely, set claude_install_method: skip.
-
-    - name: Assert claude_install_url is constrained to known-safe domains (supply chain guard)
-      when: _config_raw is defined
-      ansible.builtin.assert:
-        that:
-          - _config_raw.get('claude_pinned_version', '') | string is match('^[0-9]+\.[0-9]+\.[0-9]+([.-][a-zA-Z0-9]+)*$|^$')
-        fail_msg: >-
-          SECURITY: claude_install_url in config.yml must start with https:// and use the
-          claude.ai or anthropic.com domain. Setting an arbitrary URL causes the installer
-          to download and execute an arbitrary shell script during provisioning (RCE).
-          claude_pinned_version must be a semantic version string (e.g. "1.0.3") or empty.
-          Allowed: https://claude.ai/* or https://anthropic.com/*.
-
-    - name: Assert claude plist path vars contain only safe path characters (macOS XML injection guard)
-      when: _config_raw is defined
-      tags: [always]
-      ansible.builtin.assert:
-        that:
-          - _config_raw.get('claude_bin_path', '') | string is match('^[a-zA-Z0-9/._~-]*$')
-          - _config_raw.get('claude_remote_control_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
-          - _config_raw.get('claude_queue_poller_path', '') | string is match('^[a-zA-Z0-9/._~-]*$')
-          - _config_raw.get('claude_queue_boot_delay_sec', 60) | int >= 0
-          - _config_raw.get('claude_queue_poll_interval_sec', 120) | int >= 0
-        fail_msg: >-
-          SECURITY: claude_bin_path, claude_remote_control_config_dir, claude_queue_poller_path
-          must contain only alphanumeric/slash/dot/underscore/tilde/hyphen (plist XML injection
-          guard; systemd unit ExecStart newline injection guard).
-          claude_queue_boot_delay_sec and claude_queue_poll_interval_sec must be
-          non-negative integers (systemd timer directive injection guard).
-
-    - name: Assert claude_queue service/plist vars in config.yml are safe (systemd/plist injection guard)
-      when: _config_raw is defined
-      ansible.builtin.assert:
-        that:
-          - _config_raw.get('claude_queue_repo', '') | string is match('^[A-Za-z0-9_./-]*$')
-          - _config_raw.get('claude_queue_host_label', '') | string is match('^[a-zA-Z0-9 ._-]*$')
-          - _config_raw.get('claude_queue_max_turns', 50) | int >= 0
-          - _config_raw.get('claude_queue_timeout', 1800) | int >= 0
-          - _config_raw.get('claude_queue_max_issues_per_run', 5) | int >= 0
-        fail_msg: >-
-          SECURITY: claude_queue service variables in config.yml contain unsafe values.
-          Input: config.yml claude_queue_* section.
-          Mechanism: values are rendered directly into systemd unit [Service] directives
-          (Environment=, MemoryMax=, CPUQuota=); newlines inject additional directives.
-          Example: claude_queue_memory_max='4G\nMemoryMax=infinity' disables memory cap.
-          Impact: systemd unit directive injection — resource limits bypass, env var injection.
-          Fix: claude_queue_allowed_authors entries must be GitHub usernames (^[a-zA-Z0-9-]+$);
-          claude_queue_memory_max must match ^[0-9]+(K|M|G|T|%)?$|^infinity$;
-          claude_queue_cpu_quota must match ^[0-9]+%$.
-          Current values: allowed_authors={{ _config_raw.get('claude_queue_allowed_authors', []) }},
-          memory_max={{ _config_raw.get('claude_queue_memory_max', '4G') }},
-          cpu_quota={{ _config_raw.get('claude_queue_cpu_quota', '80%') }}.
-
-    - name: Assert desktop configuration vars in config.yml contain only safe characters (Xorg/WM injection guard)
-      when: _config_raw is defined
-      vars:
-        _color_keys:
-          - desktop_alacritty_color_bg
-          - desktop_alacritty_color_fg
-          - desktop_alacritty_color_normal_black
-          - desktop_alacritty_color_normal_red
-          - desktop_alacritty_color_normal_green
-          - desktop_alacritty_color_normal_yellow
-          - desktop_alacritty_color_normal_blue
-          - desktop_alacritty_color_normal_magenta
-          - desktop_alacritty_color_normal_cyan
-          - desktop_alacritty_color_normal_white
-          - desktop_alacritty_color_bright_black
-          - desktop_alacritty_color_bright_white
-          - desktop_bar_bg
-          - desktop_bar_fg
-          - desktop_bar_separator
-          - desktop_bar_focused_ws_bg
-          - desktop_bar_focused_ws_text
-          - desktop_bar_active_ws_bg
-          - desktop_bar_active_ws_text
-          - desktop_bar_inactive_ws_bg
-          - desktop_bar_inactive_ws_text
-          - desktop_bar_urgent_ws_bg
-          - desktop_bar_urgent_ws_text
-          - desktop_bar_binding_mode_bg
-          - desktop_bar_binding_mode_text
-      ansible.builtin.assert:
-        that:
-          - _color_keys | map('extract', _config_raw) | select('defined') | list |
-            map('string') | select() | list |
-            reject('match', '^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$') | list | length == 0
-          - _config_raw.get('desktop_alacritty_font_family', '') | string is match('^[a-zA-Z0-9 _-]*$')
-          - _config_raw.get('desktop_wm_font_family', '') | string is match('^[a-zA-Z0-9 _-]*$')
-          - _config_raw.get('desktop_wm_font_size', 10) | int > 0
-          - _config_raw.get('desktop_sway_adaptive_sync', '') | string is match('^(enabled|disabled|)$')
-          - _config_raw.get('desktop_sway_focus_follows_mouse', '') | string | lower is match('^(yes|no|always|)$')
-          - _config_raw.get('desktop_sway_xwayland', '') | string is match('^(disable|)$')
-          - _config_raw.get('desktop_alacritty_font_size', 12.0) | float > 0
-          - _config_raw.get('containers_log_driver', '') | string is match('^(k8s-file|journald|json-file|syslog|none|)$')
-          - _config_raw.get('desktop_wm_lock_color', '') | string is match('^[0-9a-fA-F]{6}$|^$')
-          - _config_raw.get('desktop_i3status_battery_num', '') | string is match('^[0-9]*$')
-          - _config_raw.get('desktop_gtk_theme', '') | string is match('^[a-zA-Z0-9 _-]*$')
-          - _config_raw.get('desktop_gtk_icon_theme', '') | string is match('^[a-zA-Z0-9 _-]*$')
-          - _config_raw.get('desktop_wm_browser', '') | string is match('^[a-zA-Z0-9/ ._-]*$')
-          - _config_raw.get('desktop_sway_polkit_agent', '') | string is match('^[a-zA-Z0-9/_.-]*$')
-          - _config_raw.get('desktop_i3_polkit_agent', '') | string is match('^[a-zA-Z0-9/_.-]*$')
-          - _config_raw.get('desktop_terminal', '') | string is match('^[a-zA-Z0-9/_.-]*$')
-          - _config_raw.get('desktop_i3_trackpoint_id', '') | string is match('^[a-zA-Z0-9 ./_-]*$')
-          - _config_raw.get('desktop_sway_trackpoint_id', '') | string is match('^[a-zA-Z0-9 ./:_-]*$')
-          - _config_raw.get('desktop_i3_trackpoint_accel_profile', 'flat') | string is match('^(flat|adaptive)$')
-          - _config_raw.get('desktop_sway_trackpoint_accel_profile', 'flat') | string is match('^(flat|adaptive)$')
-          - _config_raw.get('desktop_sway_trackpoint_pointer_accel', 0) | float >= -1.0
-          - _config_raw.get('desktop_sway_trackpoint_pointer_accel', 0) | float <= 1.0
-          - _config_raw.get('desktop_i3_trackpoint_pointer_accel', 0) | float >= -1.0
-          - _config_raw.get('desktop_i3_trackpoint_pointer_accel', 0) | float <= 1.0
-          - _config_raw.get('desktop_sway_trackpoint_scroll_factor', 1) | float >= 0
-          - _config_raw.get('desktop_wm_repeat_delay', '200') | string is match('^[0-9]+$')
-          - _config_raw.get('desktop_wm_repeat_rate', '50') | int > 0
-          - _config_raw.get('desktop_sway_output', '*') | string is match('^[a-zA-Z0-9*_-]+$')
-          - _config_raw.get('desktop_sway_hidpi_scale', '1') | string is match('^[0-9]+\.?[0-9]*$')
-          - _config_raw.get('desktop_wm_hide_edge_borders', '') | string is match('^(both|vertical|horizontal|smart|smart_no_gaps|none)?$')
-          - _config_raw.get('desktop_wm_border_width', '1') | string is match('^[0-9]+$')
-          - _config_raw.get('desktop_wm_floating_border_width', '1') | string is match('^[0-9]+$')
-          - _config_raw.get('desktop_sway_cursor_theme', 'Adwaita') | string is match('^[a-zA-Z0-9_-]+$')
-          - _config_raw.get('desktop_sway_cursor_size', '24') | string is match('^[0-9]+$')
-          - _config_raw.get('desktop_sway_libva_driver', '') | string is match('^[a-zA-Z0-9_-]*$')
-          - _config_raw.get('desktop_sway_vdpau_driver', '') | string is match('^[a-zA-Z0-9_-]*$')
-        fail_msg: >-
-          SECURITY: one or more desktop_* vars in config.yml failed validation.
-          Color values must be #RGB or #RRGGBB; wm_lock_color must be 6 hex digits without #.
-          Font/theme names: alphanumeric/space/underscore/hyphen. Driver names: alphanumeric/underscore/hyphen.
-          Numeric sizes must be positive integers or floats. Enum values (adaptive_sync, focus_follows_mouse,
-          xwayland, accel_profile, log_driver, hide_edge_borders) must be one of the listed keywords.
-          Trackpoint accel values must be in [-1.0, 1.0]; scroll_factor >= 0.
-          Fix: use plain safe values in config.yml for all desktop_* variables (no newlines, no shell metacharacters).
-
-    - name: Assert keyboard layout vars in config.yml are safe identifiers (sway input block injection guard)
-      when: _config_raw is defined
-      tags: [always]
-      ansible.builtin.assert:
-        that:
-          - _config_raw.get('desktop_sway_keyboard_layout', '') | string is match('^[a-z0-9,_-]*$')
-          - _config_raw.get('desktop_sway_keyboard_variant', '') | string is match('^[a-z0-9,_-]*$')
-          - _config_raw.get('desktop_sway_keyboard_options', '') | string is match('^[a-zA-Z0-9:,_-]*$')
-        fail_msg: >-
-          SECURITY: desktop_sway_keyboard_layout, desktop_sway_keyboard_variant, and
-          desktop_sway_keyboard_options in config.yml must use only safe characters.
-          Threat: these values are rendered bare inside the sway 'input "type:keyboard" {}' block.
-          Input: config.yml desktop_sway_keyboard_layout / desktop_sway_keyboard_variant / desktop_sway_keyboard_options.
-          Mechanism: a newline in any value closes the block and injects a top-level sway directive.
-          Example: desktop_sway_keyboard_layout: "us\n}\nexec /bin/sh\ninput \"type:keyboard\" {"
-          Impact: arbitrary command execution as the login user when sway starts or reloads.
-          Fix: keyboard_layout/variant must match ^[a-z0-9,_-]*$; keyboard_options ^[a-zA-Z0-9:,_-]*$.
-          Use plain values only (e.g. 'us', 'intl', 'ctrl:nocaps,compose:ralt').
-
-    - name: Assert sway touchpad vars in config.yml are enabled, disabled, or empty (block-escape injection guard)
-      when: _config_raw is defined
-      tags: [always]
-      ansible.builtin.assert:
-        that:
-          - _config_raw.get('desktop_sway_touchpad_tap', '') | string is match('^(enabled|disabled|)$')
-          - _config_raw.get('desktop_sway_touchpad_natural_scroll', '') | string is match('^(enabled|disabled|)$')
-          - _config_raw.get('desktop_sway_touchpad_dwt', '') | string is match('^(enabled|disabled|)$')
-          - _config_raw.get('desktop_sway_touchpad_middle_emulation', '') | string is match('^(enabled|disabled|)$')
-        fail_msg: >-
-          SECURITY: sway touchpad vars in config.yml must be 'enabled', 'disabled', or empty.
-          Input: config.yml desktop_sway_touchpad_{tap,natural_scroll,dwt,middle_emulation}.
-          Mechanism: values are rendered bare inside 'input "type:touchpad" {}' in sway.config.j2;
-          a newline closes the block and injects top-level sway directives on the next line.
-          Example: desktop_sway_touchpad_tap='enabled\n}\nexec /bin/sh\ninput "type:touchpad" {'
-          closes the block, injects exec /bin/sh, and reopens a dummy block to suppress parse errors.
-          Impact: arbitrary command execution as the login user when sway starts or reloads config.
-          Fix: set each var to 'enabled', 'disabled', or leave empty (default).
-
-    - name: Assert desktop idle timeout vars in config.yml are plain non-negative integers (swayidle injection guard)
-      when: _config_raw is defined
-      ansible.builtin.assert:
-        that:
-          - _config_raw.get('desktop_wm_idle_lock_timeout', '300') | string is match('^[0-9]+$')
-          - _config_raw.get('desktop_wm_idle_display_timeout', '600') | string is match('^[0-9]+$')
-        fail_msg: >-
-          SECURITY: desktop_wm_idle_lock_timeout or desktop_wm_idle_display_timeout in config.yml
-          must be a plain non-negative integer (seconds).
-          Input: config.yml desktop_wm_idle_lock_timeout / desktop_wm_idle_display_timeout.
-          Mechanism: values are interpolated bare into the swayidle exec directive in sway.config.j2;
-          a newline in the value terminates the backslash continuation and injects a new top-level
-          sway directive (e.g. "300\nexec /bin/sh -c 'cmd'" runs cmd at WM startup).
-          Example: desktop_wm_idle_lock_timeout: "300\nexec /bin/sh -c 'id>/tmp/pwned'"
-          Impact: local code execution as the user when sway starts.
-          Fix: use only digits (e.g. desktop_wm_idle_lock_timeout: 300).
-
-    - name: Assert desktop_i3status_cpu_temp_path is a safe sysfs path (i3status config injection guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-      ansible.builtin.assert:
-        that:
-          - _raw.get('desktop_i3status_cpu_temp_path', '') | string is match('^(/sys/[a-zA-Z0-9/_.:-]+)?$')
-        fail_msg: >-
-          SECURITY: desktop_i3status_cpu_temp_path in config.yml is not a valid sysfs path.
-          Threat: i3status config injection — a '"' in the value closes the quoted string and a
-          newline injects an additional i3status directive or opens a rogue module block.
-          Input: desktop_i3status_cpu_temp_path='{{ _raw.get('desktop_i3status_cpu_temp_path', '') }}' in config.yml.
-          Mechanism: the value is rendered inside path = "..." in i3status.conf.j2; a '"' closes
-          the quoted value and subsequent text is parsed as i3status config directives.
-          Example: '/sys/hwmon0/temp1_input"\ncpu_usage { format = " %usage" }' closes the
-          string and injects a new i3status block, crashing or corrupting the status bar.
-          Impact: i3status DoS or attacker-controlled sysfs path read.
-          Fix: use only a /sys/... path with alphanumeric, slash, dot, underscore, hyphen
-          (e.g. /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon8/temp1_input).
-
-    - name: Assert desktop_sway_workspace_outputs entries contain only safe characters (sway config injection guard)
-      when: _config_raw is defined
-      tags: [always]
-      vars:
-        _raw: "{{ _config_raw }}"
-        _wo_list: "{{ _raw.get('desktop_sway_workspace_outputs', []) }}"
-        _bad_workspaces: >-
-          {{ _wo_list | map(attribute='workspace', default='') | map('string') | select() |
-             reject('match', '^[a-zA-Z0-9_-]+$') | list }}
-        _bad_outputs: >-
-          {{ _wo_list | map(attribute='output', default='') | map('string') | select() |
-             reject('match', '^[a-zA-Z0-9*_/-]+$') | list }}
-      ansible.builtin.assert:
-        that:
-          - _bad_workspaces | length == 0
-          - _bad_outputs | length == 0
-        fail_msg: >-
-          SECURITY: desktop_sway_workspace_outputs in config.yml contains unsafe workspace or output values.
-          Threat: newline injection into the sway WM config file rendered at login or swaymsg reload.
-          Input: desktop_sway_workspace_outputs[*].workspace and [*].output fields in config.yml.
-          Mechanism: fields are rendered bare into 'workspace <name> output <output>' lines in sway.config.j2;
-          a newline inside either field (e.g. workspace="1\nexec /bin/sh") escapes the directive and
-          injects an arbitrary top-level sway directive executed when the WM starts or reloads.
-          Example: desktop_sway_workspace_outputs: [{workspace: "1\nexec /bin/sh", output: "*"}]
-          Impact: arbitrary command execution as the login user on every WM start or swaymsg reload.
-          Fix: workspace must match ^[a-zA-Z0-9_-]+$ (e.g. "1", "work"); output must match
-          ^[a-zA-Z0-9*_/-]+$ (e.g. "*", "eDP-1", "HDMI-A-1"). No newlines or shell metacharacters.
-          Bad workspaces: {{ _bad_workspaces }}. Bad outputs: {{ _bad_outputs }}.
-
-    - name: Assert email identity vars from -e flag (gitconfig INI injection guard)
-      vars:
-        _email_pattern: '^([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})?$'
-      ansible.builtin.assert:
-        that:
-          - dotfiles_user_email_work | string is match(_email_pattern)
-          - dotfiles_user_email_personal | string is match(_email_pattern)
-        fail_msg: >-
-          SECURITY: dotfiles_user_email_work or dotfiles_user_email_personal
-          (from environment or config.yml) contains characters that are not valid in an email
-          address. These values are rendered into gitconfig; newlines in the value can inject
-          INI sections (e.g., via -e flag bypass of file-based validation). This guard validates
-          both file-based and environment variable sources.
-          Allowed: alphanumeric, dot, underscore, percent, plus, hyphen (local part);
-          alphanumeric, dot, hyphen (domain); must contain exactly one @ symbol.
-          A blank value is permitted when the variable is not yet configured.
-
-    - name: Assert tmux vars in config.yml are safe (newline injection guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-      ansible.builtin.assert:
-        that:
-          - _raw.get('dotfiles_tmux_history_limit', '50000') | string is match('^[1-9][0-9]*$')
-          - _raw.get('dotfiles_tmux_prefix', 'C-a') | string is match('^[CM]-[a-zA-Z][a-zA-Z0-9]*$')
-        fail_msg: >-
-          SECURITY: dotfiles_tmux_history_limit or dotfiles_tmux_prefix in config.yml
-          contains an unsafe value. These values are rendered verbatim into tmux.conf;
-          newlines inject additional tmux commands (run-shell allows arbitrary shell
-          execution on tmux start or prefix-r reload).
-          dotfiles_tmux_history_limit must be a positive integer (e.g. 50000).
-          dotfiles_tmux_prefix must be a Ctrl or Meta key chord (e.g. C-a, M-b, C-Space).
-
-    - name: Assert dotfiles_ssh_agent_timeout is a non-negative integer (systemd ExecStart injection guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-      ansible.builtin.assert:
-        that:
-          - _raw.get('dotfiles_ssh_agent_timeout', '28800') | string is match('^[0-9]+$')
-        fail_msg: >-
-          SECURITY: dotfiles_ssh_agent_timeout in config.yml must be a non-negative integer
-          (seconds). This value is rendered verbatim into the systemd ssh-agent.service ExecStart
-          line; a non-integer (e.g. a value containing a newline) injects arbitrary systemd
-          ExecStart arguments, which systemd executes as the ssh-agent binary on service start.
-          Allowed: zero or a positive integer (e.g. 28800). A value of 0 disables the key
-          lifetime limit (unlimited).
-
-    - name: Assert proxy_url contains only safe URL characters (dnf-automatic injection guard)
-      when: >-
-        (ansible_facts['env']['http_proxy'] | default('') | length > 0)
-        or (ansible_facts['env']['HTTP_PROXY'] | default('') | length > 0)
-        or (ansible_facts['env']['https_proxy'] | default('') | length > 0)
-        or (ansible_facts['env']['HTTPS_PROXY'] | default('') | length > 0)
-      vars:
-        _proxy_env_vars:
-          - "{{ ansible_facts['env'].get('https_proxy', '') }}"
-          - "{{ ansible_facts['env'].get('HTTPS_PROXY', '') }}"
-          - "{{ ansible_facts['env'].get('http_proxy', '') }}"
-          - "{{ ansible_facts['env'].get('HTTP_PROXY', '') }}"
-        _proxy_value: "{{ _proxy_env_vars | select | first | default('') }}"
-      ansible.builtin.assert:
-        that:
-          - _proxy_value | string is match('^https?://[a-zA-Z0-9._:/%@~+-]*$')
-        fail_msg: >-
-          SECURITY: proxy_url (set via HTTPS_PROXY/HTTP_PROXY/https_proxy/http_proxy environment
-          variable) contains unsafe characters. This value is rendered verbatim into /etc/dnf/automatic.conf
-          [main] section; embedded newlines inject arbitrary configuration directives (e.g.
-          import_gpgkey=False to disable GPG verification). Attacker can then perform MITM via
-          the proxy URL to inject malicious packages installed as root by dnf-automatic.timer.
-          Allowed: alphanumeric, dot, underscore, colon, slash, hyphen, percent (standard URL
-          characters). Must start with http:// or https://. Current value: '{{ _proxy_value }}'.
-          Alternatively, unset HTTPS_PROXY/HTTP_PROXY/https_proxy/http_proxy in the environment
-          where ansible-playbook runs.
-
-    - name: Assert repos_dnf_redhat_gpgkey is set when repos_dnf_redhat_baseurl is defined (unsigned-delivery guard)
-      tags: [always]
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-        _redhat_baseurl: "{{ _raw.get('repos_dnf_redhat_baseurl', '') }}"
-        _redhat_gpgkey: "{{ _raw.get('repos_dnf_redhat_gpgkey', '') }}"
-      ansible.builtin.assert:
-        that:
-          - >-
-            (_redhat_baseurl | length == 0) or
-            (_redhat_gpgkey | length > 0)
-        fail_msg: >-
-          SECURITY: repos_dnf_redhat_baseurl is set in config.yml but repos_dnf_redhat_gpgkey
-          is missing or empty. Without a GPG key, dnf installs packages from the Red Hat internal
-          repo with gpgcheck: false and repo_gpgcheck: false, allowing unsigned or maliciously
-          substituted packages to be installed as root with no integrity verification.
-
-          REQUIRED: Set repos_dnf_redhat_gpgkey to the HTTPS URL of the repo's GPG key
-          (must target repo.redhat.com, keys.redhat.com, or a host in repos_dnf_internal_hosts).
-          Example: repos_dnf_redhat_gpgkey: https://pkgs.example.internal/repo-gnupg-keys/key.gpg
-
-          If you intentionally need an unsigned repo, remove repos_dnf_redhat_baseurl from
-          config.yml — unsigned-delivery via the internal repo path is not supported.
-
-    - name: Assert dotfiles_oh_my_zsh_plugins entries contain only safe characters (zshrc injection guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-        _plugins: "{{ _raw.get('dotfiles_oh_my_zsh_plugins', []) | default([]) }}"
-      ansible.builtin.assert:
-        that:
-          - _plugins | map('string') | select() |
-            reject('match', '^[a-zA-Z0-9_-]+$') | list | length == 0
-        fail_msg: >-
-          SECURITY: dotfiles_oh_my_zsh_plugins in config.yml contains an entry with unsafe characters.
-          Input: dotfiles_oh_my_zsh_plugins list in config.yml.
-          Mechanism: entries are joined with spaces and rendered into plugins=(...) in .zshrc;
-          a plugin name containing ')' closes the array literal and injects arbitrary shell commands
-          executed in every interactive shell session.
-          Example: 'git) echo pwned; plugins=(' injects 'echo pwned' into .zshrc.
-          Impact: persistent shell code execution for the provisioned user.
-          Fix: plugin names must match ^[a-zA-Z0-9_-]+$ (e.g. git, docker, kubectl).
-          Offending entries: {{ _plugins | reject('match', '^[a-zA-Z0-9_-]+$') | list }}
-
-    - name: Assert dotfiles_ssh_agent_label contains only safe characters (launchd plist injection guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-      ansible.builtin.assert:
-        that:
-          - _raw.get('dotfiles_ssh_agent_label', '') | string is match('^[a-zA-Z0-9._-]*$')
-        fail_msg: >-
-          SECURITY: dotfiles_ssh_agent_label in config.yml contains unsafe characters.
-          This value is rendered verbatim into the launchd plist <string> Label element on
-          macOS; unsafe characters (spaces, angle brackets, ampersands) break XML structure
-          or inject additional XML elements, potentially causing launchd to execute an
-          attacker-controlled program path. Allowed: alphanumeric, dot, underscore, hyphen
-          (e.g. com.username.ssh-agent). Leave unset to use the safe computed default.
-
-    - name: Assert notes_repo_name in config.yml contains only safe characters (shell injection guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-      ansible.builtin.assert:
-        that:
-          - _raw.get('notes_repo_name', 'notes') | string is match('^[a-zA-Z0-9_-]+$')
-        fail_msg: >-
-          SECURITY: notes_repo_name in config.yml contains unsafe characters; it is rendered
-          into the 'notes' shell alias in .zshrc. Allowed: alphanumeric, underscore, hyphen.
-          notes_repo_path is validated in the play-namespace block.
-
-    - name: Assert system_gid0_allowed_accounts entries are safe usernames (account hardening guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-        _unsafe_accounts: "{{ _raw.get('system_gid0_allowed_accounts', []) | map('string') | select('search', '[^a-zA-Z0-9_-]') | list }}"
-      ansible.builtin.assert:
-        that:
-          - _unsafe_accounts | length == 0
-        fail_msg: >-
-          SECURITY: system_gid0_allowed_accounts in config.yml contains entries with unsafe
-          characters. Each account name must match ^[a-zA-Z0-9_-]+$ (alphanumeric, underscore,
-          hyphen only). These entries are rendered verbatim into a grep regex pattern in
-          roles/system/tasks/account_hardening.yml; regex metacharacters (brackets, pipes,
-          dots, asterisks, plus signs, question marks, carets, dollar signs) can break the
-          pattern matching and allow accounts with GID=0 to bypass the hardening check.
-          Example attack: system_gid0_allowed_accounts: ['root|bin'] matches ANY account
-          whose name contains 'root' or 'bin' (including 'rabbit', 'bin2'), defeating the
-          intent to restrict GID-0 primary group to root only.
-          Unsafe entries found: {{ _unsafe_accounts }}.
-          Use only alphanumeric characters, underscores, and hyphens in account names
-          (e.g., root, service-account, bin_user).
-
-    - name: Assert ssh_work_keyscan_hosts entries are safe hostnames (command injection guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-        _keyscan_hosts: "{{ _raw.get('ssh_work_keyscan_hosts', []) }}"
-        # Handle both string entries and dict entries with 'host' field
-        _hostnames_to_check: >-
-          {{ _keyscan_hosts | map(attribute='host', default='') | map('string') | select() | list +
-             (_keyscan_hosts | selectattr('host', 'undefined') | map('string') | select() | list) }}
-        _unsafe_hosts: "{{ _hostnames_to_check | select('search', '[^a-zA-Z0-9._-]') | list }}"
-      ansible.builtin.assert:
-        that:
-          - _unsafe_hosts | length == 0
-        fail_msg: >-
-          SECURITY: ssh_work_keyscan_hosts in config.yml contains entries with unsafe
-          characters. Each hostname (plain string or dict 'host' field) must match
-          ^[a-zA-Z0-9._-]+$ (alphanumeric, dot, underscore, hyphen only). These entries
-          are passed directly to ssh-keyscan in roles/ssh/tasks/keyscan_host.yml; shell
-          metacharacters or spaces can escape the command and inject arbitrary shell
-          commands executed during provisioning. Example attack: ssh_work_keyscan_hosts:
-          ['github.com; rm -rf /'] would execute the rm command. Allowed: plain hostname
-          strings or dicts with 'host' field (e.g., ssh_work_keyscan_hosts: ['github.com']
-          or [{'host': 'git.internal.com', 'fingerprint': 'SHA256:...'}]).
-          Unsafe entries found: {{ _unsafe_hosts }}.
 
     - name: SECURITY CRITICAL — Block vault.yml encryption with weak vault-pass.sh stub
-      when: not _pf_is_molecule
-      tags: [always]
       block:
         - name: Check if vault-pass.sh contains hardcoded CHANGE_ME placeholder
           ansible.builtin.slurp:
@@ -594,7 +45,6 @@
           register: _vault_pass_sh
           failed_when: false
           no_log: true
-          tags: [always]
 
         - name: Check if vault.yml exists and may be plaintext
           ansible.builtin.slurp:
@@ -602,7 +52,6 @@
           register: _vault_yml
           failed_when: false
           no_log: true
-          tags: [always]
 
         - name: Assert vault-pass.sh and vault.yml were readable for the stub check
           ansible.builtin.assert:
@@ -641,23 +90,18 @@
               Impact: all vault secrets (SSH keys, git keys, registry tokens, GRUB hash) are exposed.
               Fix: run 'make setup-yubikeys' to replace the stub with YubiKey HMAC-SHA1 vault-pass.sh,
               then re-encrypt: 'make vault-edit'. See SECURITY.md for manual vault-pass.sh setup.
-          tags: [always]
 
     - name: SECURITY — Assert vault-pass.sh and vault.yml have restrictive permissions (distrobox $HOME exposure)
-      when: not _pf_is_molecule
-      tags: [always]
       block:
         - name: Stat vault-pass.sh
           ansible.builtin.stat:
             path: "{{ playbook_dir }}/scripts/vault-pass.sh"
           register: _stat_vault_pass
-          tags: [always]
 
         - name: Stat vault.yml
           ansible.builtin.stat:
             path: "{{ playbook_dir }}/group_vars/all/vault.yml"
           register: _stat_vault_yml
-          tags: [always]
 
         - name: Assert vault-pass.sh is mode 0700
           when: _stat_vault_pass.stat.exists
@@ -669,7 +113,6 @@
               The distrobox container mounts $HOME, so any process inside the container can read this
               file and extract the vault password. Restrict it: chmod 0700 scripts/vault-pass.sh.
               The Makefile bootstrap target sets 0700; this check detects accidental permission drift.
-          tags: [always]
 
         - name: Assert vault.yml is mode 0600
           when: _stat_vault_yml.stat.exists
@@ -680,181 +123,8 @@
               SECURITY: group_vars/all/vault.yml has mode {{ _stat_vault_yml.stat.mode }}, expected 0600.
               The distrobox container mounts $HOME; mode 0600 limits read access to the owner only.
               Restrict it: chmod 0600 group_vars/all/vault.yml.
-          tags: [always]
-
-    - name: SECURITY — Assert SSH git repo hosts are all pre-seeded in keyscan (TOFU mitigation)
-      when: not _pf_is_molecule
-      vars:
-        _raw: "{{ _config_raw }}"
-        _git_repos_list: "{{ _raw.get('git_repos_list', []) | default([]) }}"
-        _keyscan_raw: "{{ _raw.get('ssh_work_keyscan_hosts', []) }}"
-        # Hostnames from ssh_work_keyscan_hosts (handles both dict {host:...} and plain-string entries)
-        _keyscan_hostnames: >-
-          {{ (_keyscan_raw | map(attribute='host', default='') | map('string') | select() | list)
-             + (_keyscan_raw | selectattr('host', 'undefined') | map('string') | select() | list) }}
-        # Extract per-URL hostnames from SSH git repos; github.com excluded (always pre-seeded via API)
-        _ssh_git_hostnames: >-
-          {{ _git_repos_list
-             | selectattr('url', 'search', '^git@|^ssh://')
-             | map(attribute='url')
-             | map('regex_replace', '^git@([^:]+):.*', '\1')
-             | map('regex_replace', '^ssh://([^/:]+).*', '\1')
-             | reject('equalto', 'github.com')
-             | unique
-             | list }}
-        # Hosts present in git_repos_list but absent from ssh_work_keyscan_hosts
-        _missing_keyscan_hosts: "{{ _ssh_git_hostnames | difference(_keyscan_hostnames) }}"
-      ansible.builtin.assert:
-        that:
-          - _missing_keyscan_hosts | length == 0
-        fail_msg: >-
-          SECURITY: SSH git repos reference hosts not covered by ssh_work_keyscan_hosts (TOFU/MITM risk).
-          Input: git_repos_list has SSH URLs for hosts absent from ssh_work_keyscan_hosts.
-          Mechanism: accept_newhostkey:true trusts any key on first clone with no fingerprint check.
-          Example: MITM on new-internal.corp.com substitutes attacker key, serves malicious repo.
-          Impact: Arbitrary code from malicious repo runs during provisioning (become:true context).
-          Fix: Add each missing host (with fingerprint) to ssh_work_keyscan_hosts in config.yml.
-          Missing hosts: {{ _missing_keyscan_hosts }}
-      tags: [always]
-
-    - name: SECURITY WARN — keyscan hosts without fingerprint pinning (TOFU risk)
-      vars:
-        _keyscan_raw: "{{ _config_raw.get('ssh_work_keyscan_hosts', []) }}"
-        # Dict entries missing a fingerprint field, plus all plain-string entries (no fingerprint possible)
-        _unfingerprinted: >-
-          {{ (_keyscan_raw | selectattr('host', 'defined') | rejectattr('fingerprint', 'defined')
-              | map(attribute='host') | list)
-             + (_keyscan_raw | selectattr('host', 'undefined') | map('string') | select() | list) }}
-      ansible.builtin.debug:
-        msg: >-
-          SECURITY WARN: ssh_work_keyscan_hosts entries lack fingerprint pinning: {{ _unfingerprinted }}.
-          These hosts are trusted via TOFU (Trust On First Use). An MITM on first provision can seed
-          a malicious key transparently. Obtain ed25519 fingerprints from IT via out-of-band channel
-          and add fingerprint: "SHA256:..." to each entry in config.yml to eliminate TOFU risk.
-      when:
-        - not _pf_is_molecule
-        - _unfingerprinted | length > 0
-      tags: [always]
-
-    - name: Warn about keyscan hosts whose fingerprint is not pinned yet
-      when:
-        - _config_raw is defined
-        - _bad_fingerprints | length > 0
-      vars:
-        _bad_fingerprints: >-
-          {{ _config_raw.get('ssh_work_keyscan_hosts', []) | selectattr('fingerprint', 'defined')
-             | rejectattr('fingerprint', 'match', '^SHA256:[A-Za-z0-9+/]{43}$')
-             | map(attribute='host') | list }}
-      ansible.builtin.debug:
-        msg: >-
-          NOTICE: {{ _bad_fingerprints | join(', ') }} in ssh_work_keyscan_hosts lack a full
-          'SHA256:<43 base64 chars>' fingerprint (as printed by ssh-keygen -lf). Their host keys
-          are not seeded and their SSH repos are skipped this run (no trust-on-first-use).
-          Set the real fingerprint, then run 'make ssh repos' on a network that reaches them.
-      tags: [always]
-
-    - name: Assert git_repos_list dest fields contain no path traversal (LPE guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-        _git_repos_list: "{{ _raw.get('git_repos_list', []) | default([]) }}"
-        _bad_dests: >-
-          {{ _git_repos_list
-             | map(attribute='dest', default='')
-             | map('string')
-             | select('search', '\.\.|\./')
-             | list }}
-      ansible.builtin.assert:
-        that:
-          - _bad_dests | length == 0
-        fail_msg: >-
-          SECURITY: git_repos_list contains a dest field with path traversal sequences.
-          Input: git_repos_list[*].dest fields in config.yml.
-          Mechanism: dest is appended to git_repos_base_dir to form the clone path; a value
-          like '../../.local/bin' resolves to a path outside the repos directory.
-          Example: dest='../../.local/bin' with git_repos_base_dir='~/src' clones to
-          ~/.local/bin, replacing executables with attacker-controlled code on next login.
-          Impact: arbitrary file write outside repos dir — privilege escalation via PATH hijack.
-          Fix: dest must be a plain relative path without '..' or './' (e.g. 'my-project').
-          Offending entries: {{ _bad_dests }}
-
-    - name: Assert git_repos_base_dir is not the home directory or a sensitive path (SSH takeover guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-        _base_dir: "{{ _raw.get('git_repos_base_dir', '') | string }}"
-      ansible.builtin.assert:
-        that:
-          - >-
-            _base_dir == ''
-            or (_base_dir not in ['~', '~/', ansible_facts['user_dir'], ansible_facts['user_dir'] + '/'])
-          - >-
-            _base_dir == ''
-            or (_base_dir | regex_search('(^|/)(\\.ssh|\\.gnupg|\\.local/bin)(/|$)') is none)
-        fail_msg: >-
-          SECURITY: git_repos_base_dir in config.yml is the home directory or a sensitive path.
-          Threat: first-provision SSH takeover — dest:.ssh clones a malicious repo to ~/.ssh.
-          Input: git_repos_base_dir='{{ _base_dir }}' in config.yml.
-          Mechanism: git clones to git_repos_base_dir/item.dest; home dir + dest=.ssh = ~/.ssh overwrite.
-          Example: git_repos_base_dir: ~ with dest: .ssh replaces ~/.ssh/authorized_keys on first provision.
-          Impact: persistent unauthorized SSH access, SSH config/known_hosts hijack after reboot.
-          Fix: set git_repos_base_dir to a subdirectory of home (e.g. ~/src — the default).
-
-    - name: Assert real_user_home is a legitimate user home path (early guard for path-escape checks)
-      ansible.builtin.assert:
-        that:
-          - real_user_home | length > 0
-          - real_user_home != '/'
-          - real_user_home is regex('^(/home/[a-zA-Z0-9_.-]+|/root|/Users/[a-zA-Z0-9_.-]+)(/[a-zA-Z0-9_. -]+)*$')
-          - real_user_home is not search('\.\.')
-          - real_user_home is not search('\\./')
-        fail_msg: >-
-          SECURITY: real_user_home='{{ real_user_home }}' is not a legitimate user home directory.
-          Ensure HOME is set correctly before running make all (e.g. do not run with HOME=/).
-          real_user_home must match /home/<user>, /root, or /Users/<user> and must not
-          contain path traversal sequences.
-      tags: [always]
-
-    - name: Assert git_repos_base_dir is within user home directory (path escape guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-        _base_dir: "{{ _raw.get('git_repos_base_dir', real_user_home ~ '/src') | string }}"
-      ansible.builtin.assert:
-        that:
-          - >-
-            _base_dir is match('^' ~ real_user_home ~ '(/[a-zA-Z0-9_./-]+)?$')
-            or _base_dir is match('^~/[a-zA-Z0-9_./-]+$')
-        fail_msg: >-
-          SECURITY: git_repos_base_dir in config.yml resolves outside the user home directory.
-          Input: git_repos_base_dir={{ _base_dir }}; expected prefix {{ real_user_home }}.
-          Mechanism: git_repos_base_dir is the root path for all git_repos_list clones;
-          a value of /etc or / writes repo content into system directories during provisioning.
-          Example: git_repos_base_dir=/etc clones attacker-controlled repos into /etc, replacing
-          sshd_config, sudoers, and other system configs with malicious versions (GAP 2 + GAP 3).
-          Impact: arbitrary write to system paths under become:true — full privilege escalation.
-          Fix: set git_repos_base_dir to a path under your home directory (default: ~/src).
-
-    - name: Assert container_name contains only safe characters (distrobox INI injection guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-      ansible.builtin.assert:
-        that:
-          - _raw.get('container_name', 'fedora-dev') | string is match('^[a-zA-Z0-9_-]+$')
-        fail_msg: >-
-          SECURITY: container_name in config.yml contains unsafe characters.
-          This value is rendered verbatim into the [section] header of distrobox.ini;
-          embedded newlines can inject arbitrary init_hooks directives that execute as root
-          when distrobox-assemble creates the container. Newlines break the INI section header,
-          allowing arbitrary init_hooks= keys to be parsed as separate directives (distrobox
-          uses AWK line-based parsing, not a full INI parser). These injected commands execute
-          in the container initialization phase before image verification or other security controls.
-          Allowed: alphanumeric, underscore, hyphen (e.g. fedora-dev, mycontainer, work_env).
-          No spaces, newlines, or special characters allowed.
 
     - name: Assert redhat_ca_certs entries are plain filenames (path traversal guard)
-      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _ca_certs: "{{ _raw.get('redhat_ca_certs', []) }}"
@@ -869,58 +139,8 @@
           a value like "../../../../cron.d/evil" resolves outside the role files/ tree
           and writes attacker-controlled content to /etc/cron.d/evil (root cron LPE).
           Invalid entries: {{ _bad }}. Remove all slashes and path separators.
-      tags: [always]
-
-    - name: Assert packages_subctl_versioned entries have safe version strings (go install injection guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-        # No leading v: install_subctl_versions.yml prepends it (go install ...@v<version>).
-        _semver_pattern: '^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9.]+)?$'
-        _subctl_versioned_entries: "{{ _raw.get('packages_subctl_versioned', []) }}"
-      ansible.builtin.assert:
-        that:
-          - _subctl_versioned_entries | map(attribute='version') | map('string') | select() |
-            reject('match', _semver_pattern) | list | length == 0
-          - _subctl_versioned_entries | map(attribute='suffix') | map('string') | select() |
-            reject('match', '^[a-zA-Z0-9]+$') | list | length == 0
-        fail_msg: >-
-          SECURITY: packages_subctl_versioned in config.yml contains unsafe version or suffix strings.
-          Each version must match semantic versioning (e.g. "0.18.0", "1.2.3-beta").
-          Each suffix must be alphanumeric only (e.g. "18", "22").
-          These values are interpolated directly into go install commands and file paths;
-          spaces or special characters allow argument injection (e.g. "0.18.0 --help" injects the --help flag).
-          Invalid entries: {{ _subctl_versioned_entries | rejectattr('version', 'match', _semver_pattern) | list }}.
-          Remove spaces and special characters from version and suffix fields.
-
-    - name: Assert packages_subctl_rh_versions entries have safe version strings (oc image extract injection guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-        # Enforce FULL semantic versioning (v0.18.0 format required) to prevent glob ambiguity
-        # when item.tag="v0.18" matches both v0.18.0 and v0.18.1 tarballs in /tmp.
-        # Three-part versioning (major.minor.patch) prevents filesystem ordering attacks where
-        # ls+head selects the wrong file based on inode traversal order.
-        _semver_pattern_strict: '^v?[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$'
-        _subctl_rh_entries: "{{ _raw.get('packages_subctl_rh_versions', []) }}"
-      ansible.builtin.assert:
-        that:
-          - _subctl_rh_entries | map(attribute='tag') | map('string') | select() |
-            reject('match', _semver_pattern_strict) | list | length == 0
-          - _subctl_rh_entries | map(attribute='image') | map('string') | select() |
-            reject('match', '^[a-zA-Z0-9._-]+$') | list | length == 0
-          - _subctl_rh_entries | map(attribute='suffix') | map('string') | select() |
-            reject('match', '^[a-zA-Z0-9]+$') | list | length == 0
-        fail_msg: >-
-          SECURITY: packages_subctl_rh_versions tag/image/suffix contains an unsafe value.
-          tag must be major.minor.patch (e.g. v0.18.0); partial tags cause /tmp glob ambiguity and may select an attacker-controlled file.
-          image: alphanumeric/dot/hyphen; suffix: alphanumeric.
-          Values are interpolated into oc image extract commands; spaces allow shlex injection.
-          Invalid: {{ _subctl_rh_entries | rejectattr('tag', 'match', _semver_pattern_strict) | list }}.
-          Fix: use complete major.minor.patch for every tag.
 
     - name: Assert ssh_port in config.yml is a plain decimal port number (sshd injection guard)
-      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -939,41 +159,7 @@
           Fix: use a non-standard port (default 722). If port 22 is intentionally required, document the
           decision and remove this assertion — do not silently accept the reduced security posture.
 
-    - name: Assert system_ssh_extra_allow_users entries match valid Linux username character set (sshd AllowUsers injection guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-        _extra_users: "{{ _raw.get('system_ssh_extra_allow_users', []) }}"
-      ansible.builtin.assert:
-        that:
-          - _extra_users | map('string') | select() |
-            reject('match', '^[a-z_][a-z0-9_.@-]{0,31}$') | list | length == 0
-        fail_msg: >-
-          SECURITY: system_ssh_extra_allow_users in config.yml contains an invalid entry.
-          Threat: a newline-embedded value passes sshd -t and injects a top-level sshd directive.
-          Input: {{ _extra_users | reject('match', '^[a-z_][a-z0-9_.@-]{0,31}$') | list }}.
-          Mechanism: entries are joined verbatim into AllowUsers; a newline splits the value into a new directive.
-          Impact: PermitRootLogin or other hardened directives silently overridden; root SSH enabled.
-          Fix: each entry must match ^[a-z_][a-z0-9_.@-]{0,31}$ (valid Linux username, 32 chars max).
-
-    - name: Assert system_selinux_enforcing_required is not disabled in config.yml (SELinux bypass guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-      ansible.builtin.assert:
-        that:
-          - _raw.get('system_selinux_enforcing_required', true) | bool
-        fail_msg: >-
-          SECURITY: system_selinux_enforcing_required is set to false in config.yml.
-          Threat: disabling this variable silently bypasses all SELinux enforcement tasks.
-          Input: system_selinux_enforcing_required={{ _raw.get('system_selinux_enforcing_required', true) }} in config.yml.
-          Mechanism: hardening_core.yml outer block when-condition evaluates false — setenforce,
-          fact refresh, and enforce assert are skipped; provisioning completes with SELinux in any state.
-          Impact: SELinux MAC bypass — all DAC-equivalent attacks succeed without audit log entries.
-          Fix: remove system_selinux_enforcing_required from config.yml or set it to true.
-
     - name: Assert system_selinux_policy is an allowlisted value (SELinux policy weakening guard)
-      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -989,10 +175,21 @@
           Impact: SELinux MAC weakened to near-full-permissive with no preflight warning.
           Fix: remove system_selinux_policy from config.yml (defaults to 'targeted'), or
           set it to one of the allowlisted values: 'targeted', 'strict'.
-      tags: [always]
+
+    - name: Assert system_tmout in config.yml contains only safe digits (shell injection guard)
+      vars:
+        _raw: "{{ _config_raw }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_tmout', '0') | string is match('^[0-9]*$')
+        fail_msg: >-
+          SECURITY: system_tmout in config.yml must be a non-negative integer (seconds).
+          This value is rendered verbatim into /etc/profile.d/tmout.sh, /etc/bash.bashrc,
+          /etc/zshrc, and /etc/zsh/zshrc; shell metacharacters allow command injection
+          when the shell sources these files on session start. Allowed: zero or a positive
+          integer (e.g. 300, 600, 900). No spaces, newlines, or special characters allowed.
 
     - name: Assert system_umask and system_keymap contain only safe characters (login.defs/vconsole injection guard)
-      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1008,43 +205,44 @@
           Allowed: system_umask must be octal digits (0-7, e.g. 027, 077, 022);
           system_keymap must be alphanumeric, hyphen, or underscore (e.g. us, en_US, dvorak).
 
-    - name: Assert password aging and home mode vars safe (login.defs injection guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
+    - name: Assert system_sudo_timestamp_timeout is an integer in [0, 60] (sudoers injection guard)
       ansible.builtin.assert:
         that:
-          - _raw.get('system_pass_max_days', '365') | string is match('^[0-9]+$')
-          - _raw.get('system_pass_min_days', '1') | string is match('^[0-9]+$')
-          - _raw.get('system_pass_warn_age', '7') | string is match('^[0-9]+$')
-          - _raw.get('system_home_mode', '0700') | string is match('^[0-7]{4}$')
-          - _raw.get('system_inactive_days', '30') | string is match('^[0-9]+$')
+          - _config_raw.get('system_sudo_timestamp_timeout', 15) | string is match('^[0-9]+$')
+          - _config_raw.get('system_sudo_timestamp_timeout', 15) | int <= 60
         fail_msg: >-
-          SECURITY: system_pass_max_days, system_pass_min_days, system_pass_warn_age,
-          system_home_mode, or system_inactive_days in config.yml contains unsafe characters.
-          These values are rendered verbatim into /etc/login.defs via Ansible lineinfile;
-          embedded newlines inject arbitrary directives (e.g. UMASK 000 overrides hardening-
-          intended UMASK 027, or PASS_MIN_DAYS 0 allows immediate password reuse after forced
-          change). Allowed: system_pass_*_days and system_inactive_days must be non-negative
-          integers (e.g. 365, 1, 7, 30). system_home_mode must be a 4-digit octal permission
-          string (e.g. 0700, 0755). No newlines, spaces, or special characters allowed.
+          SECURITY: system_sudo_timestamp_timeout in config.yml must be an integer in [0, 60].
+          Input: system_sudo_timestamp_timeout='{{ _config_raw.get("system_sudo_timestamp_timeout", 15) }}' in config.yml.
+          Mechanism: the value is rendered verbatim into /etc/sudoers.d/99-hardening as
+          'Defaults timestamp_timeout=<value>'; non-integer or out-of-range values break sudoers
+          syntax (visudo -cf rejects the file) or produce unexpected sudo cache behavior.
+          Example: '15\nDefaults !authenticate' disables sudo password checks entirely.
+          Impact: sudoers parse failure (sudo unusable) or authentication bypass.
+          Fix: use a plain integer 0-60 (e.g., 0 for re-auth on every sudo, 15 for default).
 
-    - name: Assert system_tmout in config.yml contains only safe digits (shell injection guard)
-      when: _config_raw is defined
+    - name: Assert system_core_pattern contains only safe characters (sysctl VALUE injection guard)
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('system_tmout', '0') | string is match('^[0-9]*$')
+          # system_core_pattern is a sysctl VALUE, not a key; blocks newlines and shell metacharacters.
+          # Pipe-based coredump handlers (e.g. '|/usr/lib/systemd/systemd-coredump ...') are reserved
+          # for role defaults only and must not be overridden via config.yml — pipe exec runs as root.
+          - _raw.get('system_core_pattern', '') | string is match('^[a-zA-Z0-9/_.%-]*$')
         fail_msg: >-
-          SECURITY: system_tmout in config.yml must be a non-negative integer (seconds).
-          This value is rendered verbatim into /etc/profile.d/tmout.sh, /etc/bash.bashrc,
-          /etc/zshrc, and /etc/zsh/zshrc; shell metacharacters allow command injection
-          when the shell sources these files on session start. Allowed: zero or a positive
-          integer (e.g. 300, 600, 900). No spaces, newlines, or special characters allowed.
+          SECURITY: system_core_pattern in config.yml contains unsafe characters or a pipe handler.
+          Threat: kernel.core_pattern with a leading pipe ('|') causes the kernel to exec the named
+          binary as root on every process crash — a pipe value in config.yml enables an RCE vector.
+          Input: system_core_pattern value supplied in config.yml.
+          Mechanism: preflight validates the value before sysctl.yml deploys kernel.core_pattern;
+          pipe characters are now blocked because pipe-exec handlers run as root at crash time.
+          Example: system_core_pattern: '|/malicious/handler' would exec that binary as root.
+          Impact: arbitrary root code execution triggered by any process crash on the system.
+          Fix: remove system_core_pattern from config.yml (role default is safe) or use a plain
+          path without a leading pipe (e.g. '/var/lib/systemd/coredump/core'). No spaces, newlines,
+          shell metacharacters, or pipe characters are permitted in config.yml overrides.
 
     - name: Assert system_ssh_rekey_limit in config.yml has safe format (sshd config injection guard)
-      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1058,34 +256,7 @@
           Allowed: '<bytes>[K|M|G] [time[s|m|h|d|w]]' (e.g. '1G 1h'), 'none', or 'default'.
           No spaces, letters, or punctuation other than the unit suffixes are permitted.
 
-    - name: Assert system_kernel_lockdown in config.yml is a safe mode name (shell injection guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-      ansible.builtin.assert:
-        that:
-          - _raw.get('system_kernel_lockdown', 'integrity') | string is match('^(integrity|confidentiality|none|)$')
-        fail_msg: >-
-          SECURITY: system_kernel_lockdown in config.yml contains an unsafe value.
-          This value is interpolated directly into a bash shell script context in
-          roles/system/tasks/kernel_lockdown.yml line 208; shell metacharacters or spaces
-          allow arbitrary command injection during kernel parameter setup. Allowed values:
-          'integrity', 'confidentiality', or '' (empty string to disable for kdump/kgdb/KASAN).
-
-    - name: Assert packages_brew_autoupdate_interval is a plain integer (launchd schedule guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-      ansible.builtin.assert:
-        that:
-          - _raw.get('packages_brew_autoupdate_interval', 86400) | string is match('^[0-9]+$')
-        fail_msg: >-
-          SECURITY: packages_brew_autoupdate_interval must be a non-negative integer
-          (seconds) for the launchd Homebrew metadata refresh schedule.
-          (system_crypto_policy_target is validated in the play-namespace block below.)
-
     - name: Assert SSH integer vars contain only plain non-negative integers (sshd injection guard)
-      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1102,42 +273,7 @@
           semantically valid injected directives, so the rescue block will not remove
           the file. Remove any non-digit characters from the value.
 
-    - name: Assert ansible.cfg pipelining value is valid boolean (fapolicyd bypass guard)
-      when: not _pf_is_molecule
-      block:
-        - name: Read ansible.cfg for pipelining validation
-          ansible.builtin.slurp:
-            src: "{{ playbook_dir }}/ansible.cfg"
-          register: _ansible_cfg_raw
-          failed_when: false
-          tags: [always]
-
-        - name: Validate ansible.cfg pipelining matches boolean format
-          when: _ansible_cfg_raw.content is defined
-          vars:
-            _cfg_content: "{{ _ansible_cfg_raw.content | b64decode }}"
-            # Extract pipelining line from [defaults] section
-            _pipelining_line: >-
-              {{ _cfg_content | regex_search('(?m)^\s*pipelining\s*=\s*([^#\n]+)') }}
-            # Normalize: strip whitespace, comments, and convert to lowercase
-            _pipelining_normalized: >-
-              {{ (_pipelining_line | default('', true) | regex_replace('.*=\s*', '')
-              | regex_replace('\s*#.*', '')
-              | regex_replace('^\s+|\s+$', '') | lower) }}
-          ansible.builtin.assert:
-            that:
-              - _pipelining_normalized is match('^(true|false|yes|no|on|off|1|0|)$')
-            fail_msg: >-
-              SECURITY: ansible.cfg pipelining value is malformed or contains invalid
-              characters. Valid booleans: true, false, yes, no, on, off, 1, 0
-              (case-insensitive). Embedded spaces (e.g., 't rue') bypass preflight checks
-              while failing at runtime, causing fapolicyd to block /tmp execution despite
-              a successful preflight report. Ensure pipelining uses standard boolean syntax
-              without internal spacing. Found: '{{ _pipelining_line | default('not set') }}'.
-          tags: [always]
-
     - name: Assert system_ssh_channel_timeout contains no unsafe characters (sshd injection guard)
-      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1152,26 +288,7 @@
           Allowed: alphanumeric, equals, comma, space, asterisk, h/m/s time suffixes
           (e.g. "global=1h" or "session=30m direct-tcpip=1h").
 
-    - name: Assert systemd-coredump configuration vars contain only safe values (coredump.conf injection guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-      ansible.builtin.assert:
-        that:
-          - _raw.get('system_coredump_storage', 'external') | string is match('^(none|external|journal)$')
-          - _raw.get('system_coredump_process_size_max', '2G') | string is match('^[0-9]+[KMG]?$')
-        fail_msg: >-
-          SECURITY: system_coredump_storage or system_coredump_process_size_max in config.yml
-          contains invalid characters. These values are rendered verbatim into
-          /etc/systemd/coredump.conf.d/coredump.conf (INI format); embedded newlines inject
-          arbitrary keys (MaxUse, KeepFree, JournalSizeMax, ExternalSizeMax, etc.) that
-          override hardened settings and cause disk DoS (unlimited storage, no free-space preservation).
-          system_coredump_storage must be one of: none, external, journal.
-          system_coredump_process_size_max must be a non-negative integer with optional K/M/G suffix
-          (e.g. 2G, 1000M, 0). No spaces, newlines, or other characters allowed.
-
     - name: Assert SSH algorithm vars contain only safe characters (sshd injection guard)
-      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1191,48 +308,7 @@
           the rescue block will not remove the file.
           Allowed: alphanumeric, @, dot, comma, underscore, hyphen (algorithm name characters).
 
-    - name: Assert direnv boolean vars in config.yml are plain booleans (toml injection guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-        _allowed: ['true', 'false', 'yes', 'no', 'on', 'off', '1', '0', true, false]
-      ansible.builtin.assert:
-        that:
-          - _raw.get('dotfiles_direnv_strict_env', 'false') | string | lower in _allowed
-          - _raw.get('dotfiles_direnv_disable_stdin', 'false') | string | lower in _allowed
-        fail_msg: >-
-          SECURITY: dotfiles_direnv_strict_env and dotfiles_direnv_disable_stdin in
-          config.yml must be plain booleans (true/false/yes/no/on/off/1/0).
-          Embedded newlines inject arbitrary keys into direnv.toml [global], allowing
-          bash_path override to execute an attacker-controlled shell on every direnv
-          evaluation (every cd into a managed directory).
-
-    - name: Assert container_release and container_image contain only safe characters (distrobox tag injection guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-        _cimage: "{{ _raw.get('container_image', '') | string }}"
-      ansible.builtin.assert:
-        that:
-          - _raw.get('container_release', '') | string is match('^[a-zA-Z0-9._-]*$')
-          - _cimage is match('^[a-zA-Z0-9:/@._-]*$')
-          - >-
-            (_cimage == '') or (_cimage is
-            match('^(registry\.fedoraproject\.org/|quay\.io/|registry\.access\.redhat\.com/|registry\.redhat\.io/)'))
-          - _cimage == '' or '@sha256:' in _cimage
-        fail_msg: >-
-          SECURITY: container_image in config.yml is not from a trusted registry or is
-          missing a pinned @sha256: digest.
-          Allowed prefixes: registry.fedoraproject.org/, quay.io/,
-          registry.access.redhat.com/, registry.redhat.io/.
-          Got: {{ _cimage }}. Mutable tags let a registry serve arbitrary content at pull
-          time; the container runs with CAP_BPF+CAP_PERFMON and $HOME bind-mounted
-          (vault-pass.sh, .ssh/, .gnupg/ accessible by container UID).
-          Use: registry.example.com/image:tag@sha256:<64-hex-chars>
-          container_release must be alphanumeric/dot/hyphen (e.g. 44, f39, custom).
-
     - name: Assert system_bluetooth_* vars contain no newlines (BlueZ config injection guard)
-      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1251,7 +327,6 @@
           Disallowed: embedded literal newlines from YAML block/folded scalars.
 
     - name: Assert system_chrony_* vars in config.yml contain only safe characters (chrony.conf injection guard)
-      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1288,7 +363,6 @@
           trust anchors: with authselectmode=require, a rogue entry fully controls
           the system clock with no unauthenticated fallback. Review your NTS server
           list, then set in config.yml: system_chrony_nts_servers_confirmed: true
-      tags: [always]
 
     - name: Assert system_chrony_authselectmode prefer requires explicit acknowledgement
       when:
@@ -1306,93 +380,8 @@
           enabling on-path clock manipulation (Kerberos/TLS replay, cert expiry bypass).
           If prefer is intentional (e.g. restricted network where 4460 is blocked), also
           set in config.yml: system_chrony_authselectmode_prefer_confirmed: true
-      tags: [always]
-
-    - name: Assert DHCP-sourced NTP with non-require authselectmode requires explicit acknowledgement
-      tags: [always]
-      when:
-        - system_chrony_dhcp_sourcedir | default('') | length > 0
-        - system_chrony_authselectmode | default('require') != 'require'
-        - system_chrony_service_enabled | default(true) | bool
-      ansible.builtin.assert:
-        that:
-          - _config_raw.get('system_chrony_dhcp_sourcedir_confirmed', false) | bool
-        fail_msg: >-
-          SECURITY: system_chrony_dhcp_sourcedir is set with
-          system_chrony_authselectmode={{ system_chrony_authselectmode | default('require') }}.
-          DHCP-sourced NTP servers are unauthenticated; a rogue DHCP server can push an
-          attacker-controlled NTP source, enabling Kerberos replay, TOTP bypass, and TLS
-          certificate expiry extension. To fix: (a) set system_chrony_dhcp_sourcedir: '' to
-          disable DHCP NTP (recommended), (b) set system_chrony_authselectmode: require to
-          reject unauthenticated sources, or (c) if DHCP NTP is intentional, also set
-          system_chrony_dhcp_sourcedir_confirmed: true in config.yml to acknowledge this risk
-          (distinct from system_chrony_authselectmode_prefer_confirmed).
-
-    - name: Assert journald/auditd/aide/TLP/PAM vars in config.yml are safe (conf injection guard)
-      when: _config_raw is defined
-      ansible.builtin.assert:
-        that:
-          - _config_raw.get('system_journald_storage', '') | string is match('^(persistent|volatile|auto|none|)$')
-          - _config_raw.get('system_journald_max_use', '') | string is match('^[0-9]+[KMGTP]?$|^$')
-          - _config_raw.get('system_journald_keep_free', '') | string is match('^[0-9]+[KMGTP]?$|^$')
-          - _config_raw.get('system_journald_max_retention', '') | string is match('^[0-9a-zA-Z]+$|^$')
-          - _config_raw.get('system_journald_rate_interval', '') | string is match('^[0-9]+[smhd]?$|^$')
-          - _config_raw.get('system_journald_rate_burst', 10000) | int >= 0
-          - _config_raw.get('system_journald_compress', '') | string | lower is match('^(yes|no|true|false|1|0|)$')
-          - _config_raw.get('system_auditd_max_log_file', 8) | string is match('^[0-9]+$')
-          - _config_raw.get('system_auditd_max_log_file', 8) | int >= 1
-          - _config_raw.get('system_auditd_num_logs', 5) | string is match('^[0-9]+$')
-          - _config_raw.get('system_auditd_num_logs', 5) | int >= 1
-          - _config_raw.get('system_aide_check_calendar', '') | string is match('^[a-zA-Z0-9:*,_ -]*$')
-          - _config_raw.get('system_aide_check_random_delay', '') | string is match('^[0-9]+[smhd]?$|^$')
-          - _config_raw.get('system_tlp_bat0_start', '20') | string is match('^[0-9]+$')
-          - _config_raw.get('system_tlp_bat0_stop', '80') | string is match('^[0-9]+$')
-          - _config_raw.get('system_tlp_platform_profile_ac', '') | string is match('^(performance|balanced|low-power|)$')
-          - _config_raw.get('system_tlp_platform_profile_bat', '') | string is match('^(performance|balanced|low-power|)$')
-          - >-
-            _config_raw.get('system_tlp_cpu_energy_policy_ac', '') | string is
-            match('^(performance|balance_performance|balance_power|power|)$')
-          - >-
-            _config_raw.get('system_tlp_cpu_energy_policy_bat', '') | string is
-            match('^(performance|balance_performance|balance_power|power|)$')
-          - _config_raw.get('system_pwhistory_remember', 24) | string is match('^[0-9]+$')
-          - _config_raw.get('system_faillock_unlock_time', 900) | string is match('^[0-9]+$')
-          - _config_raw.get('system_faillock_audit', 'true') | string | lower in ['true', 'false', 'yes', 'no', '1', '0', 'on', 'off']
-          - >-
-            _config_raw.get('system_faillock_local_users_only', 'true') | string | lower in ['true', 'false', 'yes', 'no', '1', '0', 'on',
-            'off']
-          - >-
-            _config_raw.get('system_faillock_even_deny_root', 'false') | string | lower in ['true', 'false', 'yes', 'no', '1', '0', 'on',
-            'off']
-        fail_msg: >-
-          SECURITY: conf-file variable contains unsafe value. Input: one of
-          system_journald_storage/max_use/rate_burst, system_auditd_max_log_file/num_logs,
-          system_aide_check_calendar, system_tlp_bat0_start/stop,
-          system_faillock_unlock_time, system_pwhistory_remember. Mechanism: values
-          render verbatim into journald/auditd/TLP/PAM conf files; newlines inject
-          directives (e.g. system_faillock_deny='5\nevendenyroot' injects extra faillock
-          directive). Impact: lockout bypass, PAM policy override, audit dispatcher hijack.
-          Fix: see assert that: conditions above for per-variable allowed patterns.
-
-    - name: Assert system_sudo_timestamp_timeout is an integer in [0, 60] (sudoers injection guard)
-      when: _config_raw is defined
-      tags: [always]
-      ansible.builtin.assert:
-        that:
-          - _config_raw.get('system_sudo_timestamp_timeout', 15) | string is match('^[0-9]+$')
-          - _config_raw.get('system_sudo_timestamp_timeout', 15) | int <= 60
-        fail_msg: >-
-          SECURITY: system_sudo_timestamp_timeout in config.yml must be an integer in [0, 60].
-          Input: system_sudo_timestamp_timeout='{{ _config_raw.get("system_sudo_timestamp_timeout", 15) }}' in config.yml.
-          Mechanism: the value is rendered verbatim into /etc/sudoers.d/99-hardening as
-          'Defaults timestamp_timeout=<value>'; non-integer or out-of-range values break sudoers
-          syntax (visudo -cf rejects the file) or produce unexpected sudo cache behavior.
-          Example: '15\nDefaults !authenticate' disables sudo password checks entirely.
-          Impact: sudoers parse failure (sudo unusable) or authentication bypass.
-          Fix: use a plain integer 0-60 (e.g., 0 for re-auth on every sudo, 15 for default).
 
     - name: Assert system_aide_monitoring_etc_paths contains only safe path characters (AIDE monitoring bypass guard)
-      when: _config_raw is defined
       vars:
         _aide_paths: "{{ _config_raw.get('system_aide_monitoring_etc_paths', []) }}"
         _unsafe_entries: "{{ _aide_paths | map('string') | select('search', '[^a-zA-Z0-9._/-]') | list }}"
@@ -1413,205 +402,6 @@
           Use standard filesystem paths only (e.g., /etc/ssh/sshd_config.d, not /etc/[sshd_config]).
           Unsafe entries found: {{ _unsafe_entries }}.
 
-    - name: Assert system_firewall_icmp_extra_types entries are in the safe allowlist (icmp-block-inversion guard)
-      when: _config_raw is defined
-      tags: [always]
-      vars:
-        _icmp_extra: "{{ _config_raw.get('system_firewall_icmp_extra_types', []) }}"
-        # With icmp-block-inversion active on the drop zone, each entry here is ALLOWED inbound.
-        # Only permit types that have a legitimate operational need and minimal exposure risk.
-        # echo-request is intentionally excluded: it makes the host globally pingable.
-        _icmp_allowlist:
-          - destination-unreachable
-          - packet-too-big
-          - time-exceeded
-          - parameter-problem
-        _bad_value: >-
-          {{ _icmp_extra | map('string') | select() |
-             difference(_icmp_allowlist) | list }}
-      ansible.builtin.assert:
-        that:
-          - _bad_value | length == 0
-        fail_msg: >-
-          SECURITY: system_firewall_icmp_extra_types in config.yml contains an invalid entry.
-          Input: system_firewall_icmp_extra_types={{ _icmp_extra }} in config.yml.
-          Mechanism: with icmp-block-inversion active on the drop zone, every entry in
-          system_firewall_icmp_extra_types is ALLOWED inbound, not blocked. Adding
-          echo-request makes the host externally pingable from all sources.
-          Allowed values: destination-unreachable, packet-too-big, time-exceeded,
-          parameter-problem. All other types (including echo-request) are rejected.
-          Not in allowlist: {{ _bad_value }}.
-          Fix: remove disallowed entries or leave system_firewall_icmp_extra_types empty ([]).
-
-    - name: Assert system_aide_monitoring_etc_paths non-empty when system_aide_enabled (AIDE vacuous-truth guard)
-      when:
-        - _config_yml_raw.content is defined
-        - (_config_yml_raw.content | b64decode | from_yaml | default({})).get('system_aide_enabled', false) | bool
-        - "'system_aide_monitoring_etc_paths' in (_config_yml_raw.content | b64decode | from_yaml | default({}))"
-      vars:
-        _aide_paths: "{{ _config_raw.get('system_aide_monitoring_etc_paths', []) }}"
-      ansible.builtin.assert:
-        that:
-          - _aide_paths | length > 0
-        fail_msg: >-
-          SECURITY: system_aide_enabled is true but system_aide_monitoring_etc_paths is empty in
-          config.yml. Threat: with an empty path list aide.yml writes zero supplemental monitoring
-          entries, so AIDE initialises its DB without coverage of /etc/ssh/sshd_config.d,
-          /etc/crypto-policies, /etc/selinux/config, /etc/audit/rules.d, /etc/modprobe.d,
-          /etc/pam.d, and similar security-critical trees. An attacker who modifies these paths
-          post-provision evades integrity detection entirely (vacuous-truth bypass). Fix: either
-          remove system_aide_monitoring_etc_paths from config.yml (defaults cover the 14 standard
-          paths) or supply at least one explicit path such as /etc/ssh/sshd_config.d.
-
-    - name: Assert packages_go_install from -e flag (go install RCE guard)
-      vars:
-        _go_packages: "{{ packages_go_install | default([]) }}"
-        # yamllint disable-line rule:line-length
-        _go_module_regex: '^[a-zA-Z0-9]+(\.[a-zA-Z0-9-]+)*/[a-zA-Z0-9/@._:-]+@v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.]+)?$'
-        _unsafe_entries: "{{ _go_packages | map('string') | reject('match', _go_module_regex) | list }}"
-      ansible.builtin.assert:
-        that:
-          - _go_packages | map('string') | select('search', '[^a-zA-Z0-9./@_:-]') | list | length == 0
-          - _unsafe_entries | length == 0
-        fail_msg: >-
-          SECURITY: packages_go_install contains unsafe Go module paths.
-          These values are passed directly to 'go install'; init() functions execute at compile time
-          (RCE during provisioning). Allowed: module.path/cmd@vX.Y.Z (semantic version required; reject @latest, @v1 without minor/patch).
-          Unsafe entries: {{ _unsafe_entries }}.
-
-    - name: Assert packages_go_install_work from -e flag (go install RCE guard)
-      vars:
-        _go_packages_work: "{{ packages_go_install_work | default([]) }}"
-        # yamllint disable-line rule:line-length
-        _go_module_regex: '^[a-zA-Z0-9]+(\.[a-zA-Z0-9-]+)*/[a-zA-Z0-9/@._:-]+@v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.]+)?$'
-        _unsafe_entries: "{{ _go_packages_work | map('string') | reject('match', _go_module_regex) | list }}"
-      ansible.builtin.assert:
-        that:
-          - _go_packages_work | map('string') | select('search', '[^a-zA-Z0-9./@_:-]') | list | length == 0
-          - _unsafe_entries | length == 0
-        fail_msg: >-
-          SECURITY: packages_go_install_work contains unsafe Go module paths.
-          These values are passed directly to 'go install'; init() functions execute at compile time
-          (RCE during provisioning). Allowed: module.path/cmd@vX.Y.Z (semantic version required; reject @latest, @v1 without minor/patch).
-          Unsafe entries: {{ _unsafe_entries }}.
-
-    - name: Assert distrobox_host_exec_commands entries are in the known-safe allowlist (host-exec escape guard)
-      when: _config_raw is defined
-      vars:
-        _host_exec_commands: "{{ _config_raw.get('distrobox_host_exec_commands', []) }}"
-        # Allowlist: only these binaries may be delegated via distrobox-host-exec symlinks.
-        # podman: accepted risk — documented in distrobox.ini.j2; required for container-in-container workflows.
-        # flatpak: host Flatpak app access from inside the container.
-        # kind: Kubernetes-in-Docker cluster management via host Podman daemon.
-        # docker: optional; only active when install_docker: true; follows same threat model as podman.
-        _allowed_commands: [podman, flatpak, kind, docker]
-        _unlisted_entries: "{{ _host_exec_commands | map('string') | difference(_allowed_commands) | list }}"
-      ansible.builtin.assert:
-        that:
-          - _unlisted_entries | length == 0
-        fail_msg: >-
-          SECURITY: distrobox_host_exec_commands contains commands outside the known-safe allowlist.
-          Input: distrobox_host_exec_commands={{ _host_exec_commands }} in config.yml.
-          Mechanism: each entry creates /usr/local/bin/<cmd> -> /usr/bin/distrobox-host-exec
-          inside the container; any container process can run '<cmd> <args>' against the host.
-          A shell name (e.g. bash) creates a trivial host-shell escape — any container process
-          can run: bash -c 'podman run --privileged --volume /:/host image' to mount the full
-          host root filesystem, escaping all container isolation.
-          Allowed: podman, flatpak, kind, docker (the vetted host-exec delegation set).
-          Unlisted entries: {{ _unlisted_entries }}.
-          Fix: remove unlisted entries from distrobox_host_exec_commands in config.yml.
-          If a new binary is genuinely needed, review the threat model in distrobox.ini.j2
-          and add it to the allowlist in common/tasks/pre_flight_checks.yml.
-
-    - name: Assert containers_prune_schedule contains only safe systemd calendar characters (systemd timer injection guard)
-      when: _config_raw is defined
-      ansible.builtin.assert:
-        that:
-          - _config_raw.get('containers_prune_schedule', 'weekly') | string is match('^[a-zA-Z0-9:*,.\\-/~ ]+$')
-        fail_msg: >-
-          SECURITY: containers_prune_schedule in config.yml contains unsafe characters.
-          This value is rendered verbatim into the [Timer] OnCalendar= directive of the user
-          systemd timer unit; embedded newlines inject additional timer directives (AccuracySec,
-          Persistent, Unit section keys) that systemd parses as INI key-value pairs. An attacker
-          can inject AccuracySec=1us to force microsecond-precision wakeups (CPU/power DoS),
-          or inject additional OnCalendar directives to change the timer schedule.
-          Allowed: alphanumeric, colon, asterisk, comma, dot, hyphen, slash, tilde, space
-          (systemd calendar specification format per systemd.time(7),
-          e.g. weekly, daily, *-*-* 00:00:00, Mon,Wed,Fri *-*-* 10:00:00).
-          No newlines or other special characters allowed.
-
-    - name: Check GitHub CLI availability for attestation verification (packages_gh_available guard)
-      when: _config_raw is defined and _pf_gh_check_done is not defined
-      block:
-        - name: Check GitHub CLI in PATH
-          ansible.builtin.command: which gh
-          changed_when: false
-          failed_when: false
-          check_mode: false
-          register: _gh_which_check
-          tags: [always]
-
-        - name: Set packages_gh_available fact
-          ansible.builtin.set_fact:
-            packages_gh_available: "{{ _gh_which_check.rc == 0 }}"
-          tags: [always]
-
-        - name: Warn if GitHub CLI is not installed on work profile (attestation verification prerequisite)
-          ansible.builtin.debug:
-            msg: >-
-              WARNING: GitHub CLI (gh) is not installed or not in PATH on this work profile machine.
-              Attestation verification for actionlint and zizmor binaries requires GitHub CLI
-              and authentication ('gh auth login'). Without gh CLI, these binaries will be
-              verified only by SHA256 checksums. For maximum supply-chain security on work
-              profiles, install GitHub CLI: https://cli.github.com/
-          when:
-            - _config_raw.get('profile', 'work') == 'work'
-            - not packages_gh_available
-          tags: [always]
-
-        - name: Set gh check done flag
-          ansible.builtin.set_fact:
-            _pf_gh_check_done: true
-          tags: [always]
-
-    - name: Warn when cosign installation is disabled without alternative verification plan
-      when:
-        - _config_yml_raw.content is defined
-        - _cosign_alt_verification_warned is not defined
-      block:
-        - name: Warn if cosign is disabled in config.yml
-          ansible.builtin.debug:
-            msg: >-
-              WARNING: cosign installation is disabled (packages_cosign_install_enabled: false).
-              cosign verification depends on trusting Google's OIDC infrastructure and Sigstore's
-              certificate issuance. If you need cosign for Konflux image signing but want to use
-              an alternative verification method (e.g., GPG signature verification from GitHub releases),
-              you must install and configure it manually. See
-              https://github.com/sigstore/cosign/releases for available signature formats and
-              verification options. This warning is informational only — cosign will not be installed.
-          when: not _config_raw.get('packages_cosign_install_enabled', true)
-          tags: [always]
-
-        - name: Set cosign alternative verification warned flag
-          ansible.builtin.set_fact:
-            _cosign_alt_verification_warned: true
-          tags: [always]
-
-    - name: Reject _csb_molecule_force outside molecule (CSB tier-routing bypass guard)
-      when: not _pf_is_molecule
-      ansible.builtin.assert:
-        that:
-          - not (_csb_molecule_force | default(false))
-        fail_msg: >-
-          SECURITY: _csb_molecule_force is set outside a molecule run.
-          This variable bypasses csb_detect.yml, locking csb_detected/csb_rhel/
-          needs_container_tier to caller-supplied values and skipping all real CSB
-          detection probes. Outside molecule it has no legitimate use; its presence
-          indicates a -e _csb_molecule_force=true injection that silently changes
-          which hardening tasks execute (e.g. forcing hybrid tier, skipping SELinux).
-          Remove _csb_molecule_force from the command line.
-      tags: [always]
-
     # NOTE: vault assertion is NOT gated by _pf_is_molecule — catching vault_* in config.yml is always an error, even in CI.
     # NOTE: This block is unconditional (no _pf_vault_asserted is not defined guard) so that
     # passing -e _pf_vault_asserted=true cannot bypass these security assertions. The guard was
@@ -1620,39 +410,36 @@
     # CLI as a first line of defence; this unconditional block is the Ansible-layer backstop.
     # Running the assertions in both Play 1 and Play 2 is harmless — they are idempotent.
     - name: Assert config.yml vault and secret-key constraints
-      when: _user_config is defined
       block:
         - name: Assert config.yml contains no vault_* keys
           ansible.builtin.assert:
             that: >-
-              (_user_config.keys() | select('match', 'vault_') | list | length == 0)
+              (_config_raw.keys() | select('match', 'vault_') | list | length == 0)
             fail_msg: >-
               config.yml must not define vault_* variables — include_vars outranks
               group_vars (precedence 18 vs 4-5), so these keys silently shadow
-              vault.yml: {{ (_user_config | default({})).keys() | select('match', 'vault_') | list }}
-          tags: [always]
+              vault.yml: {{ (_config_raw | default({})).keys() | select('match', 'vault_') | list }}
 
         - name: Assert config.yml contains no indirection-layer secret keys
           ansible.builtin.assert:
             # Update this list when new direct-secret keys are added to group_vars/all/vault.yml
             that: >-
-              (_user_config.keys() | select('in', ['ssh_auth_key', 'ssh_auth_key_pub',
+              (_config_raw.keys() | select('in', ['ssh_auth_key', 'ssh_auth_key_pub',
                'ssh_signing_key', 'ssh_signing_key_pub', 'rh_git_key',
                'notes_transcrypt_password', 'registry_tokens', 'system_grub_password_hash']) | list | length == 0)
             fail_msg: >-
               config.yml must not define these indirection-layer keys — include_vars
               outranks group_vars/all/vars.yml (precedence 18 vs 4-5), silently
-              bypassing vault for: {{ (_user_config | default({})).keys()
+              bypassing vault for: {{ (_config_raw | default({})).keys()
               | select('in', ['ssh_auth_key', 'ssh_auth_key_pub', 'ssh_signing_key',
               'ssh_signing_key_pub', 'rh_git_key', 'notes_transcrypt_password',
               'registry_tokens', 'system_grub_password_hash']) | list }}. Use group_vars/all/vault.yml for these secrets instead.
               (ssh_git_signing_pubkey is exempt — it is a documented config.yml override.)
-          tags: [always]
 
         - name: Assert config.yml contains no security-policy key overrides
           ansible.builtin.assert:
             that: >-
-              (_user_config.keys() | select('in', ['claude_deny_sensitive',
+              (_config_raw.keys() | select('in', ['claude_deny_sensitive',
                'claude_sandbox_config', 'claude_deny_write_only']) | list | length == 0)
             fail_msg: >-
               config.yml must not override claude_deny_sensitive, claude_sandbox_config,
@@ -1661,10 +448,9 @@
               (precedence 2), so defining them in config.yml silently empties deny-lists or
               degrades sandbox enforcement. Remove them from config.yml; set them in
               roles/claude/defaults/main.yml if policy change is intentional.
-          tags: [always]
 
         - name: Assert redhat_splunk_nologin_shell is a non-login shell (CIS 5.6)
-          when: "'redhat_splunk_nologin_shell' in (_user_config | default({}))"
+          when: "'redhat_splunk_nologin_shell' in (_config_raw | default({}))"
           ansible.builtin.assert:
             that:
               - redhat_splunk_nologin_shell in ['/sbin/nologin', '/usr/sbin/nologin', '/bin/false']
@@ -1677,22 +463,16 @@
               leaves the splunk service account available for interactive login.
               Remove redhat_splunk_nologin_shell from config.yml (the default /sbin/nologin is
               correct for all supported platforms) or set it to one of the allowed values.
-          tags: [always]
 
         # set_fact for localhost persists across plays in the same playbook run (Ansible host-var cache).
         # This flag is no longer used to gate the assertion block (the block is unconditional).
         # It is retained only as a diagnostic marker visible in -vv output; it has no security role.
-        - name: Set vault asserted flag (diagnostic marker only — not a security gate)
-          ansible.builtin.set_fact:
-            _pf_vault_asserted: true
-          tags: [always]
 
     # Catches user typos — in normal operation profile is always 'work' or 'personal'
     - name: Assert profile is a valid value
       ansible.builtin.assert:
         that: profile in ['work', 'personal']
         fail_msg: "profile must be 'work' or 'personal'; got '{{ profile }}'."
-      tags: [always]
 
     # Validate critical security variables in the PLAY NAMESPACE (after -e overrides applied)
     # This complements slurp-based file validation by catching -e override attacks that bypass file checks
@@ -1718,7 +498,6 @@
               should have been caught in site.yml Play 2 pre_tasks. If you see this error,
               the critical assertion in site.yml may have been removed or replaced.
               To fix: Set all three variables in config.yml to actual values before running provisioning.
-          tags: [always]
 
         - name: Assert system_timezone is not CHANGE_ME placeholder (play namespace catch)
           ansible.builtin.assert:
@@ -1731,152 +510,8 @@
               Run 'timedatectl list-timezones' to find your zone, then add
               system_timezone: <zone> to config.yml. This unconditional check prevents
               -e _pf_is_molecule=true from bypassing the gated assertion.
-          tags: [always]
           when:
-            - not _pf_is_molecule
             - ansible_facts['system'] != 'Darwin'  # the system role (timedatectl) never runs on macOS
-
-        - name: Assert identity/gitconfig vars have safe characters (play namespace)
-          ansible.builtin.assert:
-            that:
-              - dotfiles_user_name | default('') | string is not search('[\n\r\x00-\x1f]')
-              - dotfiles_github_user | default('') | string is match('^[a-zA-Z0-9-]*$')
-              - dotfiles_internal_git_host | default('') | string is match('^[a-zA-Z0-9._-]*$')
-              - dotfiles_internal_ca_path | default('') | string is match('^[a-zA-Z0-9./_-]*$')
-              - dotfiles_laptop_tailscale_host | default('') | string is match('^[a-zA-Z0-9._-]*$')
-              - dotfiles_mac_tailscale_host | default('') | string is match('^[a-zA-Z0-9._-]*$')
-            fail_msg: >-
-              SECURITY: One or more identity variables in the play namespace (set via -e overrides
-              or config.yml) contain unsafe characters. These must match file-based validation:
-              dotfiles_github_user={{ dotfiles_github_user | default('NOTSET') }},
-              dotfiles_internal_git_host={{ dotfiles_internal_git_host | default('NOTSET') }},
-              dotfiles_internal_ca_path={{ dotfiles_internal_ca_path | default('NOTSET') }},
-              dotfiles_laptop_tailscale_host={{ dotfiles_laptop_tailscale_host | default('NOTSET') }},
-              dotfiles_mac_tailscale_host={{ dotfiles_mac_tailscale_host | default('NOTSET') }}.
-              These values are interpolated directly into .gitconfig section headers and
-              ssh_config Host stanzas; newlines or spaces break out of the stanza and allow
-              arbitrary config injection (gitconfig: core.hooksPath → code execution;
-              ssh_config: ProxyCommand → arbitrary command execution).
-              Allowed: alphanumeric, hyphen (dotfiles_github_user); alphanumeric, dot,
-              underscore, hyphen (others — matches hostname rules); alphanumeric, dot,
-              slash, hyphen (dotfiles_internal_ca_path — filesystem path).
-          tags: [always]
-
-        - name: Assert SSH key basenames have safe characters (ssh_config guard)
-          ansible.builtin.assert:
-            that:
-              - dotfiles_ssh_hardware_key_basename | default('id_ed25519_sk') | string is match('^[a-zA-Z0-9._-]+$')
-              - dotfiles_ssh_redhat_key_basename | default('id_rsa_redhat') | string is match('^[a-zA-Z0-9._-]+$')
-              - ssh_signing_key_basename | default('id_ed25519_sk_signing') | string is match('^[a-zA-Z0-9._-]+$')
-            fail_msg: >-
-              SECURITY: SSH key basename variables in the play namespace contain unsafe characters:
-              dotfiles_ssh_hardware_key_basename={{ dotfiles_ssh_hardware_key_basename | default('NOTSET') }},
-              dotfiles_ssh_redhat_key_basename={{ dotfiles_ssh_redhat_key_basename | default('NOTSET') }},
-              ssh_signing_key_basename={{ ssh_signing_key_basename | default('NOTSET') }}.
-              These values are rendered verbatim into ssh_config IdentityFile directives; newlines
-              or spaces allow arbitrary ssh_config directive injection (ProxyCommand → arbitrary
-              command execution on every ssh connection). Allowed: alphanumeric, dot, underscore,
-              hyphen only (e.g., id_ed25519_sk, id_rsa_redhat, id_ed25519_sk_signing).
-          tags: [always]
-
-        - name: Assert real_user_id matches valid Linux username format (ssh_config guard)
-          when: profile == 'work'
-          ansible.builtin.assert:
-            that:
-              - real_user_id | default('') | length > 0
-              - real_user_id | default('') is match('^[A-Za-z_][A-Za-z0-9_.@-]{0,31}$')
-            fail_msg: >-
-              SECURITY: real_user_id='{{ real_user_id | default("(empty)") }}' is empty or
-              contains characters outside the allowed set (^[A-Za-z_][A-Za-z0-9_.@-]{0,31}$).
-              Input: real_user_id from environment (USER) or -e override.
-              Mechanism: the value is rendered verbatim into 'User {{ real_user_id }}' in the
-              ssh_config.j2 dotfiles_ssh_work_hosts stanzas (work profile only).
-              A newline in the value closes the User directive and injects an arbitrary
-              ssh_config keyword (e.g. ProxyCommand) into that stanza.
-              Impact: RCE on the next SSH connection to a dotfiles_ssh_work_hosts host.
-              Fix: ensure USER is a valid username (letters incl. macOS uppercase short names, digits, _, @, ., -; max 32 chars).
-          tags: [always]
-
-        - name: Assert dotfiles_gonosumdb in play namespace contains only private domains (GONOSUMDB bypass guard)
-          vars:
-            _gonosumdb_play: "{{ dotfiles_gonosumdb | default('') | string }}"
-          ansible.builtin.assert:
-            that:
-              - >-
-                (_gonosumdb_play | length == 0) or
-                (_gonosumdb_play |
-                regex_search('(^|,)(\\*|github\\.com|golang\\.org|mvdan\\.cc|sigs\\.k8s\\.io|k8s\\.io|gopkg\\.in)(,|$)') is none)
-              - _gonosumdb_play | string is match('^[a-zA-Z0-9.,/_*-]*$')
-            fail_msg: >-
-              SECURITY: dotfiles_gonosumdb in play namespace (set via -e flag or config.yml)
-              contains public module registry domains, bypassing Go checksum verification.
-              Command-line -e flags have higher precedence than config.yml validation, allowing:
-              make all -e dotfiles_gonosumdb='attacker.io,github.com'
-
-              When GONOSUMDB='github.com', the Go toolchain skips GOSUMDB (checksum database)
-              verification for ANY module whose path starts with github.com, allowing:
-              - github.com/attacker-control/backdoor@v1.0.0 to install without checksums
-              - init() code execution during compilation with provisioning privileges
-              - Undetected code injection (XZ Utils 2024 / CVE-2024-3156 vector)
-
-              MITIGATION: dotfiles_gonosumdb must ONLY contain PRIVATE domain patterns.
-              Reject all public registries: github.com, golang.org, mvdan.cc, sigs.k8s.io,
-              k8s.io, gopkg.in. Allow only internal corporate/air-gapped domains.
-
-              REQUIRED FIX: Either omit dotfiles_gonosumdb from -e flag (use config.yml default),
-              or set it ONLY to private domain prefixes:
-                - make all -e dotfiles_gonosumdb='*.example.internal,internal.company.com'
-
-              Do NOT override dotfiles_gonosumdb via -e flag with public registries.
-              Current value (from -e flag or config.yml): '{{ _gonosumdb_play }}'.
-          tags: [always]
-
-        - name: Assert environment vars in play namespace are safe (shell injection guard)
-          ansible.builtin.assert:
-            that:
-              - dotfiles_goprivate | default('') | string is match('^[a-zA-Z0-9.,/_-]*$')
-              - dotfiles_aws_profile | default('') | string is match('^[a-zA-Z0-9_-]*$')
-              - dotfiles_claude_queue_repo | default('') | string is match('^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$|^$')
-            fail_msg: >-
-              SECURITY: Environment variables in the play namespace contain unsafe characters:
-              dotfiles_goprivate={{ dotfiles_goprivate | default('NOTSET') }},
-              dotfiles_aws_profile={{ dotfiles_aws_profile | default('NOTSET') }},
-              dotfiles_claude_queue_repo={{ dotfiles_claude_queue_repo | default('NOTSET') }}.
-              These values are written directly into shell export statements or commands; unsafe characters
-              can escape the double-quoted context to inject arbitrary commands (shell code injection via
-              semicolon, backtick, dollar-paren, etc.; command chaining via pipe/logical operators).
-              Allowed: alphanumeric, dot, comma, slash, underscore, hyphen
-              (dotfiles_goprivate); alphanumeric, underscore, hyphen
-              (dotfiles_aws_profile); owner/repo format only (dotfiles_claude_queue_repo).
-          tags: [always]
-
-        - name: Assert dotfiles_oh_my_zsh_theme in play namespace is safe (shell injection guard)
-          ansible.builtin.assert:
-            that:
-              - dotfiles_oh_my_zsh_theme | default('') | string | regex_search('^[a-zA-Z0-9_/-]*$') is not none
-            fail_msg: >-
-              SECURITY: dotfiles_oh_my_zsh_theme in the play namespace contains characters
-              outside [a-zA-Z0-9_-]. The value is rendered as ZSH_THEME="{{ '{{' }} dotfiles_oh_my_zsh_theme {{ '}}' }}"
-              in zshrc.j2; shell metacharacters (e.g. $(...), `, ;) inside the double-quoted
-              assignment are evaluated by zsh/bash at every interactive shell open (RCE).
-              This check catches -e overrides that bypass the file-based config.yml scan.
-              Allowed characters: alphanumeric, underscore, hyphen.
-              Received: "{{ dotfiles_oh_my_zsh_theme | default('') }}".
-          tags: [always]
-
-        - name: Assert dotfiles_homebrew_prefix in play namespace contains only safe path characters (-e override guard)
-          ansible.builtin.assert:
-            that:
-              - dotfiles_homebrew_prefix | default('/opt/homebrew') | string is match('^[a-zA-Z0-9/_-]+$')
-            fail_msg: >-
-              SECURITY: dotfiles_homebrew_prefix in play namespace contains unsafe characters
-              (possibly set via -e flag, bypassing config.yml file-based check).
-              This value is interpolated unfiltered into double-quoted source and [[ -f ... ]]
-              expressions in .zshrc; shell metacharacters (e.g. $(cmd)) execute on every
-              interactive shell open on macOS. Allowed: alphanumeric, slash, underscore,
-              hyphen (e.g. /opt/homebrew or /usr/local).
-              Fix: omit the -e dotfiles_homebrew_prefix=... flag or set a safe value in config.yml.
-          tags: [always]
 
         - name: Assert USBGuard whitelist/extra_rules in play namespace are well-formed
             (USBGuard injection guard)
@@ -1908,130 +543,6 @@
 
               Invalid whitelist entries: {{ _wl_invalid }}.
               Invalid extra_rules entries: {{ _er_invalid }}.
-          tags: [always]
-
-        - name: Assert sysctl extra dicts in play namespace contain safe keys (sysctl injection guard)
-          vars:
-            # yamllint disable-line rule:line-length
-            _extra_val_has_newlines: "{{ system_sysctl_extra | default({}) | dict2items | map(attribute='value') | map('string') | select('search', '\n') | list | length > 0 }}"
-            # yamllint disable-line rule:line-length
-            _additional_val_has_newlines: "{{ system_sysctl_extra_additional | default({}) | dict2items | map(attribute='value') | map('string') | select('search', '\n') | list | length > 0 }}"
-            _extra_keys_unsafe: >-  # yamllint disable-line rule:line-length
-              {{ system_sysctl_extra | default({}) | dict2items | map(attribute='key') | map('string') | select('search',
-              '[^a-zA-Z0-9._/-]') | list }}
-            _additional_keys_unsafe: >-  # yamllint disable-line rule:line-length
-              {{ system_sysctl_extra_additional | default({}) | dict2items | map(attribute='key') | map('string') | select('search',
-              '[^a-zA-Z0-9._/-]') | list }}
-            # yamllint disable-line rule:line-length
-            _extra_vals_unsafe: "{{ system_sysctl_extra | default({}) | dict2items | map(attribute='value') | map('string') | select('search', '[&|;<>$()`]') | list }}"
-            # yamllint disable-line rule:line-length
-            _additional_vals_unsafe: "{{ system_sysctl_extra_additional | default({}) | dict2items | map(attribute='value') | map('string') | select('search', '[&|;<>$()`]') | list }}"
-          ansible.builtin.assert:
-            that:
-              - not _extra_val_has_newlines
-              - not _additional_val_has_newlines
-              - _extra_keys_unsafe | length == 0
-              - _additional_keys_unsafe | length == 0
-              - _extra_vals_unsafe | length == 0
-              - _additional_vals_unsafe | length == 0
-            fail_msg: >-
-              SECURITY: sysctl extra dicts in the play namespace (set via -e
-              overrides) contain unsafe keys or values. These are rendered verbatim into
-              /etc/sysctl.d/90-hardening.conf via sysctl-hardening.conf.j2; embedded
-              newlines in a KEY inject additional sysctl directives (e.g.
-              {"kernel.x=0\nnet.y": "0"} renders two directives). Keys must match
-              ^[a-zA-Z0-9._/-]+$ (no newlines, spaces, or special characters); values
-              must not contain newlines or shell metacharacters (&, |, ;, >, <, $, (, ), backtick, space, tab).
-              Unsafe keys: {{ _extra_keys_unsafe + _additional_keys_unsafe }}.
-              Unsafe values: {{ _extra_vals_unsafe + _additional_vals_unsafe }}.
-          tags: [always]
-
-        - name: Assert kernel.core_pattern contains no shell metacharacters
-          vars:
-            _extra_core_patterns: "{{ system_sysctl_extra | default({}) | dict2items
-                | selectattr('key', 'equalto', 'kernel.core_pattern')
-                | map(attribute='value') | map('string') | select() | list }}"
-            _additional_core_patterns: "{{ system_sysctl_extra_additional | default({}) | dict2items
-                | selectattr('key', 'equalto', 'kernel.core_pattern')
-                | map(attribute='value') | map('string') | select() | list }}"
-            _all_core_patterns: "{{ _extra_core_patterns + _additional_core_patterns }}"
-            _unsafe_patterns: "{{ _all_core_patterns | select('search', '[|;&$`()]') | list }}"
-          ansible.builtin.assert:
-            that:
-              - _unsafe_patterns | length == 0
-            fail_msg: >-
-              SECURITY: kernel.core_pattern in system_sysctl_extra or system_sysctl_extra_additional
-              contains pipe (|) or other shell metacharacters. The kernel interprets | as a directive
-              to execute a program when any process crashes, executing arbitrary code as root.
-              Unsafe values: {{ _unsafe_patterns }}.
-              Allowed: regular file paths only, e.g. /var/lib/systemd/coredump, /var/crash/core.%e.%p
-              (no |, ;, &, $, `, or parentheses).
-          tags: [always]
-
-
-        - name: Assert high-risk vars in play namespace have safe values (-e override guard)
-          ansible.builtin.assert:
-            that:
-              - packages_opm_binary_name | default('opm-rhel8') | string is match('^[a-zA-Z0-9._-]+$')
-              - claude_install_url | default('https://claude.ai/install.sh') | string is match('^https://(claude\.ai|anthropic\.com)/')
-              - distrobox_host_exec_commands | default([]) | map('string') | select('search', '[^a-zA-Z0-9_-]') | list | length == 0
-              - system_crypto_policy_target | default('DEFAULT:NO-SHA1') | string is match('^[A-Z0-9:_+-]+$')
-              - dotfiles_work_src_dirs | default([]) | map('string') | select('search', '[^a-zA-Z0-9_-]') | list | length == 0
-              - claude_queue_allowed_authors | default([]) | map('string') | select() |
-                reject('match', '^[a-zA-Z0-9-]+$') | list | length == 0
-              - claude_queue_memory_max | default('4G') | string is match('^[0-9]+(K|M|G|T|%)?$|^infinity$')
-              - claude_queue_cpu_quota | default('80%') | string is match('^[0-9]+%$')
-              - distrobox_packages | default([]) | map('string') | select('search', '[^a-zA-Z0-9_.+-]') | list | length == 0
-              - distrobox_packages | default([]) | map('string') | select('match', '^-') | list | length == 0
-            fail_msg: >-
-              SECURITY: High-risk variable contains unsafe value (possibly set via -e,
-              bypassing config.yml preflight validation). RCE risk via become:true —
-              arbitrary URL executes as root; metacharacters inject systemd/ini directives.
-              URL/path safety (packages_opm_binary_name, claude_install_url,
-              dotfiles_work_src_dirs): alphanumeric/dot/hyphen or constrained https:// only.
-              Systemd/ini injection (claude_queue_allowed_authors, claude_queue_memory_max,
-              claude_queue_cpu_quota, system_crypto_policy_target, distrobox_host_exec_commands,
-              distrobox_packages): strict regex — no newlines or shell metacharacters.
-              Invalid values: {{ [('packages_opm_binary_name=' ~ (packages_opm_binary_name | default('opm-rhel8'))) if not
-              (packages_opm_binary_name | default('opm-rhel8') | string is match('^[a-zA-Z0-9._-]+$')) else '', ('claude_install_url=' ~
-              (claude_install_url | default(''))) if not (claude_install_url | default('https://claude.ai/install.sh') | string is
-              match('^https://(claude\.ai|anthropic\.com)/')) else '', ('system_crypto_policy_target=' ~ (system_crypto_policy_target |
-              default('DEFAULT:NO-SHA1'))) if not (system_crypto_policy_target | default('DEFAULT:NO-SHA1') | string is
-              match('^[A-Z0-9:_+-]+$')) else '', ('claude_queue_memory_max=' ~ (claude_queue_memory_max | default('4G'))) if not
-              (claude_queue_memory_max | default('4G') | string is match('^[0-9]+(K|M|G|T|%)?$|^infinity$')) else '',
-              ('claude_queue_cpu_quota=' ~ (claude_queue_cpu_quota | default('80%'))) if not (claude_queue_cpu_quota | default('80%') |
-              string is match('^[0-9]+%$')) else ''] | select | join(', ') }}
-          tags: [always]
-
-        - name: Assert PAM lockout vars have safe minimum values
-          ansible.builtin.assert:
-            that:
-              - system_faillock_deny | default(5) | int >= 1
-            fail_msg: >-
-              SECURITY: PAM hardening variable in play namespace has an unsafe value (possibly set
-              via -e command-line override, bypassing config.yml-based preflight validation):
-              system_faillock_deny={{ system_faillock_deny | default(5) }} --
-                must be >= 1 (deny=0 instructs pam_faillock to never lock accounts; brute-force
-                of any local account password becomes unrestricted).
-              Do NOT set this to 0 via -e flag or config.yml.
-          tags: [always]
-
-        - name: Assert system_dot_mode and system_dnssec_mode in play namespace are valid (-e override guard)
-          ansible.builtin.assert:
-            that:
-              - system_dot_mode | default('opportunistic') | string | lower in ['yes', 'no', 'opportunistic']
-              - system_dnssec_mode | default('allow-downgrade') | string | lower in ['yes', 'no', 'allow-downgrade']
-            fail_msg: >-
-              SECURITY: system_dot_mode or system_dnssec_mode in the play namespace has an invalid
-              value (possibly set via -e flag, bypassing config.yml pre-flight validation).
-              Threat: invalid value causes mid-play failure in dns_over_tls.yml after
-              systemd-resolved is enabled and resolved drop-in directories are created
-              (partial hardening state). Allowed: system_dot_mode in [yes, no, opportunistic];
-              system_dnssec_mode in [yes, no, allow-downgrade].
-              Current: system_dot_mode={{ system_dot_mode | default('DEFAULT') }},
-              system_dnssec_mode={{ system_dnssec_mode | default('DEFAULT') }}.
-              Fix: correct the -e override or config.yml value before running make all.
-          tags: [always]
 
         - name: Assert DNS server/domain vars in play namespace contain only safe characters (-e override guard)
           ansible.builtin.assert:
@@ -2053,7 +564,6 @@
               system_dns_primary={{ system_dns_primary | default('DEFAULT') }},
               system_dns_fallback={{ system_dns_fallback | default('DEFAULT') }},
               system_dns_domains={{ system_dns_domains | default('DEFAULT') }}.
-          tags: [always]
 
         - name: Assert system_resolved_llmnr and system_resolved_multicast_dns are valid enums
           ansible.builtin.assert:
@@ -2068,155 +578,8 @@
               yes, no, resolve. Current values:
               system_resolved_llmnr={{ system_resolved_llmnr | default('DEFAULT') }},
               system_resolved_multicast_dns={{ system_resolved_multicast_dns | default('DEFAULT') }}.
-          tags: [always]
-
-        - name: Assert chrony vars in play namespace contain only safe characters (-e override guard)
-          ansible.builtin.assert:
-            that:
-              - system_chrony_nts_servers | default([]) | map('string') | select('search', '[^a-zA-Z0-9._:-]') | list | length == 0
-              - system_chrony_authselectmode | default('') | string is match('^(prefer|require)$|^$')
-              - system_chrony_fallback_pool | default('') | string is match('^[a-zA-Z0-9._-]*$')
-              - system_chrony_makestep | default('') | string is match('^$|^[0-9]+([.][0-9]+)? (-1|[0-9]+)$')
-            fail_msg: >-
-              SECURITY: system_chrony_nts_servers, system_chrony_authselectmode,
-              system_chrony_fallback_pool, or system_chrony_makestep in the play namespace
-              contains an unsafe value (possibly set via -e flag, bypassing config.yml
-              pre-flight validation and the system_chrony_nts_servers_confirmed gate, which
-              only fires when the variable appears in config.yml). These values are rendered
-              verbatim into /etc/chrony.conf; an attacker-controlled NTS hostname enables
-              authenticated-timestamp manipulation (TLS time-window attacks, TOTP bypasses).
-              Allowed: NTS hostnames alphanumeric/dot/hyphen/colon; authselectmode prefer|require;
-              fallback_pool alphanumeric/dot/hyphen; makestep '<threshold> <limit>' (e.g. '1.0 3' or '1.0 -1').
-          tags: [always]
-
-        - name: Assert notes_repo_path in play namespace is a safe path (-e override guard)
-          ansible.builtin.assert:
-            that:
-              - >-
-                notes_repo_path | default('') | string == ''
-                or (notes_repo_path | default('') | string is match(
-                  '^(/home/[a-zA-Z0-9_.-]+|/root|/Users/[a-zA-Z0-9_.-]+)(/[a-zA-Z0-9._-]*)*$')
-                    and '..' not in (notes_repo_path | default('') | string))
-            fail_msg: >-
-              SECURITY: notes_repo_path in the play namespace contains an unsafe value
-              (possibly set via -e flag, bypassing config.yml pre-flight validation).
-              This value is rendered verbatim into alias notes="cd <notes_repo_path>"
-              in zshrc.j2; shell $() and backtick sequences expand at alias-definition
-              time (every interactive shell open), executing arbitrary commands as the user.
-              Example attack: make all -e notes_repo_path='$(evil_cmd)'
-              Allowed: empty (use safe computed default) or a path matching
-              /home/<user>/…, /root/…, or /Users/<user>/… with alphanumeric, dot,
-              underscore, hyphen only. No $(), backticks, spaces, or shell metacharacters.
-              Current value: '{{ notes_repo_path | default("") }}'.
-          tags: [always]
-
-        - name: Assert repos_dnf_redhat_gpgkey in play namespace targets trusted domain (-e override guard)
-          vars:
-            _hosts_re: >-
-              {{ (['repo.redhat.com', 'keys.redhat.com'] + (repos_dnf_internal_hosts | default([])))
-              | map('regex_escape') | join('|') }}
-          ansible.builtin.assert:
-            that:
-              - >-
-                (repos_dnf_redhat_gpgkey | default('') | length == 0) or
-                (repos_dnf_redhat_gpgkey | default('') is match('^https://(' ~ _hosts_re ~ ')/.*\.gpg$'))
-            fail_msg: >-
-              SECURITY: repos_dnf_redhat_gpgkey in the play namespace must target repo.redhat.com,
-              keys.redhat.com or a host listed in repos_dnf_internal_hosts, or be
-              unset. This catches -e override attacks that bypass the file-based config.yml check.
-              An attacker passing -e repos_dnf_redhat_gpgkey=https://evil.com/key.gpg causes dnf
-              to fetch the attacker-controlled GPG key and trust it to verify packages from
-              repos_dnf_redhat_baseurl, enabling signed-malware installation as root.
-              Allowed format: https://<allowed host>/<path>/<file>.gpg
-              Current value: '{{ repos_dnf_redhat_gpgkey | default("") }}'.
-          tags: [always]
-
-        - name: Assert repos_dnf_acli_baseurl in play namespace targets trusted domain (-e override guard)
-          vars:
-            _hosts_re: "{{ repos_dnf_internal_hosts | default([]) | map('regex_escape') | join('|') }}"
-          ansible.builtin.assert:
-            that:
-              - >-
-                (repos_dnf_acli_baseurl | default('') | length == 0) or
-                ((repos_dnf_internal_hosts | default([]) | length > 0) and
-                 (repos_dnf_acli_baseurl | default('') is match('^https://(' ~ _hosts_re ~ ')/.*')))
-            fail_msg: >-
-              SECURITY: repos_dnf_acli_baseurl in the play namespace must target a host listed in
-              repos_dnf_internal_hosts (https://<host>/<path>) or be unset. This catches -e override
-              attacks that bypass the file-based config.yml check. An attacker passing
-              -e repos_dnf_acli_baseurl=https://evil.com/repo causes dnf to install packages
-              from an untrusted source even with gpgcheck enabled (attacker controls the signing key).
-              Allowed format: https://<host in repos_dnf_internal_hosts>/<path>
-              Current value: '{{ repos_dnf_acli_baseurl | default("") }}'.
-          tags: [always]
-
-        - name: Assert notes_remote_url and notes_remote_url_https in play namespace are valid git URLs (-e override guard)
-          ansible.builtin.assert:
-            that:
-              - >-
-                (notes_remote_url | default('') | length == 0) or
-                (notes_remote_url | default('') is match('^git@[a-zA-Z0-9._-]+:[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+\.git$'))
-              - >-
-                (notes_remote_url_https | default('') | length == 0) or
-                (notes_remote_url_https | default('') is match('^https://[a-zA-Z0-9._-]+/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+\.git$'))
-            fail_msg: >-
-              SECURITY: notes_remote_url or notes_remote_url_https in the play namespace contains
-              an invalid or malicious URL (possibly set via -e flag, bypassing config.yml check).
-              These are passed directly to ansible.builtin.git; path traversal sequences ('..') can
-              escape the notes_repo_name validation and clone arbitrary repositories.
-              Allowed: notes_remote_url must match git@host:user/repo.git;
-              notes_remote_url_https must match https://host/user/repo.git.
-              Current: notes_remote_url='{{ notes_remote_url | default("") }}',
-              notes_remote_url_https='{{ notes_remote_url_https | default("") }}'.
-          tags: [always]
-
-        - name: Assert binary version vars in play namespace match semver format (-e override guard)
-          vars:
-            _semver_pattern: '^v?[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9.]+)?$'
-            _version_vals_ns:
-              - "{{ packages_kind_version | default('') | string }}"
-              - "{{ packages_helm_version | default('') | string }}"
-              - "{{ packages_kustomize_version | default('') | string }}"
-              - "{{ packages_k9s_version | default('') | string }}"
-              - "{{ packages_transcrypt_version | default('') | string }}"
-              - "{{ packages_sops_version | default('') | string }}"
-              - "{{ packages_gitleaks_version | default('') | string }}"
-              - "{{ packages_actionlint_version | default('') | string }}"
-              - "{{ packages_zizmor_version | default('') | string }}"
-              - "{{ packages_operator_sdk_version | default('') | string }}"
-              - "{{ packages_cosign_version | default('') | string }}"
-              - "{{ packages_tkn_version | default('') | string }}"
-              - "{{ packages_ec_version | default('') | string }}"
-              - "{{ packages_oc_version | default('') | string }}"
-              - "{{ packages_yamllint_version | default('') | string }}"
-              - "{{ packages_ansible_lint_version | default('') | string }}"
-              - "{{ packages_golangci_lint_version | default('') | string }}"
-              - "{{ packages_gofumpt_version | default('') | string }}"
-              - "{{ packages_govulncheck_version | default('') | string }}"
-              - "{{ packages_gci_version | default('') | string }}"
-              - "{{ packages_gopls_version | default('') | string }}"
-              - "{{ packages_controller_gen_version | default('') | string }}"
-              - "{{ packages_stern_version | default('') | string }}"
-              - "{{ packages_code_generator_version | default('') | string }}"
-              - "{{ packages_subctl_version | default('') | string }}"
-              - "{{ packages_aerospace_version | default('') | string }}"
-              - "{{ packages_krew_bootstrap_version | default('') | string }}"
-              - "{{ packages_krew_plugin_ctx_version | default('') | string }}"
-              - "{{ packages_krew_plugin_ns_version | default('') | string }}"
-          ansible.builtin.assert:
-            that:
-              - _version_vals_ns | select() | reject('match', _semver_pattern) | list | length == 0
-            fail_msg: >-
-              SECURITY: One or more binary version variables in the play namespace do not match
-              semantic versioning format (possibly set via -e flag, bypassing config.yml check).
-              Version strings are interpolated directly into download URLs; a value like
-              "0.32.0/../../evil" performs URL path traversal to access unintended server paths.
-              Allowed: ^v?[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$ (e.g. "1.2.3", "v0.11.0", "0.32.0-rc1", "v2.0.0-beta")
-              Invalid values: {{ _version_vals_ns | select() | reject('match', _semver_pattern) | list }}.
-          tags: [always]
 
     - name: Non-molecule pre-flight assertions
-      when: not _pf_is_molecule
       block:
         - name: Assert work identity vars are not CHANGE_ME placeholders
           when: profile == 'work'
@@ -2229,7 +592,6 @@
               The value is empty or still has the 'CHANGE_ME' placeholder.
               Without it, git commits to work repos use the wrong email.
               If you are using a personal profile, set `profile: personal` in config.yml to bypass this check.
-          tags: [always]
 
         - name: Assert desktop_environment is a valid value
           ansible.builtin.assert:
@@ -2239,172 +601,17 @@
               Got: '{{ desktop_environment }}'.
               {% if desktop_environment == 'CHANGE_ME' %}This is the CHANGE_ME sentinel — set sway, i3, or gnome in
               config.yml.{% else %}Check config.yml for typos.{% endif %}
-          tags: [always]
-
-    - name: Assert pwquality vars are non-negative integers
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-      ansible.builtin.assert:
-        that:
-          - _raw.get('system_pwquality_minlen', '14') | int >= 1
-          - _raw.get('system_pwquality_dcredit', '-1') | int >= -1
-          - _raw.get('system_pwquality_ucredit', '-1') | int >= -1
-          - _raw.get('system_pwquality_lcredit', '-1') | int >= -1
-          - _raw.get('system_pwquality_ocredit', '-1') | int >= -1
-          - _raw.get('system_pwquality_difok', '5') | int >= 0
-          - _raw.get('system_pwquality_maxrepeat', '0') | int >= 0
-          - _raw.get('system_pwquality_maxsequence', '0') | int >= 0
-        fail_msg: >-
-          SECURITY: pwquality var in config.yml is not a safe integer. Threat: newline injection
-          (e.g. "14\ndifok -1") into /etc/security/pwquality.conf overrides complexity policy (last-wins).
-          Affected: system_pwquality_minlen (>= 1), credit vars (>= -1), difok/maxrepeat/maxsequence (>= 0).
-          Fix: use plain integers only, e.g. system_pwquality_minlen: 14.
-
-    # '| int' turns any non-numeric string into 0, so the range checks above and elsewhere pass
-    # "5\nminlen = 1" or "abc"; require the plain integer form for every integer-valued setting.
-    - name: Assert integer-valued config vars are plain integers
-      when: _config_raw is defined
-      vars:
-        _int_vars:
-          - system_pwquality_minlen
-          - system_pwquality_dcredit
-          - system_pwquality_ucredit
-          - system_pwquality_lcredit
-          - system_pwquality_ocredit
-          - system_pwquality_difok
-          - system_pwquality_maxrepeat
-          - system_pwquality_maxsequence
-          - claude_queue_boot_delay_sec
-          - claude_queue_poll_interval_sec
-          - claude_queue_max_turns
-          - claude_queue_timeout
-          - claude_queue_max_issues_per_run
-          - desktop_wm_font_size
-          - desktop_wm_repeat_rate
-          - system_journald_rate_burst
-          - ssh_port
-        _bad_ints: >-
-          {{ _int_vars | select('in', _config_raw) | reject('match', '^$')
-             | map('extract', _config_raw) | map('string') | zip(_int_vars | select('in', _config_raw))
-             | rejectattr(0, 'match', '^-?[0-9]+$') | map(attribute=1) | list }}
-      ansible.builtin.assert:
-        that: _bad_ints | length == 0
-        fail_msg: >-
-          These config.yml settings must be plain integers (no quotes around text, decimals or
-          newlines): {{ _bad_ints | join(', ') }}.
-
-    - name: Assert SSH forwarding vars have safe enum values
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-      ansible.builtin.assert:
-        that:
-          - _raw.get('system_ssh_allow_agent_forwarding', 'no') | string | lower in ['yes', 'no']
-          - _raw.get('system_ssh_allow_tcp_forwarding', 'local') | string | lower in ['yes', 'no', 'local', 'all', 'remote']
-        fail_msg: >-
-          SECURITY: system_ssh_allow_agent_forwarding must be 'yes' or 'no'.
-          system_ssh_allow_tcp_forwarding must be one of 'yes', 'no', 'local', 'all', 'remote'.
-          These values are rendered directly into sshd_config without inline escaping; newlines
-          or unexpected values could inject additional sshd directives (e.g. PermitRootLogin yes).
-
-    - name: Assert system_core_pattern contains only safe characters (sysctl VALUE injection guard)
-      when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
-      ansible.builtin.assert:
-        that:
-          # system_core_pattern is a sysctl VALUE, not a key; blocks newlines and shell metacharacters.
-          # Pipe-based coredump handlers (e.g. '|/usr/lib/systemd/systemd-coredump ...') are reserved
-          # for role defaults only and must not be overridden via config.yml — pipe exec runs as root.
-          - _raw.get('system_core_pattern', '') | string is match('^[a-zA-Z0-9/_.%-]*$')
-        fail_msg: >-
-          SECURITY: system_core_pattern in config.yml contains unsafe characters or a pipe handler.
-          Threat: kernel.core_pattern with a leading pipe ('|') causes the kernel to exec the named
-          binary as root on every process crash — a pipe value in config.yml enables an RCE vector.
-          Input: system_core_pattern value supplied in config.yml.
-          Mechanism: preflight validates the value before sysctl.yml deploys kernel.core_pattern;
-          pipe characters are now blocked because pipe-exec handlers run as root at crash time.
-          Example: system_core_pattern: '|/malicious/handler' would exec that binary as root.
-          Impact: arbitrary root code execution triggered by any process crash on the system.
-          Fix: remove system_core_pattern from config.yml (role default is safe) or use a plain
-          path without a leading pipe (e.g. '/var/lib/systemd/coredump/core'). No spaces, newlines,
-          shell metacharacters, or pipe characters are permitted in config.yml overrides.
-      tags: [always]
-
-    - name: Assert system_selinux_enforcing_required is not disabled on dnf hosts (SELinux enforcement guard)
-      when:
-        - is_dnf | default(false)
-        - not (csb_rhel | default(false))
-        - not (system_is_container | default(false))
-      ansible.builtin.assert:
-        that:
-          - system_selinux_enforcing_required | default(true) | bool
-          - ansible_facts['selinux'] | default(false) is mapping
-        fail_msg: >-
-          SECURITY: SELinux enforcement disabled or kernel-disabled on a dnf host.
-          Threat: without SELinux enforcing, mandatory access control is removed — container
-          escapes and privilege escalation proceed undetected on Fedora/RHEL hosts.
-          Input: system_selinux_enforcing_required=false in config.yml or selinux=0 kernel param.
-          Mechanism: false-toggle bypasses hardening_core.yml SELinux block; kernel-disabled path
-          leaves selinux fact as non-mapping, uncaught when --start-at-task skips pre_tasks.
-          Example: make all -e system_selinux_enforcing_required=false skips all SELinux tasks.
-          Impact: mandatory access control removed; no confinement for setuid binaries or services.
-          Fix: remove system_selinux_enforcing_required: false from config.yml; set SELINUX=enforcing
-          in /etc/selinux/config and reboot; remove selinux=0 from kernel cmdline via grubby.
-      tags: [always]
-
-    - name: "GRUB password: Assert valid PBKDF2 format when enabled (preflight)"
-      when:
-        - system_grub_password_enabled | default(false)
-        - not (system_is_container or csb_rhel)
-      block:
-        - name: "GRUB: Assert hash is set and valid PBKDF2 format"
-          ansible.builtin.assert:
-            that:
-              - system_grub_password_hash | default('') | length > 0
-              - system_grub_password_hash is regex('^grub\.pbkdf2\.sha512\.[0-9]+\.[a-zA-Z0-9]+\.[a-zA-Z0-9]+$')
-              - (system_grub_password_hash.split('.')[3] | int) >= 10000
-            fail_msg: >-
-              SECURITY: system_grub_password_hash is not a valid PBKDF2 hash.
-              GRUB bootloader password (CIS 1.4.2) requires: grub.pbkdf2.sha512.ROUNDS.SALT.HASH (ROUNDS >= 10000).
-              Malformed hash fails silently at boot, bypassing kernel tampering protection.
-              Generate: grub2-mkpasswd-pbkdf2 (Fedora) or grub-mkpasswd-pbkdf2 (Debian).
-              Store in vault.yml (NOT config.yml): system_grub_password_hash: "grub.pbkdf2.sha512.10000...."
-              Current: {{ system_grub_password_hash | default('(empty)') }}
-          tags: [always]
-
-    - name: Warn when vault stub is not populated
-      when:
-        - >-
-          (vault_ssh_auth_key | default('') | length == 0) or
-          (vault_ssh_auth_key_pub | default('') | length == 0) or
-          (vault_ssh_signing_key | default('') | length == 0) or
-          (vault_ssh_signing_key_pub | default('') | length == 0)
-        - not _pf_is_molecule
-      ansible.builtin.debug:
-        msg: >-
-          WARNING: vault.yml has not been populated with real secrets
-          (one or more of vault_ssh_auth_key, vault_ssh_auth_key_pub,
-          vault_ssh_signing_key, vault_ssh_signing_key_pub is missing).
-          Secret-backed features will silently skip: SSH key deployment,
-          git commit signing, and transcrypt (notes). See CLAUDE.md step 3 to populate
-          and encrypt the vault.
-      tags: [always]
 
     - name: Read existing authorized_keys for an ed25519 bootstrap key
       when:
-        - not _pf_is_molecule
         - is_linux
       ansible.builtin.slurp:
         src: "{{ real_user_home | trim }}/.ssh/authorized_keys"
       register: _pf_authorized_keys
       failed_when: false
-      tags: [always]
 
     - name: Determine whether hardened sshd will accept any key
       when:
-        - not _pf_is_molecule
         - is_linux
       ansible.builtin.set_fact:
         # Fix option 2 below: a pre-existing ed25519/FIDO2 key keeps SSH usable after hardening
@@ -2413,12 +620,10 @@
              or ((_pf_authorized_keys.content | default('') | b64decode).splitlines()
                  | select('match', '^\s*([^#\s].*\s)?(ssh-ed25519|sk-ssh-ed25519@openssh\.com) ') | list | length > 0)
              or (ssh_port | default(722) | int == 22) }}
-      tags: [always]
 
     # At the console a keyless sshd only means "no remote SSH yet"; over SSH it strands the session.
     - name: Notice — no SSH login key yet (console run)
       when:
-        - not _pf_is_molecule
         - is_linux
         - not (_pf_ssh_login_ok | bool)
         - lookup('env', 'SSH_CONNECTION') | length == 0
@@ -2427,11 +632,9 @@
           NOTICE: no ed25519/FIDO2 SSH key is available (vault empty, none in authorized_keys).
           After hardening, sshd accepts no logins until one is added — console login is
           unaffected. Run 'make setup-yubikeys', populate the vault, then 'make ssh system'.
-      tags: [always]
 
     - name: SECURITY CRITICAL — Block provisioning over SSH when hardening would lock the session out
       when:
-        - not _pf_is_molecule
         - is_linux
         - lookup('env', 'SSH_CONNECTION') | length > 0
       ansible.builtin.assert:
@@ -2470,32 +673,5 @@
           - ssh_port: {{ ssh_port | default(722) }}
           - PasswordAuthentication will be: no
           - PubkeyAcceptedAlgorithms will be: {{ ssh_pubkey_accepted_algorithms | default(['ssh-ed25519*']) | join(',') }}
-      tags: [always]
 
     # GRUB password hash validation (CWE-426: vault-source enforcement + format validation)
-    - name: Assert desktop_gnome_hardening_dconf is a non-empty list with /org/gnome/* keys (CIS dconf hardening guard)
-      when: _config_raw is defined
-      tags: [always]
-      vars:
-        _raw: "{{ _config_raw }}"
-        _dconf_list: "{{ _raw.get('desktop_gnome_hardening_dconf', '__unset__') }}"
-        _bad_keys: >-
-          {{ _dconf_list | map(attribute='key', default='') | map('string') | select() |
-             reject('match', '^/org/gnome/') | list
-             if _dconf_list != '__unset__' else [] }}
-      ansible.builtin.assert:
-        that:
-          - >-
-            (_dconf_list == '__unset__') or
-            (_dconf_list | type_debug != 'list') or
-            (_dconf_list | length > 0)
-          - _bad_keys | length == 0
-        fail_msg: >-
-          SECURITY: desktop_gnome_hardening_dconf in config.yml is empty or contains keys
-          outside /org/gnome/. Setting this list to [] silently drops all CIS GNOME hardening
-          (lock-screen notification suppression, location disable, recent-files disable) because
-          include_vars precedence 18 fully replaces the role default (precedence 2) and the
-          desktop role loops over an empty list with no error.
-          Fix: remove desktop_gnome_hardening_dconf from config.yml to use the role defaults,
-          or keep ALL required CIS keys with /org/gnome/ prefixes.
-          Bad keys (not /org/gnome/*): {{ _bad_keys }}

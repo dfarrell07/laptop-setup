@@ -273,9 +273,6 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #                                        system_chrony_authselectmode_prefer_confirmed: true to acknowledge the trade-off.
 #   system_tmp_noexec: false           (roles/system/defaults) — noexec on /tmp disabled by default; set true for CIS 1.1.2.x compliance
 #                                        (breaks pip, cargo, rustup, npm native addons that exec from /tmp; nosuid/nodev preserved)
-#   system_var_tmp_noexec: false       (roles/system/defaults) — bind /var/tmp to /tmp with noexec — WARNING: also makes /var/tmp volatile
-#                                        (data lost on reboot); default false — set true only on hardened non-dev hosts where
-#                                        /var/tmp persistence is not needed and dracut kernel updates are not a concern
 #   system_home_nosuid_force: false    (roles/system/defaults) — set true on RHEL CSB machines where /home is a known local
 #                                        mount; nosuid already applies unconditionally on Fedora hybrid (task condition is
 #                                        true regardless of this flag); use only when /home is btrfs/ext4 under your control
@@ -321,7 +318,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   system_pass_min_days: 1               (group_vars/all/vars.yml) — login.defs PASS_MIN_DAYS; minimum days between changes
 #   system_pass_warn_age: 7               (group_vars/all/vars.yml) — login.defs PASS_WARN_AGE; days warning before expiry
 #   system_umask: "027"                   (group_vars/all/vars.yml) — login.defs UMASK; set 022 to allow group reads
-#   system_inactive_days: 30              (group_vars/all/vars.yml) — days inactive before account lock (login.defs INACTIVE,
+#   system_inactive_days: 30              (group_vars/all/vars.yml) — days inactive before account lock (/etc/default/useradd INACTIVE,
 #                                           useradd -D -f, chage -I); CIS 5.5.1.5
 #   system_gid0_allowed_accounts: [root, sync, shutdown, halt, operator]  (roles/system/defaults) — accounts exempt from
 #                                           the CIS 6.2.x GID-0 primary-group assert; add custom service accounts here

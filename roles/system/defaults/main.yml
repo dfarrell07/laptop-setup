@@ -490,11 +490,6 @@ system_tmp_noexec: false
 # on Linux 6.3+ respects noexec on /dev/shm and returns EACCES), or when a JVM is configured
 # with -XX:+PerfDataSaveToFile writing executables to /dev/shm.
 system_devshm_noexec: true
-# /var/tmp bind-mount hardening (CIS 1.1.8): binds /var/tmp to /tmp with noexec,nosuid,nodev.
-# Default false: the bind-mount makes /var/tmp a tmpfs alias of /tmp — all contents are silently
-# lost on reboot, breaking dracut on kernel updates (FHS requires /var/tmp to persist across boots).
-# Set true only on hardened, non-development hosts where /var/tmp persistence is not required.
-system_var_tmp_noexec: false
 # /home nosuid force: on RHEL CSB-detected machines the nosuid tasks are skipped because
 # IT-managed NFS/autofs home directories may break with nosuid. Set true in config.yml
 # when /home is a known local mount on a RHEL CSB machine and nosuid is safe to apply.
@@ -530,8 +525,6 @@ system_luks_discards_enabled: false
 system_iommu_passthrough: false
 system_wifi_mac_rand: "{{ not csb_detected }}"
 system_wifi_powersave_disabled: "{{ not csb_rhel }}"
-system_nm_dispatcher_allowlist: []  # Extra basenames allowed in /etc/NetworkManager/dispatcher.d.
-  # CSB hosts auto-allow csb-fedora-logo. Add site-specific scripts here to suppress the audit fail.
 system_enable_cockpit: false  # set true to unmask cockpit (port 9090); LAN-accessible; use Tailscale for VPN-only access
 
 # Chrony NTS time sources. Override in config.yml for corporate environments that block
@@ -717,9 +710,5 @@ system_dbus_system_d_allowlist: []
 # until the next `dnf upgrade` or system reboot. Applies to standard Fedora and hybrid CSB only
 # (RHEL CSB skips dnf-automatic entirely; IT manages updates via RHSM/Satellite).
 system_dnf_automatic_apply_updates: true
-# Filenames inside the dnf-automatic service drop-in directory that must not be removed
-# by the unauthorised-drop-in purge tasks. Add IT-managed filenames here when present.
-# Example: system_dnf_automatic_dropin_whitelist: [satellite-hook.conf]
-system_dnf_automatic_dropin_whitelist: []
 # systemd error text for a unit that is not installed (tolerated by masking/disable tasks)
 _system_unit_absent_re: 'Could not find the requested service|not found|does not exist'

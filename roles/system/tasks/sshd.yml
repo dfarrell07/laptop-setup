@@ -202,9 +202,12 @@
       loop: "{{ _sshd_dropin_files.files | default([]) }}"
       # Hybrid CSB: IT's remote-access role rewrites its drop-in from cron (PermitRootLogin no,
       # also set here); 00-hardening.conf sorts first, so its directives still win.
+      # 40-redhat-crypto-policies.conf and 50-redhat.conf are package-owned: deleting them would
+      # change every run and drop the crypto-policy Include; 00-hardening.conf wins by order.
       when: >-
         item.path | basename not in
-        (['00-hardening.conf'] + (['99-csb-remote-access.conf'] if csb_detected | default(false) else []))
+        (['00-hardening.conf', '40-redhat-crypto-policies.conf', '50-redhat.conf']
+         + (['99-csb-remote-access.conf'] if csb_detected | default(false) else []))
 
     # The kept IT drop-in is trusted by name only; IT's template sets just PermitRootLogin.
     # Anything else (Match, ForceCommand, AuthorizedKeysCommand, ...) would be read by sshd and
@@ -302,14 +305,6 @@
         path: /etc/ssh/sshd_config.d/.00-hardening.conf.tmp
         state: absent
       changed_when: false  # validation scratch leaves no persistent change
-
-    - name: Record sshd drop-in checksum for TOCTOU integrity guard
-      ansible.builtin.stat:
-        path: /etc/ssh/sshd_config.d/00-hardening.conf
-        checksum_algorithm: sha256
-      register: _sshd_dropin_post_validation
-      changed_when: false
-      check_mode: false  # read-only probe
 
   rescue:
     - name: Remove broken sshd drop-in to prevent SSH lockout on next restart
@@ -443,34 +438,6 @@
   when:
     - system_crypto_policy_set.rc | default(0) != 0
 
-# --- TOCTOU guard: re-verify drop-in integrity before sshd restart handler fires ---
-- name: Re-stat sshd drop-in before handler fires (TOCTOU guard)
-  ansible.builtin.stat:
-    path: /etc/ssh/sshd_config.d/00-hardening.conf
-    checksum_algorithm: sha256
-  register: _sshd_dropin_pre_handler
-  changed_when: false
-  check_mode: false  # read-only probe
-  when:
-    - _sshd_dropin_post_validation is defined
-    - _sshd_dropin_post_validation.stat is defined
-
-- name: Abort if sshd drop-in changed since sshd -t validation (TOCTOU guard)
-  ansible.builtin.fail:
-    msg: >-
-      SECURITY: /etc/ssh/sshd_config.d/00-hardening.conf changed after sshd -t
-      validated it — possible TOCTOU file substitution. Aborting before sshd restart
-      to prevent loading an unvalidated config. Re-run make system to recover.
-      Expected: {{ _sshd_dropin_post_validation.stat.checksum }}
-      Found:    {{ _sshd_dropin_pre_handler.stat.checksum | default('missing') }}
-  when:
-    - _sshd_dropin_post_validation is defined
-    - _sshd_dropin_post_validation.stat is defined
-    # check mode never writes the drop-in, so on a first provision there is nothing to compare
-    - _sshd_dropin_post_validation.stat.exists | default(false)
-    - (_sshd_dropin_pre_handler.stat.checksum | default('')) !=
-      _sshd_dropin_post_validation.stat.checksum
-
 # force_handlers is false: if an earlier run failed after writing the drop-in, that run's restart
 # was lost and this run sees no change. Restart whenever sshd is up but not on the configured port.
 - name: Detect sshd not yet listening on the configured port (interrupted earlier run)  # noqa: command-instead-of-module
@@ -510,5 +477,5 @@
     - lookup('env', 'STY') == ''      # GNU screen sets $STY; also safe
     - not (system_ssh_port_change_override | default(false) | bool)
 
-- name: Flush sshd restart handler immediately after TOCTOU integrity check passes
+- name: Flush sshd restart handler immediately
   ansible.builtin.meta: flush_handlers

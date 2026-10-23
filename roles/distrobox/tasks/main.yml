@@ -6,8 +6,7 @@
 - name: SECURITY assert distrobox variables are injection-safe
   # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always.
   # Do NOT add tags: [always] as that allows --skip-tags always to bypass this check.
-  # Duplicates the namespace assertion in pre_flight_checks.yml to protect against
-  # --start-at-task bypassing play-level pre_tasks which contain that assertion.
+  # Protects against --start-at-task bypassing play-level pre_tasks.
   ansible.builtin.assert:
     that:
       - distrobox_host_exec_commands | default([]) | map('string') | select('search', '[^a-zA-Z0-9_-]') | list | length == 0
@@ -30,9 +29,8 @@
       - distrobox_oc_mirror_url | string is match('^https://[a-zA-Z0-9._-]+(:[0-9]+)?(/[a-zA-Z0-9._-]+)*$')
       - "'..' not in distrobox_oc_mirror_url | string"
     fail_msg: >-
-      SECURITY: distrobox variable contains unsafe value. This check is duplicated in
-      pre_flight_checks.yml; it runs again here to protect against --start-at-task
-      bypassing play-level pre_tasks.
+      SECURITY: distrobox variable contains unsafe value. This check protects against
+      --start-at-task bypassing play-level pre_tasks.
       distrobox_host_exec_commands={{ distrobox_host_exec_commands | default([]) }} --
         entries must be alphanumeric/underscore/hyphen (newline injects shell commands into
         flatpak-spawn wrapper scripts and init_hooks in distrobox.ini via container-provision.yml);
@@ -54,7 +52,7 @@
 
 - name: SECURITY assert distrobox_host_exec_commands allowlist
   # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always.
-  # Duplicates the allowlist check in pre_flight_checks.yml as defense-in-depth.
+  # Defense-in-depth against --start-at-task.
   vars:
     _allowed_exec_commands: [podman, flatpak, kind, docker]
     _unlisted_exec: "{{ distrobox_host_exec_commands | default([]) | map('string') | difference(_allowed_exec_commands) | list }}"

@@ -153,6 +153,8 @@ bootstrap: guard-not-root bootstrap-hooks
 	@if [ ! -f scripts/vault-pass.sh ]; then \
 		cd scripts && cat vault-pass-ci.sh > vault-pass.sh && chmod 700 vault-pass.sh && sha256sum vault-pass.sh > vault-pass.sh.sha256 && cd .. && \
 		echo "SECURITY: Created stub vault-pass.sh — you MUST replace with YubiKey/keyring/encrypted-file before encrypting vault.yml"; \
+	elif [ ! -f scripts/vault-pass.sh.sha256 ]; then \
+		(cd scripts && sha256sum vault-pass.sh > vault-pass.sh.sha256); \
 	fi
 	@chmod 700 scripts/vault-pass.sh scripts/vault-pass-ci.sh
 	@# Verify vault-pass.sh integrity after creation/update (FATAL if check fails)

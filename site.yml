@@ -155,16 +155,6 @@
         - name: Include CSB detection
           ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
 
-    - name: SECURITY CRITICAL — Re-validate supply chain and config integrity (defense-in-depth)
-      # Refresh validation before user provisioning. Static imports and always tags
-      # do not prevent direct CLI flags from skipping tasks; the wrapper enforces
-      # that argument policy before Ansible starts.
-      become: false
-      tags: [always]
-      block:
-        - name: Re-run pre-flight checks before user provisioning
-          ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/pre_flight_checks.yml"
-
     - name: Vault healthcheck — assert required SSH key variables are defined (allows empty on first provision)
       ansible.builtin.assert:
         that:
@@ -308,9 +298,8 @@
       tags: [always]
 
     - name: SECURITY CRITICAL — Validate config integrity before container provisioning
-      # DEFENSE: Play 3 can be targeted directly with --limit containers, bypassing
-      # Play 0 and Play 2 validations. Re-run SSTI guard, vault health, and identity
-      # checks with tags: [always] to ensure they execute regardless of --limit.
+      # Also loads default.config.yml/config.yml into the container host's vars
+      # (include_vars is per inventory host; Play 3 runs on the container, not localhost).
       delegate_to: localhost
       become: false
       tags: [always]

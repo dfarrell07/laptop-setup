@@ -11,75 +11,6 @@
     group: root
   when: not system_is_container
 
-# --- NetworkManager dispatcher.d audit ---
-# Scripts in dispatcher.d execute as root on every NM restart. Enumerate the
-# directory before any task that notifies 'Restart NetworkManager' so unexpected
-# entries are caught before they run again.
-- name: Enumerate NetworkManager dispatcher scripts
-  ansible.builtin.find:
-    paths: /etc/NetworkManager/dispatcher.d
-    file_type: any
-    recurse: true
-  register: _nm_dispatcher_audit
-  when: not system_is_container
-
-- name: Check owner of Fedora's console-login dispatcher script
-  ansible.builtin.command:
-    argv:
-      - rpm
-      - -qf
-      - --queryformat
-      - "%{NAME}"
-      - /etc/NetworkManager/dispatcher.d/90-console-login-helper-messages-gensnippet_if
-  register: _nm_vendor_owner
-  changed_when: false
-  check_mode: false
-  failed_when: false
-  when:
-    - not system_is_container
-    - is_dnf
-    - >-
-      '/etc/NetworkManager/dispatcher.d/90-console-login-helper-messages-gensnippet_if'
-      in (_nm_dispatcher_audit.files | default([]) | map(attribute='path') | list)
-
-- name: Verify the Fedora console-login helper package
-  ansible.builtin.command:
-    argv: [rpm, --verify, console-login-helper-messages-issuegen]
-  register: _nm_vendor_integrity
-  changed_when: false
-  check_mode: false
-  failed_when: false
-  when:
-    - _nm_vendor_owner is not skipped
-    - _nm_vendor_owner.rc == 0
-    - _nm_vendor_owner.stdout == 'console-login-helper-messages-issuegen'
-
-- name: Record verified vendor NetworkManager dispatcher scripts
-  ansible.builtin.set_fact:
-    _nm_verified_vendor_scripts: >-
-      {{ ['/etc/NetworkManager/dispatcher.d/90-console-login-helper-messages-gensnippet_if']
-         if (_nm_vendor_owner.rc | default(1) == 0
-             and _nm_vendor_owner.stdout | default('') == 'console-login-helper-messages-issuegen'
-             and _nm_vendor_integrity.rc | default(1) == 0
-             and _nm_vendor_integrity.stdout | default('') | length == 0)
-         else [] }}
-
-- name: Fail on unexpected NetworkManager dispatcher scripts
-  vars:
-    _configured: "{{ (['csb-fedora-logo'] if csb_detected else []) + (system_nm_dispatcher_allowlist | default([])) }}"
-    _expected: "{{ _configured + (_nm_verified_vendor_scripts | map('basename') | list) }}"
-    _found: "{{ _nm_dispatcher_audit.files | default([]) | rejectattr('isdir') | map(attribute='path') | list }}"
-    _unexpected: "{{ _found | difference(_nm_verified_vendor_scripts) | map('basename') | difference(_configured) }}"
-  ansible.builtin.fail:
-    msg: |
-      Unexpected scripts in /etc/NetworkManager/dispatcher.d run as root on NM restart.
-      Unexpected: {{ _unexpected | join(', ') }}
-      Allowed:    {{ _expected | join(', ') if _expected else '(none — non-CSB host)' }}
-      Remove the files or add them to system_nm_dispatcher_allowlist in config.yml.
-  when:
-    - not system_is_container
-    - _unexpected | length > 0
-
 # --- NetworkManager Tailscale unmanaged ---
 # On CSB, IT may use MAC-based NAC that requires the hardware MAC for 802.1X RADIUS
 # authentication. stable-ssid presents a SSID-hashed pseudo-random MAC which could
@@ -151,7 +82,7 @@
     - not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
 
-# On CSB-RHEL, IT manages NM power policy; skip to avoid conflicts with corporate config.
+# On CSB, IT's NM confs already set wifi.powersave and dhcp-send-hostname; skip to avoid duplicates.
 - name: Disable WiFi power saving (prevents latency spikes and drops on ThinkPad)
   ansible.builtin.copy:
     content: |
@@ -164,7 +95,7 @@
     dest: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
     mode: "0644"
   when:
-    - not csb_rhel  # IT manages NM power policy on CSB-RHEL; guard holds even when var overridden
+    - not csb_detected  # IT manages NM power policy on CSB; guard holds even when var overridden
     - system_wifi_powersave_disabled | bool
     - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
@@ -174,7 +105,7 @@
     path: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
     state: absent
   when:
-    - csb_rhel or not (system_wifi_powersave_disabled | bool)
+    - csb_detected or not (system_wifi_powersave_disabled | bool)
     - not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
 
@@ -188,16 +119,16 @@
     dest: /etc/NetworkManager/conf.d/99-dhcp-privacy.conf
     mode: "0644"
   when:
-    - not csb_rhel
+    - not csb_detected
     - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
 
-- name: Remove DHCP hostname suppression config on CSB RHEL
+- name: Remove DHCP hostname suppression config on CSB
   ansible.builtin.file:
     path: /etc/NetworkManager/conf.d/99-dhcp-privacy.conf
     state: absent
   when:
-    - csb_rhel
+    - csb_detected
     - not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
 
@@ -250,28 +181,7 @@
     - not system_firewalld_running | bool
 
 # On hybrid CSB, IT's redhat_csb.firewall template binds wt0 to the 'redhat' zone and
-# rewrites that zone hourly. Moving wt0 to trusted would put one interface in two zones
-# (firewalld ZONE_CONFLICT after IT's next run) and open every port to NetBird peers.
-- name: Probe permanent zone of wt0
-  ansible.builtin.command: firewall-cmd --permanent --get-zone-of-interface=wt0
-  register: _system_wt0_zone
-  changed_when: false
-  failed_when: false
-  check_mode: false  # read-only probe; the assign task below depends on it
-  when:
-    - not system_is_container
-    - system_firewalld_running | bool
-    - csb_detected | bool
-
-- name: Note IT-managed wt0 zone (hybrid CSB)
-  ansible.builtin.debug:
-    msg: >-
-      wt0 (NetBird) stays in IT's 'redhat' zone, which IT's CSB firewall role manages;
-      it is not moved to the trusted zone.
-  when:
-    - csb_detected | bool
-    - (_system_wt0_zone.stdout | default('')) == 'redhat'
-
+# rewrites that zone hourly; moving wt0 to trusted would cause a ZONE_CONFLICT, so skip on CSB.
 - name: Assign wt0 (NetBird) to firewall trusted zone
   ansible.posix.firewalld:
     zone: trusted
