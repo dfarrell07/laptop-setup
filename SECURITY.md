@@ -100,8 +100,6 @@ AIDE file integrity monitoring (daily; disabled by default — set
   and deletion blocked; linear history enforced
 - **Secret scanning** — GitHub secret scanning and push protection
   enabled (server-side complement to gitleaks pre-commit hook)
-- **Browser hardening** — 41 Chrome/Chromium managed policies (HTTPS-only,
-  site isolation, WebRTC, download restrictions, remote debugging blocked)
 - **Desktop hardening** — GNOME lock screen notifications hidden, USB
   automount disabled, RDP/VNC disabled, idle lock at 300s (GNOME dconf,
   i3 via xss-lock + i3lock, Sway via swayidle + swaylock at 300s lock /

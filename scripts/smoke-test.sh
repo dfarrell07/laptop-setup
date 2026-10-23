@@ -216,8 +216,8 @@ for tool in "gofumpt:--version" "gopls:version" "stern:--version" "govulncheck:-
   name="${tool%%:*}"; args="${tool#*:}"; _gobin="$HOME/go/bin/$name"
   _test_if_installed "$_gobin" "go-$name" "$_gobin" $args
 done
-# Versioned subctl binaries (subctl18, subctlRH* — guard on binary presence, emit nothing when absent)
-for _bin in "$HOME"/.local/bin/subctl[0-9]* "$HOME"/.local/bin/subctlRH*; do
+# Versioned subctl binaries (subctl18 — guard on binary presence, emit nothing when absent)
+for _bin in "$HOME"/.local/bin/subctl[0-9]*; do
   _test_if_installed "$_bin" "$(basename "$_bin")" "$_bin" version
 done
 
@@ -260,12 +260,12 @@ if command -v gh &>/dev/null; then
   else record "gh-auth" "WARN" "not authenticated (interactive login required)"; fi
 fi
 
-# registry.redhat.io authenticated (work-profile only — RH subctl oc image extract silently fails when unauth'd)
+# registry.redhat.io authenticated (work-profile only)
 if [[ "$profile" == "work" ]] && command -v podman &>/dev/null && [[ -x /usr/local/bin/oc ]]; then
   if podman login --get-login registry.redhat.io &>/dev/null; then
     record "registry-redhat-auth" "PASS"
   else
-    record "registry-redhat-auth" "WARN" "not authenticated — RH subctl oc image extract will silently fail (run: podman login registry.redhat.io)"
+    record "registry-redhat-auth" "WARN" "not authenticated (run: podman login registry.redhat.io)"
   fi
 fi
 
@@ -764,12 +764,6 @@ done
 unset _cd label
 
 # Config file validation
-if [[ -f /etc/opt/chrome/policies/managed/security.json ]]; then
-  if python3 -c "import json; json.load(open('/etc/opt/chrome/policies/managed/security.json'))" 2>/dev/null; then
-    record "chrome-policy-json" "PASS"
-  else record "chrome-policy-json" "FAIL" "invalid JSON in /etc/opt/chrome/policies/managed/security.json — inspect with: python3 -m json.tool /etc/opt/chrome/policies/managed/security.json"; fi
-fi
-
 # --- Notes repo (transcrypt-encrypted) ---
 if [[ -d "$_notes_dir/.git" ]]; then
   record "notes-repo" "PASS"
@@ -1989,19 +1983,6 @@ EOF
   else
     record "tlp-service" "SKIP" "native power baseline (system_tlp_enabled=false)"
   fi
-
-  # Chrome policies (verify key security settings, not just file existence)
-  if python3 -c "
-import json, sys
-p = json.load(open('/etc/opt/chrome/policies/managed/security.json'))
-assert p.get('ExtensionInstallBlocklist') == ['*'], 'ExtensionInstallBlocklist not [\"*\"]'
-assert p.get('RemoteDebuggingAllowed') is False, 'RemoteDebuggingAllowed not false'
-assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLevel not >= 1'
-" 2>/dev/null; then
-    record "chrome-policies" "PASS"
-  elif [[ -f /etc/opt/chrome/policies/managed/security.json ]]; then
-    record "chrome-policies" "FAIL" "deployed but critical security policies missing or wrong"
-  else record "chrome-policies" "WARN" "not deployed"; fi
 
   # dconf system policies (CIS 1.8.3-1.8.8) — only relevant on GNOME systems
   # Sway/i3 systems use greetd not GDM; dconf policies are GNOME-specific.

@@ -16,7 +16,7 @@ class SmokeTests(unittest.TestCase):
     def test_native_power_baseline_does_not_require_tlp(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
         start = source.index('  # TLP is an explicit opt-in;')
-        end = source.index('\n  # Chrome policies', start)
+        end = source.index('\n  # dconf system policies', start)
         with tempfile.TemporaryDirectory() as directory:
             # A native stack is active and TLP is absent. No hardware/service probes
             # should run at all when the managed TLP choice is disabled.

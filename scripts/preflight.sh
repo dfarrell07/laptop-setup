@@ -340,7 +340,7 @@ for netlabel_url in "${net_urls[@]}"; do
     if [[ "$_http_code" =~ ^[23] || ( "$nlabel" == registry && "$_http_code" == 401 ) ]]; then
       record "net_${nlabel}" "pass" "$nurl reachable (HTTP $_http_code)"
     # Only GitHub is required (binary downloads); collections are vendored and the registry is
-    # used for image pulls (RH subctl extraction needs a login), so those are warnings
+    # used for image pulls (oc image extract needs a login), so those are warnings
     elif [[ "$nlabel" == github ]]; then record "net_${nlabel}" "fail" "$nurl unreachable (HTTP ${_http_code:-000})"
     else record "net_${nlabel}" "warn" "$nurl unreachable (HTTP ${_http_code:-000})"; fi
   else
