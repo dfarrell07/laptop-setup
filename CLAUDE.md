@@ -68,7 +68,7 @@ ssh_work_keyscan_hosts:
 
 Obtain fingerprints from internal IT via secure out-of-band channel. See `SECURITY.md` §
 "Internal SSH Git Host Setup" for details. Omit `fingerprint` to use TOFU (first-use trust,
-no pinning). GitHub SSH keys are auto-seeded via API; this step is only needed for internal hosts.
+no pinning). GitHub SSH keys are seeded from a pinned key; this step is only needed for internal hosts.
 
 ### ⚠️ SECURITY WARNING: Vault Password Shell Tracing Exposure
 
@@ -107,7 +107,7 @@ hardwired rule is ineffective. You MUST add VID:PID rules for internal devices.
      - "allow id VVVV:PPPP"  # Replace VVVV:PPPP with VID:PID from lsusb
    ```
 
-4. For USB mass storage, either add per-device rules OR ensure system_disable_usb_storage: false in config.yml (default is false)
+4. For USB mass storage, add per-device `allow id` rules (`make usb-add`); with USBGuard on (ImplicitPolicyTarget=block, no mass-storage class rule), hot-plugged drives are blocked even when system_disable_usb_storage: false (default)
 
 ### After first provision, if a device is blocked
 
@@ -172,10 +172,10 @@ IPv6 SLAAC disabled (set `system_ipv6_accept_ra: 2` in config.yml if home router
    - `make smoke-test` — verify provisioning succeeded before proceeding (catches failures early)
    - `tailscale up` to authenticate (interactive browser step)
    - `gh auth login` — GitHub CLI authentication (required for HTTPS git credential helper, notes clone, and claude queue-poller workflows)
-     — then re-run `make packages repos notes`: the first `make all` skips private repos, the notes clone and
-     release attestation while gh is not logged in
+     — then re-run `make packages repos notes`: the first `make all` skips private repos and the notes clone
+     while gh is not logged in
 
-- `podman login registry.redhat.io` — work profile only, if `oc` is installed; required for RH subctl `oc image extract` ; skip if vault
+- `podman login registry.redhat.io` — work profile only, if `oc` is installed; skip if vault
      `registry_tokens` provides automated auth (clears `registry-redhat-auth` WARN in smoke-test)
   - Log out and back in for group membership changes (libvirt, kvm groups)
   - For CSB/hybrid machines: `make container` to provision dev container
@@ -291,8 +291,8 @@ make repos-rh-context # internal RH context repos (VPN + SSH credentials)
   `install_standalone_binaries.yml` (standalone tool downloads: transcrypt, sops, gitleaks, actionlint, zizmor, operator-sdk, cosign, tkn,
   ec), `install_brew.yml` (Homebrew packages and autoupdate, macOS), `install_krew.yml` (kubectl krew plugin manager), `install_pipx.yml`
   (yamllint/ansible-lint via pipx), `install_virtualization.yml` (virtualization packages and post-install setup), and `verify_golang.yml`
-  (Go toolchain version assertion), plus `install_krew_plugin.yml`, `install_kubectl_upstream.yml` and `install_npm_tools.yml`
-  (main.yml = 17 task files total); add new binaries in the appropriate extractor file
+  (Go toolchain presence check), plus `install_krew_plugin.yml` and `install_kubectl_upstream.yml`
+  (main.yml = 16 task files total); add new binaries in the appropriate extractor file
 
 ## Key Patterns
 
@@ -326,7 +326,7 @@ make repos-rh-context # internal RH context repos (VPN + SSH credentials)
   `default.config.yml` for full defaults; the `Additional toggles` comment block there lists 100+
   role-defaults vars overridable in `config.yml`. Key operational ones: `system_aide_enabled` (false —
   AIDE disabled by default; enable only with a log consumer), `system_tmout` (0 — disabled; set 1–900 to enforce CIS inactivity timeout),
-  `system_disable_usb_storage` (false — USB drives allowed; set true to kernel-block usb_storage/uas), `system_kernel_lockdown`
+  `system_disable_usb_storage` (false — no kernel block of usb_storage/uas; USBGuard still blocks unlisted drives; set true to kernel-block), `system_kernel_lockdown`
 (integrity — kernel lockdown mode; set '' to disable for kdump/kgdb debugging; **note**: lockdown=integrity restricts kernel
   self-modification only — it does NOT enforce userspace binary integrity; Fedora default IMA mode is measure-only with no appraisal
   policy deployed), `system_ipv6_accept_ra`
@@ -366,7 +366,7 @@ make repos-rh-context # internal RH context repos (VPN + SSH credentials)
   See SECURITY.md for re-enabling cryptographic commit and collection signatures.
 - The commit-msg hook rejects past-tense and gerund first words after the colon
   (Added, Fixed, Adding…) but noun-phrase descriptions are the established norm
-- Scope values (capitalize in commits; commitlint.config.js lists the same values, but its type-enum rule is off):
+- Scope values (capitalize in commits):
   `Common`, `Repos-dnf`, `Packages`, `Codex`,
   `Dotfiles`, `Ssh`, `Git-repos`, `Notes`, `Redhat`, `Containers`, `Desktop`,
   `System`, `Distrobox`, `Claude`, `Ci`, `Docs`, `Chore`, `Smoke`, `Molecule`,
@@ -440,9 +440,7 @@ make repos-rh-context # internal RH context repos (VPN + SSH credentials)
 
 ## Moving from the old laptop
 
-See [the migration plan](docs/old-laptop-migration-plan.md),
-[discovery inventory](docs/old-laptop-inventory.md), and
-[transfer checklist](docs/migration-checklist.md). Familiar direct launchers are
+See the [transfer checklist](docs/migration-checklist.md). Familiar direct launchers are
 `cwork`, `cper`, `cper2`, `owork`, `oper`, and `gper`; configurable argument lists
 preserve the source laptop's workflow. `gper` requires the separate Antigravity
 vendor CLI. `~/.config/zsh/local.zsh` is preserved for personal additions.
@@ -456,7 +454,7 @@ review all archive URLs/integrity values, and run the migration regression tests
 The optional download test is
 `CODEX_INSTALL_TEST=1 .venv/bin/python3 scripts/test-laptop-migration.py`.
 
-The [wider audit](docs/old-laptop-second-pass.md) adds native package extension
+The wider audit adds native package extension
 lists, work AWS CLI tooling, typed GNOME preferences and guarded power-stack
 transitions. Native package/service behavior still requires destination validation.
 `make workstation-audit` records package provenance, PATH shadows,

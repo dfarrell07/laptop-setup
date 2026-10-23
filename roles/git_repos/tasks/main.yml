@@ -206,8 +206,8 @@
     # SECURITY: submodule URLs not validated by pre-flight TOFU guard; disable to prevent attacker-controlled .gitmodules redirect
     recursive: false
     depth: "{{ item.depth | default(omit) }}"
-    # SECURITY: TOFU mitigated by pre-flight check (pre_flight_checks.yml) asserting every SSH git hostname is pre-seeded in
-    # ssh_work_keyscan_hosts (github.com exempt — always seeded via API); new hosts must be added to ssh_work_keyscan_hosts in config.yml
+    # SECURITY: TOFU: SSH git hostnames should be pre-seeded via
+    # ssh_work_keyscan_hosts (github.com exempt — always seeded from a pinned key); add new hosts to ssh_work_keyscan_hosts in config.yml
     accept_newhostkey: true
   environment:
     GIT_TERMINAL_PROMPT: "0"  # prevent interactive credential prompt from hanging make repos

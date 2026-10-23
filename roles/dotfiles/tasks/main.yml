@@ -196,31 +196,6 @@
     mode: "0700"
   when: is_macos
 
-- name: Check current login shell (zsh advisory probe)
-  ansible.builtin.shell:
-    cmd: |
-      set -o pipefail
-      getent passwd {{ ansible_facts['user_id'] }} | cut -d: -f7
-    executable: /bin/bash
-  register: _dotfiles_login_shell
-  changed_when: false
-  failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
-  when: is_linux
-
-- name: Warn if login shell is not zsh (zshrc will be deployed but not reached on login)
-  ansible.builtin.debug:
-    msg: >-
-      ADVISORY: .zshrc is being deployed but the current login shell is
-      '{{ _dotfiles_login_shell.stdout | trim }}' (not /bin/zsh).
-      This role intentionally does not change the login shell (that is owned by the
-      desktop role). Run 'make desktop' or 'make all' to set /bin/zsh as the login
-      shell so that .zshrc is reached on login, then log out and back in.
-  when:
-    - is_linux
-    - _dotfiles_login_shell.stdout is defined
-    - _dotfiles_login_shell.stdout | trim != '/bin/zsh'
-
 - name: Deploy zshrc
   ansible.builtin.template:
     src: zshrc.j2
@@ -304,41 +279,6 @@
     - git-template-commit-msg
     - git-template-prepare-commit-msg
     - git-template-pre-push
-
-- name: Validate existing gh CLI config for non-standard aliases (security check)
-  when: is_linux or is_macos
-  block:
-    - name: Check if gh config exists
-      ansible.builtin.stat:
-        path: "{{ ansible_facts['user_dir'] }}/.config/gh/config.yml"
-      register: _gh_config_stat
-
-    - name: Read existing gh config if present
-      ansible.builtin.slurp:
-        path: "{{ ansible_facts['user_dir'] }}/.config/gh/config.yml"
-      register: _gh_config_content
-      when: _gh_config_stat.stat.exists
-
-    - name: Parse gh config YAML  # noqa: ignore-errors — a templating error is not covered by failed_when
-      ansible.builtin.set_fact:
-        _gh_config_parsed: "{{ _gh_config_content.content | b64decode | from_yaml }}"
-      when: _gh_config_stat.stat.exists
-      ignore_errors: true  # malformed YAML only skips this advisory check
-
-    # Advisory only: the config is seed-only (never rewritten), and an alias runs only when typed.
-    - name: Warn about non-standard gh aliases (security)
-      ansible.builtin.debug:
-        msg: >-
-          SECURITY NOTICE: {{ ansible_facts['user_dir'] }}/.config/gh/config.yml defines aliases beyond
-          'co': {{ _gh_config_parsed.aliases | dict2items | map(attribute='key') | list }}. Aliases can
-          run shell commands; review them if you did not add them (gh alias list).
-      when:
-        - _gh_config_stat.stat.exists
-        - _gh_config_parsed is defined
-        - _gh_config_parsed is mapping
-        - _gh_config_parsed.aliases is defined
-        - _gh_config_parsed.aliases is mapping
-        - _gh_config_parsed.aliases | dict2items | selectattr('key', 'ne', 'co') | list | length > 0
 
 - name: Deploy gh CLI config
   ansible.builtin.copy:

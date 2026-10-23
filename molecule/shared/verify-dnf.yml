@@ -392,8 +392,8 @@
     - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
-- name: Check login.defs INACTIVE={{ system_inactive_days }}
-  ansible.builtin.command: grep -q '^INACTIVE\s\+{{ system_inactive_days }}\s*$' /etc/login.defs
+- name: Check useradd INACTIVE={{ system_inactive_days }}
+  ansible.builtin.command: grep -q '^INACTIVE={{ system_inactive_days }}$' /etc/default/useradd
   changed_when: false
   become: true
   when:

@@ -346,11 +346,6 @@
   when: item.rc != 0 or (item.stdout | default('')) is search('^skip:')
 
 # --- Verify ---
-- name: Confirm Python works
-  ansible.builtin.command:
-    cmd: python3 --version
-  changed_when: false
-
 - name: Confirm oc exported to host shell
   ansible.builtin.stat:
     path: "{{ ansible_env.HOME }}/.local/bin/oc"

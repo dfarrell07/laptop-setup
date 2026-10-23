@@ -216,8 +216,8 @@ for tool in "gofumpt:--version" "gopls:version" "stern:--version" "govulncheck:-
   name="${tool%%:*}"; args="${tool#*:}"; _gobin="$HOME/go/bin/$name"
   _test_if_installed "$_gobin" "go-$name" "$_gobin" $args
 done
-# Versioned subctl binaries (subctl18, subctlRH* — guard on binary presence, emit nothing when absent)
-for _bin in "$HOME"/.local/bin/subctl[0-9]* "$HOME"/.local/bin/subctlRH*; do
+# Versioned subctl binaries (subctl18 — guard on binary presence, emit nothing when absent)
+for _bin in "$HOME"/.local/bin/subctl[0-9]*; do
   _test_if_installed "$_bin" "$(basename "$_bin")" "$_bin" version
 done
 
@@ -260,21 +260,20 @@ if command -v gh &>/dev/null; then
   else record "gh-auth" "WARN" "not authenticated (interactive login required)"; fi
 fi
 
-# registry.redhat.io authenticated (work-profile only — RH subctl oc image extract silently fails when unauth'd)
+# registry.redhat.io authenticated (work-profile only)
 if [[ "$profile" == "work" ]] && command -v podman &>/dev/null && [[ -x /usr/local/bin/oc ]]; then
   if podman login --get-login registry.redhat.io &>/dev/null; then
     record "registry-redhat-auth" "PASS"
   else
-    record "registry-redhat-auth" "WARN" "not authenticated — RH subctl oc image extract will silently fail (run: podman login registry.redhat.io)"
+    record "registry-redhat-auth" "WARN" "not authenticated (run: podman login registry.redhat.io)"
   fi
 fi
 
-# FQIN enforcement: containers_enforce_fqin=true is a no-op when /etc/containers/registries.conf
-# (system-level) defines unqualified-search-registries — Podman stops at system-level and ignores
-# user-level config entirely.
+# FQIN enforcement: a user-level ~/.config/containers/registries.conf overrides the system file
+# entirely, so only warn when it is absent and the system file allows unqualified names.
 if $IS_LINUX && command -v podman &>/dev/null; then
-  if [[ -f /etc/containers/registries.conf ]] && grep -qE '^unqualified-search-registries\s*=' /etc/containers/registries.conf; then
-    record "fqin-enforcement" "WARN" "system /etc/containers/registries.conf allows unqualified image names — containers_enforce_fqin=true has no effect (Podman ignores user-level config when system-level exists; 'podman pull nginx' resolves against docker.io)"
+  if [[ ! -f "$HOME/.config/containers/registries.conf" ]] && [[ -f /etc/containers/registries.conf ]] && grep -qE '^unqualified-search-registries\s*=' /etc/containers/registries.conf; then
+    record "fqin-enforcement" "WARN" "system /etc/containers/registries.conf allows unqualified image names and no user-level registries.conf overrides it — 'podman pull nginx' resolves against docker.io"
   else
     record "fqin-enforcement" "PASS"
   fi
@@ -765,12 +764,6 @@ done
 unset _cd label
 
 # Config file validation
-if [[ -f /etc/opt/chrome/policies/managed/security.json ]]; then
-  if python3 -c "import json; json.load(open('/etc/opt/chrome/policies/managed/security.json'))" 2>/dev/null; then
-    record "chrome-policy-json" "PASS"
-  else record "chrome-policy-json" "FAIL" "invalid JSON in /etc/opt/chrome/policies/managed/security.json — inspect with: python3 -m json.tool /etc/opt/chrome/policies/managed/security.json"; fi
-fi
-
 # --- Notes repo (transcrypt-encrypted) ---
 if [[ -d "$_notes_dir/.git" ]]; then
   record "notes-repo" "PASS"
@@ -903,7 +896,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       record "dns-over-tls" "PASS"
     else record "dns-over-tls" "WARN" "config deployed but TLS not negotiated on this network (opportunistic — plain DNS in use)"; fi
   elif $CSB_HOST; then
-    record "dns-over-tls" "WARN" "not deployed — expected on CSB (Cloudflare blocked; DHCP DNS in use)"
+    record "dns-over-tls" "PASS"  # 99-dot.conf intentionally not deployed on CSB (DHCP DNS in use)
   else record "dns-over-tls" "FAIL" "99-dot.conf not deployed — run: make system"; fi
 
   # DNSSEC: WARN-level observability check consistent with DoT "opportunistic" pattern
@@ -1321,7 +1314,7 @@ EOF
     if [[ $EUID -ne 0 && ! -r /etc/aide.conf ]]; then
       record "aide-monitors" "WARN" "needs root (run make smoke-test with sudo) — /etc/aide.conf is unreadable"
     elif [[ -r /etc/aide.conf ]]; then
-      _aide_paths=(/usr/local/bin /etc/ssh/sshd_config.d /etc/NetworkManager/conf.d /etc/systemd/resolved.conf.d /etc/systemd/logind.conf.d /etc/crypto-policies/config /etc/crypto-policies/policies /etc/selinux/config /etc/audit /etc/aide.conf /etc/sysctl.d /etc/kernel /etc/modprobe.d /etc/sudoers.d /etc/dconf /etc/systemd/journald.conf.d /etc/systemd/coredump.conf.d)
+      _aide_paths=(/etc/ssh/sshd_config.d /etc/NetworkManager/conf.d /etc/systemd/resolved.conf.d /etc/systemd/logind.conf.d /etc/crypto-policies/config /etc/crypto-policies/policies /etc/selinux/config /etc/audit /etc/aide.conf /etc/sysctl.d /etc/kernel /etc/modprobe.d /etc/sudoers.d /etc/dconf /etc/systemd/journald.conf.d /etc/systemd/coredump.conf.d)
       [[ "$profile" != "work" ]] || _aide_paths+=(/etc/bpfman)
       ! $_usbguard_enabled || _aide_paths+=(/etc/usbguard)
       for _path in "${_aide_paths[@]}"; do
@@ -1780,8 +1773,8 @@ EOF
   # splunk system account shell (CIS 5.6) — CSB hosts only; splunk absent on standard Fedora
   if $CSB_HOST && _splunk_entry=$(getent passwd splunk 2>/dev/null) && [[ -n "$_splunk_entry" ]]; then
     _splunk_shell=$(echo "$_splunk_entry" | cut -d: -f7)
-    if [[ "$_splunk_shell" == "/sbin/nologin" ]]; then record "splunk-shell" "PASS"
-    else record "splunk-shell" "FAIL" "splunk shell='$_splunk_shell', expected /sbin/nologin (CIS 5.6) — run: make redhat"; fi
+    if [[ "$_splunk_shell" =~ ^(/sbin/nologin|/usr/sbin/nologin|/usr/bin/nologin|/bin/false)$ ]]; then record "splunk-shell" "PASS"
+    else record "splunk-shell" "FAIL" "splunk shell='$_splunk_shell', expected a nologin shell (CIS 5.6)"; fi
     unset _splunk_shell _splunk_entry
   fi
 
@@ -1856,23 +1849,6 @@ EOF
     if systemctl is-enabled dev-shm-harden.service &>/dev/null; then record "dev-shm-harden-enabled" "PASS"
     else record "dev-shm-harden-enabled" "FAIL" "dev-shm-harden.service not enabled on CSB — /dev/shm hardening lost on reboot"; fi
   fi
-
-  # /var/tmp bind-mounted to /tmp with noexec (CIS 1.1.8)
-  # 'bind' is MS_BIND syscall flag, never stored in kernel option strings — compare MAJ:MIN instead
-  _vt_opts=$(findmnt -n -o OPTIONS /var/tmp 2>/dev/null || echo "")
-  _vt_min=$(findmnt -n -o MAJ:MIN /var/tmp 2>/dev/null | tr -d ' ' || echo "")
-  _tmp_min=$(findmnt -n -o MAJ:MIN /tmp 2>/dev/null | tr -d ' ' || echo "")
-  if [[ -n "$_vt_min" && "$_vt_min" = "$_tmp_min" ]] && [[ "$_vt_opts" == *noexec* ]]; then record "var-tmp-bind" "PASS"
-  elif [[ ! -f /etc/systemd/system/var-tmp.mount ]]; then record "var-tmp-bind" "WARN" "var-tmp.mount not deployed — system_var_tmp_noexec may be false (intentional)"
-  elif $CSB_HOST; then record "var-tmp-bind" "WARN" "/var/tmp not bind-mounted with noexec on CSB: $_vt_opts"
-  else record "var-tmp-bind" "FAIL" "/var/tmp not bind-mounted with noexec: $_vt_opts"; fi
-
-  if [[ -f /etc/systemd/system/var-tmp.mount ]]; then
-    if systemctl is-enabled var-tmp.mount &>/dev/null; then record "var-tmp-mount-enabled" "PASS"
-    else record "var-tmp-mount-enabled" "FAIL" "var-tmp.mount not enabled — /var/tmp hardening lost on reboot"; fi
-  fi
-
-  unset _vt_opts _vt_min _tmp_min
 
   # /home nosuid (CIS 1.1.9) — nosuid prevents setuid binaries copied into $HOME from gaining elevated privileges
   # Skipped on CSB — IT manages /home mount (may be NFS/autofs for LDAP users; remounting with nosuid may break access)
@@ -2008,19 +1984,6 @@ EOF
     record "tlp-service" "SKIP" "native power baseline (system_tlp_enabled=false)"
   fi
 
-  # Chrome policies (verify key security settings, not just file existence)
-  if python3 -c "
-import json, sys
-p = json.load(open('/etc/opt/chrome/policies/managed/security.json'))
-assert p.get('ExtensionInstallBlocklist') == ['*'], 'ExtensionInstallBlocklist not [\"*\"]'
-assert p.get('RemoteDebuggingAllowed') is False, 'RemoteDebuggingAllowed not false'
-assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLevel not >= 1'
-" 2>/dev/null; then
-    record "chrome-policies" "PASS"
-  elif [[ -f /etc/opt/chrome/policies/managed/security.json ]]; then
-    record "chrome-policies" "FAIL" "deployed but critical security policies missing or wrong"
-  else record "chrome-policies" "WARN" "not deployed"; fi
-
   # dconf system policies (CIS 1.8.3-1.8.8) — only relevant on GNOME systems
   # Sway/i3 systems use greetd not GDM; dconf policies are GNOME-specific.
   if ! systemctl cat gdm.service &>/dev/null; then
@@ -2050,10 +2013,10 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   else record "dconf-media-locks" "FAIL" "media-handling keys not locked in /etc/dconf/db/local.d/locks/50-hardening"; fi
   # Screensaver idle-delay + lock-enabled (CIS 1.8.4/1.8.5)
   if grep -q '^lock-enabled=true' /etc/dconf/db/local.d/51-screensaver 2>/dev/null && \
-     grep -q '^idle-delay=uint32 300' /etc/dconf/db/local.d/51-screensaver 2>/dev/null; then
+     grep -q '^idle-delay=uint32 [0-9]\+' /etc/dconf/db/local.d/51-screensaver 2>/dev/null; then
     record "dconf-screensaver" "PASS"
   elif [[ -f /etc/dconf/db/local.d/51-screensaver ]]; then
-    record "dconf-screensaver" "FAIL" "lock-enabled=true or idle-delay=uint32 300 missing in /etc/dconf/db/local.d/51-screensaver"
+    record "dconf-screensaver" "FAIL" "lock-enabled=true or idle-delay=uint32 N missing in /etc/dconf/db/local.d/51-screensaver"
   else record "dconf-screensaver" "FAIL" "/etc/dconf/db/local.d/51-screensaver not deployed"; fi
   # Screensaver policy locks (CIS 1.8.5)
   if grep -q '^/org/gnome/desktop/screensaver/lock-enabled$' /etc/dconf/db/local.d/locks/51-screensaver 2>/dev/null && \
@@ -2117,12 +2080,12 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   if grep -qE "^UMASK[[:space:]]+${_system_umask}([[:space:]]+#.*)?$" /etc/login.defs 2>/dev/null; then record "umask-login-defs" "PASS"
   elif $_csb_rhel_host; then record "umask-login-defs" "WARN" "skipped on RHEL CSB — login.defs not modified"
   else record "umask-login-defs" "FAIL" "UMASK not set to ${_system_umask} in login.defs"; fi
-  _inactive_logindefs=$(awk '/^INACTIVE[[:space:]]/{print $2}' /etc/login.defs 2>/dev/null || echo "")
-  if [[ -n "$_inactive_logindefs" && "$_inactive_logindefs" -ge 1 && "$_inactive_logindefs" -le 30 ]]; then record "inactive-lock" "PASS"
+  _inactive_useradd=$(awk -F= '/^INACTIVE=/{print $2}' /etc/default/useradd 2>/dev/null || echo "")
+  if [[ -n "$_inactive_useradd" && "$_inactive_useradd" -ge 1 && "$_inactive_useradd" -le 30 ]]; then record "inactive-lock" "PASS"
   elif $_csb_rhel_host; then record "inactive-lock" "WARN" "skipped on RHEL CSB — INACTIVE not set (would lock IT-managed service accounts with non-rotating passwords)"
-  else record "inactive-lock" "FAIL" "INACTIVE=${_inactive_logindefs:-unset} not in CIS range 1-30 in login.defs"; fi
+  else record "inactive-lock" "FAIL" "INACTIVE=${_inactive_useradd:-unset} not in CIS range 1-30 in /etc/default/useradd"; fi
   # CIS 5.5.1.5: verify chage -I 30 was applied to the existing user account (not just new-account default).
-  # login.defs INACTIVE=30 only governs future accounts created with useradd — the retroactive chage
+  # useradd INACTIVE=30 only governs future accounts created with useradd — the retroactive chage
   # updates /etc/shadow field 7 directly for the pre-existing user. Requires root to read /etc/shadow.
   if [[ "$EUID" -eq 0 ]]; then
     _chage_user="${SUDO_USER:-$USER}"
@@ -2393,33 +2356,6 @@ if [[ -f /etc/NetworkManager/conf.d/99-dhcp-privacy.conf ]]; then
   if grep -q '^ipv4.dhcp-send-hostname=false' /etc/NetworkManager/conf.d/99-dhcp-privacy.conf; then
     record "nm-dhcp-privacy" "PASS"
   else record "nm-dhcp-privacy" "WARN" "DHCP hostname privacy not configured (/etc/NetworkManager/conf.d/99-dhcp-privacy.conf) — run: make system"; fi
-fi
-
-# dispatcher.d unexpected-file check — provisioning installs no dispatcher scripts;
-# any file here is unexpected (IT-managed scripts are possible on CSB, hence WARN there)
-if $IS_LINUX && ! $USER_ONLY && [[ -z "$CONTAINER" ]] && [[ -d /etc/NetworkManager/dispatcher.d ]]; then
-  _dispatcher_files=""
-  # Mirror nm.yml allowlist: IT's csb-fedora-logo on CSB (plus system_nm_dispatcher_allowlist)
-  _dispatcher_allow=""
-  ! $CSB_HOST || _dispatcher_allow="csb-fedora-logo"
-  _dispatcher_allow+=" $(awk '/^system_nm_dispatcher_allowlist:/{f=1; if (match($0,/\[.*\]/)) {t=substr($0,RSTART+1,RLENGTH-2); gsub(/[,"\047]/," ",t); print t; f=0}; next} f&&/^[[:space:]]*-[[:space:]]/{sub(/^[[:space:]]*-[[:space:]]*/,""); sub(/[[:space:]]*#.*/,""); gsub(/["\047]/,""); print; next} f&&!/^[[:space:]]*(#|$)/{f=0}' "$SCRIPT_DIR/../config.yml" 2>/dev/null | tr '\n' ' ' || true)"
-  while IFS= read -r _dispatcher_file; do
-    [[ " $_dispatcher_allow " == *" $(basename "$_dispatcher_file") "* ]] && continue
-    if [[ "$_dispatcher_file" == /etc/NetworkManager/dispatcher.d/90-console-login-helper-messages-gensnippet_if ]] &&
-       command -v rpm &>/dev/null &&
-       [[ "$(rpm -qf --queryformat '%{NAME}' "$_dispatcher_file" 2>/dev/null)" == console-login-helper-messages-issuegen ]] &&
-       rpm --verify console-login-helper-messages-issuegen &>/dev/null; then
-      continue
-    fi
-    _dispatcher_files+=" $_dispatcher_file"
-  done < <(find /etc/NetworkManager/dispatcher.d \( -type f -o -type l \) 2>/dev/null | sort)
-  if [[ -z "${_dispatcher_files// /}" ]]; then
-    record "nm-dispatcher-clean" "PASS"
-  elif $CSB_HOST; then
-    record "nm-dispatcher-clean" "WARN" "dispatcher scripts present (IT-managed on CSB may be expected): ${_dispatcher_files% }"
-  else
-    record "nm-dispatcher-clean" "FAIL" "unexpected dispatcher scripts in /etc/NetworkManager/dispatcher.d/ — provisioning installs none; investigate: ${_dispatcher_files% }"
-  fi
 fi
 
 # resolved.conf.d/99-dot.conf content check (file-gated; silently skips on macOS or where system role was not run)

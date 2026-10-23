@@ -2,9 +2,7 @@
 
 Prepare the automation on this source, then run it from the destination side for
 Linux and macOS. Keep launcher arguments; skip AI history transfer and use
-repo-owned skills plus the tracked instruction baseline. See [the plan](old-laptop-migration-plan.md)
-for validation limits and [the inventory](old-laptop-inventory.md) for dated source
-paths. Run destination provisioning at its local console. Keep the source until
+repo-owned skills plus the tracked instruction baseline. Run destination provisioning at its local console. Keep the source until
 all acceptance checks below pass.
 
 ## 1. Preserve source state
@@ -72,8 +70,8 @@ all acceptance checks below pass.
    only for an intentional key/secret setup. Keep `vault_*` values out of config.yml.
 3. Native power management is the baseline (tuned/tuned-ppd on recent Fedora).
    TLP and charge thresholds require explicit `system_tlp_enabled: true`. Keep
-   the native default unless the destination needs that change. See
-   [transition limits](old-laptop-second-pass.md#power-transition-limits).
+   the native default unless the destination needs that change. Switching power
+   stacks is best effort and needs working repositories.
 4. Connect RH VPN and configure `ssh_work_keyscan_hosts` for
    the internal Git host with an independently verified fingerprint before work
    provisioning. Optionally set `git_repos_vpn_check_host` to that host; its check
@@ -112,9 +110,8 @@ all acceptance checks below pass.
    layouts. Provisioning leaves old source locations in place; it does not migrate
    their state. Import saved refs/files, repair worktrees and update absolute paths.
 4. Recover optional tools through additive `packages_extra_dnf`,
-   `packages_extra_apt`, `packages_extra_brew`, `packages_extra_pipx` and
-   `packages_extra_npm` overrides; see [config examples](../default.config.yml).
-   Native entries are package names; npm/pipx require explicit version pins.
+   `packages_extra_apt` and `packages_extra_brew` overrides; see [config examples](../default.config.yml).
+   Native entries are package names.
    Only Codex has a committed transitive npm integrity lock. Choose one Gemini
    provider; `gper` launches the separate Antigravity `agy` vendor CLI.
 5. Reinstall jinjanator, pipeline-migration-tool and CHIRP from their original
@@ -190,7 +187,6 @@ not portable installed plugins.
 
 Put hardware commands and personal aliases in `~/.config/zsh/local.zsh`, seeded
 once and sourced last. `gi` retains forgit's meaning; `gri` is the old grep helper.
-Opt into `dotfiles_legacy_grep_alias_enabled: true` only to override forgit's `gi`.
 Review old `.zlogin` wake commands, display connectors, Bluetooth IDs and local
 intel_vbtn/USB rules for the new hardware. GNOME preferences use typed
 `desktop_gnome_*` overrides. If restoring Chrome MIME/PWA handlers on Fedora,

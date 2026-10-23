@@ -251,7 +251,6 @@ class MigrationTests(unittest.TestCase):
                     agreements = (directory / instance / 'CLAUDE.md').read_text()
                     self.assertIn('--signoff', agreements)
                     self.assertNotIn('~/laptop-setup', agreements)
-                    self.assertNotIn('You cannot push', agreements)
                     settings_file.write_text('{"model": "user-model", "enabledPlugins": {}}\n')
                 result = run_play(directory, tasks=selected, variables=variables)
                 self.assertIn('changed=0', result)

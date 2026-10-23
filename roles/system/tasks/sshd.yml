@@ -56,74 +56,6 @@
           system_ssh_allow_agent_forwarding='{{ system_ssh_allow_agent_forwarding }}' is not
           a valid AllowAgentForwarding value. Accepted: yes, no.
 
-    # noqa: command-instead-of-module — query installed RPM version without modifying packages
-    - name: Probe openssh version for ChannelTimeout bz3827 guard
-      ansible.builtin.command:
-        cmd: rpm -q openssh --qf '%{VERSION}'
-      register: _sshd_rpm_version
-      changed_when: false
-      check_mode: false
-      failed_when: false
-      when:
-        - system_ssh_channel_timeout | default('') | length > 0
-        - is_dnf
-
-    - name: Fail if ChannelTimeout is set and OpenSSH version probe inconclusive (bz3827 guard)
-      ansible.builtin.fail:
-        msg: >-
-          system_ssh_channel_timeout={{ system_ssh_channel_timeout | quote }} is set but
-          rpm -q openssh returned rc={{ _sshd_rpm_version.rc | default('n/a') }} — cannot verify
-          OpenSSH >= 10.3 required for bz3827 safety. Set system_ssh_channel_timeout: ""
-          in config.yml until the OpenSSH version can be confirmed.
-      when:
-        - system_ssh_channel_timeout | default('') | length > 0
-        - is_dnf
-        - _sshd_rpm_version.rc | default(1) != 0
-
-    - name: Fail if ChannelTimeout is set on OpenSSH < 10.3 (bz3827 guard)
-      ansible.builtin.fail:
-        msg: >-
-          system_ssh_channel_timeout={{ system_ssh_channel_timeout | quote }} is set but
-          detected OpenSSH {{ _sshd_rpm_version.stdout | default('unknown') }} < 10.3.
-          bz3827 causes UnusedConnectionTimeout to fire prematurely even with open channels,
-          producing silent SSH disconnects (VS Code Remote, tmux). sshd -t accepts this config
-          as valid, masking the problem. Set system_ssh_channel_timeout: "" in config.yml until
-          all targets run OpenSSH >= 10.3.
-      when:
-        - system_ssh_channel_timeout | default('') | length > 0
-        - is_dnf
-        - _sshd_rpm_version.rc | default(1) == 0
-        - _sshd_rpm_version.stdout | default('0') is version('10.3', '<', version_type='loose')
-
-    - name: Probe openssh version for ChannelTimeout bz3827 guard (apt)
-      ansible.builtin.shell:
-        cmd: |
-          set -o pipefail
-          dpkg-query -W -f='${Version}' openssh-server | grep -oE '[0-9]+\.[0-9]+'
-        executable: /bin/bash
-      register: _sshd_apt_version
-      changed_when: false
-      check_mode: false
-      failed_when: false
-      when:
-        - system_ssh_channel_timeout | default('') | length > 0
-        - is_apt
-
-    - name: Fail if ChannelTimeout is set on OpenSSH < 10.3 on apt targets (bz3827 guard)
-      ansible.builtin.fail:
-        msg: >-
-          system_ssh_channel_timeout={{ system_ssh_channel_timeout | quote }} is set but
-          detected OpenSSH {{ _sshd_apt_version.stdout | default('unknown') }} < 10.3 on this apt target.
-          bz3827 causes UnusedConnectionTimeout to fire prematurely even with open channels,
-          producing silent SSH disconnects (VS Code Remote, tmux). sshd -t accepts this config
-          as valid, masking the problem. Set system_ssh_channel_timeout: "" in config.yml until
-          all targets run OpenSSH >= 10.3.
-      when:
-        - system_ssh_channel_timeout | default('') | length > 0
-        - is_apt
-        - _sshd_apt_version.rc | default(1) == 0
-        - _sshd_apt_version.stdout | default('0') is version('10.3', '<', version_type='loose')
-
     - name: Assert system_ssh_extra_allow_users entries match valid Linux username character set
       ansible.builtin.assert:
         that:
@@ -202,9 +134,12 @@
       loop: "{{ _sshd_dropin_files.files | default([]) }}"
       # Hybrid CSB: IT's remote-access role rewrites its drop-in from cron (PermitRootLogin no,
       # also set here); 00-hardening.conf sorts first, so its directives still win.
+      # 40-redhat-crypto-policies.conf and 50-redhat.conf are package-owned: deleting them would
+      # change every run and drop the crypto-policy Include; 00-hardening.conf wins by order.
       when: >-
         item.path | basename not in
-        (['00-hardening.conf'] + (['99-csb-remote-access.conf'] if csb_detected | default(false) else []))
+        (['00-hardening.conf', '40-redhat-crypto-policies.conf', '50-redhat.conf']
+         + (['99-csb-remote-access.conf'] if csb_detected | default(false) else []))
 
     # The kept IT drop-in is trusted by name only; IT's template sets just PermitRootLogin.
     # Anything else (Match, ForceCommand, AuthorizedKeysCommand, ...) would be read by sshd and
@@ -302,14 +237,6 @@
         path: /etc/ssh/sshd_config.d/.00-hardening.conf.tmp
         state: absent
       changed_when: false  # validation scratch leaves no persistent change
-
-    - name: Record sshd drop-in checksum for TOCTOU integrity guard
-      ansible.builtin.stat:
-        path: /etc/ssh/sshd_config.d/00-hardening.conf
-        checksum_algorithm: sha256
-      register: _sshd_dropin_post_validation
-      changed_when: false
-      check_mode: false  # read-only probe
 
   rescue:
     - name: Remove broken sshd drop-in to prevent SSH lockout on next restart
@@ -443,34 +370,6 @@
   when:
     - system_crypto_policy_set.rc | default(0) != 0
 
-# --- TOCTOU guard: re-verify drop-in integrity before sshd restart handler fires ---
-- name: Re-stat sshd drop-in before handler fires (TOCTOU guard)
-  ansible.builtin.stat:
-    path: /etc/ssh/sshd_config.d/00-hardening.conf
-    checksum_algorithm: sha256
-  register: _sshd_dropin_pre_handler
-  changed_when: false
-  check_mode: false  # read-only probe
-  when:
-    - _sshd_dropin_post_validation is defined
-    - _sshd_dropin_post_validation.stat is defined
-
-- name: Abort if sshd drop-in changed since sshd -t validation (TOCTOU guard)
-  ansible.builtin.fail:
-    msg: >-
-      SECURITY: /etc/ssh/sshd_config.d/00-hardening.conf changed after sshd -t
-      validated it — possible TOCTOU file substitution. Aborting before sshd restart
-      to prevent loading an unvalidated config. Re-run make system to recover.
-      Expected: {{ _sshd_dropin_post_validation.stat.checksum }}
-      Found:    {{ _sshd_dropin_pre_handler.stat.checksum | default('missing') }}
-  when:
-    - _sshd_dropin_post_validation is defined
-    - _sshd_dropin_post_validation.stat is defined
-    # check mode never writes the drop-in, so on a first provision there is nothing to compare
-    - _sshd_dropin_post_validation.stat.exists | default(false)
-    - (_sshd_dropin_pre_handler.stat.checksum | default('')) !=
-      _sshd_dropin_post_validation.stat.checksum
-
 # force_handlers is false: if an earlier run failed after writing the drop-in, that run's restart
 # was lost and this run sees no change. Restart whenever sshd is up but not on the configured port.
 - name: Detect sshd not yet listening on the configured port (interrupted earlier run)  # noqa: command-instead-of-module
@@ -510,5 +409,5 @@
     - lookup('env', 'STY') == ''      # GNU screen sets $STY; also safe
     - not (system_ssh_port_change_override | default(false) | bool)
 
-- name: Flush sshd restart handler immediately after TOCTOU integrity check passes
+- name: Flush sshd restart handler immediately
   ansible.builtin.meta: flush_handlers

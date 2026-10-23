@@ -16,7 +16,6 @@ desktop_sway_hidpi_scale: "1.0"  # ThinkPad P16v 2560x1600: set 1.5 in config.ym
 desktop_sway_cursor_theme: Adwaita  # cursor theme; propagated to seat config and XCURSOR_THEME for XWayland apps
 desktop_sway_cursor_size: "{{ (24 * desktop_sway_hidpi_scale | float) | int }}"  # cursor size in px; seat config + XCURSOR_SIZE
 desktop_sway_libva_driver: ''  # VA-API driver: radeonsi (AMD), iHD (Intel); empty string omits export for libva auto-detection
-desktop_sway_vdpau_driver: ''  # VDPAU driver: radeonsi (AMD), va_gl (Intel via libva), nvidia (NVIDIA proprietary)
 desktop_wm_idle_lock_timeout: 300   # seconds of idle before screen lock activates (swaylock on Sway, i3lock on i3)
 desktop_wm_idle_display_timeout: 600  # seconds of idle before display powers off
 desktop_wm_lock_color: "000000"     # screen lock background color (hex, no #) — used by swaylock (Sway) and i3lock (i3)
@@ -131,7 +130,6 @@ desktop_dnf_packages:
   - dconf
   - vim-X11  # gvim was renamed to vim-X11 in Fedora 41+
   - dejavu-sans-mono-fonts
-  - terminus-fonts
   - gnome-keyring
   - meld  # GTK graphical diff/merge tool; requires display session
 
@@ -140,7 +138,6 @@ desktop_apt_packages:
   - dconf-cli
   - vim-gtk3
   - fonts-dejavu-core
-  - fonts-terminus
   - gnome-keyring
   - meld  # GTK graphical diff/merge tool; requires display session
 
@@ -188,8 +185,6 @@ desktop_sway_apt_packages:
   - wl-clipboard  # wl-copy/wl-paste — essential for clipboard in Wayland terminal workflows
   - cliphist      # clipboard history manager for Wayland (clipboard dies with source app without it)
   - pulseaudio-utils
-
-desktop_deploy_chrome_policies: false
 
 # Alacritty terminal color scheme — Catppuccin Mocha defaults; override any key in config.yml
 desktop_alacritty_color_bg: "#1e1e2e"
