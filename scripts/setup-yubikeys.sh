@@ -101,8 +101,8 @@ if head -c 14 "$VAULT_FILE" 2>/dev/null | grep -qF "\$ANSIBLE_VAULT"; then
 fi
 
 # Decide about an existing vault-pass.sh before anything irreversible happens
-if [[ -f "$VAULT_PASS_SH" ]] && ! grep -q 'ci-dummy-vault-password' "$VAULT_PASS_SH"; then
-  warn "vault-pass.sh already exists and is not the CI stub."
+if [[ -f "$VAULT_PASS_SH" ]] && ! grep -qE "^pass=['\"]CHANGE_ME['\"]|ci-dummy-vault-password" "$VAULT_PASS_SH"; then
+  warn "vault-pass.sh already exists and is not a placeholder stub."
   printf "Overwrite it with the new YubiKey implementation? [y/N] "
   read -r OVERWRITE
   [[ "$(_lc "$OVERWRITE")" == "y" ]] || die "Aborted: nothing was changed (reprogramming without updating vault-pass.sh would orphan it)."
@@ -349,8 +349,8 @@ fi
 # ── Write vault-pass.sh (atomic: temp file → chmod → rename) ─────────────────
 printf "\n── Writing vault-pass.sh ─────────────────────────────\n"
 
-if [[ -f "$VAULT_PASS_SH" ]] && grep -q 'ci-dummy-vault-password' "$VAULT_PASS_SH"; then
-  info "Replacing CI dummy stub with YubiKey implementation."
+if [[ -f "$VAULT_PASS_SH" ]] && grep -qE "^pass=['\"]CHANGE_ME['\"]|ci-dummy-vault-password" "$VAULT_PASS_SH"; then
+  info "Replacing placeholder stub with YubiKey implementation."
 fi
 
 # Write to temp file first (atomic: never a window where the real file

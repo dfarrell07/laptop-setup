@@ -176,7 +176,6 @@
     - not csb_detected
     - not system_is_container  # home dir chmod triggers security framework events that crash Debian 13 container PID 1
 
-# --- Inactive account lockout (CIS 5.5.1.5: lock accounts inactive >30 days) ---
   block:
     - name: Set home directory mode
       ansible.builtin.file:
@@ -218,6 +217,7 @@
           ACLs preventing chmod (check getfacl/setfacl), SELinux denial (check audit.log).
           Manual fix required before provisioning can continue.
 
+# --- Inactive account lockout (CIS 5.5.1.5: lock accounts inactive >30 days) ---
 - name: Configure inactive account lockout
   when:
     # CSB: IT-managed local service accounts may not rotate passwords; useradd -D -f 30 would lock them after 30 inactive days
@@ -520,6 +520,6 @@
       mode: "{{ '0640' if is_apt else '0000' }}"
   loop_control:
     label: "{{ item.path }}"
-  # CSB: Satellite/SCAP owns these permissions; shadow group ownership may differ on RHEL CSB; Kolide/SCAP manages these on hybrid Fedora
+  # CSB: Satellite/SCAP owns these permissions; shadow group ownership may differ on RHEL CSB
   # CSB too
   when: not csb_detected and not system_is_container

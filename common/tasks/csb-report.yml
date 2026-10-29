@@ -11,8 +11,6 @@
     _csb_has_failures: "{{ (csb_failures | default([])) | length > 0 }}"
   tags: [always]
 
-# No-failures message removed: a clean run with no output is self-evidently successful.
-
 - name: Report — CSB failure summary
   become: false
   ansible.builtin.debug:

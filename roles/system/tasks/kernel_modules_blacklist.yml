@@ -16,16 +16,6 @@
         group: root
         mode: "0755"
 
-    - name: Enumerate /etc/modprobe.d for unexpected files
-      # Pre-existing zzz-evil.conf processed after hardening.conf (lexicographic order,
-      # last-rule-wins) can override 'install firewire-ohci /bin/false' with a permissive
-      # rule, silently re-enabling DMA-capable modules. Enumerate before deploying so any
-      # attacker-placed conf is caught before it can shadow the hardening rules.
-      ansible.builtin.find:
-        paths: /etc/modprobe.d
-        file_type: file
-      register: _modprobe_d_audit
-
     - name: "Find /etc/modprobe.d files not owned by any RPM (pre-plant audit)"
       ansible.builtin.shell:
         cmd: |
@@ -53,7 +43,6 @@
 
     - name: Fail on unexpected files in /etc/modprobe.d
       vars:
-        _found: "{{ _modprobe_d_audit.files | map(attribute='path') | map('basename') | list }}"
         _unowned_basenames: "{{ _modprobe_unowned.stdout_lines | default([]) | map('basename') | list }}"
         _unexpected: "{{ _unowned_basenames | difference(system_modprobed_whitelist) }}"
       ansible.builtin.fail:

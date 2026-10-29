@@ -32,9 +32,8 @@
   ansible.builtin.debug:
     msg: >-
       WARNING: firewalld is not running. Firewall hardening tasks in this file
-      (drop zone, port 722, ICMP rules) will be skipped. Related tasks in
-      other files — nm.yml (tailscale0 trusted zone) and firewall.yml (libvirt
-      zone ssh removal) — also guard on this fact and will likewise be skipped.
+      (drop zone, port 722, ICMP rules, libvirt zone changes) will be skipped. The
+      nm.yml tailscale0 trusted-zone task also guards on this fact.
       Install and start firewalld before re-running if firewall management is
       required.
   when:
@@ -99,6 +98,7 @@
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool
     - is_fedora
+    - not csb_detected
 
 - name: Remove broad port rules from FedoraWorkstation zone
   ansible.posix.firewalld:
@@ -117,18 +117,12 @@
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool
     - is_fedora
+    - not csb_detected
 
 - name: Configure allowed traffic in drop zone
   when:
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool
-
-# Fallback for machines where zone policy is managed elsewhere (RHEL CSB: IT) or by the owner
-# (system_firewall_manage_zone=false) and the primary interface stays in whatever
-# the default zone is. On Fedora hybrid, system_firewall_manage_zone=true so the
-# drop zone tasks already handle port 722 and this task is skipped. The guard on
-# not(system_firewall_manage_zone) is the primary discriminator; the default-zone
-# guard prevents a redundant rule if the default zone is already drop.
   block:
     - name: Enable ICMP block inversion on drop zone
       ansible.posix.firewalld:
@@ -341,7 +335,7 @@
     port: "{{ ssh_port }}/tcp"
     permanent: true
     immediate: true
-    state: "{{ 'enabled' if system_libvirt_open_ssh | bool else 'disabled' }}"
+    state: disabled
   register: _result_lv_ssh
   when:
     - system_firewalld_running | bool

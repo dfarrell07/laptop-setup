@@ -123,7 +123,7 @@
     - name: Check AllowTcpForwarding matches system_ssh_allow_tcp_forwarding (shared)
       ansible.builtin.command: >-
         grep -qxF 'AllowTcpForwarding {{ system_ssh_allow_tcp_forwarding | default("local") }}'
-        /etc/ssh/sshd_config.d/00-hardening.conf  # noqa: command-instead-of-module
+        /etc/ssh/sshd_config.d/00-hardening.conf
       changed_when: false
       become: true
       when:
@@ -145,7 +145,7 @@
     - name: Check UnusedConnectionTimeout on its own line (trim_blocks regression guard)
       ansible.builtin.command: >-
         grep -qP '^UnusedConnectionTimeout\s+\d+$'
-        /etc/ssh/sshd_config.d/00-hardening.conf  # noqa: command-instead-of-module
+        /etc/ssh/sshd_config.d/00-hardening.conf
       changed_when: false
       become: true
       register: verify_sshd_unused_timeout

@@ -13,7 +13,7 @@
     # overriding Fedora's 50-coredump.conf fs.suid_dumpable=2. This prevents SUID process crashes
     # from reaching systemd-coredump regardless of system_coredump_storage (CIS 1.5.1 req a —
     # SUID only; RLIMIT_CORE=0 req b applied via limits.d below when storage is none).
-    # SUID crash capture can be re-enabled via fs.suid_dumpable: 2 in system_sysctl_extra_additional (config.yml).
+    # fs.suid_dumpable is hardening-critical: sysctl.yml rejects overrides in system_sysctl_extra and system_sysctl_extra_additional.
     - name: Create /etc/systemd/coredump.conf.d directory
       ansible.builtin.file:
         path: /etc/systemd/coredump.conf.d
@@ -53,13 +53,8 @@
           WARNING: system_coredump_storage is 'external'. Crashes of processes not covered
           by PAM limits (e.g., systemd services) may write decrypted material to
           /var/lib/systemd/coredump/. Set system_coredump_storage: none in config.yml
-          to prevent this. The smoke-test will alert if such coredumps are found.
+          to prevent this.
       when: system_coredump_storage == 'external'
-
-    - name: Remove legacy coredump security warning file
-      ansible.builtin.file:
-        path: /etc/systemd/coredump.conf.d/SECURITY-WARNING
-        state: absent
 
 # RHEL CSB: deploy Storage=none drop-in unconditionally — IT manages diagnostics tooling;
 # provisioning runs hold long-lived vault/key material in memory, so external core capture

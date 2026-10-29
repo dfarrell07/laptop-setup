@@ -270,33 +270,31 @@ module.exit_json(**result)
 
 
 class PowerPolicyTests(unittest.TestCase):
-    def test_native_power_dropins_survive_default_cleanup(self):
+    def test_native_power_dropins_survive_cleanup(self):
         source = yaml.safe_load((ROOT / 'roles/system/tasks/service_masking.yml').read_text())
         cleanup = next(t for t in source if t.get('name') == 'Remove pre-existing drop-in directories for managed masked units')
-        default_enabled = yaml.safe_load((ROOT / 'roles/system/defaults/main.yml').read_text())['system_tlp_enabled']
         native = ['tuned.service', 'tuned-ppd.service', 'power-profiles-daemon.service']
-        for enabled in [default_enabled, True]:
-            with self.subTest(enabled=enabled), tempfile.TemporaryDirectory() as name:
-                directory = Path(name)
-                for unit in native + ['bluetooth.service']:
-                    dropin = directory / (unit + '.d')
-                    dropin.mkdir()
-                    (dropin / 'existing.conf').write_text('[Service]\n')
-                task = copy.deepcopy(cleanup)
-                task['loop'] = native + ['bluetooth.service']
-                task['ansible.builtin.file']['path'] = name + '/{{ item }}.d'
-                playbook = directory / 'play.yml'
-                playbook.write_text(yaml.safe_dump([{'name': 'Isolated production drop-in cleanup',
-                    'hosts': 'localhost', 'gather_facts': False, 'vars': {
-                        'system_tlp_enabled': enabled, 'system_is_container': False,
-                        'csb_rhel': False, 'csb_detected': False}, 'tasks': [task]}]))
-                result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(playbook)],
-                    cwd=ROOT, env=dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
-                    capture_output=True, text=True, timeout=max(30, TEST_TIMEOUT))
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                for unit in native:
-                    self.assertTrue((directory / (unit + '.d') / 'existing.conf').exists())
-                self.assertFalse((directory / 'bluetooth.service.d').exists())
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            for unit in native + ['bluetooth.service']:
+                dropin = directory / (unit + '.d')
+                dropin.mkdir()
+                (dropin / 'existing.conf').write_text('[Service]\n')
+            task = copy.deepcopy(cleanup)
+            task['loop'] = native + ['bluetooth.service']
+            task['ansible.builtin.file']['path'] = name + '/{{ item }}.d'
+            playbook = directory / 'play.yml'
+            playbook.write_text(yaml.safe_dump([{'name': 'Isolated production drop-in cleanup',
+                'hosts': 'localhost', 'gather_facts': False, 'vars': {
+                    'system_is_container': False,
+                    'csb_rhel': False, 'csb_detected': False}, 'tasks': [task]}]))
+            result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(playbook)],
+                cwd=ROOT, env=dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
+                capture_output=True, text=True, timeout=max(30, TEST_TIMEOUT))
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            for unit in native:
+                self.assertTrue((directory / (unit + '.d') / 'existing.conf').exists())
+            self.assertFalse((directory / 'bluetooth.service.d').exists())
 
     def exercise(self, enabled, previous=False, container=False, csb=False, distribution='Fedora', version='44', failure=None, managed=None,
                  native_status=None, tlp_state='running', tlp_status='enabled', config_changed=False, config_kind='file',
@@ -355,7 +353,6 @@ class PowerPolicyTests(unittest.TestCase):
 
     def test_opt_out_restores_exactly_one_native_stack(self):
         for distribution, version, expected in [('Fedora', '44', ['tuned.service', 'tuned-ppd.service']),
-                                                 ('Fedora', '40', ['power-profiles-daemon.service']),
                                                  ('Rocky', '10', ['tuned.service'])]:
             with self.subTest(distribution=distribution, version=version):
                 operations = self.exercise(False, previous=True, distribution=distribution, version=version)

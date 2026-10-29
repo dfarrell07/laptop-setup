@@ -188,12 +188,14 @@
   # (not a repo_X boolean, because the URL is an internal secret)
   # Risk acceptance: gpgcheck and repo_gpgcheck are disabled — this internal Red Hat repo
   # publishes no GPG key or signed metadata. Mitigations: opt-in only (explicit baseurl in
-  # config.yml), profile==work scoped, URL assert enforces *.redhat.com domain.
+  # config.yml), profile==work scoped, URL assert requires the host to be listed in
+  # repos_dnf_internal_hosts (no domain check beyond that list).
   # SECURITY — first-install window: versionlock (below) only guards against post-provision
   # unauthenticated updates; it does NOT protect the first-install window. A compromised repo
   # host at first provision delivers a malicious package which versionlock then pins permanently.
   # Mitigate by setting repos_dnf_acli_binary_sha256 in config.yml (gitignored) to the SHA256
-  # of the trusted acli binary — the play fails immediately if it mismatches. Obtain the hash
+  # of the trusted acli binary — the play fails after the install if it mismatches (the package and
+  # its scriptlets have already run and the versionlock is not applied; dnf remove acli). Obtain the hash
   # out-of-band from IT or internal release notes before provisioning.
   when:
     - profile == 'work'
@@ -226,18 +228,19 @@
       ignore_errors: "{{ ansible_check_mode }}"  # the repo file is not written in check mode, so the package may not resolve
     - name: Warn when acli first-install SHA256 check is not configured
       # repos_dnf_acli_binary_sha256 is not set — no integrity check on the downloaded binary.
-      # Obtain the expected SHA256 out-of-band from IT and set it in config.yml to close
-      # the first-install window (variable name: repos_dnf_acli_binary_sha256).
+      # Obtain the expected SHA256 out-of-band from IT and set it in config.yml for a post-install check
+      # (variable name: repos_dnf_acli_binary_sha256).
       ansible.builtin.debug:
         msg: >-
           SECURITY ADVISORY: repos_dnf_acli_binary_sha256 is not set in config.yml.
           The acli binary was installed from an unsigned repo with no integrity check.
           Obtain the SHA256 hash out-of-band from IT and add
-          repos_dnf_acli_binary_sha256 to config.yml to enable first-install verification.
+          repos_dnf_acli_binary_sha256 to config.yml to enable a post-install check (it detects a mismatch after
+          the package scriptlets have run; it does not prevent them).
       when: repos_dnf_acli_binary_sha256 is not defined
     - name: Stat acli binary for SHA256 first-install integrity check
       # Only runs when repos_dnf_acli_binary_sha256 is set in config.yml.
-      # This is the sole guard against a compromised first-install payload;
+      # Post-install check: detects a mismatch after the scriptlets ran, does not prevent them;
       # versionlock below only prevents unauthenticated updates after this point.
       ansible.builtin.stat:
         path: /usr/bin/acli
@@ -277,7 +280,7 @@
         _csb_role: repos_dnf
         _csb_task_name: "Add acli repository"
         _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
-        _csb_action: "Install acli via pipx: pipx install atlassian-cli"
+        _csb_action: "Request access to the internal acli RPM repository; it is the only supported channel"
         _csb_ticket_summary: "Exception request: acli RPM repository"
         _csb_ticket_body: >-
           acli is a Red Hat-internal command-line tool for Jira and Confluence automation.
@@ -580,7 +583,7 @@
 - name: Add Tailscale repo
   when:
     - repo_tailscale
-    - not csb_rhel
+    - not csb_detected  # IT repo allowlist; tailscale installs from the base Fedora repos
   block:
     - name: Assert Tailscale GPG fingerprint is 40 hex digits (interpolated into a shell script)
       ansible.builtin.assert:
@@ -660,79 +663,48 @@
 # yum_repository state: absent deletes /etc/yum.repos.d/<name>.repo idempotently.
 # A repo whose package is installed is kept: removing it silently stops that package's
 # security updates (e.g. a browser installed outside this playbook).
-# Exception: redhat-internal is removed whenever it is not configured (its packages are not tracked).
+# Exception: redhat-internal is removed whenever it is not configured (its packages are not tracked), except on CSB (IT-managed repo file).
 - name: Gather installed packages before third-party repo cleanup
   ansible.builtin.package_facts:
     manager: rpm
 
-- name: Keep disabled third-party repos whose packages are installed
-  ansible.builtin.debug:
-    msg: >-
-      Keeping the {{ item.repo }} repo although {{ item.toggle }} is false: {{ item.pkg }} is
-      installed and would stop receiving updates. Set {{ item.toggle }}: true in config.yml to
-      silence this, or remove the package first.
-  loop:
-    - {repo: google-chrome, pkg: google-chrome-stable, toggle: repo_google_chrome, enabled: "{{ repo_google_chrome }}"}
-    - {repo: google-cloud-cli, pkg: google-cloud-cli, toggle: repo_google_cloud_sdk, enabled: "{{ repo_google_cloud_sdk }}"}
-    - {repo: mullvad, pkg: mullvad-vpn, toggle: repo_mullvad, enabled: "{{ repo_mullvad }}"}
-    - {repo: docker-ce, pkg: docker-ce, toggle: repo_docker_ce, enabled: "{{ repo_docker_ce }}"}
-    - {repo: tailscale-stable, pkg: tailscale, toggle: repo_tailscale, enabled: "{{ repo_tailscale }}"}
-  loop_control:
-    label: "{{ item.repo }}"
-  when:
-    - not (item.enabled | bool)
-    - item.pkg in ansible_facts.packages
-    - not (csb_detected and item.repo in ['google-chrome', 'google-cloud-cli'])  # IT-managed repo files
+- name: Third-party repo cleanup for disabled toggles
+  vars:
+    _repos_dnf_toggled:
+      - {repo: gh-cli, pkg: gh, toggle: repo_gh_cli, enabled: "{{ repo_gh_cli }}"}
+      - {repo: google-chrome, pkg: google-chrome-stable, toggle: repo_google_chrome, enabled: "{{ repo_google_chrome }}"}
+      - {repo: google-cloud-cli, pkg: google-cloud-cli, toggle: repo_google_cloud_sdk, enabled: "{{ repo_google_cloud_sdk }}"}
+      - {repo: mullvad, pkg: mullvad-vpn, toggle: repo_mullvad, enabled: "{{ repo_mullvad }}"}
+      - {repo: docker-ce, pkg: docker-ce, toggle: repo_docker_ce, enabled: "{{ repo_docker_ce }}"}
+      - {repo: tailscale-stable, pkg: tailscale, toggle: repo_tailscale, enabled: "{{ repo_tailscale }}"}
+  block:
+    - name: Keep disabled third-party repos whose packages are installed
+      # tailscale-stable is excluded from the notice: tailscale may come from the base repos. The removal task
+      # below still keeps an existing tailscale-stable.repo while the package is installed.
+      ansible.builtin.debug:
+        msg: >-
+          Keeping the {{ item.repo }} repo although {{ item.toggle }} is false: {{ item.pkg }} is
+          installed and would stop receiving updates. Set {{ item.toggle }}: true in config.yml to
+          silence this, or remove the package first.
+      loop: "{{ _repos_dnf_toggled | rejectattr('repo', 'eq', 'tailscale-stable') | list }}"
+      loop_control:
+        label: "{{ item.repo }}"
+      when:
+        - not (item.enabled | bool)
+        - item.pkg in ansible_facts.packages
+        - not (csb_detected and item.repo in ['google-chrome', 'google-cloud-cli'])  # IT-managed repo files
 
-- name: Remove gh-cli repo when disabled
-  ansible.builtin.yum_repository:
-    name: gh-cli
-    state: absent
-  when:
-    - not repo_gh_cli
-    - "'gh' not in ansible_facts.packages"  # keep updates flowing for an installed gh
-
-- name: Remove google-chrome repo when disabled
-  ansible.builtin.yum_repository:
-    name: google-chrome
-    state: absent
-  when:
-    - not repo_google_chrome
-    - "'google-chrome-stable' not in ansible_facts.packages"
-    - not csb_detected  # IT-managed repo file on CSB
-
-- name: Remove google-cloud-cli repo when disabled
-  ansible.builtin.yum_repository:
-    name: google-cloud-cli
-    state: absent
-  when:
-    - not repo_google_cloud_sdk
-    - "'google-cloud-cli' not in ansible_facts.packages"
-    - not csb_detected  # IT-managed repo file on CSB
-
-- name: Remove mullvad repo when disabled
-  ansible.builtin.yum_repository:
-    name: mullvad
-    state: absent
-  when:
-    - not repo_mullvad
-    - "'mullvad-vpn' not in ansible_facts.packages"
-
-- name: Remove docker-ce repo when disabled
-  ansible.builtin.yum_repository:
-    name: docker-ce
-    state: absent
-  when:
-    - not repo_docker_ce
-    - "'docker-ce' not in ansible_facts.packages"
-
-- name: Remove tailscale-stable repo when disabled
-  ansible.builtin.yum_repository:
-    name: tailscale-stable
-    state: absent
-  when:
-    - not repo_tailscale
-    - "'tailscale' not in ansible_facts.packages"
+    - name: Remove disabled third-party repo files
+      ansible.builtin.yum_repository:
+        name: "{{ item.repo }}"
+        state: absent
+      loop: "{{ _repos_dnf_toggled }}"
+      loop_control:
+        label: "{{ item.repo }}"
+      when:
+        - not (item.enabled | bool)
+        - item.pkg not in ansible_facts.packages
+        - not (csb_detected and item.repo in ['google-chrome', 'google-cloud-cli'])  # IT-managed repo files
 
 - name: Remove acli repo when disabled
   ansible.builtin.yum_repository:
@@ -746,4 +718,6 @@
   ansible.builtin.yum_repository:
     name: redhat-internal
     state: absent
-  when: not (repo_redhat and profile == 'work' and repos_dnf_redhat_baseurl is defined)
+  when:
+    - not (repo_redhat and profile == 'work' and repos_dnf_redhat_baseurl is defined)
+    - not csb_detected  # IT-managed repo file on CSB

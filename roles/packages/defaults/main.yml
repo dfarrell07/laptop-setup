@@ -65,8 +65,6 @@ packages_security_yubikey:
 packages_apt_yubikey:
   - yubikey-manager
   - pcscd  # smart-card daemon; ykman PIV/OATH talk to the key through it
-  - yubikey-personalization  # legacy: provides ykpersonalize (EOL Feb 2026);
-                              # setup-yubikeys.sh uses yubikey-manager only
 
 # macOS: ykpers/ykpersonalize not available on Homebrew (EOL Feb 2026);
 # setup-yubikeys.sh uses ykman for all operations
@@ -178,7 +176,7 @@ packages_apt:
 packages_apt_work:
   - awscli
   # Debian 13 ships Go 1.24; gofumpt/govulncheck need 1.25, gopls needs 1.26.
-  # GOTOOLCHAIN=auto (default in packages_gotoolchain) downloads the toolchain on demand.
+  # GOTOOLCHAIN=auto (opt-in via packages_gotoolchain: auto) downloads the toolchain on demand.
   - golang  # work-only on Debian (mirrors packages_languages_work on Fedora); 300+ MB — skip for personal
   - gcc     # CGO builds — mirrors packages_languages_work on Fedora
   - nmap    # network scanner; work-only (mirrors packages_networking_work on Fedora)
@@ -268,7 +266,6 @@ packages_kubectl_source: ocp
 # Fetch latest: curl -L -s https://dl.k8s.io/release/stable.txt
 packages_kubectl_version: "1.36.3"
 packages_kubectl_sha256: "ebbd080e7c2e275093b55915722043257eb24004363e20acb3c4d71919f88336"  # x86_64 Linux
-packages_kubectl_sha256_arm64: "3d86f24401c41ae5a46ac50eef8865fe891d3647d324a0836f6c63757a126e62"  # arm64 Linux
 
 packages_go_install: []  # no universal Go tools; all dev tools are profile-scoped below
 # GOTOOLCHAIN env for go install; 'local' prevents runtime toolchain downloads (aligns with SHA256-pinned pattern).
@@ -310,7 +307,7 @@ packages_go_install_work:
   - "github.com/stern/stern@v{{ packages_stern_version }}"
 
 # Versioned subctl installs: each entry becomes subctl<major><minor> in ~/.local/bin.
-# Example: {version: "0.18.0", suffix: "18"} → installs /usr/local/bin → ~/.local/bin/subctl18
+# Example: {version: "0.18.0", suffix: "18"} → installs ~/.local/bin/subctl18
 # Useful when managing Submariner clusters at different broker API versions.
 # The latest version should also be in packages_go_install_work (as plain 'subctl').
 packages_code_generator_version: "0.36.2"  # governs all k8s.io/code-generator/* tools; bump with OVN-K k8s upgrade
@@ -349,7 +346,7 @@ packages_gosumdb_proxy: ''
 # GOPROXY value for go install; override with corporate mirror (e.g. 'https://goproxy.corp.com,direct')
 packages_goproxy: 'https://proxy.golang.org,direct'
 
-packages_install_binaries: true  # fallback; authoritative definition in group_vars/all/vars.yml; consumed by packages, claude, distrobox
+packages_install_binaries: true  # fallback; authoritative in group_vars/all/vars.yml; consumed by packages, claude, codex, distrobox
 install_virtualization: true  # fallback; authoritative value in group_vars/all/vars.yml
 network_proxied: false  # fallback; authoritative value in group_vars/all/vars.yml
 proxy_url: ''  # fallback; authoritative value in group_vars/all/vars.yml
@@ -366,8 +363,6 @@ system_is_container: false  # fallback; authoritative value in group_vars/all/va
 packages_brew_taps: []
 
 packages_brew_taps_yubikey: []
-
-packages_brew_taps_work: []  # AeroSpace removed from tap; installed via direct SHA256-verified download (see install_brew.yml)
 
 packages_brew_update: false  # launchd refreshes metadata; updating on every provision is slow
 packages_brew_autoupdate_interval: 86400  # seconds per metadata refresh; 0 disables the background job
@@ -435,7 +430,7 @@ packages_brew_work:
   - iperf3
   - wireshark  # Homebrew formula is the CLI build (provides tshark); the GUI is a separate cask
   - k9s   # NOTE: unversioned on macOS (brew tracks latest); Linux uses pinned binary via install_binary_downloads.yml
-  - krew  # NOTE: unversioned on macOS (brew tracks latest); Linux pins bootstrap via packages_krew_bootstrap_version; self-manages updates
+  - krew  # NOTE: unversioned on macOS (brew tracks latest); Linux pins bootstrap via packages_krew_bootstrap_version
   - mtr  # requires sudo on macOS for ICMP (raw socket); on Linux, capabilities handle it
   - actionlint  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_actionlint_version pin
   - zizmor      # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_zizmor_version pin

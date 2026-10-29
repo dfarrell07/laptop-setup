@@ -1,6 +1,6 @@
 ---
 # Shared container-safe overrides for the system role in all molecule CI scenarios.
-# Included by molecule/{fedora,rocky,debian}/converge.yml system role pre_tasks.
+# Included via common-system-play-pre-tasks.yml (directly by debian, through dnf-system-play-pre-tasks.yml for fedora and rocky).
 # Prevents container-incompatible tasks from running in Podman-based CI scenarios.
 # NOTE: sshd hardening is exercised in Fedora container CI (openssh-server is
 # pre-installed by prepare.yml; Rocky installs it in converge, but csb_rhel skips the

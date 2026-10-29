@@ -7,7 +7,6 @@
 - name: Install and enable dnf-automatic
   when:
     - is_dnf
-    - not csb_rhel
     - not system_is_container  # RPM post-install calls systemctl daemon-reload, crashes Podman container systemd
   block:
     - name: Install dnf-automatic
@@ -37,23 +36,6 @@
       when: not (ansible_check_mode and system_dnf_automatic_installed is changed)
 
   rescue:
-    - name: Record dnf-automatic install/enable failure (CSB restriction)
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: system
-        _csb_task_name: "Install and enable dnf-automatic"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
-        _csb_action: >-
-          Check repo connectivity and re-run provisioning. Automatic security updates
-          are disabled until dnf-automatic is installed and enabled.
-        _csb_ticket_summary: "Cannot install dnf-automatic on CSB"
-        _csb_ticket_body: >-
-          Attempted to install {{ 'dnf5-plugin-automatic' if is_dnf5 else 'dnf-automatic' }}
-          but installation failed. Error: {{ ansible_failed_result.msg | default('unknown error') }}.
-          This may indicate repo connectivity issues or package unavailability.
-          Automatic security updates are disabled without dnf-automatic.
-      when: csb_detected
-
     - name: Fail on dnf-automatic install/enable failure
       ansible.builtin.fail:
         msg: >-
@@ -71,7 +53,6 @@
     - is_dnf
     - system_aide_enabled | bool
     - system_dnf_automatic_apply_updates | bool
-    - not csb_rhel
     - not system_is_container
     - _dnf_auto_svc is defined
 
@@ -94,7 +75,6 @@
     - is_dnf
     - system_aide_enabled | bool
     - system_dnf_automatic_apply_updates | bool  # hook only meaningful when packages are applied
-    - not csb_rhel  # dnf-automatic not installed on CSB
     - not system_is_container
     - _dnf_auto_svc is defined
   notify: Restart dnf-automatic timer
@@ -107,7 +87,6 @@
     - is_dnf
     - system_aide_enabled | bool
     - not (system_dnf_automatic_apply_updates | bool)
-    - not csb_rhel
     - not system_is_container
     - _dnf_auto_svc is defined
   notify: Restart dnf-automatic timer

@@ -29,8 +29,7 @@
     - system_authselect_bin.stat.exists
     - is_dnf  # authselect is RHEL/Fedora only; avoids spurious changed=1 on Debian
     - system_authselect_current.stdout | default('') is not search('^(sssd|ipa-client|ipa)( |$)')
-    - not csb_rhel
-    - not csb_detected  # on Fedora hybrid CSB, IT may use a non-sssd base (e.g. ipa) —
+    - not csb_detected  # on Fedora hybrid CSB, IT may use a non-sssd base —
       # --force would wipe IT-managed PAM customizations; defer authselect base selection to IT
     - not system_is_container  # PAM restarts crash privileged container init
   changed_when: system_authselect_select_result.rc | default(1) == 0
@@ -62,7 +61,6 @@
   when:
     - system_authselect_bin.stat.exists
     - is_dnf
-    - not csb_rhel
     - not csb_detected
     - not system_is_container
     - system_authselect_select_result.rc | default(1) == 0
@@ -76,7 +74,6 @@
   when:
     - system_authselect_bin.stat.exists
     - is_dnf
-    - not csb_rhel
     - not csb_detected
     - not system_is_container
     - system_authselect_select_result.rc | default(1) == 0
@@ -93,7 +90,6 @@
   check_mode: false  # read-only probe — must run in check mode
   when:
     - system_authselect_bin.stat.exists
-    - not csb_rhel
     - not csb_detected  # hybrid Fedora CSB: IT manages authselect/fprintd; skip fingerprint management
 
 - name: Disable authselect with-fingerprint feature
@@ -104,7 +100,6 @@
     - system_disable_fingerprint | bool
     - system_authselect_bin.stat.exists
     - system_authselect_fingerprint_check.rc | default(1) == 0
-    - not csb_rhel  # CSB: IT manages authselect profile; all other authselect action tasks carry this guard
     - not csb_detected  # Hybrid CSB: IT may have enabled fingerprint as access policy; don't disable
     - not system_is_container  # authselect enable/disable-feature triggers PAM reload → inotify → daemon-reload → crashes container
   changed_when: system_authselect_disable_fp_result.rc == 0
@@ -120,7 +115,6 @@
   when:
     - system_authselect_disable_fp_result.rc | default(0) != 0
     - system_authselect_disable_fp_result is not skipped
-    - not csb_rhel
     - not csb_detected
     - not system_is_container
 
@@ -129,7 +123,6 @@
     path: /usr/lib/systemd/system/fprintd.service
   register: fprintd_unit_stat
   when:
-    - not csb_rhel
     - not csb_detected
     - not system_is_container
 
@@ -139,7 +132,6 @@
     masked: "{{ system_disable_fingerprint | bool }}"
     state: "{{ 'stopped' if system_disable_fingerprint | bool else omit }}"
   when:
-    - not csb_rhel  # CSB: IT manages fprintd/fingerprint auth
     - not csb_detected  # Hybrid CSB: IT may manage fprintd; don't mask
     - not system_is_container  # systemctl mask writes to /etc/systemd/system/, triggers inotify → daemon-reload → crashes containers
     - fprintd_unit_stat.stat.exists | default(false)
@@ -155,7 +147,6 @@
   when:
     - not ansible_check_mode  # the mask above is only simulated in check mode
     - system_disable_fingerprint | bool
-    - not csb_rhel
     - not csb_detected
     - not system_is_container
     - fprintd_unit_stat.stat.exists | default(false)
@@ -168,8 +159,7 @@
     - not (system_disable_fingerprint | bool)
     - system_authselect_bin.stat.exists
     - system_authselect_fingerprint_check.rc | default(1) != 0
-    - not csb_rhel
-    - not csb_detected  # CSB: IT manages authselect; all authselect action tasks skip on CSB
+    - not csb_detected  # CSB: IT manages fingerprint auth; with-fingerprint is not toggled on CSB
     - not system_is_container  # authselect enable/disable-feature triggers PAM reload → inotify → daemon-reload → crashes container
   changed_when: system_authselect_enable_fp_result.rc == 0
   failed_when: false
@@ -187,7 +177,6 @@
     - not ansible_check_mode  # the disable-feature command is skipped in check mode
     - system_disable_fingerprint | bool
     - system_authselect_bin.stat.exists
-    - not csb_rhel
     - not csb_detected  # Hybrid CSB: IT manages authselect; skip post-disable verification
     - not system_is_container
 
@@ -201,7 +190,6 @@
     - not ansible_check_mode  # the disable-feature command is skipped in check mode
     - system_disable_fingerprint | bool
     - system_authselect_bin.stat.exists
-    - not csb_rhel
     - not csb_detected
     - not system_is_container
     - system_authselect_post_fp_probe is not skipped

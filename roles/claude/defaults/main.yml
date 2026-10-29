@@ -11,7 +11,7 @@ claude_install_method: native  # native (recommended) or skip (CI/testing — by
 claude_install_url: "https://claude.ai/install.sh"  # Fetches latest at provision time; post-install upgrades use `claude update`
 # SECURITY: SHA256 integrity verification is MANDATORY — set in config.yml before make all
 claude_install_sha256: ""
-claude_pinned_version: ""  # minimum version, pin in config.yml (e.g. "1.0.3"); installed when missing or older; empty = latest
+claude_pinned_version: ""  # minimum version; REQUIRED when claude_install_sha256 is set (native), e.g. "1.0.3"
 claude_bin_path: "{{ ansible_facts['user_dir'] }}/.local/bin/claude"
 claude_queue_poller_path: "{{ ansible_facts['user_dir'] }}/.local/bin/claude-queue-poller.sh"
 
@@ -101,7 +101,7 @@ claude_deny_sensitive:
   - "~/.docker/config.json"
   - "~/.local/share/keyrings/**"
   - "~/.config/helm/**"
-  - "~/.config/claude/**"  # queue-repos.conf and work-env — read denied (defense-in-depth; write also blocked via claude_deny_write_only)
+  - "~/.config/claude/**"  # queue-repos.conf and work-env; Read and Edit denied
   - "~/.azure/**"
   - "~/.config/rclone/**"
   - "~/.gitconfig"
@@ -160,7 +160,6 @@ claude_own_instance_deny_write:
   - "output-styles/**"
 
 claude_deny_write_only:
-  - "~/.config/claude/**"  # Edit denied (covers Write); Read also denied via claude_deny_sensitive entry below — defense-in-depth
   - "~/.config/systemd/user/**"  # Claude-the-agent only; Ansible deploys claude-queue.service/timer here
   - "~/.bashrc"
   - "~/.zshrc"

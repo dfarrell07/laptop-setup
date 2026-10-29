@@ -84,8 +84,7 @@ else
 fi
 CONFIG_FILE="$SCRIPT_DIR/../config.yml"
 if [[ -z "$PROFILE" ]]; then
-  PROFILE="work"  # default matches group_vars/all/vars.yml; overridden by macOS detection or config.yml profile: line below
-  [[ "$OS_FAMILY" == "darwin" ]] && PROFILE="personal"
+  PROFILE="work"  # default matches group_vars/all/vars.yml; overridden by the config.yml profile: line below
   # Apply config.yml profile override in both directions
   if [[ -f "$CONFIG_FILE" ]]; then
     if grep -qE '^profile:[[:space:]]*["'"'"']?work["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then
@@ -260,10 +259,7 @@ fi
 if [[ ! -f "$CONFIG_FILE" ]]; then
   record "config_yml" "fail" "config.yml missing — create it before running make all (Play 1 runs fully before Play 2 checks identity; SSH port moves to 722 and kernel hardening applies before the CHANGE_ME assert fires)"
 elif ! grep -q '^desktop_environment:' "$CONFIG_FILE"; then
-  record "config_yml" "fail" "config.yml exists but does not set desktop_environment — 'auto' detection fails before any WM is installed; set 'desktop_environment: sway' (or i3/gnome)"
-# Intentional: 'auto' subset of the generic check below; gives a more actionable error for the common mistake
-elif grep -qE '^desktop_environment:[[:space:]]*["'"'"']?auto["'"'"']?([[:space:]]|$)' "$CONFIG_FILE"; then
-  record "config_yml" "fail" "desktop_environment is 'auto' — auto-detection requires an active XDG session and will fail on first provision; set 'desktop_environment: sway' (or i3/gnome) in config.yml"
+  record "config_yml" "fail" "config.yml exists but does not set desktop_environment; set 'desktop_environment: sway' (or i3/gnome)"
 elif ! grep -qE '^desktop_environment:[[:space:]]*["'"'"']?('"$([[ "$OS_FAMILY" == darwin ]] && echo aerospace || echo 'sway|i3|gnome')"')["'"'"']?([[:space:]]|$)' "$CONFIG_FILE"; then
   record "config_yml" "fail" "desktop_environment must be $([[ "$OS_FAMILY" == darwin ]] && echo aerospace || echo 'sway, i3, or gnome') — got: $(grep '^desktop_environment:' "$CONFIG_FILE")"
 else
@@ -365,7 +361,7 @@ fi
 FAPOLICYD_BLOCKING=false
 if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
   if systemctl is-active fapolicyd &>/dev/null; then
-    if grep -qiE '^permissive[[:space:]]*=[[:space:]]*1([[:space:]]*(#.*))?$' /etc/fapolicyd/fapolicyd.conf 2>/dev/null; then
+    if grep -qiE '^[[:space:]]*permissive[[:space:]]*=[[:space:]]*1([[:space:]]|#|$)' /etc/fapolicyd/fapolicyd.conf 2>/dev/null; then
       record "fapolicyd" "warn" "active but permissive mode (permissive=1 in config) — /tmp execution allowed"
     else
       FAPOLICYD_BLOCKING=true
@@ -410,7 +406,7 @@ if [[ -f "$CONFIG_FILE" ]]; then
     trackpoint_value=$(grep '^desktop_i3_trackpoint_id:' "$CONFIG_FILE" | cut -d: -f2- | sed "s/^[[:space:]]*//;s/[[:space:]][[:space:]]*#.*$//;s/[[:space:]]*$//" | tr -d "'" | tr -d '"')
     if [[ -n "$trackpoint_value" ]]; then
       if [[ "$trackpoint_value" =~ [^a-zA-Z0-9_./\ -] ]]; then
-        record "config_trackpoint_id" "fail" "desktop_i3_trackpoint_id contains unsafe characters — alphanumeric, spaces, hyphens, underscores only"
+        record "config_trackpoint_id" "fail" "desktop_i3_trackpoint_id contains unsafe characters — alphanumeric, spaces, hyphens, underscores, dots, slashes only"
       else
         record "config_trackpoint_id" "pass" "desktop_i3_trackpoint_id is safe"
       fi

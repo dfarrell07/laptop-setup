@@ -2,7 +2,7 @@
 # roles/system/tasks/usbguard.yml
 # USBGuard install/enable (or stop/disable when system_install_usbguard is false).
 # Split from services.yml so it can be a separate chunk (sys_usbguard); imported from main.yml
-# right after services.yml. The "Restart usbguard" handler runs at the next flush point, as it did in services.yml.
+# right after services.yml. The "Restart usbguard" handler runs at the flush right after the import in main.yml.
 
 - name: Detect usbguard (may not be installed)
   ansible.builtin.command: # noqa: command-instead-of-module
@@ -71,6 +71,7 @@
         group: root
         mode: "0600"
       notify: Restart usbguard
+      when: not _system_usbguard_pending | bool
       # No failed_when: false — a missing or corrupt rules.conf means USBGuard starts
       # with ImplicitPolicyTarget=block and an empty ruleset, blocking all USB devices
       # including the keyboard. Template failure must be a hard stop.

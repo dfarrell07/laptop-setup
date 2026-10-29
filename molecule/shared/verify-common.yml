@@ -1042,7 +1042,7 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
 
 - name: Assert DNS-over-TLS config deployed
   ansible.builtin.assert:
@@ -1056,7 +1056,7 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
 
 - name: Slurp DNS-over-TLS drop-in content
   ansible.builtin.slurp:
@@ -1065,7 +1065,7 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
     - verify_dot_conf.stat.exists
 
 - name: Assert DNSOverTLS= value matches deployed variable
@@ -1079,7 +1079,7 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
     - verify_dot_conf.stat.exists
 
 - name: Stat /etc/resolv.conf (symlink check)
@@ -1589,7 +1589,7 @@
   when:
     - item is not skipped
 
-- name: Read immutable audit policy receipt
+- name: Read audit policy receipt
   ansible.builtin.slurp:
     src: /etc/audit/claude-code-policy.json
   register: verify_audit_policy_receipt
@@ -1622,8 +1622,7 @@
     - item.split('exe=')[-1] not in ((verify_audit_policy_receipt.content | b64decode | from_json).omitted_executables)
 
 # --- auditd.conf coverage (deployed by system role on non-CSB Linux) ---
-# auditd.yml deploys auditd.conf only when not csb_detected: IT owns it on every CSB tier
-# (RHEL CSB via SCAP, hybrid Fedora CSB via osquery/Kolide Fleet).
+# auditd.yml deploys auditd.conf only when not csb_detected (IT-owned on CSB).
 - name: Stat /etc/audit/auditd.conf
   ansible.builtin.stat:
     path: /etc/audit/auditd.conf
@@ -1780,6 +1779,7 @@
   when:
     - ansible_system == 'Linux'
     - verify_gdm.stat.exists | default(false)
+    - not csb_detected | default(false)
 
 - name: Check dconf 51-screensaver has lock-enabled=true (CIS 1.8.5)
   ansible.builtin.command: grep -q '^lock-enabled=true' /etc/dconf/db/local.d/51-screensaver
@@ -1910,7 +1910,7 @@
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
     - ansible_os_family != 'Debian'
-    - not csb_detected  # session_timeout.yml skips TMOUT on all CSB tiers
+    - not csb_rhel  # session_timeout.yml leaves TMOUT to IT on RHEL CSB only
     - system_tmout | int > 0
 
 # No system_is_container guard: session_timeout.yml writes /etc/zshrc in containers (unlike profile.d which crashes PID 1)
@@ -1920,7 +1920,7 @@
   when:
     - ansible_system == 'Linux'
     - ansible_os_family != 'Debian'
-    - not csb_detected  # session_timeout.yml skips TMOUT on all CSB tiers
+    - not csb_rhel  # session_timeout.yml leaves TMOUT to IT on RHEL CSB only
     - system_tmout | int > 0
 
 - name: Check TMOUT typeset -xr in /etc/zsh/zshrc (CIS 5.5.5 — zsh, Debian GLOBAL_ZSHRC)

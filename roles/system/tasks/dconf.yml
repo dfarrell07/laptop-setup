@@ -81,6 +81,7 @@
         mode: "0644"
       notify: Apply dconf schema database
 
+# IT owns the idle-delay and screen-lock keys on CSB hosts; skip both screensaver tasks there.
 - name: Deploy screensaver/idle lock policy (CIS 1.8.4/1.8.5)
   ansible.builtin.copy:
     content: |
@@ -94,6 +95,7 @@
       lock-delay=uint32 0
     dest: /etc/dconf/db/local.d/51-screensaver
     mode: "0644"
+  when: not csb_detected
   notify: Apply dconf schema database
 
 - name: Lock screensaver/idle settings (CIS 1.8.5)
@@ -104,6 +106,7 @@
       /org/gnome/desktop/screensaver/lock-delay
     dest: /etc/dconf/db/local.d/locks/51-screensaver
     mode: "0644"
+  when: not csb_detected
   notify: Apply dconf schema database
 
 - name: Disable XDCMP in GDM (CIS 1.8.10)

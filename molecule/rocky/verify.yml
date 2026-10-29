@@ -74,7 +74,7 @@
     - name: Include dnf verify assertions
       ansible.builtin.import_tasks: ../shared/verify-dnf.yml
 
-    # DNS-over-TLS (99-dot.conf) checked in molecule/shared/verify-common.yml
+    # DNS-over-TLS (99-dot.conf) is skipped in container CI (system_is_container); only the VM scenario checks it (vm/verify.yml).
 
     - name: Stat repositories excluded on corporate RHEL
       ansible.builtin.stat:
@@ -100,7 +100,7 @@
       ansible.builtin.import_tasks: ../shared/verify-notes.yml
 
     # --- Desktop role ---
-    - name: "Include Alacritty assertions (Chrome policy CI gap: not system_is_container)"
+    - name: "Include Alacritty assertions"
       ansible.builtin.import_tasks: ../shared/verify-desktop-common.yml
 
     # --- Claude task queue (shared/ci-default-vars.yml sets claude_queue_enabled: true) ---

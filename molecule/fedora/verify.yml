@@ -65,7 +65,7 @@
       ansible.builtin.import_tasks: ../shared/verify-notes.yml
 
     # --- Desktop role ---
-    - name: "Include desktop common assertions (Alacritty; Chrome policy skipped when system_is_container)"
+    - name: "Include desktop common assertions (Alacritty)"
       ansible.builtin.import_tasks: ../shared/verify-desktop-common.yml
 
     # --- Desktop WM configs (converge sets desktop_environment: sway) ---
@@ -88,7 +88,7 @@
     - name: Import Claude queue verification tasks
       ansible.builtin.import_tasks: ../shared/verify-claude-queue.yml
 
-    # DNS-over-TLS (99-dot.conf) checked in molecule/shared/verify-common.yml
+    # DNS-over-TLS (99-dot.conf) is skipped in container CI (system_is_container); only the VM scenario checks it (vm/verify.yml).
 
     # --- distrobox role: no-op path (packages_containers emptied in converge) ---
     - name: Import distrobox no-op path assertions

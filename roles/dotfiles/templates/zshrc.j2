@@ -129,7 +129,7 @@ cw() {
 ccp() {
   command -v tmux &>/dev/null || { echo "ERROR: tmux not found"; return 1; }
   local phys="$(pwd -P)"
-{% if dotfiles_work_src_dirs %}
+{% if profile == 'work' and dotfiles_work_src_dirs %}
   case "$phys" in
 {% for d in dotfiles_work_src_dirs %}
   */src/{{ d | regex_replace('[^a-zA-Z0-9_-]', '') }}|*/src/{{ d | regex_replace('[^a-zA-Z0-9_-]', '') }}/*)
@@ -364,9 +364,7 @@ alias vpn='netstat -rn | grep -E "utun|wg"'
 {% else %}
 alias vpn='ip route | grep -E "tun|wg"'
 {% endif %}
-{% if repo_tailscale | default(true) %}
-alias ts='tailscale status'
-{% endif %}
+command -v tailscale &>/dev/null && alias ts='tailscale status'
 
 # --- General aliases ---
 command -v gvim &>/dev/null && alias gv="gvim -vp"
@@ -380,7 +378,6 @@ alias -g ....='../../..'
 alias -g .....='../../../..'
 alias -g ......='../../../../..'
 alias -g .......='../../../../../..'
-unset GREP_OPTIONS
 
 # --- umask ---
 umask 077

@@ -65,6 +65,8 @@ class RegistryTests(unittest.TestCase):
                 with self.subTest(chunk=name, check=check):
                     if re.search(r'^\s*_ug_chk ' + re.escape(check) + ' ', script, re.M):
                         continue  # recorded by the _ug_chk helper, which records PASS generically
+                    if re.search(r'^\s*_sysctl_check "[^"]+"\s+"[^"]*"\s+"' + re.escape(check) + '"', script, re.M):
+                        continue  # recorded by the _sysctl_check helper
                     self.assertRegex(script, r'record "' + re.escape(check) + r'"')
                     # --only treats anything but PASS as unverified: a check that can never PASS is useless here
                     self.assertRegex(script, r'record [\'"]' + re.escape(check) + r'[\'"] [\'"]PASS[\'"]')
@@ -129,7 +131,7 @@ class CliTests(unittest.TestCase):
         self.assertIn('login_shell', result.stdout.strip().split(','))
 
     def test_invalid_config_exits_2_with_one_message(self):
-        result = self.run_cli('check', 'rollout_enable: [packges]\n')
+        result = self.run_cli('skip-tags', 'rollout_enable: [packges]\n')
         self.assertEqual(result.returncode, 2)
         self.assertEqual(result.stderr.count('ERROR'), 1)
         self.assertIn("did you mean 'packages'", result.stderr)
@@ -225,6 +227,7 @@ class TagTests(unittest.TestCase):
         'system : Apply pending handlers (GRUB)',
         'system : Apply pending handlers (auditd)',
         'system : Apply pending handlers (chrony)',
+        'system : Apply pending handlers (baseline, USBGuard)',
     }
 
     def test_system_tasks_belong_to_a_chunk_or_are_allowed_prerequisites(self):
@@ -412,7 +415,7 @@ class ConfirmationTests(unittest.TestCase):
         self.assertNotIn('--system-only', command)
 
     def test_malformed_yaml_is_a_clean_error(self):
-        result = subprocess.run([sys.executable, str(ROOT / 'scripts/rollout.py'), 'check',
+        result = subprocess.run([sys.executable, str(ROOT / 'scripts/rollout.py'), 'skip-tags',
                                  '--config', config('rollout_enable: [unclosed\n')], capture_output=True, text=True)
         self.assertEqual(result.returncode, 2)
         self.assertIn('not valid YAML', result.stderr)
@@ -422,7 +425,7 @@ class ConfirmationTests(unittest.TestCase):
 
 class UxTests(unittest.TestCase):
     def test_bad_type_error_names_config_and_echoes_the_value(self):
-        result = subprocess.run([sys.executable, str(ROOT / 'scripts/rollout.py'), 'check', '--config',
+        result = subprocess.run([sys.executable, str(ROOT / 'scripts/rollout.py'), 'skip-tags', '--config',
                                  config("rollout_enable: 'All'\n")], capture_output=True, text=True)
         self.assertEqual(result.returncode, 2)
         self.assertIn("config.yml: rollout_enable is 'All' (str)", result.stderr)

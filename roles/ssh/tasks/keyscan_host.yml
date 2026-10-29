@@ -98,8 +98,15 @@
           WARNING: ssh-keyscan output contained no lines starting with '{{ _ks_host }}'.
           known_hosts was not pre-seeded — git clone will prompt on first connection.
       when:
-        - ssh_keyscan_result is succeeded  # an unreachable host is reported after the block
+        - ssh_keyscan_result is succeeded  # an unreachable host is reported at the end of the block
         - (ssh_keyscan_result.stdout_lines | select('match', '^' + (_ks_host | regex_escape)) | list | length) == 0
+
+    - name: Warn — could not fetch host keys for {{ _ks_host }}
+      ansible.builtin.debug:
+        msg: >
+          WARNING: Could not fetch {{ _ks_host }} SSH host keys
+          (VPN may be required). known_hosts not pre-seeded.
+      when: ssh_keyscan_result is failed
 
   rescue:
     - name: Abort — fingerprint mismatch (MITM risk) for {{ _ks_host }}
@@ -113,10 +120,3 @@
       ansible.builtin.fail:
         msg: "{{ ansible_failed_result.msg | default('unexpected error in keyscan block') }}"
       when: "'Verify host key fingerprint' not in (ansible_failed_task.name | default(''))"
-
-- name: Warn — could not fetch host keys for {{ _keyscan_host.host | default(_keyscan_host) }}
-  ansible.builtin.debug:
-    msg: >
-      WARNING: Could not fetch {{ _keyscan_host.host | default(_keyscan_host) }} SSH host keys
-      (VPN may be required). known_hosts not pre-seeded.
-  when: ssh_keyscan_result is failed

@@ -160,8 +160,8 @@
   when: git_repos_filtered | length > 0
 
 # accept_newhostkey below would trust an unseen host key, so SSH repos are cloned only from
-# hosts the ssh role already seeded (pinned fingerprint or GitHub API). Unseeded hosts (off VPN,
-# fingerprint not yet pinned) are deferred to a later 'make ssh repos' instead of failing the run.
+# hosts the ssh role already seeded (pinned fingerprint, TOFU keyscan or the pinned github.com key).
+# Unseeded hosts (off VPN, fingerprint not yet pinned) are deferred to a later 'make ssh repos' instead of failing the run.
 - name: Check SSH git repo hosts are in known_hosts
   ansible.builtin.command:
     cmd: >-

@@ -1,16 +1,4 @@
 ---
-- name: Remount /tmp  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    cmd: "mount -o remount,nosuid,nodev{{ ',noexec' if (system_tmp_noexec | bool and not csb_rhel) else '' }} /tmp"
-  become: true
-  register: _tmp_remount_handler_result
-  until: _tmp_remount_handler_result.rc == 0
-  retries: 3
-  delay: 2
-  failed_when: _tmp_remount_handler_result.rc != 0
-  changed_when: _tmp_remount_handler_result.rc == 0
-  when: not system_is_container  # noexec on /tmp breaks Ansible temp-dir creation in containers
-
 - name: Apply firewall rules
   ansible.builtin.systemd:
     name: firewalld

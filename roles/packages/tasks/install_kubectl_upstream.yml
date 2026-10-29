@@ -23,13 +23,9 @@
         _kubectl_upstream_check.rc != 0 or
         packages_kubectl_version not in _kubectl_upstream_check.stdout
       ansible.builtin.get_url:
-        url: >-
-          https://dl.k8s.io/release/v{{ packages_kubectl_version }}/bin/linux/{{
-          'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}/kubectl
+        url: https://dl.k8s.io/release/v{{ packages_kubectl_version }}/bin/linux/amd64/kubectl
         dest: /usr/local/bin/kubectl
-        checksum: >-
-          sha256:{{ packages_kubectl_sha256_arm64 if ansible_facts['architecture'] == 'aarch64'
-          else packages_kubectl_sha256 }}
+        checksum: "sha256:{{ packages_kubectl_sha256 }}"
         mode: "0755"
         timeout: 120
       environment:

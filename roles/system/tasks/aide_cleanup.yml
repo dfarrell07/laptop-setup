@@ -6,7 +6,7 @@
   when:
     - is_dnf
     - not (system_aide_enabled | bool)
-    - not csb_rhel  # CSB IT manages AIDE baseline; don't interfere
+    - not csb_rhel  # RHEL CSB: IT manages the AIDE baseline; don't interfere
     - not system_is_container  # daemon_reload: true always runs systemctl daemon-reload, crashing privileged Podman container PID 1
   block:
     - name: Disable and stop aide-check.timer when AIDE disabled
@@ -25,9 +25,7 @@
         - /etc/systemd/system/aide-check.timer
         - /etc/systemd/system/aide-notify@.service
         # Created by dnf_automatic.yml; removed here to prevent aide --update running against a non-existent DB.
-        # Both paths are listed so removal is correct regardless of whether csb_detect.yml ran —
-        # is_dnf5 defaults to false in isolated tag runs, which would miss the dnf5 path on Fedora 44+.
-        # state: absent is idempotent, so listing both is safe when only one exists.
+        # Both the dnf and dnf5 unit paths are listed; state: absent is idempotent when only one exists.
         - /etc/systemd/system/dnf-automatic.service.d/aide-update.conf
         - /etc/systemd/system/dnf5-automatic.service.d/aide-update.conf
       loop_control:

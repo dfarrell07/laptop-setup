@@ -22,9 +22,10 @@ dotfiles_goprivate: !unsafe 'git.example.internal,pkgs.example.internal'
 ### SECURITY: never use `--start-at-task`
 
 It skips play-level `pre_tasks` (SSTI guard, URL and version validation, identity assertions), so `-e` values such as `claude_install_url`
-could reach installers unchecked. Each role repeats its critical assertions with `tags: [always]` as defence in depth, but do not rely on
-that: restart with `make all`, or run one role (`make packages`) with full pre-flight. Never call `ansible-playbook` directly; make targets
-go through `scripts/verify-ansible-args.sh`. See SECURITY.md § "Ansible Playbook Safety".
+could reach installers unchecked. Roles repeat their critical assertions (tagged `always`, or deliberately untagged so
+`--skip-tags always` cannot bypass them) as defence in depth, but do not rely on that: restart with `make all`, or run one role
+(`make packages`) with full pre-flight. Never call `ansible-playbook` directly; make targets go through
+`scripts/verify-ansible-args.sh`. See SECURITY.md § "Ansible Playbook Safety".
 
 ### SECURITY: vault password and shell tracing
 
@@ -49,9 +50,8 @@ Without `fingerprint` it is trust-on-first-use. See SECURITY.md § "Internal SSH
 0. Enable Secure Boot in firmware: `lockdown=integrity` is bypassable by a physical attacker booting a custom kernel without it
    (`make smoke-test` FAILs `secure-boot` until enabled).
 1. `make bootstrap` (fresh Fedora/RHEL: `sudo dnf install -y make` first; macOS: `xcode-select --install` and Homebrew first).
-2. `cp default.config.yml config.yml`, then replace every `CHANGE_ME`: `desktop_environment` (Linux: sway/i3/gnome; macOS: aerospace),
-   `dotfiles_github_user`, `dotfiles_user_name`, `dotfiles_user_email_work`, `dotfiles_user_email_personal`. Also set `system_timezone`
-   (default `UTC`; not a `CHANGE_ME` sentinel; preflight fails if the key is absent from `config.yml`).
+2. `cp default.config.yml config.yml`, then replace every `CHANGE_ME` in it (preflight fails while any remain).
+   Also set `system_timezone` (default `UTC`; not a `CHANGE_ME` sentinel; preflight fails if the key is absent from `config.yml`).
 3. `make setup-yubikeys` programs the keys and writes `vault-pass.sh`; then fill `group_vars/all/vault.yml` (SSH keys) and run
    `ansible-vault encrypt` on it. A first provision without secrets works at the console from the plaintext stub: container provisioning is
    deferred (`make container`) and internal git hosts with placeholder fingerprints are skipped (`make ssh repos`). Provisioning over SSH
@@ -62,8 +62,9 @@ Without `fingerprint` it is trust-on-first-use. See SECURITY.md § "Internal SSH
 3c. `make check`: sudo `--check --diff` of every play. `make check` and `make all` log to `~/.cache/laptop-setup/logs/`
     (`check-latest.log`, `all-latest.log`; newest 20 kept).
 3d. Recommended over `make all`: roll out in chunks. Optionally set `rollout_enable: [list]` in `config.yml`, then per chunk
-    `make status`, `make plan CHUNK=x`, `make chunk-x`, `make verify CHUNK=x`. The first run creates `.venv` (needs network); until then the
-    chunk-config check is skipped.
+    `make status`, `make plan CHUNK=x`, `make chunk-x`, `make verify CHUNK=x`. The first run creates `.venv` (needs network); until then
+    only the chunk banner is skipped, and the wrapper validates `rollout_enable` with system python3 and stops if ansible is not
+    importable.
 4. `make all` applies every enabled chunk (asks for sudo). **Run at the local console or in tmux, NOT over SSH**: the system role restarts
    sshd and kills an SSH-hosted run (`tmux new-session -s provision 'make all'`).
 5. Surprises afterwards (SSH on port 722, printing, TCP forwarding, IPv6 SLAAC, lockdown, ...): `references/troubleshooting.md` and the
@@ -141,7 +142,7 @@ runs `git_repos` for one `repo_category`. `make help` lists everything; scenario
 - **Local repo list**: repos on internal hosts go in gitignored `group_vars/all/local_repos.yml` (`git_repos_local`; copy
   `local_repos.yml.example`); `repos.yml` holds public repos only and both concatenate into `git_repos_list`.
 - **Config**: tracked `default.config.yml` plus gitignored `config.yml` overrides. Top-level keys: `profile`, `desktop_environment`,
-  `rollout_enable`, `ssh_port` (722), feature toggles (`install_docker`, `install_vpn`, `install_virtualization`), `repo_*` toggles and
+  `rollout_enable`, `ssh_port` (722), feature toggles (`install_vpn`, `install_virtualization`), `repo_*` toggles and
   `container_*` settings. Its `Additional toggles` comment block documents 100+ role-default variables; read it, not this file, for
   defaults and rationale. Do not set `system_core_pattern` via `system_sysctl_extra` (toggle-managed). `containers_environment_d_enabled`
   (default false) is opt-in because it injects `DOCKER_HOST` into every graphical session; see troubleshooting.

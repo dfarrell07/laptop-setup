@@ -9,19 +9,11 @@
   # Protects against --start-at-task bypassing play-level pre_tasks.
   ansible.builtin.assert:
     that:
-      - distrobox_host_exec_commands | default([]) | map('string') | select('search', '[^a-zA-Z0-9_-]') | list | length == 0
-      - container_image | default('') | string is match('^[a-zA-Z0-9:/@._-]*$|^$')
-      - (container_image | default('') == '') or
-        (container_image | default('') is
-        match('^(registry\.fedoraproject\.org/|quay\.io/|registry\.access\.redhat\.com/|registry\.redhat\.io/)'))
-      - container_image | default('') == '' or '@sha256:' in (container_image | default(''))
-      # Resolved image (also reachable by setting distrobox_container_image directly,
-      # which would otherwise skip the container_image checks above).
+      # Resolved image (container_image feeds it; distrobox_container_image can also be set directly).
       - distrobox_container_image | string is match('^[a-zA-Z0-9:/@._-]+$')
       - distrobox_container_image is
         match('^(registry\.fedoraproject\.org/|quay\.io/|registry\.access\.redhat\.com/|registry\.redhat\.io/)')
       - "'@sha256:' in distrobox_container_image"
-      - container_name | default('') | string is match('^[a-zA-Z0-9_-]*$|^$')
       - distrobox_container_name | default('') | string is match('^[a-zA-Z0-9_-]*$|^$')
       - distrobox_packages | default([]) | map('string') | select('search', '[^a-zA-Z0-9_.+-]') | list | length == 0
       - distrobox_packages | default([]) | map('string') | select('match', '^-') | list | length == 0
@@ -31,9 +23,6 @@
     fail_msg: >-
       SECURITY: distrobox variable contains unsafe value. This check protects against
       --start-at-task bypassing play-level pre_tasks.
-      distrobox_host_exec_commands={{ distrobox_host_exec_commands | default([]) }} --
-        entries must be alphanumeric/underscore/hyphen (newline injects shell commands into
-        flatpak-spawn wrapper scripts and init_hooks in distrobox.ini via container-provision.yml);
       container_image={{ container_image | default('') }} distrobox_container_image={{ distrobox_container_image }} --
         must be from a trusted registry with a pinned @sha256: digest; mutable tags let the
         registry serve arbitrary content (CAP_BPF+CAP_PERFMON, $HOME bind-mounted —
@@ -41,8 +30,7 @@
       container_name={{ container_name | default('') }} --
         must be alphanumeric/underscore/hyphen (space injects extra argument to toolbox create/rm);
       distrobox_container_name={{ distrobox_container_name | default('') }} --
-        must be alphanumeric/underscore/hyphen; validated separately from container_name to cover
-        direct overrides of distrobox_container_name in config.yml (normally derived from container_name);
+        must be alphanumeric/underscore/hyphen; validated here; it is normally derived from container_name;
       distrobox_packages={{ distrobox_packages | default([]) }} --
         entries must be alphanumeric/dot/underscore/plus/hyphen; a newline in any entry injects
         an arbitrary INI key into distrobox.ini (init_hooks RCE via flatpak-spawn --host).
@@ -302,7 +290,7 @@
         msg: >-
           WARNING: container_replace=true and container '{{ distrobox_container_name }}' already exists.
           The existing container will be destroyed and rebuilt. Remove container_replace from config.yml
-          after this run to prevent destruction on every subsequent 'make all' or 'make distrobox' run.
+          after this run to prevent destruction on every subsequent 'make all' or 'make container' run.
       when:
         - distrobox_container_replace | bool
         - distrobox_container_exists.rc == 0
@@ -375,7 +363,7 @@
         msg: >-
           WARNING: container_replace=true and container '{{ distrobox_container_name }}' already exists.
           The existing container will be destroyed and rebuilt. Remove container_replace from config.yml
-          after this run to prevent destruction on every subsequent 'make all' or 'make distrobox' run.
+          after this run to prevent destruction on every subsequent 'make all' or 'make container' run.
       when:
         - distrobox_container_replace | bool
         - distrobox_container_exists.rc == 0

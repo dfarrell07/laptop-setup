@@ -13,7 +13,7 @@
     - name: Override profile and identity vars to match converge
       ansible.builtin.set_fact:
         system_is_container: true  # converge forces true; verify must match or not-system_is_container guards run against absent files
-        system_ssh_unused_connection_timeout: 600  # placeholder value (role default is 3600); absent here silences verify trim_blocks guard
+        system_ssh_unused_connection_timeout: 600  # any non-empty value enables the UnusedConnectionTimeout guard in verify-smoke.yml
         profile: personal
         dotfiles_user_email_personal: "molecule-test-personal@ci.invalid"  # matches ci-default-vars.yml (not re-loaded in verify)
         system_tmout: 300  # system-container-overrides.yml sets this in converge; enables TMOUT assertions
@@ -39,7 +39,7 @@
       ansible.builtin.import_tasks: ../shared/verify-notes.yml
 
     # --- Desktop role ---
-    - name: Include Alacritty and Chrome policy assertions
+    - name: Include Alacritty assertions
       ansible.builtin.import_tasks: ../shared/verify-desktop-common.yml
 
     # --- Containers ---

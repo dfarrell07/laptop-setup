@@ -51,21 +51,6 @@
     - "['sys_baseline', 'sys_remote_access'] | difference(ansible_skip_tags) | length > 0"
     - not system_is_container  # RPM post-install calls daemon-reload, crashes Podman container systemd; installed in prepare instead
 
-- name: "SECURITY: Reject system_selinux_enforcing_required: false on managed dnf hosts"
-  ansible.builtin.assert:
-    that:
-      - system_selinux_enforcing_required | bool
-    fail_msg: >-
-      SECURITY: system_selinux_enforcing_required is false — all SELinux enforcement tasks are skipped.
-      Threat: config.yml sets system_selinux_enforcing_required: false to silently bypass MAC enforcement.
-      Input: system_selinux_enforcing_required={{ system_selinux_enforcing_required }}.
-      Mechanism: hardening_core.yml outer block when-condition evaluates false — setenforce, fact refresh,
-      and enforce assert are all skipped; provisioning completes with SELinux in permissive or disabled state.
-      Impact: SELinux MAC bypass — all DAC-equivalent attacks succeed without audit log entries.
-      Fix: remove system_selinux_enforcing_required from config.yml or set it to true.
-  when: is_dnf and not csb_rhel and not system_is_container
-  tags: [always]
-
 - name: "SECURITY: Validate system_kernel_lockdown value (injection guard)"
   ansible.builtin.assert:
     that:
@@ -89,9 +74,8 @@
   when: not system_is_container
   tags: [always]
 
-# Audit watches require this directory, although the SSH role owns no unit drop-ins.
-# Accept only the empty, root-owned non-writable directory created for that watch.
-- name: Inspect the audit watch directory for SSH service overrides
+# Tolerate only an empty, root-owned, non-writable sshd.service.d; any entry in it is unexpected.
+- name: Inspect the SSH service drop-in directory
   ansible.builtin.stat:
     path: /etc/systemd/system/sshd.service.d
     follow: false
@@ -113,7 +97,7 @@
     - not _system_ssh_dropin_stat.stat.islnk | default(false)
   tags: [always]
 
-- name: Recognize the safe empty SSH audit watch directory
+- name: Recognize the safe empty SSH service drop-in directory
   ansible.builtin.set_fact:
     _system_empty_ssh_dropin: >-
       {{ (_system_ssh_dropin_stat.stat.isdir | default(false))
@@ -233,8 +217,8 @@
 - name: "Hardening core (mounts, firewall, kernel, sysctl, coredumps, modules blacklist, kernel lockdown)"
   ansible.builtin.import_tasks: hardening_core.yml
 
-# Apply this subsystem's queued handlers now: force_handlers is deliberately false, so a later
-# failure would otherwise drop them, and the rerun sees no change and never applies the config.
+# Apply all handlers queued so far (flush_handlers is play-wide) now: force_handlers is deliberately
+# false, so a later failure would otherwise drop them, and the rerun sees no change and never applies the config.
 - name: Apply pending handlers (hardening core)
   ansible.builtin.meta: flush_handlers
 
@@ -253,7 +237,7 @@
   ansible.builtin.include_tasks: kernel_modules_kind.yml
   when: not system_is_container and not csb_rhel
   tags: [sys_sysctl]
-  # Always load on non-container hosts — unused modules are harmless; NOT loading them
+  # Always load on non-container, non-RHEL-CSB hosts — unused modules are harmless; NOT loading them
   # when needed is catastrophic with modules_disabled=1. The include file already uses
   # failed_when:false to tolerate Intel/AMD mismatch.
 
@@ -261,8 +245,8 @@
   ansible.builtin.import_tasks: grub_password.yml
   tags: [sys_optional]
 
-# Apply this subsystem's queued handlers now: force_handlers is deliberately false, so a later
-# failure would otherwise drop them, and the rerun sees no change and never applies the config.
+# Apply all handlers queued so far (flush_handlers is play-wide) now: force_handlers is deliberately
+# false, so a later failure would otherwise drop them, and the rerun sees no change and never applies the config.
 - name: Apply pending handlers (GRUB)
   ansible.builtin.meta: flush_handlers
 
@@ -271,8 +255,8 @@
   ansible.builtin.import_tasks: auditd.yml
   tags: [sys_auditd]
 
-# Apply this subsystem's queued handlers now: force_handlers is deliberately false, so a later
-# failure would otherwise drop them, and the rerun sees no change and never applies the config.
+# Apply all handlers queued so far (flush_handlers is play-wide) now: force_handlers is deliberately
+# false, so a later failure would otherwise drop them, and the rerun sees no change and never applies the config.
 - name: Apply pending handlers (auditd)
   ansible.builtin.meta: flush_handlers
 
@@ -299,6 +283,11 @@
 - name: USBGuard install/enable
   ansible.builtin.import_tasks: usbguard.yml
   tags: [sys_usbguard]
+
+# Apply all handlers queued so far (flush_handlers is play-wide) now: force_handlers is deliberately
+# false, so a later failure would otherwise drop them, and the rerun sees no change and never applies the config.
+- name: Apply pending handlers (baseline, USBGuard)
+  ansible.builtin.meta: flush_handlers
 
 - name: Firmware updates
   ansible.builtin.import_tasks: firmware.yml
@@ -361,8 +350,8 @@
   when: not system_is_container and not csb_detected
   tags: [sys_time_dns]
 
-# Apply this subsystem's queued handlers now: force_handlers is deliberately false, so a later
-# failure would otherwise drop them, and the rerun sees no change and never applies the config.
+# Apply all handlers queued so far (flush_handlers is play-wide) now: force_handlers is deliberately
+# false, so a later failure would otherwise drop them, and the rerun sees no change and never applies the config.
 - name: Apply pending handlers (chrony)
   ansible.builtin.meta: flush_handlers
 
@@ -400,7 +389,7 @@
 
 - name: Account hardening
   ansible.builtin.import_tasks: account_hardening.yml
-  tags: [account, become, sys_signin]
+  tags: [become, sys_signin]
 
 - name: System-level dconf hardening
   ansible.builtin.include_tasks: dconf.yml

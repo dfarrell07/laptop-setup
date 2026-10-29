@@ -7,7 +7,6 @@
     scope: user
     state: restarted
     daemon_reload: true
-  when: not (system_is_container | default(false))  # scope:user systemd crashes containers; virtualization_type unreliable in nested-VM CI
   failed_when: false
 
 - name: Reload ssh-agent launchd bootout (macOS)  # noqa: command-instead-of-module
@@ -15,7 +14,6 @@
     cmd: >-
       launchctl bootout gui/{{ ansible_facts['user_uid'] }}/{{ dotfiles_ssh_agent_label }}
   listen: Reload ssh-agent launchd (macOS)
-  when: is_macos
   failed_when: false
   changed_when: false
 
@@ -25,6 +23,5 @@
       launchctl bootstrap gui/{{ ansible_facts['user_uid'] }}
       {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/{{ dotfiles_ssh_agent_label }}.plist
   listen: Reload ssh-agent launchd (macOS)
-  when: is_macos
   failed_when: false
   changed_when: false

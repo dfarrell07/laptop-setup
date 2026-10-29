@@ -77,15 +77,15 @@ Compensating controls:
 2. It is a required status check on main, so unencrypted secrets cannot merge
 3. Other required checks (`Secret Detection`, `Git Config Guards`) cover secrets and hook tampering
 
-There is no safe bypass: no hook honours an environment override, and the only CI environment override is `SKIP_GPG_VERIFY=1`, which skips
-just the missing-key GPG check in collection verification. Fix the failing check instead. The only exception is a CI-only
-workflow step, and only when the commit is entirely CI-generated, the workflow is sealed, and earlier gates validated the content.
+There is no safe bypass: no hook honours an environment override, and the only environment override is `SKIP_GPG_VERIFY=1` (set by CI and
+by the wrapper for `--syntax-check`), which skips just the missing-key GPG check in collection verification. Fix the failing check
+instead. The only exception is a CI-only workflow step, and only when the commit is entirely CI-generated, the workflow is sealed, and
+earlier gates validated the content.
 
 ### Hook changes require review
 
-Changes to `.githooks/pre-commit`, `.githooks/commit-msg` and `.githooks/pre-push` are validated three ways: shellcheck (syntax), a CI
-behavioral scan, and owner review. `.githooks/prepare-commit-msg` is not shellcheck-ed or behaviorally scanned in CI; its changes get only
-the CI `core.hooksPath` write check and owner review.
+Changes to `.githooks/pre-commit`, `.githooks/commit-msg`, `.githooks/prepare-commit-msg` and `.githooks/pre-push` are validated three ways:
+shellcheck (syntax), a CI behavioral scan, and owner review.
 
 - The CI scan rejects `curl`/`wget`/`nc` with URLs, `cat` of `~/.ssh`, `~/.gnupg`, `~/.aws` or gcloud paths, and credential exports
   (`AWS_*`, `GOOGLE_*`, `GCP_*`, `GITHUB_TOKEN`)
@@ -189,8 +189,8 @@ key is handled the same way: revoke it, remove it from GitHub, and re-sign.
 The wrapper (`VERIFY_AND_RUN` in the Makefile):
 
 - rejects `--start-at-task` (and abbreviations), `--vault-id`, `--vault-password-file`, `--skip-tags always`, `@file` extra-vars,
-  backslash-escaped structured extra-vars, and `-e` overrides of protected variables (`csb_rhel`, `_pf_*`, `system_sysctl_hardening`,
-  `common_project_root`, `rollout_enable`, `rollout_catalog`, `_rollout_*`)
+  backslash-escaped structured extra-vars, and `-e` overrides of the protected variables (`_protected_keys` in
+  `scripts/verify-ansible-args.sh`)
 - canonicalizes abbreviated long options before scanning
 - turns shell tracing off and clears `BASH_XTRACEFD`, `PS4`, `SHELLOPTS`, `BASHOPTS` and 90+ other environment variables
   (`ANSIBLE_*`, `LD_*`, `PYTHON*`, `GIT_*`, Go, container and registry variables), pins `ANSIBLE_VAULT_PASSWORD_FILE`, and checks `HOME`
@@ -309,7 +309,6 @@ lockdown activates. Both protections are needed.
 - Vault ships as a plaintext stub (`vault_placeholder`); encrypt after adding real secrets
 - The production vault password is derived from YubiKey HMAC-SHA1 challenge-response
 - `vault-pass.sh` is gitignored; `make bootstrap` creates a stub from `vault-pass-ci.sh` (integrity-checked)
-- CI uses `vault-pass-ci.sh` with a dummy password (no real secrets); a CI job rejects vaults encrypted with it
 - The pre-commit hook blocks committing unencrypted vault files that contain real variables
 - Rotate the password with `ansible-vault rekey group_vars/all/vault.yml`
 
@@ -349,18 +348,14 @@ chmod 700 scripts/vault-pass.sh
 ansible-vault encrypt group_vars/all/vault.yml
 ```
 
-### Future Migration to SOPS + age
-
-HMAC-SHA1 is the only challenge-response primitive the YubiKey OTP applet offers. If stronger hardware support arrives, migrate secrets to
-SOPS with `age-plugin-yubikey` and retire `vault-pass.sh`. No migration is scheduled; see "Known Limitations" for the strength trade-off.
-
 ### Lost or Compromised YubiKey
 
 `make setup-yubikeys` enforces a recovery path:
 
 1. **Hardware redundancy (recommended)** — program 2+ YubiKeys in one session with the same secret and store them separately; any one
    unlocks the vault.
-2. **Password manager backup (single YubiKey)** — the script requires you to save the vault password to your password manager during setup.
+2. **Password manager backup (single YubiKey)** — with one key programmed the script offers this instead of a backup key; it shows the vault
+   password and refuses to continue until you answer y that it is saved in your password manager (it cannot verify that).
 
 The HMAC secret cannot be read back from a YubiKey and the script never displays it, so a replacement key cannot be cloned afterwards.
 To rotate to new keys, decrypt with a surviving key (or the saved password), re-run `make setup-yubikeys` (which generates a new secret and

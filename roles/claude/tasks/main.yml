@@ -483,7 +483,7 @@
       no_log: true
 
     # podman-prune.* are the containers role's units (containers_prune_enabled).
-    - name: Warn on unmanaged systemd user unit files before daemon-reload
+    - name: Fail on unmanaged systemd user unit files before daemon-reload
       ansible.builtin.fail:
         msg: >-
           Unmanaged systemd user unit file detected before daemon-reload:

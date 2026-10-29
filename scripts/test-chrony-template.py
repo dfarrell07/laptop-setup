@@ -69,7 +69,7 @@ class ChronyTemplateTests(unittest.TestCase):
             probe['ansible.builtin.command']['argv'][0] = str(executable)
             play = root / 'probe.yml'
             play.write_text(yaml.safe_dump([{'hosts': 'localhost', 'gather_facts': False,
-                'vars': {'csb_rhel': False, 'system_chrony_service_enabled': True,
+                'vars': {'system_chrony_service_enabled': True,
                          'is_dnf': True, 'is_apt': False, 'system_is_container': False}, 'tasks': [probe]}]))
             for error, status, accepted in [('', 0, True), ('Invalid directive at line 1', 1, True),
                                             ('Could not open /dev/null: Permission denied', 1, False)]:

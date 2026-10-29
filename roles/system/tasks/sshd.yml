@@ -312,7 +312,7 @@
   when:
     - ssh_port | int != 22
     - ansible_facts['selinux'].status | default('') == 'enabled'
-    - not csb_rhel  # CSB: sshd port-722 drop-in not deployed above; no need to label port 722
+    - not csb_rhel  # RHEL CSB: IT owns sshd; the port-722 drop-in is not deployed, so no label is needed
   block:
     - name: Apply SELinux port label for non-default SSH port
       community.general.seport:
@@ -362,7 +362,6 @@
   when:
     - system_crypto_policy.rc | default(-1) == 0
     - system_crypto_policy.stdout | default('') != system_crypto_policy_target
-    - not csb_rhel  # RHEL CSB: IT may enforce FIPS/FUTURE
     # Fedora CSB: IT's infosec role resets the policy to DEFAULT on every csb-cron run, so
     # setting it here only flip-flops (and re-notifies sshd/chronyd each make all).
     - not csb_detected
@@ -397,7 +396,9 @@
   failed_when: false
   check_mode: false
   notify: Restart sshd
-  when: not system_is_container
+  when:
+    - not system_is_container
+    - not csb_rhel  # IT owns sshd and its port; the 722 drop-in is not deployed
 
 - name: Check if provisioning session is over SSH on port 22 (connection safety check)
   ansible.builtin.set_fact:
@@ -413,14 +414,12 @@
       running over bare SSH port {{ _ssh_connection_port }} (no tmux/screen detected).
       The sshd restart will kill this connection and abort provisioning mid-run.
       Fix: Run inside tmux (tmux new-session -s provision 'make all') or at local console.
-      See CLAUDE.md Quick Reference step 4. To override (only if you know tmux is active),
-      set system_ssh_port_change_override: true in config.yml.
+      See CLAUDE.md Quick Reference step 4.
   when:
     - ssh_port | int != 22
     - _ssh_connection_port | default('') == '22'
     - lookup('env', 'TMUX') == ''     # tmux sets $TMUX; inside tmux = safe (survives sshd restart)
     - lookup('env', 'STY') == ''      # GNU screen sets $STY; also safe
-    - not (system_ssh_port_change_override | default(false) | bool)
 
 - name: Flush sshd restart handler immediately
   ansible.builtin.meta: flush_handlers

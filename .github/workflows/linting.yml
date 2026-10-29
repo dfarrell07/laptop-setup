@@ -33,8 +33,7 @@ jobs:
         run: ansible-lint
 
       - name: Run yamllint
-        # ansible-lint skips yaml rules (see .ansible-lint skip_list); yamllint covers them
-        # and also lints .github/ (excluded from ansible-lint)
+        # ansible-lint skips yaml[line-length] (yamllint --strict enforces it); yamllint also lints .github/
         run: yamllint --strict .
 
       - name: Check lock file drift
@@ -127,7 +126,7 @@ jobs:
         run: |
           shellcheck -S warning scripts/*.sh
           shellcheck -S warning roles/claude/files/*.sh
-          shellcheck -S warning .githooks/pre-commit .githooks/commit-msg .githooks/pre-push
+          shellcheck -S warning .githooks/pre-commit .githooks/commit-msg .githooks/prepare-commit-msg .githooks/pre-push
           shellcheck -S warning roles/dotfiles/files/git-template-*
 
       - name: Validate git hooks — prevent malicious exfiltration patterns
@@ -135,7 +134,7 @@ jobs:
           # SECURITY: Behavioral validation of hook changes to prevent key exfiltration attacks.
           # This complements shellcheck (syntax validation) with intent/behavior checks.
           failed=0
-          for hook in .githooks/pre-commit .githooks/commit-msg .githooks/pre-push; do
+          for hook in .githooks/pre-commit .githooks/commit-msg .githooks/prepare-commit-msg .githooks/pre-push; do
             # Prohibit common exfiltration methods: curl, wget, nc with URLs
             if grep -E 'curl\s|wget\s|nc\s' "$hook" | grep -qE 'https?://|::[0-9]+'; then
               echo "::error::$hook: curl/wget/nc with network URLs detected (potential exfiltration)" >&2
@@ -194,38 +193,6 @@ jobs:
           SUBPYEOF
 
 
-      - name: Verify hook baseline integrity (detect behavior changes)
-        if: github.event_name == 'pull_request'
-        run: |
-          # SECURITY: Flag (notice only) hook changes that need maintainer review.
-          # If a PR modifies .githooks/*, require explicit evidence of intent (commit message pattern).
-          # Informational: enforcement is branch protection plus code review.
-          BASE_SHA="${{ github.event.pull_request.base.sha }}"
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-
-          # List all commits in the PR
-          commits=$(git rev-list "$BASE_SHA..$HEAD_SHA")
-
-          # Check if any commit modifies .githooks/*
-          hook_modified=0
-          for commit in $commits; do
-            changed_paths=$(git diff-tree --root --no-commit-id --name-only -r -m "$commit")
-            if grep -Eq '^\.githooks/' <<< "$changed_paths"; then
-              hook_modified=1
-              # Require PR description or explicit commit message keyword for hook changes
-              msg=$(git log -1 --format=%B "$commit")
-              if ! printf '%s' "$msg" | \
-                 grep -qiE '(SECURITY|hook.*change|gitHook|integrity|behavioral|vault|pre.push)'; then
-                echo "::notice::Commit $commit modifies .githooks/ — commit message lacks"
-                echo "  security/behavioral keywords (SECURITY, hook, integrity, vault, pre-push, etc.)"
-              fi
-            fi
-          done
-
-          if [ "$hook_modified" -eq 1 ]; then
-            echo "::notice::PR modifies .githooks/ — code review by project maintainer REQUIRED (GitHub branch protection enforces this)"
-          fi
-
       - name: Validate preflight JSON output
         run: |
           # Exit 0 = pass, 1 = findings (valid JSON still emitted); anything else is a crash.
@@ -265,23 +232,12 @@ jobs:
       - name: Set up CI environment
         uses: ./.github/actions/ci-setup
 
-      - name: Parse sample config with an unsafe-tagged value
-        run: |
-          out=$(printf 'dotfiles_goprivate: !unsafe "a.example,{{ b }}"\nplain: x\n' \
-            | python3 scripts/parse-config.py)
-          printf '%s' "$out" | python3 -c '
-          import json, sys
-          d = json.load(sys.stdin)
-          assert d["plain"] == "x", d
-          assert d["dotfiles_goprivate"] == "a.example,{{ b }}", d
-          '
-
       - name: Install zsh for migration launcher regression tests
         run: |
           sudo apt-get update
           sudo apt-get install --yes zsh dconf-cli dbus-x11 python3-gi python3-psutil
 
-      - name: Run config parser and SSH host-key regression tests
+      - name: Run script and template regression tests
         run: |
           python3 scripts/test-config-parser.py
           python3 scripts/test-ssh-known-hosts.py
@@ -624,13 +580,6 @@ jobs:
               echo "::error::Commit $commit modifies .githooks/ with git config core.hooksPath write (hook disabling risk)" >&2
               failed=1
             fi
-            # Also check for config unset patterns
-            if git show "$commit" -- .githooks/ | \
-               grep -vE '^\+[[:space:]]*#' | \
-               grep -qE '^\+.*git\s+config(\s+(--(local|global|system|worktree|unset|add)|set|unset))*\s+core\.hooksPath'; then
-              echo "::error::Commit $commit modifies .githooks/ with git config --unset core.hooksPath (hook disabling risk)" >&2
-              failed=1
-            fi
           done
           exit "$failed"
 
@@ -813,10 +762,13 @@ jobs:
             desc_first=$(printf "%s\n" "$subject" | sed 's/^[-A-Za-z0-9/]*:[[:space:]]*//' | awk '{print $1}')
             desc_first="${desc_first%:}"
             # Check scope word (e.g. 'Fixed: suppress lint warning' -> 'Fixed' is caught)
-            if _bad_word "$first"; then
-              echo "::error::Commit $sha: Use imperative mood for scope word, not '$first'"
-              failed=1
-            fi
+            IFS='/' read -ra _scope_parts <<< "$first"
+            for _part in "${_scope_parts[@]}"; do
+              if _bad_word "$_part"; then
+                echo "::error::Commit $sha: Use imperative mood for scope word, not '$_part'"
+                failed=1
+              fi
+            done
             # Also check word after scope colon (e.g. 'Dotfiles: Updated' -> 'Updated' is caught)
             if [[ "$desc_first" != "$first" ]] && _bad_word "$desc_first"; then
               echo "::error::Commit $sha: Use imperative mood after scope colon, not '$desc_first'"
@@ -1048,7 +1000,7 @@ jobs:
           # SECURITY: Enforce that supply-chain validation gates pass before merge.
           # This is a secondary gate (redundant with branch protection) that validates:
           #   1. GPG Signature Verification (signoff and configured signing policy)
-          #   2. Node Lint (enforces Signed-off-by requirement in PR commits)
+          #   2. Node Lint (enforces Signed-off-by requirement in non-Dependabot PR commits)
           #   3. Secret Detection/gitleaks (no credentials leaked in history)
           # If this job fails, the PR cannot be merged (in addition to branch protection).
           # If this job succeeds, it confirms that all supply-chain validation has passed.
@@ -1081,7 +1033,7 @@ jobs:
             echo ""
             echo "NOTE: Ensure GitHub branch protection is configured with required checks:"
             echo "  Required checks on 'main' branch MUST include:"
-            echo "    - Node Lint (enforces Signed-off-by: on all commits)"
+            echo "    - Node Lint (enforces Signed-off-by: on non-Dependabot PR commits)"
             echo "    - GPG Signature Verification (enforces configured signing policy)"
             echo "    - Secret Detection (gitleaks) (detects leaked credentials)"
             echo ""

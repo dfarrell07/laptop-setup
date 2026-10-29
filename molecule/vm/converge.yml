@@ -44,11 +44,11 @@
         system_disable_bluetooth: true        # VM scenario exercises BT masking + module blacklist path
         system_disable_printing: true        # VM scenario exercises cups masking path (cups-browsed/socket/path)
         system_disable_usb_storage: true     # VM scenario exercises usb_storage kernel-block path
-        system_disable_fingerprint: true     # explicit (role default=true); VM verify asserts fprintd masked unconditionally
+        system_disable_fingerprint: true     # explicit (role default=true); VM verify asserts fprintd masked when the unit exists
         system_tmout: 600                    # VM scenario exercises session timeout deployment path
-        # account_hardening aborts on unexpected sudoers.d files; vagrant is the NOPASSWD fixture from prepare.yml
+        # account_hardening aborts on unexpected sudoers.d files (non-CSB hosts; CSB hosts only warn)
+        # vagrant is the NOPASSWD fixture from prepare.yml
         system_sudoersd_whitelist: [99-hardening, go-env, vagrant]
-        is_dnf5: "{{ ansible_facts['pkg_mgr'] | default('') == 'dnf5' }}"
 
   roles:
     - role: repos_dnf
@@ -116,18 +116,14 @@
     - role: ssh
     - role: git_repos
     - role: notes
-      vars:
-        notes_transcrypt_password: ""
     - role: containers
     - role: distrobox
     - role: claude
-      vars:
-        claude_install_method: skip
     - role: codex
 
   post_tasks:
     # Desktop role called via include_role so vars: are at role-params precedence (p20),
-    # overriding desktop role default (desktop_environment: auto from roles/desktop/defaults/main.yml).
+    # overriding desktop role default (desktop_environment: CHANGE_ME from roles/desktop/defaults/main.yml).
     # Calling with roles: vars: would set vars at play-vars precedence (p12), losing to p18.
     - name: Converge desktop role
       ansible.builtin.include_role:
@@ -138,25 +134,6 @@
         desktop_sway_packages: []
         desktop_i3_packages: []
         is_dnf: "{{ ansible_facts['pkg_mgr'] | default('') in ['dnf', 'dnf5'] }}"
-
-    - name: Capture persistent boot arguments after package installation
-      ansible.builtin.command:
-        argv: "{{ item }}"
-      loop:
-        - [grubby, '--info=ALL']
-        - [grub2-editenv, list]
-        - [cat, /etc/kernel/cmdline]
-      register: vm_boot_arguments
-      become: true
-      changed_when: false
-      failed_when: false
-
-    - name: Show boot arguments for repeat-run diagnostics
-      ansible.builtin.debug:
-        msg: "{{ item.stdout | default('') }} {{ item.stderr | default('') }}"
-      loop: "{{ vm_boot_arguments.results }}"
-      loop_control:
-        label: "{{ item.item | join(' ') }}"
 
     - name: Generate CSB compatibility report
       ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/common/tasks/csb-report.yml"

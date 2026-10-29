@@ -63,8 +63,7 @@ Do not run `make all` in one shot: one chunk per invocation gives a clear pass/f
    only at the local console or in tmux, a second session open, after reading `docs/rollout-recovery.md`. Use `make chunk-x`, which asks
    for typed confirmation; role targets do not. `sys_*` chunks restart sshd or change boot settings: never over SSH.
 5. Role targets (`make dotfiles`, `packages`, `ssh`, `repos`, `notes`, `redhat`, `containers`, `desktop`, `claude`, `codex`, `container`)
-   suit a whole role once all its chunks are enabled. `make container` and molecule container tests exceed the 120 s Bash default: use
-   `timeout=600000` or `run_in_background=true`.
+   suit a whole role once all its chunks are enabled.
 
 ### On failure
 

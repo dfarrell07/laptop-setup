@@ -56,17 +56,6 @@
     - not system_is_container
   notify: Restart systemd-resolved
 
-- name: Warn that DoT and resolved are unmanaged on RHEL CSB
-  ansible.builtin.debug:
-    msg: >-
-      RHEL CSB: systemd-resolved and DNS-over-TLS are not managed by this role
-      (IT controls DNS via IPA/SSSD); 99-dot.conf removed if present
-  when:
-    - csb_detected
-    - csb_rhel
-    - not system_is_container
-
-
 - name: Assert system_dot_mode is valid
   ansible.builtin.assert:
     that: system_dot_mode | string | lower | replace('true', 'yes') | replace('false', 'no') in ['yes', 'no', 'opportunistic']
@@ -99,7 +88,6 @@
         dest: /etc/systemd/resolved.conf.d/99-dot.conf
         mode: "0644"
       notify: Restart systemd-resolved
-      register: _dot_conf_result
 
     - name: Warn on strict DoT mode
       ansible.builtin.debug:
@@ -108,7 +96,7 @@
           port 853 (captive portals, hotel/conference Wi-Fi). FallbackDNS also uses
           port 853 in strict mode, so it will not help on networks that block port 853.
           It WILL help if the primary server is temporarily unreachable.
-      when: system_dot_mode | string | lower in ['yes', 'true', '1']
+      when: system_dot_mode | string | lower in ['yes', 'true']
 
     - name: "Warn: Domains=~. catch-all breaks non-NM VPN split DNS"
       ansible.builtin.debug:
@@ -131,7 +119,7 @@
           — systemd-resolved sends those queries to the per-link resolver using its native
           transport (typically plain UDP 53). system_dot_mode: yes does not encrypt
           per-link DNS.
-      when: system_dot_mode | string | lower not in ['no', 'false', '0']
+      when: system_dot_mode | string | lower not in ['no', 'false']
 
     - name: Warn on strict DNSSEC without strict DoT
       ansible.builtin.debug:
@@ -141,8 +129,8 @@
           failure, allowing a network-path adversary to strip DNSSEC records. Set
           system_dot_mode: yes alongside system_dnssec_mode: yes for a protected channel.
       when:
-        - system_dnssec_mode | string | lower in ['yes', 'true', '1']
-        - system_dot_mode | string | lower not in ['yes', 'true', '1']
+        - system_dnssec_mode | string | lower in ['yes', 'true']
+        - system_dot_mode | string | lower not in ['yes', 'true']
 
     - name: Warn on opportunistic DoT with allow-downgrade DNSSEC (default full-downgrade risk)
       ansible.builtin.debug:
@@ -152,9 +140,9 @@
           responses simultaneously. Set system_dot_mode: yes and system_dnssec_mode: yes for a
           fully protected channel.
       when:
-        - system_dot_mode | string | lower not in ['yes', 'true', '1']
-        - system_dnssec_mode | string | lower not in ['yes', 'true', '1']
-        - system_dot_mode | string | lower not in ["no", "false", "0"]
+        - system_dot_mode | string | lower not in ['yes', 'true']
+        - system_dnssec_mode | string | lower not in ['yes', 'true']
+        - system_dot_mode | string | lower not in ["no", "false"]
 
     - name: Warn when DoT is explicitly disabled (system_dot_mode=no)
       ansible.builtin.debug:
@@ -163,7 +151,7 @@
           All DNS queries travel in plaintext and are visible to on-path observers.
           Set system_dot_mode: yes (strict) or omit the variable (opportunistic) to enable
           transport encryption.
-      when: system_dot_mode | string | lower in ["no", "false", "0"]
+      when: system_dot_mode | string | lower in ["no", "false"]
 # yamllint enable rule:line-length
 
 # --- Verify resolv.conf symlink for split DNS ---

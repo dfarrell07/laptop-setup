@@ -17,7 +17,7 @@ STOP_CHARGE_THRESH_BAT0={{ system_tlp_bat0_stop | int }}
 START_CHARGE_THRESH_BAT1={{ system_tlp_bat0_start | int }}
 STOP_CHARGE_THRESH_BAT1={{ system_tlp_bat0_stop | int }}
 
-# WiFi power: explicitly disable to match NM's 99-wifi-powersave.conf setting (deployed on all but RHEL CSB hosts).
+# WiFi power: explicitly disable to match NM's 99-wifi-powersave.conf setting (deployed only when not csb_detected).
 # TLP fires on every AC→BAT udev event after NM sets the interface, overriding NM's
 # wifi.powersave=2. Pinning here ensures low-latency wifi on both AC and battery.
 WIFI_PWR_ON_AC=off

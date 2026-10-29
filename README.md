@@ -61,10 +61,10 @@ recommended order, is `group_vars/all/rollout.yml`; the design is in [docs/rollo
 | `make dotfiles`, `make packages`, ... | One role, skipping the high-risk prompt; prefer `make chunk-x` for high-risk chunks |
 | `make backup` | Back up dotfiles before re-provisioning |
 | `make smoke-test` | Verify a provisioned machine |
-| `make lint`, `make test-scripts`, `make test` | Checks before committing |
+| `make lint`, `make syntax-check`, `make test-scripts`, `make test` | Checks before committing |
 
-`make help` lists every target. [CLAUDE.md](CLAUDE.md) has the full command reference and the first-time setup
-notes (reboot, `gh auth login`, Tailscale).
+[CLAUDE.md](CLAUDE.md) has the full command reference and the first-time setup notes (reboot, `gh auth login`,
+Tailscale); `make help` lists the main targets.
 
 ## Configuration
 
@@ -87,7 +87,8 @@ variables and feature toggles. Secrets live in the Ansible vault (`group_vars/al
 ## Contributing
 
 Use feature branches and signed-off commits (`git commit -s`) with `Scope: noun-phrase summary` subjects of at
-most 72 characters. Run `make lint` and `make test-scripts` first; `make ci` runs everything CI does that works
-locally. The remote is public: keep host-specific details out of tracked files.
+most 72 characters. Run `make lint`, `make syntax-check` and `make test-scripts` first; `make test` runs the Linux-capable molecule
+and script tests; `make ci` adds the gitleaks config test and the macOS scenario (needs a macOS runner).
+The remote is public: keep host-specific details out of tracked files.
 
 Licensed under the Apache License 2.0 ([LICENSE](LICENSE)).

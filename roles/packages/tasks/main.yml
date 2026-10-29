@@ -78,7 +78,6 @@
       Got: {{ packages_kubectl_source | default('UNDEFINED') }}.
       'ocp' extracts kubectl from OCP tarball (tracks OCP release cadence).
       'upstream' downloads kubectl from dl.k8s.io (tracks upstream Kubernetes).
-      An invalid value causes kubectl installation to be silently skipped.
       Fix: Set packages_kubectl_source to 'ocp' or 'upstream' in config.yml.
 
 # On CSB container tier (fapolicyd enforcing), binaries installed to /usr/local/bin
@@ -264,7 +263,7 @@
         state: started
       become: true
       tags: [become]
-      when: _packages_tailscaled_unit.stdout != 'not-found'
+      when: _packages_tailscaled_unit.stdout == 'loaded'
 
 - name: Set Linux x86 work binary install fact
   ansible.builtin.set_fact:
@@ -326,7 +325,7 @@
   ansible.builtin.include_tasks: install_krew.yml
   when: _packages_linux_x86_work
 
-- name: Assert krew binary exists after installation
+- name: Stat krew binary after installation
   ansible.builtin.stat:
     path: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew"
   register: _krew_binary_stat
