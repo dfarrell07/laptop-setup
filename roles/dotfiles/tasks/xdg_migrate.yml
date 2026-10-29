@@ -23,7 +23,7 @@
       {{ _backup_path ~ ('.' ~ now(utc=true, fmt='%Y%m%dT%H%M%SZ')
          if _xdg_migrate_backup_stat.stat.exists | default(false) else '') }}
     remote_src: true
-    mode: "0644"
+    mode: preserve
     force: false
   when: _xdg_migrate_stat.stat.exists
 
