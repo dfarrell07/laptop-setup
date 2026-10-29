@@ -277,7 +277,7 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
   TMPFILE=$(mktemp)
   trap 'rm -f "${TMPFILE:-}"' EXIT
   chmod 0600 "$TMPFILE"
-  echo "$PROMPT" > "$TMPFILE"
+  printf '%s\n' "$PROMPT" > "$TMPFILE"
 
   # The poller (not Claude) fetches, checks out and pushes.  Start from a clean
   # default branch even if a previous failed run left the clone dirty.
@@ -296,7 +296,7 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
     git checkout -B "$BRANCH_NAME" || exit 1
 
     set +e
-    "$TIMEOUT_BIN" "$TIMEOUT_SECONDS" "$CLAUDE_BIN" -p \
+    "$TIMEOUT_BIN" -k 30 "$TIMEOUT_SECONDS" "$CLAUDE_BIN" -p \
       --allowedTools "$TOOLS" \
       --max-turns "$MAX_TURNS" \
       < "$TMPFILE" \
