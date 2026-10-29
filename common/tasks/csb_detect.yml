@@ -74,9 +74,6 @@
   become: false
   when: is_linux | bool and (is_rhel | bool or is_fedora | bool)
 
-# sudo probing and usbguard_running sections removed — facts were only
-# consumed in the verbosity=1 debug summary and not by any downstream role task.
-
 # ---------------------------------------------------------------------------
 # 3. Internal CA certificates (Red Hat specific)
 # ---------------------------------------------------------------------------
@@ -113,7 +110,7 @@
 
 # ---------------------------------------------------------------------------
 # 4. CSB heuristic: RHEL + fapolicyd + internal CA
-#    Fedora path: hostname + internal CA only; fapolicyd not required —
+#    Fedora path: (.csb hostname or fapolicyd installed) + internal CA; enforcing fapolicyd not required —
 #    hybrid Fedora CSB may lack enforcing fapolicyd; csb_restricted handles
 #    the container vs. hybrid split downstream.
 # ---------------------------------------------------------------------------
@@ -137,11 +134,6 @@
   become: false
   when: not (_csb_molecule_force | default(false)) and (is_linux | bool) and (is_rhel | bool or is_fedora | bool)
 
-# rootless container readiness and toolbox/distrobox detection sections removed —
-# podman_rootless_ready was never consumed by any task (distrobox role re-checks subuid/subgid
-# independently at task-time); distrobox role detects
-# these independently via its own 'which' checks; these facts were unused.
-
 # ---------------------------------------------------------------------------
 # 5. Network proxy detection
 # ---------------------------------------------------------------------------
@@ -164,9 +156,6 @@
         ] | select | first | default('')
       }}
   become: false
-
-# firewall_zone and OSCAP/STIG detection sections removed — all facts
-# were only consumed in the verbosity=1 debug summary; no role task used them.
 
 # ---------------------------------------------------------------------------
 # 6. Derived: container tier strategy

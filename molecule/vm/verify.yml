@@ -30,7 +30,7 @@
         system_disable_usb_storage: true     # converge.yml sets this; enables usb_storage blacklist assertions
         system_disable_fingerprint: true     # converge.yml sets this (role default=true); verify asserts fprintd masked
         system_tmout: 600                    # converge.yml sets this; enables session timeout assertions
-        profile: personal                    # converge.yml sets personal profile; sos (work-only) must be guarded
+        profile: personal                    # matches converge.yml
         ssh_port: 722                        # matches default; parameterizes sshd port assertions
         system_ssh_unused_connection_timeout: >-
           {{ (lookup('file', lookup('env', 'MOLECULE_PROJECT_DIRECTORY') ~ '/roles/system/defaults/main.yml')
@@ -63,8 +63,6 @@
       ansible.builtin.import_tasks: ../shared/verify-dnf.yml
 
     # --- repos_dnf checks ---
-    # gh-cli repo assertion removed: gh ships in standard Fedora repos (F43+),
-    # so the third-party repo is no longer added on Fedora.
 
     - name: Verify google-chrome repo configured
       ansible.builtin.stat:
@@ -79,7 +77,7 @@
         fail_msg: "google-chrome repo not configured"
       when: repo_google_chrome
 
-    - name: Include desktop common assertions (Alacritty + Chrome policy)
+    - name: Include desktop common assertions (Alacritty)
       ansible.builtin.import_tasks: ../shared/verify-desktop-common.yml
 
     - name: Verify google-cloud-cli repo configured
@@ -483,13 +481,11 @@
       register: verify_selinux
       changed_when: false
       become: true
-      when: system_selinux_enforcing_required | default(true) | bool
 
     - name: Assert SELinux is enforcing
       ansible.builtin.assert:
         that: verify_selinux.stdout == 'Enforcing'
         fail_msg: "SELinux is '{{ verify_selinux.stdout }}', expected 'Enforcing'"
-      when: system_selinux_enforcing_required | default(true) | bool
 
     - name: Check pam_wheel.so in /etc/pam.d/su
       ansible.builtin.command: grep -qE '^auth.*required.*pam_wheel.so' /etc/pam.d/su
@@ -543,7 +539,6 @@
       ansible.builtin.command: grep -qE '^{{ item.path }}(/[^[:space:]]*)?[$]?[[:space:]]' /etc/aide.conf
       loop:
         - path: /etc/audit
-        - path: /etc/bpfman
         - path: /etc/crypto-policies
         - path: /etc/selinux
         - path: /etc/usbguard
@@ -552,7 +547,6 @@
       when:
         - system_aide_enabled | default(false)
         - item.path != '/etc/usbguard' or usbguard_expected | default(false)
-        - item.path != '/etc/bpfman' or profile | default('personal') == 'work'
       changed_when: false
       become: true
 
@@ -718,11 +712,6 @@
     - name: Check YubiKey Manager is installed
       ansible.builtin.command: ykman --version
       changed_when: false
-
-    - name: Check sos is installed (sosreport diagnostic bundle tool)
-      ansible.builtin.command: rpm -q sos  # noqa: command-instead-of-module
-      changed_when: false
-      when: profile | default('personal') == 'work'  # sos is work-profile only; skipped here (profile forced personal)
 
     # --- distrobox role ---
     - name: Check for distrobox binary

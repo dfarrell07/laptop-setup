@@ -1,7 +1,7 @@
 ---
 # roles/packages/tasks/install_oc_opm.yml
 # OpenShift CLI (oc+kubectl) and OPM operator registry tool downloads.
-# Included from main.yml; inherits become from the calling play.
+# Included from install_binary_downloads.yml; inherits become from the calling play.
 # Guarded by _packages_linux_x86_work (is_linux + x86_64 + profile==work +
 # packages_install_binaries); do not include directly without that guard.
 - name: Install oc and kubectl
@@ -302,13 +302,6 @@
                 dest: /usr/local/bin/opm
                 remote_src: true
                 mode: '0755'
-              become: true
-              tags: [become]
-
-            - name: Remove source opm binary after copy
-              ansible.builtin.file:
-                path: /usr/local/bin/{{ packages_opm_binary_name }}
-                state: absent
               become: true
               tags: [become]
 

@@ -37,78 +37,42 @@
     - not csb_rhel
     - not system_is_container  # /etc/security/ writes trigger PAM re-evaluation; crashes Debian 13 container PID 1
 
-- name: Enable pam_faillock audit flag (when system_faillock_audit is true)
+- name: Set pam_faillock audit flag
   community.general.ini_file:
     path: /etc/security/faillock.conf
     section: null
     option: audit
+    state: "{{ 'present' if system_faillock_audit | bool else 'absent' }}"
     allow_no_value: true
     no_extra_spaces: true
     mode: "0644"
   when:
-    - system_faillock_audit | bool
     - not csb_rhel
     - not system_is_container
 
-- name: Remove pam_faillock audit flag (when disabled)
-  community.general.ini_file:
-    path: /etc/security/faillock.conf
-    section: null
-    option: audit
-    state: absent
-    mode: "0644"
-  when:
-    - not (system_faillock_audit | bool)
-    - not csb_rhel
-    - not system_is_container
-
-- name: Enable pam_faillock local_users_only flag (when system_faillock_local_users_only is true)
+- name: Set pam_faillock local_users_only flag
   community.general.ini_file:
     path: /etc/security/faillock.conf
     section: null
     option: local_users_only  # prevent double-lockout with SSSD/IPA domain users
+    state: "{{ 'present' if system_faillock_local_users_only | bool else 'absent' }}"
     allow_no_value: true
     no_extra_spaces: true
     mode: "0644"
   when:
-    - system_faillock_local_users_only | bool
     - not csb_rhel
     - not system_is_container
 
-- name: Remove pam_faillock local_users_only flag (when disabled)
-  community.general.ini_file:
-    path: /etc/security/faillock.conf
-    section: null
-    option: local_users_only
-    state: absent
-    mode: "0644"
-  when:
-    - not (system_faillock_local_users_only | bool)
-    - not csb_rhel
-    - not system_is_container
-
-- name: Enable pam_faillock even_deny_root flag (when system_faillock_even_deny_root is true)
+- name: Set pam_faillock even_deny_root flag
   community.general.ini_file:
     path: /etc/security/faillock.conf
     section: null
     option: even_deny_root
+    state: "{{ 'present' if system_faillock_even_deny_root | bool else 'absent' }}"
     allow_no_value: true
     no_extra_spaces: true
     mode: "0644"
   when:
-    - system_faillock_even_deny_root | bool
-    - not csb_rhel
-    - not system_is_container
-
-- name: Remove pam_faillock even_deny_root flag (when disabled)
-  community.general.ini_file:
-    path: /etc/security/faillock.conf
-    section: null
-    option: even_deny_root
-    state: absent
-    mode: "0644"
-  when:
-    - not (system_faillock_even_deny_root | bool)
     - not csb_rhel
     - not system_is_container
 
@@ -251,7 +215,7 @@
 # those settings have NO effect. Two lines are required:
 #   preauth  — before pam_unix.so, checks if account is already locked
 #   authfail — after pam_unix.so, records failed attempts
-# Both are written atomically via a single shell task (awk rewrite + mv rename) to
+# Both are written atomically via a single shell task (python converter writes a temp file, awk validates it, mv renames) to
 # eliminate the inter-task inconsistency window that existed when two sequential
 # lineinfile tasks were used (brute-force attempts landing between the two writes
 # were not counted toward the lockout threshold).
@@ -420,53 +384,6 @@
     - not system_is_container
     - not ansible_check_mode  # the insertions above are only simulated in check mode
 
-# --- Debian PAM pwquality (password complexity) ---
-# On Debian, pam_pwquality.so is active in common-password by default (via
-# libpam-pwquality) and reads /etc/security/pwquality.conf. Configure the
-# same complexity requirements applied on Fedora/RHEL.
-- name: Configure password quality requirements (Debian)
-  community.general.ini_file:
-    path: /etc/security/pwquality.conf
-    section: null
-    option: "{{ item.key }}"
-    value: "{{ item.value }}"
-    no_extra_spaces: true
-    mode: "0644"
-  loop:
-    - key: minlen
-      value: "{{ system_pwquality_minlen | int }}"
-    - key: dcredit
-      value: "{{ system_pwquality_dcredit | int }}"
-    - key: ucredit
-      value: "{{ system_pwquality_ucredit | int }}"
-    - key: lcredit
-      value: "{{ system_pwquality_lcredit | int }}"
-    - key: ocredit
-      value: "{{ system_pwquality_ocredit | int }}"
-    - key: difok
-      value: "{{ system_pwquality_difok | int }}"
-    - key: maxrepeat
-      value: "{{ system_pwquality_maxrepeat | int }}"
-    - key: maxsequence
-      value: "{{ system_pwquality_maxsequence | int }}"
-  loop_control:
-    label: "{{ item.key }}"
-  when:
-    - is_apt
-    - not system_is_container
-
-- name: Enforce pwquality for root (Debian, CIS 5.3.4)
-  community.general.ini_file:
-    path: /etc/security/pwquality.conf
-    section: null
-    option: enforce_for_root
-    allow_no_value: true
-    no_extra_spaces: true
-    mode: "0644"
-  when:
-    - is_apt
-    - not system_is_container
-
 # --- PAM pwhistory (password reuse prevention, CIS 5.3.5) ---
 - name: Check if authselect with-pwhistory feature is already enabled
   ansible.builtin.command:
@@ -629,7 +546,6 @@
   when:
     - not csb_rhel
     - not system_is_container
-    - not is_apt
 
 - name: Enforce pwquality for root (CIS 5.3.4)
   community.general.ini_file:
@@ -642,7 +558,6 @@
   when:
     - not csb_rhel
     - not system_is_container
-    - not is_apt
 
 # --- Restrict su to wheel group ---
 - name: Enable pam_wheel.so for su

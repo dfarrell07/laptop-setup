@@ -2,39 +2,6 @@
 # roles/desktop/tasks/main.yml
 # Desktop environment: Sway/GNOME/i3 (Linux), AeroSpace (macOS), Alacritty, fonts.
 
-- name: Set effective desktop
-  ansible.builtin.set_fact:
-    desktop_effective: >-
-      {{ desktop_environment if desktop_environment != 'auto'
-         else ('sway' if (ansible_facts['env']['XDG_SESSION_TYPE'] | default('') == 'wayland' and
-                          ansible_facts['env']['XDG_CURRENT_DESKTOP'] | default('') == 'sway')
-               else ('gnome' if (ansible_facts['env']['XDG_CURRENT_DESKTOP'] | default('') is search('GNOME'))
-               else ('i3' if (ansible_facts['env']['XDG_CURRENT_DESKTOP'] | default('') == 'i3')
-               else 'unknown'))) }}
-
-- name: Warn when desktop_environment explicitly set to unknown
-  ansible.builtin.debug:
-    msg: >-
-      desktop_environment is set to 'unknown' — no WM packages will be installed.
-      Set desktop_environment: sway, i3, or gnome in config.yml if a WM is needed.
-  when:
-    - desktop_effective == 'unknown'
-    - desktop_environment != 'auto'
-
-- name: Fail when auto-detection falls through to unknown on Linux
-  ansible.builtin.fail:
-    msg: >-
-      desktop_environment is 'auto' but no desktop session was detected
-      (XDG_SESSION_TYPE='{{ ansible_facts['env']['XDG_SESSION_TYPE'] | default('') }}',
-      XDG_CURRENT_DESKTOP='{{ ansible_facts['env']['XDG_CURRENT_DESKTOP'] | default('') }}').
-      Set desktop_environment: sway, i3, or gnome in config.yml before running
-      make all — auto-detection requires an active desktop session and will not
-      work on bare installs or remote SSH provisioning.
-  when:
-    - desktop_effective == 'unknown'
-    - desktop_environment == 'auto'
-    - is_linux
-
 - name: Assert display timeout is greater than lock timeout
   ansible.builtin.assert:
     that: desktop_wm_idle_display_timeout | int > desktop_wm_idle_lock_timeout | int
@@ -43,22 +10,7 @@
       than desktop_wm_idle_lock_timeout ({{ desktop_wm_idle_lock_timeout }}s). If the display
       powers off before the screen locks, the resume handler will wake the display and expose
       an unlocked desktop. Set display_timeout > lock_timeout in config.yml.
-  when: desktop_effective in ['sway', 'i3']
-
-- name: Assert desktop_wm_hide_edge_borders is an allowlist value
-  ansible.builtin.assert:
-    that: >-
-      desktop_wm_hide_edge_borders | length == 0
-      or desktop_wm_hide_edge_borders in ['none', 'vertical', 'horizontal', 'both', 'smart', 'smart_no_gaps']
-    fail_msg: >-
-      SECURITY: desktop_wm_hide_edge_borders contains a disallowed value.
-      Input: '{{ desktop_wm_hide_edge_borders }}'
-      Mechanism: bare rendering in sway/i3 config templates allows newline injection.
-      Example: "smart\nexec xterm" injects an exec directive run at WM start/restart.
-      Impact: arbitrary commands execute as the user when the window manager starts.
-      Fix: set desktop_wm_hide_edge_borders to one of:
-        none, vertical, horizontal, both, smart, smart_no_gaps (or '' to omit).
-  tags: [always]
+  when: desktop_environment in ['sway', 'i3']
 
 - name: Install desktop packages (dnf)
   when: is_dnf
@@ -66,9 +18,9 @@
     - name: Install desktop packages (dnf)
       vars:
         _wm_pkgs: >-
-          {{ (desktop_sway_packages if desktop_effective == 'sway' else [])
-             + (desktop_i3_packages if desktop_effective == 'i3' else [])
-             + (desktop_gnome_packages if desktop_effective == 'gnome' else [])
+          {{ (desktop_sway_packages if desktop_environment == 'sway' else [])
+             + (desktop_i3_packages if desktop_environment == 'i3' else [])
+             + (desktop_gnome_packages if desktop_environment == 'gnome' else [])
              + (desktop_alacritty_packages if desktop_terminal == 'alacritty' else []) }}
       ansible.builtin.dnf:
         name: "{{ desktop_dnf_packages + _wm_pkgs }}"
@@ -90,8 +42,8 @@
     - name: Install desktop packages (apt)
       vars:
         _apt_wm_pkgs: >-
-          {{ (desktop_sway_apt_packages if desktop_effective == 'sway' else [])
-             + (desktop_i3_apt_packages if desktop_effective == 'i3' else [])
+          {{ (desktop_sway_apt_packages if desktop_environment == 'sway' else [])
+             + (desktop_i3_apt_packages if desktop_environment == 'i3' else [])
              + (desktop_alacritty_packages if desktop_terminal == 'alacritty' else []) }}
       ansible.builtin.apt:
         name: "{{ desktop_apt_packages + _apt_wm_pkgs }}"
@@ -131,7 +83,7 @@
 
 # --- i3 config ---
 - name: Deploy i3 configuration
-  when: desktop_effective == 'i3'
+  when: desktop_environment == 'i3'
   block:
     - name: Ensure i3 config directory
       ansible.builtin.file:
@@ -149,7 +101,7 @@
 # --- i3 TrackPoint config (X11 persistent, via xorg.conf.d) ---
 - name: TrackPoint config for i3 (X11, xorg.conf.d)
   when:
-    - desktop_effective == 'i3'
+    - desktop_environment == 'i3'
     - desktop_i3_trackpoint_id | length > 0
   become: true
   tags: [become]
@@ -172,10 +124,10 @@
     path: "{{ ansible_facts['user_dir'] }}/Pictures"
     state: directory
     mode: "0755"
-  when: desktop_effective in ['sway', 'i3']
+  when: desktop_environment in ['sway', 'i3']
 
 - name: Deploy Sway configuration and GTK settings
-  when: desktop_effective == 'sway'
+  when: desktop_environment == 'sway'
   block:
     - name: Ensure Sway config directories
       ansible.builtin.file:
@@ -242,12 +194,12 @@
     mode: "0644"
   when:
     - is_linux
-    - desktop_effective in ['sway', 'i3']
+    - desktop_environment in ['sway', 'i3']
     - not system_is_container  # ~/.config/environment.d not created in containers (common task guards it)
 
 # --- i3status config (shared by i3 and Sway) ---
 - name: Deploy i3status config (shared by i3 and Sway)
-  when: desktop_effective in ['i3', 'sway']
+  when: desktop_environment in ['i3', 'sway']
   block:
     - name: Ensure i3status config directory
       ansible.builtin.file:
@@ -321,7 +273,7 @@
 
 # For SSSD/LDAP domain accounts, chsh and usermod only modify /etc/passwd
 # and cannot write to LDAP backends. Set override_shell for the domain instead —
-# this takes effect for the domain user on next login after sssd restarts.
+# this applies to every user of that domain on next login after sssd restarts.
 - name: Get SSSD domain section for override_shell
   ansible.builtin.shell:
     cmd: |
@@ -346,7 +298,7 @@
 
 # A conf.d snippet, not an edit of sssd.conf: Red Hat IT re-templates sssd.conf on CSB
 # (dropping override_shell), and sssd on Fedora 41+ runs as the sssd user, so the file it
-# reads must keep sssd.conf's group and mode (root:sssd 0640 there). Mode 0600 would make
+# reads must have sssd.conf's group, mode 0640 when that group is not root (root:sssd there). Mode 0600 would make
 # sssd unable to read its config and break domain logins.
 - name: Read sssd.conf ownership for the override_shell snippet
   ansible.builtin.stat:
@@ -517,7 +469,7 @@
 - name: GNOME hardening dconf settings
   when:
     - is_linux
-    - desktop_effective == 'gnome'
+    - desktop_environment == 'gnome'
     - not (system_is_container | default(false))
   block:
     - name: Validate GNOME preference types

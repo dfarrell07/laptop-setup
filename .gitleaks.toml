@@ -15,7 +15,7 @@
     condition = "AND"
     regexTarget = "match"
     regexes = [
-      '''system_grub_password_hash:[\s]*"grub\.pbkdf2\.sha512\.(10000|200000)\.\.\.\."''',
+      '''(system|vault)_grub_password_hash:[\s]*"grub\.pbkdf2\.sha512\.(10000|200000)\.\.\.\."''',
       '''password hash via: grub2-mkpasswd-pbkdf2''',
     ]
     paths = ['''(^|/)(common/tasks/pre_flight_checks|roles/system/tasks/grub_password)\.yml$''']

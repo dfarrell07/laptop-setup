@@ -80,7 +80,6 @@ CROSS_ROLE_MIRROR_KEYS = {
     ],
     "is_apt": [
         REPO_ROOT / "roles/desktop/defaults/main.yml",
-        REPO_ROOT / "roles/dotfiles/defaults/main.yml",
         REPO_ROOT / "roles/packages/defaults/main.yml",
     ],
     "packages_bpfman_enabled": [
@@ -115,9 +114,6 @@ CROSS_ROLE_MIRROR_KEYS = {
     "repo_tailscale": [
         REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
         REPO_ROOT / "roles/packages/defaults/main.yml",
-    ],
-    "install_docker": [
-        REPO_ROOT / "roles/containers/defaults/main.yml",
     ],
     "ssh_signing_key_basename": [
         REPO_ROOT / "roles/ssh/defaults/main.yml",

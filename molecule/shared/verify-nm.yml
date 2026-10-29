@@ -94,16 +94,16 @@
   register: verify_nm_wifi_ps
   become: true
   when:
-    - system_wifi_powersave_disabled | default(not csb_rhel) | bool
-    - not csb_rhel  # RHEL CSB removes this file
+    - system_wifi_powersave_disabled | default(not csb_detected) | bool
+    - not csb_detected  # CSB removes this file
 
 - name: Assert 99-wifi-powersave.conf deployed by system role
   ansible.builtin.assert:
     that: verify_nm_wifi_ps.stat.exists
     fail_msg: "99-wifi-powersave.conf missing — Wi-Fi power management not configured"
   when:
-    - system_wifi_powersave_disabled | default(not csb_rhel) | bool
-    - not csb_rhel  # RHEL CSB removes this file
+    - system_wifi_powersave_disabled | default(not csb_detected) | bool
+    - not csb_detected  # CSB removes this file
 
 - name: Slurp 99-wifi-powersave.conf for content check
   ansible.builtin.slurp:
@@ -111,8 +111,8 @@
   register: verify_nm_wifi_ps_content
   become: true
   when:
-    - system_wifi_powersave_disabled | default(not csb_rhel) | bool
-    - not csb_rhel  # RHEL CSB removes this file
+    - system_wifi_powersave_disabled | default(not csb_detected) | bool
+    - not csb_detected  # CSB removes this file
     - verify_nm_wifi_ps.stat.exists
 
 - name: Assert 99-wifi-powersave.conf contains wifi.powersave=2
@@ -122,8 +122,8 @@
       - (verify_nm_wifi_ps_content.content | b64decode) is search('^match-device=type:wifi$', multiline=True)
     fail_msg: "99-wifi-powersave.conf exists but does not contain wifi.powersave=2"
   when:
-    - system_wifi_powersave_disabled | default(not csb_rhel) | bool
-    - not csb_rhel  # RHEL CSB removes this file
+    - system_wifi_powersave_disabled | default(not csb_detected) | bool
+    - not csb_detected  # CSB removes this file
     - verify_nm_wifi_ps.stat.exists
 
 - name: Stat /etc/NetworkManager/conf.d/99-dhcp-privacy.conf

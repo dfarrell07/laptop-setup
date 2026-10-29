@@ -137,7 +137,7 @@
   when:
     - is_dnf
     - system_aide_enabled | bool
-    - not csb_rhel  # CSB IT manages AIDE baseline; don't overwrite
+    - not csb_rhel  # RHEL CSB: IT manages the AIDE baseline
     - not system_is_container
     # check mode only simulates the install, so /etc/aide.conf does not exist yet
     - not (ansible_check_mode and _system_aide_rpm.rc | default(0) != 0)
@@ -290,7 +290,7 @@
         state: present
       register: _aide_conf_r6e
 
-    # Content hashes (NORMAL) changed on every append, so each hourly check alerted. These
+    # Content hashes (NORMAL) changed on every append, so each daily check alerted. These
     # are the LOG-group attributes spelled out: growing+s reports a log that shrank (truncation or
     # replacement), plus owner/mode/link-count/ACL/SELinux/xattr changes.
     - name: Add /var/log/audit/audit.log to AIDE monitoring (growing-log attributes)
@@ -419,8 +419,8 @@
           register: system_aide_reinit_result
 
     - name: Promote aide.db.new.gz to aide.db.gz (resume interrupted init)
-      ansible.builtin.command:
-        cmd: mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+      ansible.builtin.shell:  # noqa: command-instead-of-module
+        cmd: mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz && touch /var/lib/aide/.rebaseline-pending
       when:
         - system_aide_db_new.stat.exists | default(false)
         - system_aide_reinit_result is skipped  # DB promotion from interrupted init; result always defined even when skipped
@@ -435,7 +435,7 @@
 
     # Reached when no DB exists and no reinit was triggered: either aide.conf was already fully configured
     # (zero lineinfile changes, _aide_conf_changed=false) on first run, or the rescue block deleted aide.db.gz
-    # after a failed reinit and control returned here for a recovery re-init.
+    # after a failed reinit; this task then performs the recovery init on the next run.
     - name: Initialize AIDE database (first run or post-rescue)
       when:
         - not (system_aide_db.stat.exists | default(false))

@@ -37,9 +37,8 @@ acceptance checks pass. Skip AI transcript and session history; restore AI tooli
 ## 2. Prepare the destination
 
 1. Follow the README quick start through `make bootstrap`, then `cp default.config.yml config.yml`; merge reviewed
-   source overrides into it. Set `profile`, `desktop_environment` (GNOME, i3 or Sway; `aerospace` on macOS),
-   timezone and identity, and replace every `CHANGE_ME`. The Claude native install also needs a reviewed
-   `claude_install_sha256` and `claude_pinned_version`; the pin does not freeze later auto-updates.
+   source overrides into it. The Claude native install also needs a reviewed `claude_install_sha256` and
+   `claude_pinned_version`; the pin does not freeze later auto-updates.
 2. Reuse the encrypted vault and a reviewed `scripts/vault-pass.sh` with your existing hardware keys. After
    restoring the helper, `chmod 700 scripts/vault-pass.sh` and refresh its integrity file:
    `(cd scripts && sha256sum vault-pass.sh > vault-pass.sh.sha256)`. Check with `make vault-view` in a private
@@ -99,12 +98,14 @@ repository, RHEL CSB or hybrid Fedora CSB); other Linux hosts use the
 [vendor install](https://docs.cloud.google.com/sdk/docs/install-sdk). Authentication and private project settings stay outside Git.
 
 The launchers keep their old bypass arguments: Claude `--dangerously-skip-permissions --plugin-dir .`, Codex
-`--ask-for-approval=never --sandbox=danger-full-access`. Do not treat the managed sandbox and deny config as an
+`--ask-for-approval=never --sandbox=danger-full-access`, gper
+`--mode=accept-edits --dangerously-skip-permissions`. Do not treat the managed sandbox and deny config as an
 enforcement guarantee while they are in place. To drop them:
 
 ```yaml
 dotfiles_claude_launcher_args: []
 dotfiles_codex_launcher_args: []
+dotfiles_gemini_launcher_args: []
 ```
 
 Codex config and `AGENTS.md` are seeded once, and Claude preferences (fullscreen UI, repository marketplace

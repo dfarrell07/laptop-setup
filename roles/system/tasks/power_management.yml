@@ -228,13 +228,9 @@
               {{ (ansible_facts.services | default({})) | dict2items
                  | selectattr('key', 'in', ['tuned.service', 'tuned-ppd.service', 'power-profiles-daemon.service']) | items2dict }}
             _system_native_power_packages: >-
-              {{ ['tuned', 'tuned-ppd']
-                 if ansible_distribution == 'Fedora' and ansible_distribution_major_version | int >= 41
-                 else (['power-profiles-daemon'] if ansible_distribution == 'Fedora' else ['tuned']) }}
+              {{ ['tuned', 'tuned-ppd'] if ansible_distribution == 'Fedora' else ['tuned'] }}
             _system_native_power_units: >-
-              {{ ['tuned.service', 'tuned-ppd.service']
-                 if ansible_distribution == 'Fedora' and ansible_distribution_major_version | int >= 41
-                 else (['power-profiles-daemon.service'] if ansible_distribution == 'Fedora' else ['tuned.service']) }}
+              {{ ['tuned.service', 'tuned-ppd.service'] if ansible_distribution == 'Fedora' else ['tuned.service'] }}
 
         - name: Switch managed TLP to the native power stack
           block:

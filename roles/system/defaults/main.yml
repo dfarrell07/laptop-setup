@@ -136,9 +136,6 @@ system_firewall_icmp_extra_types: []
 # Set false in config.yml to keep tftp in the libvirt zone (needed for PXE/network-boot VMs).
 # When true (default), tftp is removed from the libvirt zone because it is not needed for most hosts.
 system_libvirt_remove_tftp: true
-# Set true in config.yml to allow VMs to reach host on ssh_port (opt-in).
-# Default false; explicit opt-in required for VM→host SSH (e.g., ansible-provisioning guests).
-system_libvirt_open_ssh: false
 
 # Core dumps
 # Default 'none' — prevents systemd-coredump from writing process memory to
@@ -182,7 +179,7 @@ system_usbguard_whitelist:
   - "allow id 1d6b:0002 with-interface one-of { 09:*:* }"  # USB 2.0 root hubs
   - "allow id 1d6b:0003 with-interface one-of { 09:*:* }"  # USB 3.0 root hubs
   # Retained for Intel-based hardware where ACPI tables populate hardwired correctly.
-  # Interface class restriction excludes mass storage (08) and unexpected classes.
+  # Interface class restriction excludes mass storage (08); vendor-specific (FF) and wireless (E0:01:01) are still admitted.
   # NOTE: AMD machines (ThinkPad P16v Gen 1) report internal ports as 'not used',
   # not 'hardwired'; this rule is a no-op on those hosts. Add per-device VID:PID
   # rules via system_usbguard_extra_rules in config.yml for AMD internal devices.
@@ -212,7 +209,6 @@ system_logind_idle_sec: 900   # seconds of inactivity before logind locks the se
 # before 'aide --init' are baked into the initial DB as known-good and never alert.
 # Auditd write-watches (auditd-system.rules.j2) only cover writes after auditd starts,
 # so a pre-provisioning plant is invisible to both subsystems.
-# preflight.sh runs 'aide --check' when a DB exists to surface changes before provisioning.
 system_aide_enabled: false  # 5-10 min init on first provision; enable only when monitoring results
 # Paths added to /etc/aide.conf as 'NORMAL' entries with insertbefore: '^/etc\s'.
 # Override in config.yml to add or remove monitored paths without editing tasks.
@@ -230,7 +226,6 @@ system_aide_monitoring_etc_paths:
   - /etc/selinux/config          # SELinux enforcement mode (enforcing/permissive/disabled)
   - /etc/sysctl.d                # kernel hardening parameters
   - /etc/kernel                  # kernel cmdline parameters (next-boot install)
-  - /etc/chrony.d                # chrony NTS drop-in configs (time sync tampering)
   - /etc/systemd/resolved.conf.d # DNS-over-TLS config (DoT server substitution)
   - /etc/audit                   # auditd rules integrity
   - /etc/modprobe.d              # kernel module blacklist integrity
@@ -312,7 +307,7 @@ system_bluetooth_privacy: device   # BlueZ Privacy= in /etc/bluetooth/main.conf;
 system_bluetooth_name: "Bluetooth"  # BlueZ Name= in /etc/bluetooth/main.conf; shown to Bluetooth scanners
 system_disable_fingerprint: true  # mask fprintd — set false in config.yml to enable fingerprint auth
 system_mask_abrt: true  # mask ABRT to prevent automatic upstream crash reporting and reduce daemon surface area;
-# local core capture is handled by systemd-coredump; set false on RHEL CSB (guard in task)
+# local core capture is handled by systemd-coredump; skipped on RHEL CSB (guard in task)
 # SysRq bitmask: 0=disabled (CIS), 176=sync(16)+remount-ro(32)+reboot(128) for kernel dev/recovery.
 # Dangerous bits omitted from 176: raw-console(4), process-signalling(64), crash/dump(8).
 # Set in config.yml — e.g. system_sysrq: 176 on a ThinkPad used for OVN-K kernel debugging.
@@ -399,10 +394,10 @@ system_kernel_lockdown: integrity
 
 # GRUB bootloader password (CIS 1.4.2) — protects against kernel param tampering
 # with physical console access (prevents removing lockdown=integrity before boot).
-# Default: false (opt-in). Set true in config.yml + configure system_grub_password_hash.
+# Default: false (opt-in). Set true in config.yml and store the hash in the vault.
 system_grub_password_enabled: false
 # Generate via: grub2-mkpasswd-pbkdf2 (Fedora) or grub-mkpasswd-pbkdf2 (Debian)
-# Recommend storing in vault-encrypted config.yml (vault_grub_password_hash) for deployments.
+# Store the hash as vault_grub_password_hash in group_vars/all/vault.yml (never in config.yml).
 system_grub_password_hash: ""
 
 # Identity fallbacks — site.yml always sets these via set_fact from env,
@@ -486,12 +481,6 @@ system_devshm_noexec: true
 # NOTE: on Fedora hybrid (csb_detected=true, Fedora distribution), nosuid is applied
 # regardless of this flag — /home is a local btrfs partition and nosuid is always safe.
 system_home_nosuid_force: false
-# SELinux enforcement assertion: set false only in container CI environments where the
-# container image reports SELinux as disabled regardless of host policy (e.g., geerlingguy
-# Rocky images in Podman). On real hosts, leave true — the assert catches mis-configured
-# hosts before security-sensitive tasks run.
-# CI gap: SELinux enforcement is NOT verified by Podman-based scenarios when set false.
-system_selinux_enforcing_required: true
 system_selinux_policy: targeted  # SELinux policy type (targeted/minimum/strict)
 # Polkit rules directory scan: any file in /etc/polkit-1/rules.d not listed here
 # causes a hard failure. Fedora's packaged PKLA compatibility rule is accepted
@@ -513,7 +502,7 @@ system_luks_discards_enabled: false
 # assigning PCI devices to VMs. Enabling iommu=pt bypasses DMA remapping for all devices
 # not assigned to a VM, trading full DMA isolation for passthrough performance.
 system_iommu_passthrough: false
-system_wifi_powersave_disabled: "{{ not csb_rhel }}"
+system_wifi_powersave_disabled: "{{ not csb_detected }}"
 system_enable_cockpit: false  # set true to unmask cockpit (port 9090); LAN-accessible; use Tailscale for VPN-only access
 
 # Chrony NTS time sources. Override in config.yml for corporate environments that block

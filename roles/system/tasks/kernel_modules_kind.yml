@@ -73,7 +73,7 @@
     - vhost_net  # vhost kernel acceleration for VMs
     - vhost_vsock  # VM sockets for host-guest communication
   when:
-    - not csb_rhel  # kind runs inside dev container on CSB; persistent modules on host unnecessary
+    - not csb_rhel  # RHEL CSB: kind runs inside the dev container; host modules unneeded
     - not system_is_container
     # Loading iptables modules in a Podman container disrupts host iptables/networking
     # and kills the container connection; modules are managed by the host on container hosts.
@@ -115,7 +115,3 @@
        | list }}
   loop_control:
     label: "{{ item.item }}"
-  when:
-    - not csb_rhel
-    - not (item.item == 'kvm_intel' and 'amd' in (ansible_facts['processor'] | join(' ') | lower))
-    - not (item.item == 'kvm_amd' and 'intel' in (ansible_facts['processor'] | join(' ') | lower))

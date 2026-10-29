@@ -197,7 +197,7 @@ def status_table(catalog, enabled):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument('command', choices=['check', 'skip-tags', 'status', 'chunk-args', 'banner', 'verify'])
+    parser.add_argument('command', choices=['skip-tags', 'status', 'chunk-args', 'banner', 'verify'])
     parser.add_argument('chunk', nargs='?', default='')
     parser.add_argument('--preview', action='store_true', help='chunk-args for a read-only preview: skip the high-risk confirmation')
     parser.add_argument('--config', default=str(CONFIG))

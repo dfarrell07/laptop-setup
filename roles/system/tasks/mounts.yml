@@ -27,7 +27,6 @@
           Options=mode=1777,strictatime,nosuid,nodev{{ _noexec_opt }},size=50%%,nr_inodes=1m,x-systemd.graceful-option=usrquota
         dest: /etc/systemd/system/tmp.mount.d/hardening.conf
         mode: "0644"
-      notify: Remount /tmp  # handler remounts live (adds, never removes, noexec); daemon_reload below handles first-provision
 
     - name: Reload systemd after deploying tmp.mount drop-in
       ansible.builtin.systemd:
@@ -108,7 +107,6 @@
     path: /etc/fstab
     regexp: '^tmpfs\s+/dev/shm\s+'
     line: "tmpfs /dev/shm tmpfs defaults,nosuid,nodev{{ _devshm_noexec_opt }},x-systemd.graceful-option=usrquota 0 0"
-    create: false   # Changed from true — defensive: only add when fstab exists with root entry
     backup: true   # fstab corruption causes non-recoverable boot failure without console access
     mode: "0644"
   when:
@@ -162,7 +160,7 @@
   changed_when: false
   when: not system_is_container
 
-# On CSB, fstab is IT-managed so we cannot add the /dev/shm entry for persistence.
+# On RHEL CSB, fstab is IT-managed so we cannot add the /dev/shm entry for persistence.
 # Deploy a one-shot service to re-apply hardening on every boot instead.
 - name: Deploy dev-shm-harden.service (CSB — fstab not modified)
   vars:
@@ -273,8 +271,7 @@
     msg: >-
       WARNING: /home is a separate mountpoint but has no /etc/fstab entry.
       The fstab lineinfile tasks will silently no-op (backrefs: true). Live nosuid/nodev
-      is applied for this session but will not survive a reboot. Add /home to /etc/fstab
-      or set system_home_nosuid_force: false to suppress this block.
+      is applied for this session but will not survive a reboot. Add /home to /etc/fstab.
   when:
     - system_home_mountpoint.rc | default(-1) == 0
     - not csb_rhel or (system_home_nosuid_force | bool)
@@ -366,9 +363,9 @@
 # that each task can run independently (e.g. fstab updated on prior run but not yet
 # rebooted). Uses backrefs to append to the installer's existing fstab entry.
 #
-# CSB: fstab is IT-managed; skip fstab modification on CSB and deploy a one-shot
+# RHEL CSB: fstab is IT-managed; skip fstab modification there and deploy a one-shot
 # service to re-apply hardening at every boot instead (same pattern as dev-shm-harden.service).
-# The live remount runs unconditionally to harden the current boot session.
+# The live remount runs on RHEL CSB too (when /boot is a separate mountpoint) to harden the current boot session.
 - name: Check if /boot is a separate mountpoint
   ansible.builtin.command:
     cmd: findmnt -n /boot

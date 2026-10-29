@@ -3,8 +3,9 @@
 # (low risk and high value first). A chunk's name is also its Ansible tag.
 #
 # rollout_enable (override in config.yml): `all` (default) or a list of chunk names.
-# scripts/rollout.py turns the chunks that are not enabled into --skip-tags, so with the
-# default nothing is skipped and a run is identical to one without this file.
+# scripts/rollout.py prints the chunks that are not enabled; scripts/verify-ansible-args.sh passes
+# them as --skip-tags, so with the default nothing is skipped and a run is identical to one
+# without this file.
 #
 # Fields: desc, risk (low|medium|high), sudo (default true; false = needs no sudo), requires (chunks
 # that must also be enabled; listed earlier in this file), verify (scripts/smoke-test.sh check names
@@ -26,7 +27,7 @@ rollout_catalog:
     risk: low
     sudo: false
     requires: [ssh_client]
-    verify: [dotfile-gitconfig, git-hooks-path, ssh-config-hash-known-hosts]
+    verify: [dotfile-gitconfig, git-hooks-path, ssh-config-hash-known-hosts, ssh-config-github-strict]
   desktop:
     desc: GNOME, sway, i3 or AeroSpace configuration
     risk: low
@@ -39,16 +40,18 @@ rollout_catalog:
     desc: Git repository clones and the notes repo
     risk: low
     sudo: false
+    requires: [packages]
   containers:
     desc: Podman config, pull policy and registries
     risk: medium
+    sudo: false
     requires: [packages]
     verify: [fqin-enforcement, containers-policy]
   distrobox:
     desc: Dev container provisioning
     risk: low
     sudo: false
-    requires: [containers, ssh_client]
+    requires: [containers]
     verify: [distrobox-container]
   login_shell:
     desc: zsh as the login shell (usermod or SSSD override)
@@ -58,18 +61,17 @@ rollout_catalog:
   redhat:
     desc: Red Hat IT tooling (VPN client, certificates)
     risk: medium
-    requires: [packages]
   repos_dnf:
     desc: Third-party dnf repositories
     risk: medium
   sys_baseline:
-    desc: Passive settings (SELinux, masking, logind, journald, cron, dconf)
+    desc: Baseline settings (SELinux, masking, logind, journald, cron, dconf, firmware, timezone)
     risk: medium
-    verify: [login-banner, cron-allow-root, journald-persistent]
+    verify: [selinux, login-banner, cron-allow-root, journald-persistent, ctrl-alt-del-masked, logind-idle-sec, fwupd-refresh-timer]
   sys_sysctl:
     desc: sysctl hardening, core dumps, module blacklist, kind kernel modules
     risk: medium
-    verify: [coredump-configured, modprobe-hardening]
+    verify: [coredump-configured, modprobe-hardening, sysctl-ptrace-scope, sysctl-no-accept-ra]
   sys_time_dns:
     desc: chrony NTS, DNS-over-TLS, dnf-automatic
     risk: medium
@@ -78,10 +80,11 @@ rollout_catalog:
     desc: Session timeout, AIDE, setuid scan, GRUB password, module-load lock
     risk: medium
     requires: [sys_sysctl]
+    verify: [setuid-scan-timer]
   sys_mounts:
     desc: Mount hardening (tmpfs and fstab options)
     risk: high
-    verify: [tmp-hardening]
+    verify: [tmp-hardening, shm-hardening, home-nosuid, boot-hardening, boot-efi-hardening]
   sys_lockdown:
     desc: Kernel lockdown and boot arguments (needs a reboot)
     risk: high
@@ -97,15 +100,15 @@ rollout_catalog:
   sys_signin:
     desc: Sudoers defaults, account hardening, authselect and PAM
     risk: high
-    verify: [authselect-check, pam-wheel]
+    verify: [authselect-check, authselect-faillock, authselect-pwhistory, sudoers-hardening, pam-wheel]
   ssh_authorized_keys:
     desc: Exclusive authorized_keys from the vault (can lock out remote access)
     risk: high
     sudo: false
     requires: [ssh_client]
-    verify: [authorized-keys-exists, authorized-keys-ed25519]
+    verify: [authorized-keys-exists, authorized-keys-ed25519, authorized-keys-exclusive]
   sys_remote_access:
     desc: Firewall, NetworkManager zones, sshd (port 722, Tailscale inbound SSH)
     risk: high
     requires: [sys_baseline, ssh_authorized_keys]
-    verify: [sshd-hardening, sshd-port, sshd-port-bound, firewall-ssh-port]
+    verify: [sshd-hardening, sshd-port, sshd-port-bound, firewall-ssh-port, firewall-tailscale-permanent]

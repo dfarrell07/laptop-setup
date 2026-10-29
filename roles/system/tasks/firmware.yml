@@ -8,7 +8,7 @@
   register: system_fwupd_install_result
   when:
     - is_dnf
-    - not csb_rhel  # CSB: IT manages firmware via Satellite/RHSM, not LVFS
+    - not csb_rhel  # RHEL CSB: IT manages firmware via Satellite/RHSM, not LVFS
     - not system_is_container  # RPM post-install calls systemctl preset + daemon-reload, crashes Podman container systemd
   # No failed_when: false — fwupd install failure means no firmware updates; surface as hard error.
 
@@ -51,7 +51,7 @@
         - _fwupd_timer is failed
         - not (ansible_check_mode and 'Could not find the requested service' in (_fwupd_timer.msg | default('')))
       when:
-        - not csb_rhel  # CSB: IT manages firmware; LVFS timer not needed
+        - not csb_rhel  # RHEL CSB: IT manages firmware; LVFS timer not needed
         - not system_is_container
 
     # A metadata download failure (offline, CDN hiccup) must not abort provisioning: the
@@ -140,14 +140,13 @@
   failed_when: false
   check_mode: false  # read-only probe — runs even in check mode
   when:
-    - not csb_rhel  # CSB: IT manages firmware; LVFS probe not needed
+    - not csb_rhel  # RHEL CSB: IT manages firmware; LVFS probe not needed
     - not system_is_container  # fwupdmgr activates fwupd D-Bus service, crashing privileged Podman container systemd
 
 - name: Report available firmware updates
   ansible.builtin.debug:
     msg: "Firmware updates available: {{ system_fwupd_check_result.stdout | default('') | trim }}\nRun: sudo fwupdmgr update"
   when:
-    - not csb_rhel  # CSB: IT manages firmware; LVFS probe not needed
+    - not csb_rhel  # RHEL CSB: IT manages firmware; LVFS probe not needed
     - not system_is_container
     - system_fwupd_check_result.rc == 0
-    - "'no available firmware updates' not in (system_fwupd_check_result.stdout | default('') | lower)"

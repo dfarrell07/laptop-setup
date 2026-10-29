@@ -29,7 +29,7 @@ system_grub_password_hash: "{{ vault_grub_password_hash | default('') }}"
 registry_tokens: "{{ vault_registry_tokens | default([]) }}"
 
 # CSB / OS detection baselines — csb_detect.yml overrides on Linux via set_fact at runtime;
-# macOS values depend on a separate fact-computation step in site.yml
+# macOS values depend on a separate fact-computation step in pre-flight.yml
 # (see molecule/macos/converge.yml for the pattern).
 # Defining here removes the need for | default(X) guards in conditionals.
 csb_detected: false
@@ -69,7 +69,6 @@ repo_redhat: true
 repo_rpmfusion_free: true
 repo_rpmfusion_nonfree: false
 repo_tailscale: true
-install_docker: false
 install_vpn: true
 install_virtualization: true
 

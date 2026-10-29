@@ -136,12 +136,6 @@
     - _gotoolchain_proxy_probe is defined
     - _gotoolchain_proxy_probe.status | default(-1) | int != 200
 
-- name: Create GOTMPDIR directory for Go tool compilation
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/tmp"
-    state: directory
-    mode: "0700"
-
 - name: Assert Go version sufficient for work tools when GOTOOLCHAIN=local
   # gopls requires Go 1.26+; gofumpt/govulncheck require Go 1.25+ (Fedora 44 ships 1.26; Debian 13 ships 1.24).
   # With GOTOOLCHAIN=local, go install exits non-zero for modules requiring a newer toolchain,
@@ -203,7 +197,7 @@
     - name: Install Go tools
       # No 'creates:' guard — version bumps would be silently ignored. Pinned versions
       # with warm cache are fast. Every run reports as changed (false positive, accepted).
-      # Do NOT add @latest entries. See defaults/main.yml for rationale.
+      # Do NOT add @latest entries: unpinned versions change silently between runs.
       ansible.builtin.command:
         argv: >-
           {{ ['go', 'install']
@@ -308,7 +302,7 @@
   when:
     - _packages_go_checksum_errors | length > 0
 
-- name: Record Go tool install failures (CSB — network/timeout only)
+- name: Record Go tool install failures (CSB)
   ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
   vars:
     _csb_role: packages

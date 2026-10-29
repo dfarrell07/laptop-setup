@@ -108,7 +108,7 @@
 
 # CI gap: ykman (packages_security_yubikey) not installed in Podman CI — no test path exists without a hardware YubiKey present
 
-# CI gap: /etc/kernel/cmdline only written by grubby (kernel_lockdown.yml),
+# CI gap: /etc/kernel/cmdline is only written by kernel_lockdown.yml,
 # which is blocked on not system_is_container. All four assertions below
 # silently skip in Podman CI — make test-vm exercises kernel cmdline hardening.
 - name: Stat /etc/kernel/cmdline
@@ -156,13 +156,13 @@
   ansible.builtin.stat:
     path: /etc/yum.repos.d/tailscale-stable.repo
   register: verify_tailscale_repo
-  when: repo_tailscale and not csb_rhel
+  when: repo_tailscale and not csb_detected
 
 - name: Assert tailscale-stable.repo was deployed by repos_dnf
   ansible.builtin.assert:
     that: verify_tailscale_repo.stat.exists
     fail_msg: "tailscale-stable.repo missing — repos_dnf role not exercised or template broken"
-  when: repo_tailscale and not csb_rhel
+  when: repo_tailscale and not csb_detected
 
 - name: Verify mullvad.repo exists
   ansible.builtin.stat:
@@ -389,7 +389,7 @@
   changed_when: false
   become: true
   when:
-    - not (csb_detected | default(false))
+    - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
 
 - name: Check useradd INACTIVE={{ system_inactive_days }}
@@ -397,7 +397,7 @@
   changed_when: false
   become: true
   when:
-    - not (csb_detected | default(false))
+    - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
 
 - name: Check login.defs UMASK={{ system_umask }}
@@ -405,7 +405,7 @@
   changed_when: false
   become: true
   when:
-    - not (csb_detected | default(false))
+    - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
 
 - name: Check login.defs PASS_MIN_DAYS={{ system_pass_min_days }}
@@ -413,7 +413,7 @@
   changed_when: false
   become: true
   when:
-    - not (csb_detected | default(false))
+    - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
 
 - name: Check login.defs PASS_WARN_AGE={{ system_pass_warn_age }}
@@ -421,7 +421,7 @@
   changed_when: false
   become: true
   when:
-    - not (csb_detected | default(false))
+    - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
 
 - name: Check login.defs HOME_MODE={{ system_home_mode | default('0700') }} (CIS 5.4.2)
@@ -429,7 +429,7 @@
   changed_when: false
   become: true
   when:
-    - not (csb_detected | default(false))
+    - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
 
 - name: Check login.defs ENCRYPT_METHOD=YESCRYPT (CIS 5.3.6)
@@ -437,15 +437,15 @@
   changed_when: false
   become: true
   when:
-    - not (csb_detected | default(false))
+    - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
 
-- name: Check login.defs YESCRYPT_COST_FACTOR={{ system_yescrypt_cost_factor | default(5) }} (CIS 5.4.1)
-  ansible.builtin.command: grep -q '^YESCRYPT_COST_FACTOR {{ system_yescrypt_cost_factor | default(5) }}\s*$' /etc/login.defs
+- name: Check login.defs YESCRYPT_COST_FACTOR=5 (CIS 5.4.1)
+  ansible.builtin.command: grep -q '^YESCRYPT_COST_FACTOR 5\s*$' /etc/login.defs
   changed_when: false
   become: true
   when:
-    - not (csb_detected | default(false))
+    - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
 
 - name: Check /etc/dnf/automatic.conf upgrade_type = security
@@ -521,7 +521,7 @@
   become: true
   failed_when: false
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
 - name: Assert crypto-policy matches system_crypto_policy_target (default DEFAULT:NO-SHA1)

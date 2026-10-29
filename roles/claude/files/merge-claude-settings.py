@@ -8,7 +8,7 @@ the existing file or the policy is not a JSON object.
 
 Merge rules: user keys are kept; permissions.deny is the de-duplicated union
 (policy entries first); permissions.allow/ask stay the user's; every other policy
-key (sandbox, enableAllProjectMcpServers, cleanupPeriodDays, env keys) overrides
+key (sandbox, enableAllProjectMcpServers, env keys) overrides
 the user's value, merging dictionaries recursively.
 """
 import json

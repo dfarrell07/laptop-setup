@@ -26,7 +26,6 @@ named make target.
 | --- | --- | --- |
 | No Bluetooth adapter, `rfkill` blocked | `system_disable_bluetooth: false` (true) | `make system` |
 | USB drive does not mount | `make usb-add` (USBGuard blocks unlisted drives); `system_disable_usb_storage` (false; true also blocks `usb_storage`/`uas` in the kernel) | `make usb-add`, `make system` |
-| Phone tethering or USB modem missing | `system_disable_modemmanager: false` (false) | `make system` |
 | `.local` names do not resolve | `system_disable_avahi: false` (true) | `make system` |
 | ABRT units `masked` | `system_mask_abrt: false` (true) | `make system` |
 | Shell exits when idle | `system_tmout: 0` (0 = off; 1-900 enforces) | `make system` |
@@ -54,7 +53,7 @@ RHEL CSB and Debian skip it). If the machine does not boot, follow [Rescue boot]
 | Connection refused after provisioning | sshd moved to port 722 (`ssh_port`): `ssh -p 722 user@host` or `Port 722` in `~/.ssh/config`. To change it, set `ssh_port` (not 22) in `config.yml` and re-run `make system` from the console or tmux |
 | sshd fails or rejects you | from the console inspect `/etc/ssh/sshd_config.d/00-hardening.conf` (`AllowUsers`, `Port`) and `sudo sshd -T \| grep -i port`. Only ed25519 and FIDO2 (`sk-ssh-ed25519`) keys are accepted; an empty vault writes no `authorized_keys` |
 | FIDO2 signing: "agent refused operation" | `SSH_AUTH_SOCK` points at a GNOME agent. The dotfiles role masks `gcr-ssh-agent` and deploys `ssh-agent.service` plus `environment.d`; log out and in, then `echo $SSH_AUTH_SOCK` must be `/run/user/<uid>/ssh-agent.socket` |
-| `no matching key exchange method` to an old server | crypto policy is `system_crypto_policy_target` (`DEFAULT:NO-SHA1`). Scope an exception to one host: `ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=+ssh-rsa user@host`, or the same options in a `Host` stanza |
+| `no matching key exchange method` to an old server | crypto policy is `system_crypto_policy_target` (`DEFAULT:NO-SHA1`; a CSB host keeps IT's policy). Scope an exception to one host: `ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=+ssh-rsa user@host`, or the same options in a `Host` stanza |
 | Smoke test cannot see the YubiKey | `systemctl status pcscd.socket` (`sudo systemctl enable --now pcscd.socket`), `lsusb \| grep -i yubico`, and USBGuard must allow `1050:*`. FIDO2 SSH keys do not need pcscd |
 
 ## Vault password file missing
@@ -110,11 +109,10 @@ skipped on CSB hosts. Diagnose with `resolvectl status` and `resolvectl query ex
   PreDown = resolvectl revert %i
   ```
 
-- **`resolv.conf` symlink task fails:** NetworkManager owns `/etc/resolv.conf`. Re-run `make system` (deploys
-  `/etc/NetworkManager/conf.d/99-dns.conf` with `dns=systemd-resolved`), restart NetworkManager from the console or tmux, and check
-  `readlink /etc/resolv.conf` is `/run/systemd/resolve/stub-resolv.conf`. On any CSB host (`csb_detected`) `99-dns.conf` is not deployed
-  (removed if present); only the stub symlink is enforced on hybrid Fedora CSB, and RHEL CSB skips it. Chrony NTS and dnf-automatic are
-  likewise not applied on CSB.
+- **`resolv.conf` symlink task fails:** NetworkManager owns `/etc/resolv.conf`. Check `readlink /etc/resolv.conf` is
+  `/run/systemd/resolve/stub-resolv.conf`; on hybrid Fedora CSB `make system` only enforces that symlink (RHEL CSB skips it). On a non-CSB
+  host `make system` also deploys `/etc/NetworkManager/conf.d/99-dns.conf` (`dns=systemd-resolved`); restart NetworkManager from the
+  console or tmux afterwards. Chrony NTS and dnf-automatic are likewise not applied on CSB.
 
 ## Containers and OVN-K / Submariner
 
@@ -151,8 +149,8 @@ dependencies) once unprivileged `bpf()` is allowed. Value 1 needs a custom kerne
 - **fapolicyd blocks `distrobox enter`:** it watches tmpfs and overlay mounts. Ask IT to drop `tmpfs` from `watch_fs` in
   `/etc/fapolicyd/fapolicyd.conf`; use the RPM-installed distrobox (or Toolbx, the role's fallback).
 - **Ansible `AnsiballZ_*.py: Operation not permitted`:** `ansible.cfg` sets `pipelining = true`; run from the repo root so it loads.
-- **Third-party repos (Chrome, Docker CE, Tailscale...) on CSB:** Chrome is skipped on any CSB; Docker CE and Tailscale are skipped on
-  RHEL CSB only. A repo failure prints only a `REPO SETUP FAILED` warning, and no IT-ticket text is recorded for these repos (only acli
+- **Third-party repos (Chrome, Docker CE, Tailscale...) on CSB:** Chrome and Tailscale are skipped on any CSB
+  (Tailscale installs from the base Fedora repos); Docker CE is skipped on RHEL CSB only. A repo failure prints only a `REPO SETUP FAILED` warning, and no IT-ticket text is recorded for these repos (only acli
   and the Red Hat internal repo record it, on RHEL CSB). Use the container for those tools.
 - **Login shell stays `/bin/bash` on an SSSD account:** the role writes `override_shell` to `/etc/sssd/conf.d/90-laptop-setup-shell.conf`
   only if `sssd.conf` or `conf.d` has a `[domain/...]` section. Otherwise add `override_shell = /bin/zsh` to the `[domain/...]`

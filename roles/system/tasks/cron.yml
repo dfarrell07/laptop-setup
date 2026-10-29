@@ -4,7 +4,7 @@
 # IT-provisioned tools may run cron jobs under dedicated non-root system users. Creating
 # cron.allow with only 'root' would silently block those IT management jobs, so RHEL CSB skips
 # all of this. Hybrid Fedora CSB: IT's csb-fedora automation does not manage cron.allow/at.allow,
-# so only that access restriction is applied there (see the hybrid block below); the /etc/cron.d
+# so only that access restriction is applied there (see the block below); the /etc/cron.d
 # audit and directory chmod stay limited to non-CSB hosts because IT may drop files in /etc/cron.d.
 - name: Cron access restriction (skip on CSB and containers)
   when:
@@ -50,23 +50,6 @@
         - system_root_crontab_stat.stat.exists | default(false)
         - system_root_crontab_content.content is defined
         - (system_root_crontab_content.content | b64decode | trim) | length > 0
-
-    - name: Restrict cron and at access to root only (CIS 5.1.8/5.1.9)
-      ansible.builtin.copy:
-        content: "root\n"
-        dest: "{{ item }}"
-        mode: "0600"
-      loop:
-        - /etc/cron.allow
-        - /etc/at.allow
-
-    - name: Remove cron.deny and at.deny (CIS 5.1.8-5.1.9 — allow files are authoritative)
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /etc/cron.deny
-        - /etc/at.deny
 
     - name: Stat cron paths to harden (absent paths are legitimately skipped)
       ansible.builtin.stat:
@@ -139,13 +122,12 @@
       when:
         - (system_crond_files.files | default([])) | length > 0
 
-- name: Cron and at access restriction on hybrid Fedora CSB (cron.allow/at.allow only)
+- name: Cron and at access restriction (cron.allow/at.allow only; all but RHEL CSB)
   when:
-    - csb_detected
-    - not csb_rhel
     - not system_is_container
+    - not csb_rhel
   block:
-    - name: Restrict cron and at access to root only (CIS 5.1.8/5.1.9, hybrid CSB)
+    - name: Restrict cron and at access to root only (CIS 5.1.8/5.1.9)
       ansible.builtin.copy:
         content: "root\n"
         dest: "{{ item }}"
@@ -154,7 +136,7 @@
         - /etc/cron.allow
         - /etc/at.allow
 
-    - name: Remove cron.deny and at.deny (hybrid CSB — allow files are authoritative)
+    - name: Remove cron.deny and at.deny (CIS 5.1.8-5.1.9 — allow files are authoritative)
       ansible.builtin.file:
         path: "{{ item }}"
         state: absent

@@ -145,13 +145,6 @@
 # Services are masked separately (see service_masking.yml). Dev servers bound to
 # 0.0.0.0 are reachable from NetBird peers — bind to 127.0.0.1 or use
 # firewall-cmd --zone=trusted --add-rich-rule for port-specific restrictions if needed.
-- name: Warn when wt0 zone assignment will be skipped
-  ansible.builtin.debug:
-    msg: "system_firewalld_running=false — wt0 zone assignment skipped; run without --tags to configure firewall"
-  when:
-    - not system_is_container
-    - not system_firewalld_running | bool
-
 # On hybrid CSB, IT's redhat_csb.firewall template binds wt0 to the 'redhat' zone and
 # rewrites that zone hourly; moving wt0 to trusted would cause a ZONE_CONFLICT, so skip on CSB.
 - name: Assign wt0 (NetBird) to firewall trusted zone

@@ -50,9 +50,10 @@
           (1) pre-reboot window: kexec_file_load() is unblocked until reboot activates
           lockdown — a root process can load a kernel stripped of all hardening parameters;
           (2) physical access: the lockdown= cmdline parameter can be stripped by booting
-          a custom kernel. Enable Secure Boot in firmware to close both gaps. Reboot SLA:
-          smoke-test emits FAIL (kernel-lockdown and secure-boot) until lockdown is active
-          on the running kernel — do not use this host before those checks PASS.
+          a custom kernel. Enable Secure Boot in firmware to close both gaps. smoke-test
+          emits FAIL for kernel-lockdown until lockdown is active on the running kernel (reboot)
+          and for secure-boot until Secure Boot is enabled in firmware — do not use this host
+          before both PASS.
       when:
         - system_kernel_lockdown | length > 0
         - system_sb_state_result.rc | default(-1) == 0
@@ -223,16 +224,6 @@
       # WARNING: set system_remove_luks_key: true in config.yml only if this machine does NOT
       # use a LUKS keyfile for auto-unlock at boot. Removing rd.luks.key from the cmdline means
       # LUKS will require manual passphrase entry on every reboot. Default: false (preserve keyfile auth).
-
-    - name: Remove rd.luks.key from /etc/default/grub (prevents grub2-mkconfig re-introducing it)
-      ansible.builtin.replace:
-        path: /etc/default/grub
-        regexp: '\s*rd\.luks\.key=\S+'
-        replace: ''
-      when:
-        - system_grubby_info.rc == 0
-        - system_remove_luks_key | bool
-      failed_when: false
 
     - name: Remove rd.luks.allow-discards grub parameter (mitigates SSD wear-pattern fingerprinting)
       ansible.builtin.command:

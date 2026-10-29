@@ -18,7 +18,7 @@
 - name: Apply sysctl hardening (non-container, non-CSB-RHEL)
   when:
     - not system_is_container
-    - not csb_rhel  # CSB: IT manages sysctl via SCAP; 90-hardening.conf would conflict
+    - not csb_rhel  # RHEL CSB: IT manages sysctl via SCAP; 90-hardening.conf would conflict (Fedora CSB is hardened)
   block:
     - name: Ensure /etc/sysctl.d exists
       ansible.builtin.file:
@@ -99,7 +99,7 @@
       # extra-vars (precedence 22) beats set_fact (18); -esystem_sysctl_hardening={}
       # replaces the role-default dict before this task runs.  A mapping check alone
       # does not catch the empty-dict attack, so also enforce a minimum key count
-      # matching the static baseline (30 keys as of last audit).  Using >= 25 as the
+      # matching the static baseline.  Using >= 25 as the
       # floor gives headroom for minor refactors while still blocking {}.
       ansible.builtin.assert:
         that:

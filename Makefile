@@ -1,6 +1,6 @@
-.PHONY: status plan verify rollout-banner bootstrap-hooks help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check diff test smoke-test \
+.PHONY: status plan verify rollout-banner bootstrap-hooks help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check test smoke-test \
        dotfiles packages repos notes \
-       ssh desktop system repos_dnf redhat containers claude codex distrobox container \
+       ssh desktop system repos_dnf redhat containers claude codex container \
        container-rebuild csb-audit vault-edit vault-view vault-diff update hooks \
        smoke-test-container smoke-test-user \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
@@ -87,7 +87,7 @@ export ANSIBLE_CALLBACK_RESULT_FORMAT = yaml
 
 help:
 	@echo "Start here: make status  (which chunks are on)  then  make plan CHUNK=<name>, make chunk-<name>, make verify CHUNK=<name>"
-	@echo "Primary:    all minimal offline container container-rebuild update  (distrobox=alias for container)"
+	@echo "Primary:    all minimal offline container container-rebuild update"
 	@echo "Roles:      dotfiles packages repos notes ssh desktop system repos_dnf"
 	@echo "            redhat containers claude codex"
 	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream repos-evpn repos-rh-context"
@@ -97,7 +97,7 @@ help:
 	@echo "Output:     QUIET=1 hides ok results, including debug warnings (e.g. make all QUIET=1)"
 	@echo "USB:        usb-add  (allow blocked/connected USB devices now; save rules to config.yml)"
 	@echo "AIDE:       aide-rebaseline  (accept current files as the baseline after expected changes, e.g. dnf upgrade)"
-	@echo "Other:      backup backup-dry-run migration-inventory workstation-audit csb-audit diff vault-edit vault-view vault-diff pip-lock pip-sync preflight"
+	@echo "Other:      backup backup-dry-run migration-inventory workstation-audit csb-audit vault-edit vault-view vault-diff pip-lock pip-sync preflight"
 
 # --- Primary targets ---
 # Safety guard: user-space role targets must not run as root (dotfiles would install to /root/)
@@ -140,7 +140,7 @@ bootstrap: guard-not-root bootstrap-hooks
 	@if [ "$$(uname -s)" = "Darwin" ]; then \
 		brew install ansible git openssh libfido2 ykman make shellcheck coreutils node bash python3; \
 	elif command -v apt-get >/dev/null 2>&1; then \
-		sudo apt-get update && sudo apt-get install -y ansible git yubikey-personalization yubikey-manager make shellcheck python3-venv python3-pip; \
+		sudo apt-get update && sudo apt-get install -y ansible git yubikey-manager make shellcheck python3-venv python3-pip; \
 	else \
 		sudo bash -c 'dnf install -y ansible-core git make && { dnf install -y ykpers yubikey-manager ShellCheck || echo "WARN: ykpers/yubikey-manager/ShellCheck unavailable (RHEL: install EPEL first; Fedora: check repo availability) — continuing without optional tools"; }'; \
 	fi
@@ -183,12 +183,13 @@ bootstrap: guard-not-root bootstrap-hooks
 	@echo "Next steps:"
 	@echo "  1. Create config.yml (REQUIRED before make all — do not skip):"
 	@echo "       cp default.config.yml config.yml"
-	@echo "     Edit config.yml and replace each CHANGE_ME sentinel value — at minimum:"
-	@echo "       desktop_environment: sway   # or i3 / gnome"
+	@echo "     Edit config.yml and replace each CHANGE_ME sentinel value:"
+	@echo "       desktop_environment: sway   # Linux: sway/i3/gnome; macOS: aerospace"
 	@echo "       dotfiles_github_user: 'yourusername'"
 	@echo "       dotfiles_user_name: 'Your Name'"
 	@echo "       dotfiles_user_email_work: 'you@company.com'"
 	@echo "       dotfiles_user_email_personal: 'you@personal.com'"
+	@echo "     Also set (default UTC, not a CHANGE_ME sentinel):"
 	@echo "       system_timezone: America/Chicago   # timedatectl list-timezones"
 	@echo "     Personal machine? also add: profile: personal  # skips work tooling; work email then optional"
 	@echo "     Want notes provisioned? also add: notes_enabled: true  # opt-in; requires a GitHub repo named \"notes\" accessible as dotfiles_github_user/notes"
@@ -362,15 +363,13 @@ redhat: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,redhat --ask-become-pass
 
 containers: guard-not-root rollout-banner
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,containers --ask-become-pass
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,containers --skip-tags become
 
 claude: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,claude --ask-become-pass
 
 codex: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,codex --skip-tags become
-
-distrobox: container  # alias for backwards compatibility
 
 # --- Audit and testing ---
 
@@ -391,9 +390,6 @@ csb-audit: guard-not-root preflight
 # 'make check' and 'make all' log to ~/.cache/laptop-setup/logs/<target>-latest.log.
 check: guard-not-root rollout-banner preflight
 	$(VERIFY_AND_RUN) --run-log=check ansible-playbook site.yml --check --diff --ask-become-pass
-
-diff: guard-not-root rollout-banner
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --check --diff --tags dotfiles --skip-tags become
 
 # --- Chunks (registry: group_vars/all/rollout.yml; design: docs/rollout-plan.md) ---
 # status: which chunks are on (config.yml rollout_enable). plan: preview one chunk (CHUNK=name). chunk-<name>: apply exactly one enabled chunk. verify: run only the smoke checks mapped to it.
@@ -467,7 +463,7 @@ commitlint:
 # For VM tests: make test-vm (requires: make bootstrap-test first).
 test: shellcheck test-scripts test-poller test-fedora test-rocky test-debian test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role test-ssti-guard
 
-# Syntax-check the scripts/ directory (bash -n: parse only, no execution).
+# Syntax-check scripts/ (bash -n), then run the hook tests and scripts/test-*.py suites.
 test-scripts: .venv
 	bash -n scripts/preflight.sh
 	bash -n scripts/smoke-test.sh

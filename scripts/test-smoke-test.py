@@ -143,7 +143,7 @@ class SmokeTests(unittest.TestCase):
                     with self.subTest(suffix=suffix, valid=valid):
                         fixture.write_text(content if valid else '')
                         result = subprocess.run(['bash', '-c', 'record() { printf "%s %s\\n" "$1" "$2"; };\n'
-                            '_skip_faillock=false; _skip_pwquality=false; _skip_pwhistory=false;\n' + loop],
+                            '_csb_non_fedora=false;\n' + loop],
                             capture_output=True, text=True)
                         self.assertEqual(result.returncode, 0, result.stderr)
                         rows = [line.split() for line in result.stdout.splitlines()]

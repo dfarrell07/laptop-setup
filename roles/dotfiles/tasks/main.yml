@@ -418,7 +418,7 @@
         mode: "0700"
       when: >-
         _dotfiles_envd_files.files | map(attribute='path') | map('basename')
-        | reject('in', ['ssh-agent.conf', 'gotmpdir.conf', 'containers.conf', 'terminal.conf', 'xdg.conf'])
+        | reject('in', ['ssh-agent.conf', 'gotmpdir.conf', 'containers.conf', 'terminal.conf'])
         | list | length > 0
 
     - name: Quarantine unmanaged files from ~/.config/environment.d (security remediation)
@@ -434,7 +434,7 @@
       loop: "{{ _dotfiles_envd_files.files }}"
       loop_control:
         label: "{{ item.path | basename }}"
-      when: item.path | basename not in ['ssh-agent.conf', 'gotmpdir.conf', 'containers.conf', 'terminal.conf', 'xdg.conf']
+      when: item.path | basename not in ['ssh-agent.conf', 'gotmpdir.conf', 'containers.conf', 'terminal.conf']
       register: _dotfiles_envd_removed
 
     - name: Warn on removed unmanaged files in ~/.config/environment.d  # noqa: no-handler — advisory must appear immediately after cleanup
@@ -443,8 +443,8 @@
           SECURITY WARNING: Moved unmanaged file {{ item.item.path }} to
           ~/.local/state/laptop-setup/quarantine/environment.d/. Files there are not loaded by
           systemd-environment-d-generator, which could otherwise inject LD_PRELOAD, PATH or other
-          variables at login. If it is yours, put its settings in ~/.config/zsh/local.zsh (or
-          restore it and add its name to the allowlist in roles/dotfiles/tasks/main.yml).
+          variables at login. If it is yours, restore it and add its name to the allowlist in
+          roles/dotfiles/tasks/main.yml.
       loop: "{{ _dotfiles_envd_removed.results }}"
       when: item.changed | default(false)
 

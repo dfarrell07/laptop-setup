@@ -69,9 +69,9 @@
         GOBIN: "{{ _subctl_tmpdir.path }}/subctl-v{{ item.version }}-bin"
         GOTMPDIR: "{{ ansible_facts['user_dir'] }}/tmp"
         GOTOOLCHAIN: "{{ packages_gotoolchain }}"
-        HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        GOPROXY: 'https://proxy.golang.org,direct'
+        HTTPS_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"
+        HTTP_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"
+        GOPROXY: "{{ packages_goproxy }}"
         GONOSUMDB: "{{ (dotfiles_gonosumdb | default('')) or (dotfiles_goprivate | default('')) or 'none' }}"
         GOPRIVATE: "{{ (dotfiles_goprivate | default('')) or 'none' }}"
         GOSUMDB: "{{ packages_gosumdb | default('sum.golang.org') }}"

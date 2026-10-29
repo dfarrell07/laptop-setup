@@ -7,7 +7,7 @@
   become: false
   tags: [always]
   block:
-    # Defined first: assertions throughout this file gate on it.
+    # Defined first: site.yml and several roles gate on it (this file never tests it).
     - name: Set molecule context flag
       ansible.builtin.set_fact:
         _pf_is_molecule: "{{ lookup('env', 'MOLECULE_SCENARIO_NAME') != '' }}"
@@ -20,7 +20,7 @@
 
     - name: Load user overrides
       ansible.builtin.include_vars: config.yml
-      failed_when: false
+      when: _config_yml_stat.stat.exists
 
     - name: Assert playbook is not running inside a container host (hardening bypass guard)
       ansible.builtin.assert:
@@ -110,8 +110,7 @@
               - _stat_vault_pass.stat.mode == '0700'
             fail_msg: >-
               SECURITY: scripts/vault-pass.sh has mode {{ _stat_vault_pass.stat.mode }}, expected 0700.
-              The distrobox container mounts $HOME, so any process inside the container can read this
-              file and extract the vault password. Restrict it: chmod 0700 scripts/vault-pass.sh.
+              Other local users must not be able to read or run it. Restrict it: chmod 0700 scripts/vault-pass.sh.
               The Makefile bootstrap target sets 0700; this check detects accidental permission drift.
 
         - name: Assert vault.yml is mode 0600
@@ -121,7 +120,7 @@
               - _stat_vault_yml.stat.mode == '0600'
             fail_msg: >-
               SECURITY: group_vars/all/vault.yml has mode {{ _stat_vault_yml.stat.mode }}, expected 0600.
-              The distrobox container mounts $HOME; mode 0600 limits read access to the owner only.
+              Mode 0600 limits read access to the owner only.
               Restrict it: chmod 0600 group_vars/all/vault.yml.
 
     - name: Assert ssh_port in config.yml is a plain decimal port number (sshd injection guard)
@@ -178,6 +177,7 @@
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
+          - _raw.get('system_umask', '027') is string
           - _raw.get('system_umask', '027') | string is match('^[0-7]+$')
           - _raw.get('system_keymap', 'us') | string is match('^[a-zA-Z0-9_-]+$')
         fail_msg: >-
@@ -186,7 +186,7 @@
           metacharacters (.*+?[]{}()^$|) embedded in the value can escape literal matching.
           system_keymap is rendered into /etc/vconsole.conf; shell metacharacters allow
           injection of arbitrary configuration directives.
-          Allowed: system_umask must be octal digits (0-7, e.g. 027, 077, 022);
+          Allowed: system_umask must be a quoted string of octal digits (0-7, e.g. "027", "077", "022");
           system_keymap must be alphanumeric, hyphen, or underscore (e.g. us, en_US, dvorak).
 
     - name: Assert system_sudo_timestamp_timeout is an integer in [0, 60] (sudoers injection guard)
@@ -406,10 +406,12 @@
           ansible.builtin.assert:
             that: >-
               (_config_raw.keys() | select('in', ['claude_deny_sensitive',
-               'claude_sandbox_config', 'claude_deny_write_only']) | list | length == 0)
+               'claude_sandbox_config', 'claude_deny_write_only',
+               'claude_own_instance_deny_read', 'claude_own_instance_deny_write']) | list | length == 0)
             fail_msg: >-
               config.yml must not override claude_deny_sensitive, claude_sandbox_config,
-              or claude_deny_write_only — these variables control the Claude settings.json
+              claude_deny_write_only, claude_own_instance_deny_read or
+              claude_own_instance_deny_write — these variables control the Claude settings.json
               deny-list and sandbox policy. include_vars (precedence 18) outranks role defaults
               (precedence 2), so defining them in config.yml silently empties deny-lists or
               degrades sandbox enforcement. Remove them from config.yml; set them in
@@ -470,8 +472,7 @@
               SECURITY: system_timezone is empty or still the CHANGE_ME placeholder in the
               play namespace. Set system_timezone in config.yml before running make all.
               Run 'timedatectl list-timezones' to find your zone, then add
-              system_timezone: <zone> to config.yml. This unconditional check prevents
-              -e _pf_is_molecule=true from bypassing the gated assertion.
+              system_timezone: <zone> to config.yml.
           when:
             - ansible_facts['system'] != 'Darwin'  # the system role (timedatectl) never runs on macOS
 
@@ -557,9 +558,9 @@
 
         - name: Assert desktop_environment is a valid value
           ansible.builtin.assert:
-            that: desktop_environment in ['sway', 'i3', 'gnome', 'aerospace', 'auto']
+            that: desktop_environment in ['sway', 'i3', 'gnome', 'aerospace']
             fail_msg: >-
-              desktop_environment must be one of: sway, i3, gnome, aerospace (macOS), auto.
+              desktop_environment must be one of: sway, i3, gnome, aerospace (macOS).
               Got: '{{ desktop_environment }}'.
               {% if desktop_environment == 'CHANGE_ME' %}This is the CHANGE_ME sentinel — set sway, i3, or gnome in
               config.yml.{% else %}Check config.yml for typos.{% endif %}

@@ -49,7 +49,7 @@
 
 - name: Apply auditd rules and configuration
   when:
-    - not csb_rhel  # no SIEM at home; audit package not installed in container CI (see comment above)
+    - not csb_rhel  # RHEL CSB: IT owns auditing; audit package not installed in container CI (see comment above)
     - not system_is_container
     - (is_dnf and _audit_pkg_install.rc | default(0) == 0) or (is_apt and _apt_audit_pkg_install is not failed)
   block:
@@ -145,7 +145,7 @@
           contain '-e 0': {{ _auditd_late_e0_files.stdout }}. On hybrid CSB the guard
           does not abort, but augenrules will merge these last and may override the
           -e 1 enforcement directive. Review and rename offending files to sort before
-          claude-code.rules, or add them to the audit whitelist if IT-managed.
+          claude-code.rules.
       when: _auditd_late_e0_files.stdout | trim | length > 0 and csb_detected
 
     - name: Compile audit policy against the target filesystem
@@ -164,11 +164,11 @@
       check_mode: false
 
     - name: Deploy auditd rules
-      # File sorts as 's' — before 'z' and digit-prefixed files. augenrules merges
+      # File sorts as 'c' — after digit-prefixed files, before z*. augenrules merges
       # rules.d/ in lexicographic order; the last -e directive wins. If IT later deploys
-      # a z-finalize.rules or 99-it.rules ending with -e 2, it overrides our -e 1 intent
-      # on csb_detected machines. Accepted risk: Fedora hybrid CSB has no IT-managed
-      # SIEM pipeline (that is RHEL CSB only, blocked by the not csb_rhel guard above).
+      # a z-finalize.rules (any name sorting after claude-code.rules) ending with -e 2, it overrides our -e 1 intent
+      # on csb_detected machines. Accepted risk. Hybrid CSB may have IT log ingestion of
+      # audit.log, so rule volume matters (see sys_auditd in docs/rollout-recovery.md); RHEL CSB is skipped by the guard above.
       ansible.builtin.copy:
         content: "{{ (_audit_policy_compile.stdout | from_json).content }}"
         dest: /etc/audit/rules.d/claude-code.rules
@@ -177,7 +177,7 @@
         mode: "0640"
       notify: Restart auditd
 
-    - name: Save the root-owned immutable audit policy receipt
+    - name: Save the root-owned audit policy receipt
       ansible.builtin.copy:
         content: "{{ (_audit_policy_compile.stdout | from_json).receipt | to_nice_json }}\n"
         dest: /etc/audit/claude-code-policy.json
@@ -193,7 +193,7 @@
         group: root
         mode: "0640"
       notify: Reload auditd configuration
-      # IT owns auditd.conf on all csb_detected machines (RHEL CSB via SCAP; hybrid Fedora CSB via osquery/Kolide Fleet)
+      # IT owns auditd.conf on csb_detected machines
       when: not csb_detected
         # no drop-in mechanism exists — last writer wins with no merge. Deploying our
         # SUSPEND disk-space settings would conflict with IT's STIG AU-5 HALT/SINGLE baseline on both tiers.

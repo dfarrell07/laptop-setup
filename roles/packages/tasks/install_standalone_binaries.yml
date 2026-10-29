@@ -295,12 +295,6 @@
         state: absent
       when: _cosign_tmpdir.path is defined
 
-# Bootstrap trust limitation: the SHA256 checksum and the cosign binary are both served from
-# the GitHub releases CDN — they share the same trust domain. A CDN compromise or GitHub
-# release tampering that simultaneously updates the binary and the release-page SHA256 would
-# produce a malicious cosign binary that passes this SHA256 check unchanged.
-# Sigstore bundle verification (used on re-provision via the block above) is structurally
-# impossible here because cosign is not yet installed.
 - name: Install cosign (first install; bootstrap — SHA256 and binary share GitHub releases CDN trust domain)
   when:
     - is_linux

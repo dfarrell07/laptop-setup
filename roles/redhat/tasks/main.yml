@@ -65,11 +65,7 @@
       and build infrastructure are unreachable without an active tunnel.
       Blocked workflows: all internal network access when off the
       Red Hat corporate network.
-  when:
-    - install_vpn
-    - csb_detected
-    - not system_is_container
-    - _vpn_result is failed
+  when: _vpn_result is failed
 
 # --- CSB system account hardening (CIS 5.6) ---
 # splunkforwarder CSB package creates a 'splunk' account with /bin/bash shell.

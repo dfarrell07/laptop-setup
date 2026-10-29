@@ -27,11 +27,12 @@ write_baseline() {
 # Scan every btrfs/ext4/xfs filesystem: each btrfs subvolume (e.g. /home) is its own device, so
 # a single "find / -xdev" never descends into them. -xdev still keeps out /proc, /sys, /dev.
 # find exits 1 on any unreadable or vanished entry; that must not abort the scan (pipefail).
+# Container image layers (*/containers/storage) are pruned: they hold setuid files and change on every pull.
 # -l (not -r): raw mode hex-escapes spaces (\x20), which find then cannot open.
 mapfile -t ROOTS < <(findmnt -lno TARGET -t btrfs,ext4,xfs | sort -u)
 [[ ${#ROOTS[@]} -gt 0 ]] || ROOTS=(/)
 # -print0 + tr: a newline in a file name becomes '?', so names cannot forge extra log lines.
-{ find "${ROOTS[@]}" -xdev -perm /6000 -type f -print0 2>/dev/null || true; } | tr '\0\n' '\n?' | sort -u > "$CURRENT"
+{ find "${ROOTS[@]}" -xdev -path '*/containers/storage' -prune -o -perm /6000 -type f -print0 2>/dev/null || true; } | tr '\0\n' '\n?' | sort -u > "$CURRENT"
 COUNT=$(wc -l < "$CURRENT")
 
 if [[ ! -f "$BASELINE" ]]; then

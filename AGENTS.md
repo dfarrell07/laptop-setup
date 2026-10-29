@@ -6,5 +6,5 @@ hardening. Agents do not run provisioning; the owner does (plan: [docs/rollout-p
 
 Use feature branches and signed-off incremental commits. Keep secrets, host-specific names and raw AI
 memory/history out of Git; capture portable configuration in roles and decisions in
-docs/design-principles.md. Run the focused regression for changed behavior, then lint, syntax-check
-and test-scripts. Linux rendering does not establish native macOS behavior.
+docs/design-principles.md. Before committing, follow "Testing and CI" in CLAUDE.md. Linux rendering
+does not establish native macOS behavior.

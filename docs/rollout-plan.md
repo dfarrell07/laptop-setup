@@ -41,8 +41,8 @@ constraints: [design-principles.md](design-principles.md). Undo steps: [rollout-
    `roles/system/tasks/nm.yml`).
 
 Suggested `config.yml` for such a machine (not the `default.config.yml` defaults): `desktop_environment: gnome`;
-`repo_tailscale: false` (a YAML boolean) with `packages_extra_dnf: [tailscale]`; `repo_rpmfusion_free: false`;
+`repo_rpmfusion_free: false`;
 `install_virtualization: false`; `install_vpn: false`; `system_tmout: 0`; `system_aide_enabled: false`;
 `system_enable_ip_forward: false`; launcher args without the bypass flags (the defaults in
 `roles/dotfiles/defaults/main.yml` include them, and the `.zshrc` template adds none; each list replaces the whole
-default); third-party Claude plugin marketplaces off.
+default); `claude_work_plugin_settings: {}` (no work-home marketplace seeds; seed-only, an existing `settings.json` is untouched).

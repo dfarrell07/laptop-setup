@@ -13,6 +13,5 @@ module.exports = {
     // Scope format is enforced by the commit-msg hook regex; scopes are not enumerated here.
     'subject-empty': [2, 'never'],
     'subject-full-stop': [2, 'never', '.'],
-    'scope-empty': [2, 'always'],
   },
 };

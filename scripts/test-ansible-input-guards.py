@@ -75,7 +75,7 @@ class InputGuardTests(unittest.TestCase):
     def test_foreign_and_symlinked_user_units(self):
         tasks = yaml.safe_load((ROOT / 'roles/claude/tasks/main.yml').read_text())
         block = next(t['block'] for t in tasks if t.get('name') == 'Deploy and enable task queue systemd units')
-        task = next(t for t in block if t.get('name', '').startswith('Warn on unmanaged systemd user unit files'))
+        task = next(t for t in block if t.get('name', '').startswith('Fail on unmanaged systemd user unit files'))
         for filename, regular, accepted in [('ssh-agent.service', True, True),
                                             ('claude-queue.timer', True, True),
                                             ('foreign.service', True, False),
@@ -95,7 +95,7 @@ class InputGuardTests(unittest.TestCase):
 
     def test_empty_ssh_audit_watch_directory(self):
         tasks = yaml.safe_load((ROOT / 'roles/system/tasks/main.yml').read_text())
-        recognize = next(t for t in tasks if t.get('name') == 'Recognize the safe empty SSH audit watch directory')
+        recognize = next(t for t in tasks if t.get('name') == 'Recognize the safe empty SSH service drop-in directory')
         assertion = guard('roles/system/tasks/main.yml', 'Fail on unexpected systemd drop-in directories')
         base = {'isdir': True, 'islnk': False, 'uid': 0, 'mode': '0755'}
         cases = [(base, 0, True), (base, 1, False),
