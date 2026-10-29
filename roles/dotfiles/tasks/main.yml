@@ -246,7 +246,7 @@
     file_type: file
   register: _git_hooks_found
 
-# Unmanaged template hooks are copied into every new clone; take them out of use, but keep them.
+# core.hooksPath runs every file in the template hooks dir by name; move unmanaged ones aside, but keep them.
 - name: Create quarantine directory for unmanaged git template hooks
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.local/state/laptop-setup/quarantine/git-template-hooks"
