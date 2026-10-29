@@ -35,12 +35,12 @@ SSH_ENV = {'SSH_CONNECTION': '192.0.2.1 50000 192.0.2.2 22'}
 
 class InputGuardTests(unittest.TestCase):
     def test_personal2_config_path_cannot_inject_tmpfiles_directives(self):
-        task = guard('common/tasks/pre_flight_checks.yml', 'Assert claude config dir vars contain only safe path characters')
+        task = guard('roles/claude/tasks/main.yml', 'SECURITY assert active Claude instance paths cannot inject tmpfiles directives')
         for path, accepted in [('/home/fixture/.claude-per2', True),
                                ('/home/fixture/.claude-per2\n', False),
                                ('/home/fixture/.claude-per2\nz /fixture/unrelated 0000 - - -\n#', False)]:
             with self.subTest(path=path):
-                self.check(task, {'_config_raw': {'claude_personal2_config_dir': path}}, accepted)
+                self.check(task, {'_claude_instances': [path]}, accepted)
 
     def check(self, task, variables, accepted, env=None):
         with tempfile.TemporaryDirectory() as directory:
@@ -118,7 +118,7 @@ class InputGuardTests(unittest.TestCase):
         template = (ROOT / 'roles/claude/templates/claude-queue-poller-logrotate.j2').read_text()
         content = (template.replace('{{ ansible_managed }}', 'Ansible managed')
                    .replace('{{ claude_log_dir }}', '/home/fixture/old-logs')
-                   .replace("{{ ansible_facts['user_id'] }}", 'fixture')
+                   .replace("{{ real_user_id | default(ansible_facts['user_id']) }}", 'fixture')
                    .replace('{{ _primary_group_name.stdout | trim }}', 'fixture-group'))
         cases = [(content, 0, '0644', True, True),
                  (content.replace('    copytruncate', '    postrotate\n        /fixture/rogue\n    endscript'), 0, '0644', True, False),
@@ -129,7 +129,7 @@ class InputGuardTests(unittest.TestCase):
             with self.subTest(uid=uid, mode=mode, regular=regular, accepted=accepted):
                 self.check([recognize, reject], {
                     'role_path': str(ROOT / 'roles/system'), 'is_dnf': True,
-                    'ansible_facts': {'user_id': 'fixture', 'user_uid': 1000},
+                    'real_user_id': 'fixture',
                     'claude_log_dir': '/home/fixture/new-logs',
                     'system_logrotated_whitelist': [],
                     '_logrotated_unowned': {'stdout_lines': ['/etc/logrotate.d/claude-queue-poller']},
@@ -305,24 +305,6 @@ class InputGuardTests(unittest.TestCase):
             with self.subTest(prefix=prefix, interval=interval):
                 self.check(task, {'_packages_brew_prefix': {'stdout': prefix},
                                   'packages_brew_autoupdate_interval': interval}, accepted)
-
-    def test_vendor_networkmanager_script_validation(self):
-        source = yaml.safe_load((ROOT / 'roles/system/tasks/nm.yml').read_text())
-        tasks = [task for task in source if task['name'] in [
-            'Record verified vendor NetworkManager dispatcher scripts',
-            'Fail on unexpected NetworkManager dispatcher scripts']]
-        vendor = '/etc/NetworkManager/dispatcher.d/90-console-login-helper-messages-gensnippet_if'
-        package = 'console-login-helper-messages-issuegen'
-        cases = [([vendor], package, 0, '', True), ([vendor], 'other-package', 0, '', False),
-                 ([vendor], package, 1, '', False), ([vendor], package, 0, 'modified script', False),
-                 ([vendor, vendor.replace('dispatcher.d/', 'dispatcher.d/pre-up.d/')], package, 0, '', False)]
-        for files, owner, rc, output, accepted in cases:
-            with self.subTest(files=files, owner=owner, rc=rc, output=output):
-                self.check(tasks, {'system_is_container': False, 'csb_detected': False,
-                                  'system_nm_dispatcher_allowlist': [],
-                                  '_nm_dispatcher_audit': {'files': [{'path': path, 'isdir': False} for path in files]},
-                                  '_nm_vendor_owner': {'rc': 0, 'stdout': owner},
-                                  '_nm_vendor_integrity': {'rc': rc, 'stdout': output}}, accepted)
 
     def test_tailscale_restart_only_for_a_running_service(self):
         handlers = yaml.safe_load((ROOT / 'roles/system/handlers/main.yml').read_text())

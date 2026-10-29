@@ -164,7 +164,6 @@ if [[ -n "$GITHUB_USER" ]]; then
   DOTFILES+=(
     "Library/LaunchAgents/com.${GITHUB_USER}.ssh-agent.plist"
     "Library/LaunchAgents/com.${GITHUB_USER}.claude-queue.plist"
-    "Library/LaunchAgents/com.${GITHUB_USER}.claude-remote-control.plist"
   )
 else
   echo "[warn] no valid dotfiles_github_user; skipping macOS LaunchAgent plists" >&2

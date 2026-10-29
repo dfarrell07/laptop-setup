@@ -5,7 +5,6 @@
 {% endfor %}
   },
   "sandbox": {{ dict(claude_sandbox_config, enableWeakerNestedSandbox=(claude_nested_sandbox | bool)) | to_json }},
-  "cleanupPeriodDays": {{ claude_cleanup_period_days | int }},
   "enableAllProjectMcpServers": {{ claude_enable_all_project_mcp_servers | to_json }},
   "permissions": {
     "deny": [

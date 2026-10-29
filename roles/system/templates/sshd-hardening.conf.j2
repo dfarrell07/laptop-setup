@@ -36,15 +36,7 @@ AllowTcpForwarding {{ system_ssh_allow_tcp_forwarding | regex_replace('[\r\n].*'
 
 ClientAliveInterval {{ system_ssh_client_alive_interval | int }}
 ClientAliveCountMax {{ system_ssh_client_alive_count_max | int }}  # compiled default 3; tightened to 2 — disconnect after 2 unacknowledged keepalive probes (10 min with ClientAliveInterval 300)
-# ChannelTimeout and UnusedConnectionTimeout require OpenSSH >= 9.2 (2023-02-02).
-# Fedora 44 ships 10.2p1; Rocky Linux 10 ships 9.9p1 — both above the 9.2 feature minimum, but below the 10.3 bz3827 fix.
-# NOTE: UCT closes connections with no open channels after N seconds regardless of ChannelTimeout
-# or OpenSSH version. bz3827: ChannelTimeout + UCT together caused UCT to fire prematurely (even
-# with channels open) on < 10.3; that is why ChannelTimeout is disabled here until all targets run >= 10.3.
-# Default: disabled (system_ssh_channel_timeout: ""); set e.g. "global 1h" in config.yml once all targets run OpenSSH >= 10.3.
-{% if system_ssh_channel_timeout %}
-ChannelTimeout {{ system_ssh_channel_timeout | regex_replace('[\r\n].*', '') }}
-{% endif %}
+# UnusedConnectionTimeout requires OpenSSH >= 9.2.
 # system_ssh_unused_connection_timeout: default 3600 (1h, tolerates VS Code Remote SSH idle) — directive is emitted unless the value is falsy ('' or 0 in config.yml), which omits it.
 {# '' or 0 to omit/disable #}
 {% if system_ssh_unused_connection_timeout %}
@@ -54,7 +46,7 @@ TCPKeepAlive no  # OpenSSH compiled default is yes; disabled in favour of encryp
 SyslogFacility AUTHPRIV  # compiled default is AUTH; explicit here to guarantee AUTHPRIV regardless of 50-redhat.conf presence or order
 LogLevel VERBOSE
 UsePAM yes  # compiled default no; setting no bypasses PAM account/session modules (faillock lockout, audit, MOTD); matches 50-redhat.conf; explicit (first-occurrence)
-PrintMotd no  # pam_motd already prints the MOTD; carries over 50-redhat.conf, which sshd.yml deletes
+PrintMotd no  # pam_motd already prints the MOTD; same as 50-redhat.conf
 MaxStartups 10:30:60  # start:rate:full; full ceiling tightened from OpenSSH default 10:30:100
 GSSAPIAuthentication no  # overrides 50-redhat.conf which sets yes on Fedora/RHEL; without this line the effective value is yes even though the compiled default is no; placed before RekeyLimit so first-occurrence semantics protect this directive even if system_ssh_rekey_limit contains injected text
 

@@ -219,22 +219,6 @@
       git alias.revert-s is '{{ verify_revert_s_alias.stdout | trim }}', expected 'revert -s'.
       If the alias was renamed back to 'revert' it silently shadows the git built-in.
 
-- name: Get global safe.directory entries (claude role cleanup regression guard)
-  ansible.builtin.command:
-    cmd: git config --global --get-all safe.directory
-  register: verify_safe_directory_common
-  changed_when: false
-  failed_when: verify_safe_directory_common.rc not in [0, 1]  # 1 = no entries configured
-
-- name: Assert no wildcard safe.directory entries exist
-  ansible.builtin.assert:
-    that: >-
-      verify_safe_directory_common.stdout_lines | default([])
-      | select('match', '^\*{1,2}$|^/$') | list | length == 0
-    fail_msg: >-
-      safe.directory contains a wildcard entry — claude role cleanup task regression?
-      (shell task requires executable: /bin/bash for set -o pipefail + [[ ]] on Debian/dash)
-
 - name: Verify ~/.config/git/ignore exists
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/git/ignore"

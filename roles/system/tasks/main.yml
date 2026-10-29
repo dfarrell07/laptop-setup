@@ -29,46 +29,6 @@
   when: not (system_is_container or csb_rhel)
   tags: [always]
 
-- name: "SECURITY: Enumerate files in /etc/udev/rules.d/ (pre-plant audit)"
-  ansible.builtin.find:
-    paths: /etc/udev/rules.d/
-    file_type: file
-  register: _udev_rules_found
-  when: not system_is_container
-  tags: [always]
-
-- name: "SECURITY: Warn on unexpected files in /etc/udev/rules.d/ (CSB — IT may deploy rules)"
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: Unexpected file(s) in /etc/udev/rules.d/.
-      On CSB machines IT may deploy udev rules — verify these are IT-managed.
-      Unexpected: {{ _udev_rules_found.files | map(attribute='path') | map('basename')
-      | difference(system_udev_rules_d_allowlist) | list }}
-      To suppress: add basename(s) to system_udev_rules_d_allowlist in config.yml.
-  when:
-    - csb_detected
-    - not system_is_container
-    - _udev_rules_found.files | map(attribute='path') | map('basename')
-      | difference(system_udev_rules_d_allowlist) | list | length > 0
-  tags: [always]
-
-- name: "SECURITY: Assert no unauthorized files in /etc/udev/rules.d/ (pre-plant attack)"
-  ansible.builtin.assert:
-    that:
-      - >-
-        _udev_rules_found.files | map(attribute='path') | map('basename')
-        | difference(system_udev_rules_d_allowlist) | list | length == 0
-    fail_msg: >-
-      SECURITY: Unauthorized file(s) in /etc/udev/rules.d/.
-      Attack: a pre-planted udev rule executes as root on every matching device event.
-      Unauthorized: {{ _udev_rules_found.files | map(attribute='path') | map('basename')
-      | difference(system_udev_rules_d_allowlist) | list }}
-      Fix: add the basename(s) to system_udev_rules_d_allowlist in config.yml, then re-run.
-  when:
-    - not csb_detected
-    - not system_is_container
-  tags: [always]
-
 # --- Gather service facts (needed for firewalld/auditd/resolved conditionals) ---
 - name: Gather service facts
   ansible.builtin.service_facts:
@@ -78,7 +38,9 @@
 # set_fact ansible_facts here: that creates a variable shadowing the real facts for the
 # rest of the run, hiding facts gathered later (e.g. package_facts in repos_dnf).
 
-# --- Prerequisites (needed by seport and other system tasks) ---
+# --- Prerequisites (needed by seport and the SELinux block; it also pulls in the SELinux Python bindings) ---
+# Not tagged with a chunk: two chunks (sys_baseline, sys_remote_access) need it and a task is skipped when ANY of
+# its tags is skipped. It is installed only when at least one of them is not in --skip-tags.
 - name: Ensure policycoreutils-python-utils is installed
   ansible.builtin.dnf:
     name: policycoreutils-python-utils
@@ -86,6 +48,7 @@
   when:
     - is_dnf
     - not csb_rhel
+    - "['sys_baseline', 'sys_remote_access'] | difference(ansible_skip_tags) | length > 0"
     - not system_is_container  # RPM post-install calls daemon-reload, crashes Podman container systemd; installed in prepare instead
 
 - name: "SECURITY: Reject system_selinux_enforcing_required: false on managed dnf hosts"
@@ -289,12 +252,14 @@
 - name: Kernel modules for kind
   ansible.builtin.include_tasks: kernel_modules_kind.yml
   when: not system_is_container and not csb_rhel
+  tags: [sys_sysctl]
   # Always load on non-container hosts — unused modules are harmless; NOT loading them
   # when needed is catastrophic with modules_disabled=1. The include file already uses
   # failed_when:false to tolerate Intel/AMD mismatch.
 
 - name: "GRUB bootloader password (CIS 1.4.2)"
   ansible.builtin.import_tasks: grub_password.yml
+  tags: [sys_optional]
 
 # Apply this subsystem's queued handlers now: force_handlers is deliberately false, so a later
 # failure would otherwise drop them, and the rerun sees no change and never applies the config.
@@ -304,6 +269,7 @@
 # --- Auditd ---
 - name: Auditd tasks
   ansible.builtin.import_tasks: auditd.yml
+  tags: [sys_auditd]
 
 # Apply this subsystem's queued handlers now: force_handlers is deliberately false, so a later
 # failure would otherwise drop them, and the rerun sees no change and never applies the config.
@@ -312,21 +278,31 @@
 
 - name: "Bolt hardening"
   ansible.builtin.import_tasks: bolt.yml
+  tags: [sys_baseline]
 
 - name: Authselect and fingerprint auth
   ansible.builtin.import_tasks: authselect_fingerprint.yml
+  tags: [sys_signin]
 
 - name: "Service masking"
   ansible.builtin.import_tasks: service_masking.yml
+  tags: [sys_baseline]
 
 - name: "Logind configuration"
   ansible.builtin.import_tasks: logind.yml
+  tags: [sys_baseline]
 
 - name: "Service enable/disable"
   ansible.builtin.import_tasks: services.yml
+  tags: [sys_baseline]
+
+- name: USBGuard install/enable
+  ansible.builtin.import_tasks: usbguard.yml
+  tags: [sys_usbguard]
 
 - name: Firmware updates
   ansible.builtin.import_tasks: firmware.yml
+  tags: [sys_baseline]
 
 - name: "SECURITY: Validate system_ssh_extra_allow_users entries (sshd AllowUsers injection guard)"
   ansible.builtin.assert:
@@ -354,27 +330,36 @@
 
 - name: SSHD hardening, SELinux port label, and crypto policy
   ansible.builtin.import_tasks: sshd.yml
+  tags: [sys_remote_access]
 
 - name: NetworkManager configuration
   ansible.builtin.import_tasks: nm.yml
+  tags: [sys_remote_access]
 
 - name: Dnf-automatic
   ansible.builtin.import_tasks: dnf_automatic.yml
+  when: not csb_detected  # IT owns update policy on CSB (RHEL and hybrid Fedora)
+  tags: [sys_time_dns]
 
 - name: DNS-over-TLS
   ansible.builtin.import_tasks: dns_over_tls.yml
   when: not system_is_container
+  tags: [sys_time_dns]
 
 # --- Session timeout (CIS 5.5.5: TMOUT <= 900s) ---
 - name: "Session timeout"
   ansible.builtin.import_tasks: session_timeout.yml
+  tags: [sys_optional]
 
 - name: Timezone and locale
   ansible.builtin.import_tasks: timezone_locale.yml
+  tags: [sys_baseline]
 
 - name: Chrony NTS
   ansible.builtin.import_tasks: chrony.yml
-  when: not system_is_container  # chrony apt install + systemd start hang in Debian 13 privileged Podman containers
+  # chrony apt install + systemd start hang in Debian 13 privileged Podman containers; IT owns time sync on CSB
+  when: not system_is_container and not csb_detected
+  tags: [sys_time_dns]
 
 # Apply this subsystem's queued handlers now: force_handlers is deliberately false, so a later
 # failure would otherwise drop them, and the rerun sees no change and never applies the config.
@@ -383,15 +368,19 @@
 
 - name: PAM hardening (faillock, pwhistory, pwquality, pam_wheel)
   ansible.builtin.import_tasks: pam.yml
+  tags: [sys_signin]
 
 - name: Journald persistent logging
   ansible.builtin.import_tasks: journald.yml
+  tags: [sys_baseline]
 
 - name: Logrotate for sudo.log
   ansible.builtin.import_tasks: logrotate_sudo.yml
+  tags: [sys_signin]  # sudo.log is written by the sudoers drop-in that sys_signin installs
 
 - name: "Cron access restriction"
   ansible.builtin.import_tasks: cron.yml
+  tags: [sys_baseline]
 
 - name: Deploy login banners (/etc/issue and /etc/issue.net)
   ansible.builtin.copy:
@@ -407,25 +396,30 @@
   when:
     - not csb_rhel  # RHEL CSB: IT maintains compliant login banner; csb-fedora does not touch /etc/issue
     - not system_is_container  # /etc/issue writes trigger getty inotify; crashes privileged Podman container PID 1
+  tags: [sys_baseline]
 
 - name: Account hardening
   ansible.builtin.import_tasks: account_hardening.yml
-  tags: [account, become]
+  tags: [account, become, sys_signin]
 
 - name: System-level dconf hardening
   ansible.builtin.include_tasks: dconf.yml
   when:
     - '"gdm.service" in (ansible_facts.services | default({}))'
     - not csb_rhel
+  tags: [sys_baseline]
 
 - name: "AIDE cleanup"
   ansible.builtin.import_tasks: aide_cleanup.yml
+  tags: [sys_optional]
 
 - name: AIDE configuration
   ansible.builtin.import_tasks: aide.yml
+  tags: [sys_optional]
 
 - name: Apply the module loading lock after system provisioning and handlers
   ansible.builtin.include_tasks: kernel_modules_lockdown.yml
   when:
     - not system_is_container
     - not csb_rhel
+  tags: [sys_optional]

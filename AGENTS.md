@@ -1,11 +1,10 @@
 # Working in laptop-setup
 
-Read [CLAUDE.md](CLAUDE.md) for repository conventions, Make targets and provisioning
-prerequisites. Use feature branches and signed-off incremental commits.
+Read [CLAUDE.md](CLAUDE.md) for conventions, Make targets and warnings, and
+[docs/design-principles.md](docs/design-principles.md) before changing roles, Make targets or
+hardening. Agents do not run provisioning; the owner does (plan: [docs/rollout-plan.md](docs/rollout-plan.md)).
 
-When auditing a source laptop, capture portable configuration in roles and concise
-decisions in the migration docs; run provisioning from the destination checkout.
-Keep account secrets and raw AI memory/history out of Git.
-
-Use the focused regressions for changed behavior, then the repository lint,
-syntax and script gates. Linux rendering does not establish native macOS behavior.
+Use feature branches and signed-off incremental commits. Keep secrets, host-specific names and raw AI
+memory/history out of Git; capture portable configuration in roles and decisions in
+docs/design-principles.md. Run the focused regression for changed behavior, then lint, syntax-check
+and test-scripts. Linux rendering does not establish native macOS behavior.

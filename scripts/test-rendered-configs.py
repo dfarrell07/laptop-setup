@@ -25,15 +25,13 @@ CASES = {
                                     {'host': 'git-b.example.internal', 'user': 'git'}],
         'ssh_work_keyscan_hosts': [
             {'host': 'git-a.example.internal', 'fingerprint': 'SHA256:' + 'A' * 43},
-            'git-b.example.internal', 'git.example.test'],
-        'dotfiles_internal_git_host': 'git.example.test'}),
+            'git-b.example.internal', 'git.example.test']}),
     'ssh_unseeded': ('roles/dotfiles/templates/ssh_config.j2', {
         'profile': 'work',
         'dotfiles_ssh_work_hosts': [{'host': 'git-a.example.internal'},
                                     {'host': 'git-b.example.internal', 'user': 'git'}],
         'ssh_work_keyscan_hosts': [
-            {'host': 'git-a.example.internal', 'fingerprint': 'SHA256:placeholder'}],
-        'dotfiles_internal_git_host': 'git.example.test'}),
+            {'host': 'git-a.example.internal', 'fingerprint': 'SHA256:placeholder'}]}),
     'policy': ('roles/containers/templates/policy.json.j2', {'is_dnf': True}),
     'usbguard': ('roles/system/templates/usbguard-rules.conf.j2', {}),
     'gitconfig': ('roles/dotfiles/templates/gitconfig.j2', {}),
@@ -102,10 +100,9 @@ class RenderedConfigTests(unittest.TestCase):
         seeded = dict(hosts(self.read('ssh_seeded')))
         self.assertIn('StrictHostKeyChecking yes', seeded['Host git-a.example.internal'])
         self.assertIn('StrictHostKeyChecking yes', seeded['Host git-b.example.internal'])
-        self.assertIn('StrictHostKeyChecking yes', seeded['Host internal-git'])
         unseeded = dict(hosts(self.read('ssh_unseeded')))
-        for host in ('Host git-a.example.internal', 'Host internal-git'):
-            self.assertNotIn('StrictHostKeyChecking yes', unseeded[host], host)
+        host = 'Host git-a.example.internal'
+        self.assertNotIn('StrictHostKeyChecking yes', unseeded[host], host)
         self.assertIn('StrictHostKeyChecking yes', unseeded['Host gh gist github.com gist.github.com'])
 
     def test_policy_json_registry_allowlist(self):
@@ -113,7 +110,8 @@ class RenderedConfigTests(unittest.TestCase):
         policy = json.loads(self.read('policy'))
         self.assertEqual(policy['default'], [{'type': 'reject'}])
         docker = policy['transports']['docker']
-        for registry in ('quay.io', 'docker.io', 'ghcr.io', 'registry.k8s.io', 'registry.fedoraproject.org'):
+        for registry in ('quay.io', 'docker.io', 'ghcr.io', 'registry.k8s.io', 'registry.fedoraproject.org',
+                         'mcr.microsoft.com', 'public.ecr.aws'):
             self.assertEqual(docker[registry], [{'type': 'insecureAcceptAnything'}], registry)
         for registry in ('registry.redhat.io', 'registry.access.redhat.com'):
             self.assertEqual(docker[registry][0]['type'], 'signedBy', registry)

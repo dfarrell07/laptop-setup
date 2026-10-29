@@ -40,43 +40,6 @@
     access_time: preserve
     modification_time: preserve
 
-- name: Fetch GitHub SSH host keys from API
-  ansible.builtin.uri:
-    url: "{{ ssh_github_known_hosts_url }}"
-    return_content: true
-    timeout: 10
-  register: ssh_github_meta
-  changed_when: false
-  check_mode: false
-  failed_when: >
-    ssh_github_meta.status is not defined and
-    ssh_github_meta.msg is defined
-  retries: 2
-  delay: 3
-  until: ssh_github_meta.status | default(0) == 200
-
-- name: Set GitHub ed25519 keys fact
-  ansible.builtin.set_fact:
-    ssh_github_ed25519_keys: "{{ ssh_github_meta.json.ssh_keys | default([]) | select('match', 'ssh-ed25519 ') | list }}"
-
-- name: Set GitHub API fetch success fact
-  ansible.builtin.set_fact:
-    ssh_github_ok: "{{ ssh_github_meta.status | default(0) == 200 and ssh_github_ed25519_keys | length > 0 }}"
-
-- name: Set MITM guard flag when API ed25519 keys share no key with pinned fallback
-  ansible.builtin.set_fact:
-    _ssh_github_mitm_guard: "{{ ssh_github_ok and (ssh_github_ed25519_keys | intersect(ssh_github_known_hosts_fallback) | length == 0) }}"
-
-- name: Override ssh_github_ok when MITM guard triggered (reject untrusted API keys)
-  ansible.builtin.set_fact:
-    ssh_github_ok: false
-  when: _ssh_github_mitm_guard
-
-- name: Seed only API keys that match the pinned fallback (extra keys in the response are not trusted)
-  ansible.builtin.set_fact:
-    ssh_github_ed25519_keys: "{{ ssh_github_ed25519_keys | intersect(ssh_github_known_hosts_fallback) }}"
-  when: ssh_github_ok
-
 - name: Check known_hosts exists before the read-only probe (including check mode)
   ansible.builtin.stat:
     path: "{{ ansible_facts['user_dir'] }}/.ssh/known_hosts"
@@ -102,7 +65,7 @@
     _ssh_existing_github_keys: >-
       {{ _ssh_github_existing.stdout_lines | default([]) | reject('match', '^#')
          | map('regex_replace', _ssh_host_field_re, '') | list }}
-    _ssh_desired_github_keys: "{{ ssh_github_ed25519_keys if ssh_github_ok else ssh_github_known_hosts_fallback }}"
+    _ssh_desired_github_keys: "{{ ssh_github_known_hosts_fallback }}"
   ansible.builtin.known_hosts:
     path: "{{ ansible_facts['user_dir'] }}/.ssh/known_hosts"
     name: github.com
@@ -116,26 +79,9 @@
     key: "github.com {{ item }}"
     state: present
     hash_host: true
-  loop: "{{ ssh_github_ed25519_keys if ssh_github_ok else ssh_github_known_hosts_fallback }}"
+  loop: "{{ ssh_github_known_hosts_fallback }}"
   loop_control:
     label: "{{ item.split()[0] }}"
-
-- name: Warn if GitHub SSH key fetch failed (used pinned fallback)
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: Could not fetch GitHub SSH host keys from api.github.com
-      (status: {{ ssh_github_meta.status | default('no response') }}).
-      Seeded github.com known_hosts from pinned fallback keys instead.
-  when: not ssh_github_ok and not _ssh_github_mitm_guard | default(false)
-
-- name: Warn when MITM guard triggered for GitHub SSH API keys
-  ansible.builtin.debug:
-    msg: >-
-      SECURITY WARNING: GitHub API ed25519 keys share no key with pinned fallback (ssh_github_known_hosts_fallback).
-      A rogue CA or TLS MITM may have injected attacker-controlled SSH host keys via api.github.com.
-      Seeding github.com known_hosts from pinned fallback instead; API keys rejected.
-      If GitHub legitimately rotated keys, update ssh_github_known_hosts_fallback and re-provision.
-  when: _ssh_github_mitm_guard | default(false)
 
 - name: Pre-seed work git host known_hosts
   ansible.builtin.include_tasks: keyscan_host.yml
@@ -159,7 +105,7 @@
   when:
     - ansible_facts['system'] == 'Linux'  # the system role hardens sshd only on Linux
     - ssh_auth_key_pub | trim | length > 0
-  tags: [always]
+  tags: [always, ssh_authorized_keys]
 
 - name: Deploy SSH auth key
   ansible.builtin.copy:
@@ -180,7 +126,7 @@
   ansible.builtin.stat:
     path: "{{ ansible_facts['user_dir'] }}/.ssh/authorized_keys"
   register: _ssh_authkeys_stat
-  tags: [always]
+  tags: [always, ssh_authorized_keys]
 
 - name: Assert authorized_keys is not a symlink
   ansible.builtin.assert:
@@ -191,7 +137,7 @@
       {{ _ssh_authkeys_stat.stat.lnk_target | default('unknown') }}).
       A symlink-to-device attack would silently discard written keys.
       Remove the symlink and re-run provisioning.
-  tags: [always]
+  tags: [always, ssh_authorized_keys]
 
 - name: Assert — vault empty and no authorized_keys present (SSH lockout risk after reboot)
   ansible.builtin.assert:
@@ -213,9 +159,10 @@
     - ssh_auth_key_pub | trim | length == 0
     - not _ssh_authkeys_stat.stat.exists
     - lookup('env', 'SSH_CONNECTION') | length > 0  # console runs: pre-flight prints a notice instead
-  tags: [always]
+  tags: [always, ssh_authorized_keys]
 
 - name: Validate existing authorized_keys key types when vault is empty
+  tags: [ssh_authorized_keys]
   when:
     - ansible_facts['system'] == 'Linux'  # macOS setup configures an SSH client, not sshd
     - ssh_auth_key_pub | trim | length == 0  # vault empty
@@ -277,6 +224,7 @@
     src: "{{ ansible_facts['user_dir'] }}/.ssh/authorized_keys"
   register: _pre_excl_authkeys_slurp
   no_log: true
+  tags: [ssh_authorized_keys]
   when:
     - ssh_auth_key_pub | trim | length > 0
     - _ssh_authkeys_stat.stat.exists
@@ -288,6 +236,7 @@
       After this run, authorized_keys will contain ONLY the vault key.
       If the YubiKey is temporarily unavailable (firmware update, re-programming),
       SSH login requires physical console access — no backup key will remain.
+  tags: [ssh_authorized_keys]
   when:
     - ssh_auth_key_pub | trim | length > 0
     - _ssh_authkeys_stat.stat.exists
@@ -304,6 +253,7 @@
     state: present
     exclusive: true
   no_log: true
+  tags: [ssh_authorized_keys]
   when: ssh_auth_key_pub | trim | length > 0
 
 - name: Deploy SSH signing key

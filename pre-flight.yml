@@ -61,3 +61,30 @@
       block:
         - name: Include CSB detection
           ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
+
+    # fapolicyd-enforcing CSB container tier blocks binaries outside the dnf trust db at runtime. Derive the
+    # gate here (always-tagged) so chunk runs (--tags common,<chunk>) that skip the packages role still honour it.
+    - name: Disable binary downloads on fapolicyd-enforcing CSB container tier
+      ansible.builtin.set_fact:
+        packages_install_binaries: "{{ packages_install_binaries | bool and needs_container_tier != 'container' }}"
+      tags: [always]
+
+    # Chunk selection (group_vars/all/rollout.yml): a chunk's name is its tag. The make wrapper turns
+    # rollout_enable into --skip-tags; this assert makes a run without them fail closed.
+    - name: Resolve disabled chunks
+      ansible.builtin.set_fact:
+        _rollout_disabled: >-
+          {{ rollout_catalog | list | difference(rollout_catalog | list if rollout_enable == 'all' else rollout_enable) }}
+      tags: [always]
+
+    - name: Chunk selection is valid and every disabled chunk is skipped
+      ansible.builtin.assert:
+        that:
+          - rollout_enable == 'all' or (rollout_enable is sequence and rollout_enable is not string and rollout_enable is not mapping)
+          - rollout_enable == 'all' or (rollout_enable | difference(rollout_catalog | list) | length == 0)
+          - _rollout_disabled | difference(ansible_skip_tags) | length == 0
+        fail_msg: >-
+          rollout_enable must be 'all' or a list of known chunks (see scripts/rollout.py status), and every chunk
+          that is not enabled must be passed as --skip-tags. Run through make (or scripts/verify-ansible-args.sh),
+          which adds them. Disabled: {{ _rollout_disabled | join(', ') }}. Skipped: {{ ansible_skip_tags | join(', ') }}.
+      tags: [always]

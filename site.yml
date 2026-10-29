@@ -16,11 +16,10 @@
 #   • system: Hardening, SELinux, firewall, kernel params, services
 #   • Play-level become: true simplifies privilege escalation for these roles
 #   • Post-task: Validates DNS resolution after NetworkManager restart
-#     (Play 2 depends on DNS for git/binary downloads; see line 35)
+#     (Play 2 depends on DNS for git/binary downloads)
 #
 # Play 2 (User setup, become: false): User-level provisioning
-#   • Pre-tasks: CSB re-validation, pre-flight re-check (defense against
-#     --start-at-task bypass), vault healthcheck, identity var assertions
+#   • Pre-tasks: CSB re-validation, vault healthcheck, identity var assertions
 #   • Roles: packages, ssh, dotfiles, git_repos, notes, redhat, containers,
 #     desktop, distrobox, claude
 #   • Individual tasks use become: true + tags: [become] when needed
@@ -53,11 +52,12 @@
 
     - name: Verify sudo authentication (Play 1)
       ansible.builtin.import_tasks: common/tasks/become_probe.yml
-      tags: [repos_dnf, system]
+      # always + become, not chunk names: the probe must run for every sudo target and be skipped by the no-sudo ones
+      tags: [always, become]
 
     # SECURITY: Close pre-hardening cron window.
     # cronie is installed by default on Fedora and may already be running when provisioning
-    # begins. cron.yml runs at import position 21 of 25 in the system role (~10-20 min
+    # begins. cron.yml runs about two thirds of the way through the system role's imports (~10-20 min
     # into provisioning), leaving a window in which pre-placed /var/spool/cron/<user>
     # jobs fire freely. Writing cron.allow=root here — the earliest privileged step —
     # eliminates that window before any role executes. Skip on any CSB machine (IT managed
@@ -74,8 +74,9 @@
         - ansible_facts['system'] == 'Linux'  # macOS cron uses /usr/lib/cron; these files would be inert
         - not system_is_container
         - not csb_detected
-      # Not 'always': no-sudo targets (make dotfiles, ...) must not attempt become here
-      tags: [repos_dnf, system]
+      # Not 'always': no-sudo targets (make dotfiles, ...) must not attempt become here.
+      # sys_baseline (not repos_dnf): skipping the repos_dnf chunk must not skip this guard.
+      tags: [system, sys_baseline]
 
   roles:
     - role: repos_dnf
@@ -139,7 +140,7 @@
 
     - name: Verify sudo authentication (Play 2 targets run with --ask-become-pass)
       ansible.builtin.import_tasks: common/tasks/become_probe.yml
-      tags: [packages, desktop, redhat, containers, claude]
+      tags: [always, become]
 
     - name: Set OS family facts (is_macos, is_linux)
       ansible.builtin.set_fact:
@@ -154,16 +155,6 @@
       block:
         - name: Include CSB detection
           ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
-
-    - name: SECURITY CRITICAL — Re-validate supply chain and config integrity (defense-in-depth)
-      # Refresh validation before user provisioning. Static imports and always tags
-      # do not prevent direct CLI flags from skipping tasks; the wrapper enforces
-      # that argument policy before Ansible starts.
-      become: false
-      tags: [always]
-      block:
-        - name: Re-run pre-flight checks before user provisioning
-          ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/pre_flight_checks.yml"
 
     - name: Vault healthcheck — assert required SSH key variables are defined (allows empty on first provision)
       ansible.builtin.assert:
@@ -184,8 +175,7 @@
 
     # REQUIRED GUARD — DO NOT REMOVE: Play 1 applies SSH port change + kernel
     # hardening before Play 2, so users who skip 'make preflight' get no other
-    # warning. preflight.sh alone is not sufficient. This block is protected
-    # from automated modification in the audit workflow script (GITIGNORED).
+    # warning. preflight.sh alone is not sufficient.
     - name: Assert identity vars are not CHANGE_ME placeholder values
       ansible.builtin.assert:
         that:
@@ -220,7 +210,7 @@
       tags: [packages]
 
     - role: ssh
-      tags: [ssh]
+      tags: [ssh, ssh_client]
 
     - role: dotfiles
       tags: [dotfiles]
@@ -229,7 +219,7 @@
       tags: [repos, git_repos]
 
     - role: notes
-      tags: [notes]
+      tags: [notes, repos]
 
     - role: redhat
       tags: [redhat]
@@ -242,10 +232,10 @@
       tags: [desktop]
 
     - role: claude
-      tags: [claude]
+      tags: [claude, agents]
 
     - role: codex
-      tags: [codex]
+      tags: [codex, agents]
       when: codex_enabled | default(true) | bool
 
     - role: distrobox
@@ -264,7 +254,7 @@
       become: true
       register: _aide_rebaseline_marker
       when: ansible_facts['system'] == 'Linux'  # no AIDE (and no reason to escalate) on macOS
-      tags: [always, become]
+      tags: [always, become, sys_optional]
 
     - name: Rebuild the AIDE baseline after provisioning
       ansible.builtin.shell:  # noqa: command-instead-of-module
@@ -275,7 +265,7 @@
       timeout: 1800
       changed_when: true
       when: _aide_rebaseline_marker.stat.exists | default(false)
-      tags: [always, become]
+      tags: [always, become, sys_optional]
 
     # Only a full run supersedes the report: a single-role target (make ssh) knows nothing of
     # failures recorded by other roles, and the report is only written when it has failures.
@@ -308,9 +298,8 @@
       tags: [always]
 
     - name: SECURITY CRITICAL — Validate config integrity before container provisioning
-      # DEFENSE: Play 3 can be targeted directly with --limit containers, bypassing
-      # Play 0 and Play 2 validations. Re-run SSTI guard, vault health, and identity
-      # checks with tags: [always] to ensure they execute regardless of --limit.
+      # Also loads default.config.yml/config.yml into the container host's vars
+      # (include_vars is per inventory host; Play 3 runs on the container, not localhost).
       delegate_to: localhost
       become: false
       tags: [always]

@@ -134,12 +134,23 @@
 # On Fedora/RHEL: /etc/zshrc (compiled default GLOBAL_ZSHRC=/etc/zshrc).
 # On Debian: /etc/zsh/zshrc (compiled default GLOBAL_ZSHRC=/etc/zsh/zshrc;
 # /etc/zshrc is silently ignored by Debian's zsh binary).
+# zsh's /etc/zshrc is %config(noreplace): creating it before the package is installed would
+# make rpm keep our 1-line file and write the packaged one as /etc/zshrc.rpmnew.
+- name: Install zsh before editing /etc/zshrc
+  ansible.builtin.dnf:
+    name: zsh
+    state: present
+  when:
+    - is_dnf
+    - not csb_rhel
+    - system_tmout | int > 0
+
 - name: Deploy session timeout to /etc/zshrc (Fedora/RHEL/macOS zsh)
   ansible.builtin.lineinfile:
     path: /etc/zshrc
     line: "typeset -xr TMOUT={{ system_tmout | int }}  # CIS 5.5.5"
     regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
-    create: true  # system role runs before packages; zsh may not be installed yet on first provision
+    create: true  # dnf task above installs zsh first; create only matters in check mode
     mode: "0644"
   when:
     - not is_apt

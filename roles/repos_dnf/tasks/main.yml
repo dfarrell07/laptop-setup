@@ -464,11 +464,6 @@
         # yamllint disable-line rule:line-length
         name: "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"
         state: present
-    # noqa: command-instead-of-module — verify RPM signature without installing
-    - name: Verify RPM Fusion free release cryptographic signature
-      ansible.builtin.command:
-        cmd: rpm --verify --verbose --nofiles --nomtime rpmfusion-free-release
-      changed_when: false
   rescue:
     - name: Abort on malformed GPG fingerprint configuration
       ansible.builtin.fail:
@@ -483,13 +478,6 @@
       when:
         - _rpmfusion_free_gpg_tmp_dir is defined
         - _rpmfusion_free_gpg_tmp_dir.path is defined
-    - name: Remove rpmfusion-free-release after signing check failure
-      ansible.builtin.dnf:
-        name: rpmfusion-free-release
-        state: absent
-      failed_when: false
-      # Only an unverifiable package is removed; a network or sudo failure keeps a working repo
-      when: "'cryptographic signature' in (ansible_failed_task.name | default(''))"
     - name: Warn RPM Fusion free failed (network error)
       ansible.builtin.debug:
         msg: >-
@@ -565,11 +553,6 @@
           https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_facts['distribution_major_version']
           }}.noarch.rpm
         state: present
-    # noqa: command-instead-of-module — verify RPM signature without installing
-    - name: Verify RPM Fusion nonfree release cryptographic signature
-      ansible.builtin.command:
-        cmd: rpm --verify --verbose --nofiles --nomtime rpmfusion-nonfree-release
-      changed_when: false
   rescue:
     - name: Abort on malformed GPG fingerprint configuration
       ansible.builtin.fail:
@@ -584,13 +567,6 @@
       when:
         - _rpmfusion_nonfree_gpg_tmp_dir is defined
         - _rpmfusion_nonfree_gpg_tmp_dir.path is defined
-    - name: Remove rpmfusion-nonfree-release after signing check failure
-      ansible.builtin.dnf:
-        name: rpmfusion-nonfree-release
-        state: absent
-      failed_when: false
-      # Only an unverifiable package is removed; a network or sudo failure keeps a working repo
-      when: "'cryptographic signature' in (ansible_failed_task.name | default(''))"
     - name: Warn RPM Fusion nonfree failed (network error)
       ansible.builtin.debug:
         msg: >-

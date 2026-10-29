@@ -168,6 +168,7 @@
     - is_dnf
     - not csb_rhel
     - not system_is_container
+  tags: [sys_baseline]
 
 # --- cups-browsed (CVE-2024-47176) and cups service/socket/path ---
 # system_disable_printing: true  → cups-browsed masked+stopped; cups.service disabled;
@@ -430,10 +431,12 @@
     path: /usr/lib/systemd/system/cockpit.socket
   register: _cockpit_stat
 
-- name: Configure cockpit masking (mask when not system_enable_cockpit)
+- name: Mask or enable cockpit per system_enable_cockpit (installed units only)
   ansible.builtin.systemd:
     name: "{{ item }}"
     masked: "{{ not (system_enable_cockpit | bool) }}"
+    enabled: "{{ system_enable_cockpit | bool }}"
+    state: "{{ 'started' if system_enable_cockpit | bool else 'stopped' }}"
   loop:
     - cockpit.service
     - cockpit.socket
@@ -441,57 +444,6 @@
     - not csb_rhel  # RHEL CSB: IT manages cockpit access; do not mask
     - not system_is_container  # socket masking triggers daemon-reload, crashes Debian containers
     - _cockpit_stat.stat.exists
-  register: _system_cockpit_mask
-  ignore_errors: true  # noqa: ignore-errors  (failed_when: false would clear .failed and kill the warning below)
-
-- name: Warn when cockpit masking failed
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: cockpit masking/unmasking failed (unit-not-found is tolerated, other errors are not):
-      {{ (_system_cockpit_mask.results | default([]) | selectattr('failed', 'defined')
-          | selectattr('failed')
-          | rejectattr('msg', 'search', _system_unit_absent_re) | list)
-          | map(attribute='item') | list }}
-  when:
-    - not csb_rhel
-    - not system_is_container
-    - _cockpit_stat.stat.exists
-    - (_system_cockpit_mask.results | default([]) | selectattr('failed', 'defined')
-        | selectattr('failed')
-        | rejectattr('msg', 'search', _system_unit_absent_re) | list)
-        | length > 0
-
-- name: Configure cockpit state and enablement (installed units only)
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    state: "{{ 'started' if system_enable_cockpit else 'stopped' }}"
-    enabled: "{{ system_enable_cockpit | bool }}"
-  loop:
-    - cockpit.service
-    - cockpit.socket
-  when:
-    - not csb_rhel  # RHEL CSB: IT manages cockpit access; do not mask
-    - not system_is_container
-    - _cockpit_stat.stat.exists
-  register: _system_cockpit_state
-  ignore_errors: true  # noqa: ignore-errors  (failed_when: false would clear .failed and kill the warning below)
-
-- name: Warn when cockpit state failed
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: cockpit state/enablement change failed (unit-not-found is tolerated, other errors are not):
-      {{ (_system_cockpit_state.results | default([]) | selectattr('failed', 'defined')
-          | selectattr('failed')
-          | rejectattr('msg', 'search', _system_unit_absent_re) | list)
-          | map(attribute='item') | list }}
-  when:
-    - not csb_rhel
-    - not system_is_container
-    - _cockpit_stat.stat.exists
-    - (_system_cockpit_state.results | default([]) | selectattr('failed', 'defined')
-        | selectattr('failed')
-        | rejectattr('msg', 'search', _system_unit_absent_re) | list)
-        | length > 0
 
 - name: Mask Ctrl+Alt+Delete reboot target
   ansible.builtin.systemd:

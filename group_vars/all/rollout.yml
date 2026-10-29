@@ -1,0 +1,111 @@
+---
+# Chunk registry: the one list of independently appliable chunks, in recommended order
+# (low risk and high value first). A chunk's name is also its Ansible tag.
+#
+# rollout_enable (override in config.yml): `all` (default) or a list of chunk names.
+# scripts/rollout.py turns the chunks that are not enabled into --skip-tags, so with the
+# default nothing is skipped and a run is identical to one without this file.
+#
+# Fields: desc, risk (low|medium|high), sudo (default true; false = needs no sudo), requires (chunks
+# that must also be enabled; listed earlier in this file), verify (scripts/smoke-test.sh check names
+# proving the chunk applied).
+# Undo notes and decision records live in docs/rollout-recovery.md, one heading per chunk.
+rollout_enable: all
+
+rollout_catalog:
+  packages:
+    desc: Packages, pinned binaries, Go tools, pipx, krew
+    risk: low
+  ssh_client:
+    desc: Pinned known_hosts and vault-backed SSH and signing keys
+    risk: low
+    sudo: false
+    verify: [known-hosts-github]
+  dotfiles:
+    desc: Shell, git (incl. commit signing), ssh client config, tmux and tool config
+    risk: low
+    sudo: false
+    requires: [ssh_client]
+    verify: [dotfile-gitconfig, git-hooks-path, ssh-config-hash-known-hosts]
+  desktop:
+    desc: GNOME, sway, i3 or AeroSpace configuration
+    risk: low
+  agents:
+    desc: Claude Code and Codex installs and settings
+    risk: low
+    requires: [packages]
+    verify: [claude-privacy-tmpfiles, codex]
+  repos:
+    desc: Git repository clones and the notes repo
+    risk: low
+    sudo: false
+  containers:
+    desc: Podman config, pull policy and registries
+    risk: medium
+    requires: [packages]
+    verify: [fqin-enforcement, containers-policy]
+  distrobox:
+    desc: Dev container provisioning
+    risk: low
+    sudo: false
+    requires: [containers, ssh_client]
+    verify: [distrobox-container]
+  login_shell:
+    desc: zsh as the login shell (usermod or SSSD override)
+    risk: medium
+    requires: [packages, desktop, dotfiles]
+    verify: [login-shell-zsh]
+  redhat:
+    desc: Red Hat IT tooling (VPN client, certificates)
+    risk: medium
+    requires: [packages]
+  repos_dnf:
+    desc: Third-party dnf repositories
+    risk: medium
+  sys_baseline:
+    desc: Passive settings (SELinux, masking, logind, journald, cron, dconf)
+    risk: medium
+    verify: [login-banner, cron-allow-root, journald-persistent]
+  sys_sysctl:
+    desc: sysctl hardening, core dumps, module blacklist, kind kernel modules
+    risk: medium
+    verify: [coredump-configured, modprobe-hardening]
+  sys_time_dns:
+    desc: chrony NTS, DNS-over-TLS, dnf-automatic
+    risk: medium
+    verify: [chronyd-service, dnf-automatic]
+  sys_optional:
+    desc: Session timeout, AIDE, setuid scan, GRUB password, module-load lock
+    risk: medium
+    requires: [sys_sysctl]
+  sys_mounts:
+    desc: Mount hardening (tmpfs and fstab options)
+    risk: high
+    verify: [tmp-hardening]
+  sys_lockdown:
+    desc: Kernel lockdown and boot arguments (needs a reboot)
+    risk: high
+    verify: [kernel-lockdown, kernel-cmdline]
+  sys_auditd:
+    desc: auditd rules
+    risk: high
+    verify: [auditd-service, auditd-rules]
+  sys_usbguard:
+    desc: USBGuard (blocks unlisted USB devices)
+    risk: high
+    verify: [usbguard, usbguard-implicit-policy, usbguard-yubikey-rule]
+  sys_signin:
+    desc: Sudoers defaults, account hardening, authselect and PAM
+    risk: high
+    verify: [authselect-check, pam-wheel]
+  ssh_authorized_keys:
+    desc: Exclusive authorized_keys from the vault (can lock out remote access)
+    risk: high
+    sudo: false
+    requires: [ssh_client]
+    verify: [authorized-keys-exists, authorized-keys-ed25519]
+  sys_remote_access:
+    desc: Firewall, NetworkManager zones, sshd (port 722, Tailscale inbound SSH)
+    risk: high
+    requires: [sys_baseline, ssh_authorized_keys]
+    verify: [sshd-hardening, sshd-port, sshd-port-bound, firewall-ssh-port]

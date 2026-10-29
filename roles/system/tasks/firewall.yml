@@ -123,7 +123,7 @@
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool
 
-# Fallback for RHEL CSB machines where IT manages firewall zone policy
+# Fallback for machines where zone policy is managed elsewhere (RHEL CSB: IT) or by the owner
 # (system_firewall_manage_zone=false) and the primary interface stays in whatever
 # the default zone is. On Fedora hybrid, system_firewall_manage_zone=true so the
 # drop zone tasks already handle port 722 and this task is skipped. The guard on
@@ -193,7 +193,7 @@
         immediate: true
         state: "{{ 'enabled' if system_enable_cockpit else 'disabled' }}"
       notify: Apply firewall rules
-- name: Open SSH port in default zone (CSB fallback)
+- name: Open SSH port in default zone (zone management disabled)
   ansible.posix.firewalld:
     port: "{{ ssh_port }}/tcp"
     zone: "{{ system_firewall_info.firewalld_info.default_zone }}"
@@ -203,7 +203,6 @@
   register: _result
   when:
     - system_firewalld_running | bool
-    - csb_detected
     - not (system_firewall_manage_zone | bool)
     - system_firewall_info.firewalld_info.default_zone | default('') not in ['drop', 'trusted', '']
   failed_when: >-
@@ -227,41 +226,16 @@
     - not (system_firewall_manage_zone | bool)
     - (system_firewall_info.firewalld_info.default_zone | default('')) == 'trusted'
 
-# Non-CSB safety net: on plain Fedora with zone management explicitly disabled via
-# system_firewall_manage_zone: false, the drop-zone SSH task (line ~176) is skipped and
-# the CSB fallback above requires csb_detected=true — leaving port {{ ssh_port }} in no zone.
-# After sshd.yml reconfigures sshd to port {{ ssh_port }}, SSH becomes unreachable externally.
-# This task is a safety net; the recommended setting is to leave system_firewall_manage_zone
-# at its default (not csb_rhel, which is true on plain Fedora).
-- name: Open SSH port in default zone (non-CSB safety net)
-  ansible.posix.firewalld:
-    port: "{{ ssh_port }}/tcp"
-    zone: "{{ system_firewall_info.firewalld_info.default_zone }}"
-    permanent: true
-    immediate: true
-    state: enabled
-  register: _result_non_csb_ssh
-  when:
-    - system_firewalld_running | bool
-    - not csb_detected
-    - not (system_firewall_manage_zone | bool)
-    - system_firewall_info.firewalld_info.default_zone | default('') not in ['drop', 'trusted', '']
-  failed_when: >-
-    (_result_non_csb_ssh.failed | default(false)) and
-    'INVALID_ZONE' not in (_result_non_csb_ssh.msg | default(''))
-  notify: Apply firewall rules
-
 - name: 'Warn: SSH port not opened — RHEL CSB drop zone'
   ansible.builtin.debug:
     msg: >-
-      WARNING: csb_rhel=true and the default firewall zone is 'drop'.
+      WARNING: the default firewall zone is 'drop' and zone management is off.
       The fallback SSH task was skipped (drop zone excluded) and the
       redhat-zone task only runs on Fedora. Port {{ ssh_port }}/tcp is
-      not opened by this playbook on this host — IT's zone policy must
+      not opened by this playbook on this host — the zone policy must
       include port {{ ssh_port }}/tcp for SSH to be reachable.
   when:
     - system_firewalld_running | bool
-    - csb_rhel | bool
     - not (system_firewall_manage_zone | bool)
     - (system_firewall_info.firewalld_info.default_zone | default('')) == 'drop'
 

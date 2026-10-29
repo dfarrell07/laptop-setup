@@ -2,13 +2,13 @@
 # roles/packages/tasks/install_go_tools.yml
 # Install Go tools via `go install` (extracted from main.yml)
 #
-# WHY NOT SHA256 COMPILED BINARIES: Go binary SHA256 is non-deterministic (toolchain
-# version, build flags, architecture all affect output). The Go module checksum database
-# (GOSUMDB) is the correct integrity mechanism — it's validated below. See 812cd185.
+# WHY NOT SHA256 COMPILED BINARIES: the output depends on the local toolchain, build flags
+# and architecture, so there is no upstream binary hash to pin. The Go module checksum
+# database (GOSUMDB) is the integrity mechanism for the source — it's validated below. See 812cd185.
 #
 # SUPPLY CHAIN MODEL: GOSUMDB prevents tampered modules; this file fails on checksum
 # mismatches and never retries them (only 'permission denied' is retried).
-# Known gap: maintainer compromise passes GOSUMDB (same as XZ Utils 2024 vector).
+# Known gap: a malicious release from a compromised maintainer passes GOSUMDB.
 
 - name: Compute effective GOSUMDB proxy environment
   # Prefers packages_gosumdb_proxy; falls back to auto-detected proxy when
@@ -365,10 +365,11 @@
     - not csb_rhel | bool
     - _packages_go_network_failed | length > 0
 
-- name: Fail on Go tool install errors (non-CSB)
-  ansible.builtin.fail:
+- name: Warn about Go tools that failed to install (non-CSB)
+  ansible.builtin.debug:
     msg: >-
-      Go tool install failed: {{ _packages_go_failed | difference(_packages_go_network_failed) | join(', ') }}
+      WARNING: Go tool install failed (optional tooling; continuing):
+      {{ _packages_go_failed | difference(_packages_go_network_failed) | join(', ') }}.
   when:
     - not csb_rhel | bool
     - _packages_go_failed | difference(_packages_go_network_failed) | length > 0

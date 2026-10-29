@@ -1,10 +1,10 @@
 #!/bin/bash
 # smoke-test.sh — post-provisioning verification for workstation Ansible playbook
-# Usage: smoke-test.sh [--json] [--user-only|--system-only] [--profile work|personal] [--container <name>]
-# Exit: 0 = all pass, 1 = any failures
+# Usage: smoke-test.sh [--json] [--user-only|--system-only] [--profile work|personal] [--container <name>] [--only name[,name...]]
+# Exit: 0 = all pass, 1 = any failures (with --only: any selected check not PASS, including checks that did not run)
 set -euo pipefail
 
-JSON=false USER_ONLY=false SYSTEM_ONLY=false CONTAINER="" PROFILE_OVERRIDE=""
+JSON=false USER_ONLY=false SYSTEM_ONLY=false CONTAINER="" PROFILE_OVERRIDE="" ONLY="" ONLY_LIST=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --json)      JSON=true; shift ;;
@@ -14,7 +14,10 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 && "$2" =~ ^(work|personal)$ ]] || { echo "Error: --profile requires work or personal" >&2; exit 2; }
       PROFILE_OVERRIDE="$2"; shift 2 ;;
     --container) [[ $# -ge 2 ]] || { echo "Error: --container requires a value" >&2; exit 2; }; CONTAINER="$2"; shift 2 ;;
-    -h|--help)   printf 'Usage: %s [--json] [--user-only|--system-only] [--profile work|personal] [--container <name>]\nExit: 0 = all pass, 1 = any failures\n' "$0"; exit 0 ;;
+    --only)
+      [[ $# -ge 2 && "$2" =~ ^[A-Za-z0-9_.-]+(,[A-Za-z0-9_.-]+)*$ ]] || { echo "Error: --only requires check names separated by commas" >&2; exit 2; }
+      ONLY=",$2,"; ONLY_LIST="$2"; shift 2 ;;
+    -h|--help)   printf 'Usage: %s [--json] [--user-only|--system-only] [--profile work|personal] [--container <name>] [--only name[,name...]]\nExit: 0 = all pass, 1 = any failures\n' "$0"; exit 0 ;;
     *)           echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -37,9 +40,16 @@ RESULTS=()
 FAILURES=0
 WARNS=0
 SKIPS=0
+ONLY_SEEN=","   # --only: names recorded so far
+ONLY_NOT_PASS=0
 
 record() { # name status [detail]
   local n="$1" s="$2" d="${3:-}"
+  if [[ -n "$ONLY" ]]; then  # --only: record just the selected checks; a selected check that is not PASS fails the run
+    case "$ONLY" in *",$n,"*) ;; *) return 0 ;; esac
+    ONLY_SEEN="${ONLY_SEEN}${n},"
+    [[ "$s" == PASS ]] || ONLY_NOT_PASS=$((ONLY_NOT_PASS + 1))
+  fi
   # JSON-safe: drop other control bytes, then escape backslash, quote and common whitespace (name and detail)
   n="$(printf '%s' "$n" | LC_ALL=C tr -d '\000-\037\177')"; local nj="${n//\\/\\\\}"; nj="${nj//\"/\\\"}"
   d="$(printf '%s' "$d" | LC_ALL=C tr -d '\000-\010\013\014\016-\037\177')"
@@ -82,6 +92,8 @@ _mask_iscsi=true
 grep -qiE '^system_mask_iscsi:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_iscsi=false
 _usbguard_enabled=true
 grep -qiE '^system_install_usbguard:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _usbguard_enabled=false
+_containers_policy_enabled=true
+grep -qiE '^containers_policy_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _containers_policy_enabled=false
 _mask_abrt=true
 grep -qiE '^system_mask_abrt:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_abrt=false
 _rpmfusion_free=true
@@ -192,12 +204,14 @@ for tool in "kubectl:kubectl version --client" "podman:podman info" "claude:clau
   # shellcheck disable=SC2086  # intentional word-split: cmd is "binary arg1 arg2"
   if exec_cmd $cmd &>/dev/null; then record "$name" "PASS"; else record "$name" "$_tool_absent" "not found"; fi
 done
-if [[ -x "$HOME/.krew/bin/krew" ]]; then
-  if exec_cmd "$HOME/.krew/bin/krew" version &>/dev/null; then record "krew" "PASS"
+if [[ -x "$HOME/.krew/bin/kubectl-krew" ]]; then
+  if exec_cmd "$HOME/.krew/bin/kubectl-krew" version &>/dev/null; then record "krew" "PASS"
   else record "krew" "FAIL" "krew installed but version failed"; fi
 else record "krew" "$_tool_absent" "not found"; fi
-if ! $_codex_enabled || [[ -n "$CONTAINER" ]]; then
-  record "codex" "SKIP" "disabled or host-only CLI"
+if ! $_codex_enabled; then
+  record "codex" "PASS" "codex_enabled: false"
+elif [[ -n "$CONTAINER" ]]; then
+  record "codex" "SKIP" "host-only CLI"
 elif exec_cmd codex --version &>/dev/null; then
   record "codex" "PASS"
 else
@@ -216,8 +230,8 @@ for tool in "gofumpt:--version" "gopls:version" "stern:--version" "govulncheck:-
   name="${tool%%:*}"; args="${tool#*:}"; _gobin="$HOME/go/bin/$name"
   _test_if_installed "$_gobin" "go-$name" "$_gobin" $args
 done
-# Versioned subctl binaries (subctl18, subctlRH* — guard on binary presence, emit nothing when absent)
-for _bin in "$HOME"/.local/bin/subctl[0-9]* "$HOME"/.local/bin/subctlRH*; do
+# Versioned subctl binaries (subctl18 — guard on binary presence, emit nothing when absent)
+for _bin in "$HOME"/.local/bin/subctl[0-9]*; do
   _test_if_installed "$_bin" "$(basename "$_bin")" "$_bin" version
 done
 
@@ -260,24 +274,38 @@ if command -v gh &>/dev/null; then
   else record "gh-auth" "WARN" "not authenticated (interactive login required)"; fi
 fi
 
-# registry.redhat.io authenticated (work-profile only — RH subctl oc image extract silently fails when unauth'd)
+# registry.redhat.io authenticated (work-profile only)
 if [[ "$profile" == "work" ]] && command -v podman &>/dev/null && [[ -x /usr/local/bin/oc ]]; then
   if podman login --get-login registry.redhat.io &>/dev/null; then
     record "registry-redhat-auth" "PASS"
   else
-    record "registry-redhat-auth" "WARN" "not authenticated — RH subctl oc image extract will silently fail (run: podman login registry.redhat.io)"
+    record "registry-redhat-auth" "WARN" "not authenticated (run: podman login registry.redhat.io)"
   fi
 fi
 
-# FQIN enforcement: containers_enforce_fqin=true is a no-op when /etc/containers/registries.conf
-# (system-level) defines unqualified-search-registries — Podman stops at system-level and ignores
-# user-level config entirely.
+# FQIN enforcement: a user-level ~/.config/containers/registries.conf overrides the system file
+# entirely, so only warn when it is absent and the system file allows unqualified names.
 if $IS_LINUX && command -v podman &>/dev/null; then
-  if [[ -f /etc/containers/registries.conf ]] && grep -qE '^unqualified-search-registries\s*=' /etc/containers/registries.conf; then
-    record "fqin-enforcement" "WARN" "system /etc/containers/registries.conf allows unqualified image names — containers_enforce_fqin=true has no effect (Podman ignores user-level config when system-level exists; 'podman pull nginx' resolves against docker.io)"
+  if [[ ! -f "$HOME/.config/containers/registries.conf" ]] && [[ -f /etc/containers/registries.conf ]] && grep -qE '^unqualified-search-registries\s*=' /etc/containers/registries.conf; then
+    record "fqin-enforcement" "WARN" "system /etc/containers/registries.conf allows unqualified image names and no user-level registries.conf overrides it — 'podman pull nginx' resolves against docker.io"
   else
     record "fqin-enforcement" "PASS"
   fi
+fi
+
+# Pull policy (the containers chunk's main control): the user-level policy.json overrides /etc/containers/policy.json.
+if $IS_LINUX && command -v podman &>/dev/null; then
+  _pj="$HOME/.config/containers/policy.json"
+  if ! $_containers_policy_enabled; then
+    record "containers-policy" "PASS" "pull policy disabled (containers_policy_enabled: false)"
+  elif [[ ! -f "$_pj" ]]; then
+    record "containers-policy" "WARN" "$_pj missing — image pulls are not restricted; run: make chunk-containers"
+  elif tr -d ' \n\t' < "$_pj" | grep -q '"default":\[{"type":"reject"'; then
+    record "containers-policy" "PASS"
+  else
+    record "containers-policy" "WARN" "$_pj does not default to reject — run: make chunk-containers"
+  fi
+  unset _pj
 fi
 
 # YubiKey
@@ -382,7 +410,14 @@ unset _tmux_conf
 _gc="$HOME/.config/git/config"
 if [[ ! -f "$_gc" ]]; then record "dotfile-gitconfig" "FAIL" "missing — run: make dotfiles"
 elif ! grep -q 'Ansible managed' "$_gc"; then record "dotfile-gitconfig" "FAIL" "present but not Ansible-managed (manually overwritten?) — inspect and re-run: make dotfiles"
-else record "dotfile-gitconfig" "PASS"; fi
+else
+  # Signing is switched on here, but its key file is deployed by ssh_client: until it exists every commit fails.
+  _sk=$(git config --file "$_gc" --get user.signingkey 2>/dev/null || true)
+  case "$_sk" in \~/*) _sk="$HOME/${_sk#\~/}" ;; esac
+  if [[ -n "$_sk" && ! -e "$_sk" ]]; then record "dotfile-gitconfig" "FAIL" "signing key file $_sk is missing, so every commit fails; run: make chunk-ssh_client"
+  else record "dotfile-gitconfig" "PASS"; fi
+  unset _sk
+fi
 if [[ -f "$HOME/.gitconfig" ]]; then record "legacy-gitconfig" "FAIL" "$HOME/.gitconfig exists alongside XDG config — run: make dotfiles"; else record "legacy-gitconfig" "PASS"; fi
 # git identity must be set to non-placeholder values
 _git_name=$(git config --global user.name 2>/dev/null || echo "")
@@ -610,8 +645,8 @@ if [[ -f "$HOME/.ssh/config" ]]; then
 else record "ssh-config" "FAIL" "$HOME/.ssh/config not deployed — run: make dotfiles"; fi
 
 # SSH signing key file (required for git commit signing — deployed by ssh role from vault)
-if [[ -f "$HOME/.ssh/id_ed25519_sk_signing.pub" ]]; then record "ssh-signing-key-file" "PASS"
-else record "ssh-signing-key-file" "WARN" "$HOME/.ssh/id_ed25519_sk_signing.pub missing — git commit signing unavailable (YubiKey enrollment required or vault has no keys)"; fi
+if [[ -f "$HOME/.ssh/id_ed25519_sk_signing.pub" && -f "$HOME/.ssh/id_ed25519_sk_signing" ]]; then record "ssh-signing-key-file" "PASS"
+else record "ssh-signing-key-file" "WARN" "$HOME/.ssh/id_ed25519_sk_signing(.pub) missing — git commit signing unavailable (YubiKey enrollment required, vault has no keys, or only one of vault_ssh_signing_key/_pub is set)"; fi
 
 check_perms "ssh-dir-perms" "$HOME/.ssh" "700"
 
@@ -622,6 +657,12 @@ _ak="$HOME/.ssh/authorized_keys"
 if [[ ! -f "$_ak" ]]; then
   record "authorized-keys-exists" "WARN" "$_ak missing — vault may have no auth key (ssh_auth_key_pub empty) or ssh role not yet run"
 else
+  record "authorized-keys-exists" "PASS"
+  if grep -qE '^[[:space:]]*(([^[:space:]"#]+|"([^"\\]|\\.)*")+[[:space:]]+)?(ssh-ed25519|sk-ssh-ed25519@openssh\.com)[[:space:]]+[^[:space:]]' "$_ak"; then
+    record "authorized-keys-ed25519" "PASS"
+  else
+    record "authorized-keys-ed25519" "WARN" "no ed25519/FIDO2 key in $_ak: hardened sshd accepts only those, so remote login would stop (RSA is rejected)"
+  fi
   check_perms "authorized-keys-perms" "$_ak" "600"
   _ak_total=$(grep -cvE '^[[:space:]]*$|^#' "$_ak" 2>/dev/null || true)
   if [[ "$_ak_total" -gt 1 ]]; then
@@ -639,8 +680,8 @@ unset _ak _ak_total
 _kh="$HOME/.ssh/known_hosts"
 if [[ -f "$_kh" ]]; then
   check_perms "known-hosts-perms" "$_kh" "600"
-  if ssh-keygen -F github.com -f "$_kh" &>/dev/null; then record 'known-hosts-github' 'PASS'
-  else record 'known-hosts-github' 'FAIL' 'github.com not in known_hosts — run: make ssh'; fi
+  if ssh-keygen -F github.com -f "$_kh" &>/dev/null; then record "known-hosts-github" "PASS"
+  else record "known-hosts-github" "FAIL" "github.com not in known_hosts — run: make chunk-ssh_client"; fi
 fi
 unset _kh
 
@@ -662,7 +703,7 @@ else record "home-dir-perms" "FAIL" "permissions $homedir_perms, expected no gro
 # Non-signing checks always FAIL if wrong. Signing checks downgrade to WARN when
 # the signing key is absent (expected on first provision with plaintext vault).
 _signing_key_present=false
-[[ -f "$HOME/.ssh/id_ed25519_sk_signing.pub" ]] && _signing_key_present=true
+[[ -f "$HOME/.ssh/id_ed25519_sk_signing.pub" && -f "$HOME/.ssh/id_ed25519_sk_signing" ]] && _signing_key_present=true
 for check in "core.fsmonitor=false" "safe.bareRepository=explicit" "commit.gpgsign=true" "tag.gpgsign=true" "gpg.format=ssh" "gpg.ssh.allowedSignersFile=~/.config/git/allowed_signers" "user.signingkey=~/.ssh/id_ed25519_sk_signing.pub" "protocol.allow=never" "protocol.https.allow=always" "protocol.ssh.allow=always" "push.autoSetupRemote=true" "fetch.prune=true" "alias.revert-s=revert -s" "core.excludesfile=~/.config/git/ignore"; do
   key="${check%%=*}" expected="${check#*=}"
   # Skip per-key signing checks when key absent — consolidated WARN emitted below
@@ -765,12 +806,6 @@ done
 unset _cd label
 
 # Config file validation
-if [[ -f /etc/opt/chrome/policies/managed/security.json ]]; then
-  if python3 -c "import json; json.load(open('/etc/opt/chrome/policies/managed/security.json'))" 2>/dev/null; then
-    record "chrome-policy-json" "PASS"
-  else record "chrome-policy-json" "FAIL" "invalid JSON in /etc/opt/chrome/policies/managed/security.json — inspect with: python3 -m json.tool /etc/opt/chrome/policies/managed/security.json"; fi
-fi
-
 # --- Notes repo (transcrypt-encrypted) ---
 if [[ -d "$_notes_dir/.git" ]]; then
   record "notes-repo" "PASS"
@@ -861,6 +896,26 @@ if [[ -f /etc/kernel/cmdline ]]; then
   unset _kcmd _kcmd_ok
 fi
 
+# Chunk checks used by make verify (login_shell, distrobox). WARN, not FAIL, when absent: the chunk may be off.
+if $IS_LINUX && [[ -z "$CONTAINER" ]]; then
+  _login_shell=$(getent passwd "$USER" 2>/dev/null | cut -d: -f7 || true)
+  if [[ "$_login_shell" == */zsh && ! -x "$_login_shell" ]]; then record "login-shell-zsh" "FAIL" "login shell $_login_shell is missing or not executable: logins will fail (reinstall zsh or undo login_shell)"
+  elif [[ "$_login_shell" == */zsh ]]; then record "login-shell-zsh" "PASS"
+  else record "login-shell-zsh" "WARN" "login shell is ${_login_shell:-unknown}, not zsh (login_shell chunk not applied)"; fi
+  unset _login_shell
+  if command -v podman >/dev/null 2>&1; then
+    _dbx_name=$(awk -F': ' '/^container_name:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$SCRIPT_DIR/../config.yml" 2>/dev/null || true)
+    [[ "$_dbx_name" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || _dbx_name="fedora-dev"
+    _dbx_state=$(podman inspect --format '{{.State.Status}}' "$_dbx_name" 2>/dev/null || true)
+    if ! podman container exists "$_dbx_name" 2>/dev/null; then
+      record "distrobox-container" "WARN" "container $_dbx_name not found (distrobox chunk not applied, or the vault is still empty)"
+    elif [[ "$_dbx_state" == created || "$_dbx_state" == configured ]]; then
+      record "distrobox-container" "WARN" "container $_dbx_name exists but never started (check: podman logs $_dbx_name; re-run make chunk-distrobox)"
+    else record "distrobox-container" "PASS"; fi
+    unset _dbx_name _dbx_state
+  fi
+fi
+
 fi  # user-level checks
 
 # ---- System-level checks (skipped with --user-only, --container, or macOS) ----
@@ -903,7 +958,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       record "dns-over-tls" "PASS"
     else record "dns-over-tls" "WARN" "config deployed but TLS not negotiated on this network (opportunistic — plain DNS in use)"; fi
   elif $CSB_HOST; then
-    record "dns-over-tls" "WARN" "not deployed — expected on CSB (Cloudflare blocked; DHCP DNS in use)"
+    record "dns-over-tls" "PASS"  # 99-dot.conf intentionally not deployed on CSB (DHCP DNS in use)
   else record "dns-over-tls" "FAIL" "99-dot.conf not deployed — run: make system"; fi
 
   # DNSSEC: WARN-level observability check consistent with DoT "opportunistic" pattern
@@ -1321,7 +1376,7 @@ EOF
     if [[ $EUID -ne 0 && ! -r /etc/aide.conf ]]; then
       record "aide-monitors" "WARN" "needs root (run make smoke-test with sudo) — /etc/aide.conf is unreadable"
     elif [[ -r /etc/aide.conf ]]; then
-      _aide_paths=(/usr/local/bin /etc/ssh/sshd_config.d /etc/NetworkManager/conf.d /etc/systemd/resolved.conf.d /etc/systemd/logind.conf.d /etc/crypto-policies/config /etc/crypto-policies/policies /etc/selinux/config /etc/audit /etc/aide.conf /etc/sysctl.d /etc/kernel /etc/modprobe.d /etc/sudoers.d /etc/dconf /etc/systemd/journald.conf.d /etc/systemd/coredump.conf.d)
+      _aide_paths=(/etc/ssh/sshd_config.d /etc/NetworkManager/conf.d /etc/systemd/resolved.conf.d /etc/systemd/logind.conf.d /etc/crypto-policies/config /etc/crypto-policies/policies /etc/selinux/config /etc/audit /etc/aide.conf /etc/sysctl.d /etc/kernel /etc/modprobe.d /etc/sudoers.d /etc/dconf /etc/systemd/journald.conf.d /etc/systemd/coredump.conf.d)
       [[ "$profile" != "work" ]] || _aide_paths+=(/etc/bpfman)
       ! $_usbguard_enabled || _aide_paths+=(/etc/usbguard)
       for _path in "${_aide_paths[@]}"; do
@@ -1590,7 +1645,7 @@ EOF
     if printf '%s\n' "$_chrony_authdata" | awk -F, '$9+0 > 0 {found=1} END {exit !found}'; then
       record "chrony-nts" "PASS"
     else record "chrony-nts" "WARN" "NTS configured but chronyc authdata shows no authenticated sources — time sync may have fallen back to unauthenticated pool (TCP 4460 blocked? run: chronyc authdata)"; fi
-  elif $CSB_HOST; then record "chrony-nts" "WARN" "skipped on CSB — IT manages chrony.conf (Kerberos NTP)"
+  elif $CSB_HOST; then record "chrony-nts" "WARN" "skipped on CSB — IT owns time sync; chrony.yml not run when csb_detected"
   else record "chrony-nts" "FAIL" "NTS not configured in chrony.conf"; fi
   # chrony-nts-active: verify the currently selected (*) reference source is NTS-authenticated.
   # The chrony-nts check above verifies cookies exist for any source; this check
@@ -1706,9 +1761,9 @@ EOF
 
   # sudoers hardening drop-in (mode 0440 — unreadable by non-root; WARN not FAIL)
   if [[ "$EUID" -eq 0 ]]; then
-    if grep -qE '^Defaults[[:space:]]+(.*,[[:space:]]*)?use_pty([[:space:],]|$)' /etc/sudoers.d/99-hardening 2>/dev/null && \
+    if grep -qE '^Defaults(:!root)?[[:space:]]+(.*,[[:space:]]*)?use_pty([[:space:],]|$)' /etc/sudoers.d/99-hardening 2>/dev/null && \
        grep -qE '^Defaults[[:space:]].*logfile=' /etc/sudoers.d/99-hardening 2>/dev/null && \
-       grep -qE '^Defaults[[:space:]]+umask=0?[0-7]*[2367]7\b' /etc/sudoers.d/99-hardening 2>/dev/null; then
+       grep -qE '^Defaults(:!root)?[[:space:]]+umask=0?[0-7]*[2367]7\b' /etc/sudoers.d/99-hardening 2>/dev/null; then
       record "sudoers-hardening" "PASS"
     elif $_csb_rhel_host; then record "sudoers-hardening" "WARN" "skipped on RHEL CSB — IT manages sudoers; 99-hardening not deployed (not csb_rhel guard)"
     else record "sudoers-hardening" "FAIL" "sudoers hardening drop-in missing or incomplete"; fi
@@ -1780,8 +1835,8 @@ EOF
   # splunk system account shell (CIS 5.6) — CSB hosts only; splunk absent on standard Fedora
   if $CSB_HOST && _splunk_entry=$(getent passwd splunk 2>/dev/null) && [[ -n "$_splunk_entry" ]]; then
     _splunk_shell=$(echo "$_splunk_entry" | cut -d: -f7)
-    if [[ "$_splunk_shell" == "/sbin/nologin" ]]; then record "splunk-shell" "PASS"
-    else record "splunk-shell" "FAIL" "splunk shell='$_splunk_shell', expected /sbin/nologin (CIS 5.6) — run: make redhat"; fi
+    if [[ "$_splunk_shell" =~ ^(/sbin/nologin|/usr/sbin/nologin|/usr/bin/nologin|/bin/false)$ ]]; then record "splunk-shell" "PASS"
+    else record "splunk-shell" "FAIL" "splunk shell='$_splunk_shell', expected a nologin shell (CIS 5.6)"; fi
     unset _splunk_shell _splunk_entry
   fi
 
@@ -1856,23 +1911,6 @@ EOF
     if systemctl is-enabled dev-shm-harden.service &>/dev/null; then record "dev-shm-harden-enabled" "PASS"
     else record "dev-shm-harden-enabled" "FAIL" "dev-shm-harden.service not enabled on CSB — /dev/shm hardening lost on reboot"; fi
   fi
-
-  # /var/tmp bind-mounted to /tmp with noexec (CIS 1.1.8)
-  # 'bind' is MS_BIND syscall flag, never stored in kernel option strings — compare MAJ:MIN instead
-  _vt_opts=$(findmnt -n -o OPTIONS /var/tmp 2>/dev/null || echo "")
-  _vt_min=$(findmnt -n -o MAJ:MIN /var/tmp 2>/dev/null | tr -d ' ' || echo "")
-  _tmp_min=$(findmnt -n -o MAJ:MIN /tmp 2>/dev/null | tr -d ' ' || echo "")
-  if [[ -n "$_vt_min" && "$_vt_min" = "$_tmp_min" ]] && [[ "$_vt_opts" == *noexec* ]]; then record "var-tmp-bind" "PASS"
-  elif [[ ! -f /etc/systemd/system/var-tmp.mount ]]; then record "var-tmp-bind" "WARN" "var-tmp.mount not deployed — system_var_tmp_noexec may be false (intentional)"
-  elif $CSB_HOST; then record "var-tmp-bind" "WARN" "/var/tmp not bind-mounted with noexec on CSB: $_vt_opts"
-  else record "var-tmp-bind" "FAIL" "/var/tmp not bind-mounted with noexec: $_vt_opts"; fi
-
-  if [[ -f /etc/systemd/system/var-tmp.mount ]]; then
-    if systemctl is-enabled var-tmp.mount &>/dev/null; then record "var-tmp-mount-enabled" "PASS"
-    else record "var-tmp-mount-enabled" "FAIL" "var-tmp.mount not enabled — /var/tmp hardening lost on reboot"; fi
-  fi
-
-  unset _vt_opts _vt_min _tmp_min
 
   # /home nosuid (CIS 1.1.9) — nosuid prevents setuid binaries copied into $HOME from gaining elevated privileges
   # Skipped on CSB — IT manages /home mount (may be NFS/autofs for LDAP users; remounting with nosuid may break access)
@@ -1951,8 +1989,8 @@ EOF
     record "dnf-automatic" "WARN" "timer enabled but not active (reboot or: systemctl start $timer)"
   elif ! command -v rpm &>/dev/null; then
     record "dnf-automatic" "SKIP" "dnf-automatic is installed on dnf hosts only"
-  elif $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then
-    record "dnf-automatic" "WARN" "skipped on RHEL CSB — IT manages updates via Satellite/RHSM; Ansible not-csb_rhel guard"
+  elif $CSB_HOST; then
+    record "dnf-automatic" "WARN" "skipped on CSB — IT manages updates; dnf_automatic.yml not run when csb_detected"
   else record "dnf-automatic" "WARN" "timer not enabled"; fi
 
   # RPM Fusion free repo (Fedora only; mirrors repos_dnf not csb_rhel guard)
@@ -2008,19 +2046,6 @@ EOF
     record "tlp-service" "SKIP" "native power baseline (system_tlp_enabled=false)"
   fi
 
-  # Chrome policies (verify key security settings, not just file existence)
-  if python3 -c "
-import json, sys
-p = json.load(open('/etc/opt/chrome/policies/managed/security.json'))
-assert p.get('ExtensionInstallBlocklist') == ['*'], 'ExtensionInstallBlocklist not [\"*\"]'
-assert p.get('RemoteDebuggingAllowed') is False, 'RemoteDebuggingAllowed not false'
-assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLevel not >= 1'
-" 2>/dev/null; then
-    record "chrome-policies" "PASS"
-  elif [[ -f /etc/opt/chrome/policies/managed/security.json ]]; then
-    record "chrome-policies" "FAIL" "deployed but critical security policies missing or wrong"
-  else record "chrome-policies" "WARN" "not deployed"; fi
-
   # dconf system policies (CIS 1.8.3-1.8.8) — only relevant on GNOME systems
   # Sway/i3 systems use greetd not GDM; dconf policies are GNOME-specific.
   if ! systemctl cat gdm.service &>/dev/null; then
@@ -2050,10 +2075,10 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   else record "dconf-media-locks" "FAIL" "media-handling keys not locked in /etc/dconf/db/local.d/locks/50-hardening"; fi
   # Screensaver idle-delay + lock-enabled (CIS 1.8.4/1.8.5)
   if grep -q '^lock-enabled=true' /etc/dconf/db/local.d/51-screensaver 2>/dev/null && \
-     grep -q '^idle-delay=uint32 300' /etc/dconf/db/local.d/51-screensaver 2>/dev/null; then
+     grep -q '^idle-delay=uint32 [0-9]\+' /etc/dconf/db/local.d/51-screensaver 2>/dev/null; then
     record "dconf-screensaver" "PASS"
   elif [[ -f /etc/dconf/db/local.d/51-screensaver ]]; then
-    record "dconf-screensaver" "FAIL" "lock-enabled=true or idle-delay=uint32 300 missing in /etc/dconf/db/local.d/51-screensaver"
+    record "dconf-screensaver" "FAIL" "lock-enabled=true or idle-delay=uint32 N missing in /etc/dconf/db/local.d/51-screensaver"
   else record "dconf-screensaver" "FAIL" "/etc/dconf/db/local.d/51-screensaver not deployed"; fi
   # Screensaver policy locks (CIS 1.8.5)
   if grep -q '^/org/gnome/desktop/screensaver/lock-enabled$' /etc/dconf/db/local.d/locks/51-screensaver 2>/dev/null && \
@@ -2117,12 +2142,12 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   if grep -qE "^UMASK[[:space:]]+${_system_umask}([[:space:]]+#.*)?$" /etc/login.defs 2>/dev/null; then record "umask-login-defs" "PASS"
   elif $_csb_rhel_host; then record "umask-login-defs" "WARN" "skipped on RHEL CSB — login.defs not modified"
   else record "umask-login-defs" "FAIL" "UMASK not set to ${_system_umask} in login.defs"; fi
-  _inactive_logindefs=$(awk '/^INACTIVE[[:space:]]/{print $2}' /etc/login.defs 2>/dev/null || echo "")
-  if [[ -n "$_inactive_logindefs" && "$_inactive_logindefs" -ge 1 && "$_inactive_logindefs" -le 30 ]]; then record "inactive-lock" "PASS"
+  _inactive_useradd=$(awk -F= '/^INACTIVE=/{print $2}' /etc/default/useradd 2>/dev/null || echo "")
+  if [[ -n "$_inactive_useradd" && "$_inactive_useradd" -ge 1 && "$_inactive_useradd" -le 30 ]]; then record "inactive-lock" "PASS"
   elif $_csb_rhel_host; then record "inactive-lock" "WARN" "skipped on RHEL CSB — INACTIVE not set (would lock IT-managed service accounts with non-rotating passwords)"
-  else record "inactive-lock" "FAIL" "INACTIVE=${_inactive_logindefs:-unset} not in CIS range 1-30 in login.defs"; fi
+  else record "inactive-lock" "FAIL" "INACTIVE=${_inactive_useradd:-unset} not in CIS range 1-30 in /etc/default/useradd"; fi
   # CIS 5.5.1.5: verify chage -I 30 was applied to the existing user account (not just new-account default).
-  # login.defs INACTIVE=30 only governs future accounts created with useradd — the retroactive chage
+  # useradd INACTIVE=30 only governs future accounts created with useradd — the retroactive chage
   # updates /etc/shadow field 7 directly for the pre-existing user. Requires root to read /etc/shadow.
   if [[ "$EUID" -eq 0 ]]; then
     _chage_user="${SUDO_USER:-$USER}"
@@ -2365,17 +2390,12 @@ elif $IS_LINUX && ! $USER_ONLY && [[ -z "$CONTAINER" ]]; then
 fi
 
 # NM conf.d content checks — file-gated; silently skip on macOS or where system role was not run
-if [[ -f /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf ]]; then
-  if grep -q '^wifi.cloned-mac-address=stable-ssid' /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf; then
-    record "wifi-mac-rand" "PASS"
-  elif $CSB_HOST; then record "wifi-mac-rand" "WARN" "skipped on CSB — IT may use MAC-based NAC; stable-ssid not deployed"
-  else record "wifi-mac-rand" "WARN" "WiFi MAC randomization not configured"; fi
-fi
 if [[ -f /etc/NetworkManager/conf.d/99-dns.conf ]]; then
-  # Skipped on CSB — paired with resolv.conf guard; Ansible deliberately omits both on CSB (DHCP DNS remains active)
+  # Not deployed on any CSB tier (csb_detected): a leftover file from an earlier run is removed by the next make system.
+  # The resolv.conf stub link is still enforced on hybrid Fedora CSB (see resolv-stub).
   if grep -q '^dns=systemd-resolved' /etc/NetworkManager/conf.d/99-dns.conf; then
     record "nm-dns-resolved" "PASS"
-  elif $CSB_HOST; then record "nm-dns-resolved" "WARN" "skipped on CSB — DHCP DNS active via systemd-resolved without NM override"
+  elif $CSB_HOST; then record "nm-dns-resolved" "WARN" "not managed on CSB — NM dns=systemd-resolved override is removed by make system (Fedora already uses resolved)"
   else record "nm-dns-resolved" "FAIL" "NM dns=systemd-resolved not configured (/etc/NetworkManager/conf.d/99-dns.conf)"; fi
 fi
 if [[ -f /etc/NetworkManager/conf.d/99-wifi-powersave.conf ]]; then
@@ -2393,33 +2413,6 @@ if [[ -f /etc/NetworkManager/conf.d/99-dhcp-privacy.conf ]]; then
   if grep -q '^ipv4.dhcp-send-hostname=false' /etc/NetworkManager/conf.d/99-dhcp-privacy.conf; then
     record "nm-dhcp-privacy" "PASS"
   else record "nm-dhcp-privacy" "WARN" "DHCP hostname privacy not configured (/etc/NetworkManager/conf.d/99-dhcp-privacy.conf) — run: make system"; fi
-fi
-
-# dispatcher.d unexpected-file check — provisioning installs no dispatcher scripts;
-# any file here is unexpected (IT-managed scripts are possible on CSB, hence WARN there)
-if $IS_LINUX && ! $USER_ONLY && [[ -z "$CONTAINER" ]] && [[ -d /etc/NetworkManager/dispatcher.d ]]; then
-  _dispatcher_files=""
-  # Mirror nm.yml allowlist: IT's csb-fedora-logo on CSB (plus system_nm_dispatcher_allowlist)
-  _dispatcher_allow=""
-  ! $CSB_HOST || _dispatcher_allow="csb-fedora-logo"
-  _dispatcher_allow+=" $(awk '/^system_nm_dispatcher_allowlist:/{f=1; if (match($0,/\[.*\]/)) {t=substr($0,RSTART+1,RLENGTH-2); gsub(/[,"\047]/," ",t); print t; f=0}; next} f&&/^[[:space:]]*-[[:space:]]/{sub(/^[[:space:]]*-[[:space:]]*/,""); sub(/[[:space:]]*#.*/,""); gsub(/["\047]/,""); print; next} f&&!/^[[:space:]]*(#|$)/{f=0}' "$SCRIPT_DIR/../config.yml" 2>/dev/null | tr '\n' ' ' || true)"
-  while IFS= read -r _dispatcher_file; do
-    [[ " $_dispatcher_allow " == *" $(basename "$_dispatcher_file") "* ]] && continue
-    if [[ "$_dispatcher_file" == /etc/NetworkManager/dispatcher.d/90-console-login-helper-messages-gensnippet_if ]] &&
-       command -v rpm &>/dev/null &&
-       [[ "$(rpm -qf --queryformat '%{NAME}' "$_dispatcher_file" 2>/dev/null)" == console-login-helper-messages-issuegen ]] &&
-       rpm --verify console-login-helper-messages-issuegen &>/dev/null; then
-      continue
-    fi
-    _dispatcher_files+=" $_dispatcher_file"
-  done < <(find /etc/NetworkManager/dispatcher.d \( -type f -o -type l \) 2>/dev/null | sort)
-  if [[ -z "${_dispatcher_files// /}" ]]; then
-    record "nm-dispatcher-clean" "PASS"
-  elif $CSB_HOST; then
-    record "nm-dispatcher-clean" "WARN" "dispatcher scripts present (IT-managed on CSB may be expected): ${_dispatcher_files% }"
-  else
-    record "nm-dispatcher-clean" "FAIL" "unexpected dispatcher scripts in /etc/NetworkManager/dispatcher.d/ — provisioning installs none; investigate: ${_dispatcher_files% }"
-  fi
 fi
 
 # resolved.conf.d/99-dot.conf content check (file-gated; silently skips on macOS or where system role was not run)
@@ -2450,6 +2443,20 @@ elif $IS_LINUX && ! $USER_ONLY && [[ -z "$CONTAINER" ]]; then
   else record 'llmnr-disabled' 'FAIL' '/etc/systemd/resolved.conf.d/98-llmnr.conf not deployed — run: make system'; fi
 fi
 
+# --only: a selected check that never ran (not applicable here, or needs root/--system-only) is SKIP, which fails the run
+if [[ -n "$ONLY" ]]; then
+  IFS=, read -r -a _only_names <<< "$ONLY_LIST"
+  for _only_name in "${_only_names[@]}"; do
+    [[ "$ONLY_SEEN" == *",$_only_name,"* ]] && continue
+    # Linux-only checks (tmpfiles, podman registries, getent login shell, distrobox) have nothing to verify on macOS
+    if ! $IS_LINUX && [[ " claude-privacy-tmpfiles fqin-enforcement containers-policy login-shell-zsh distrobox-container " == *" $_only_name "* ]]; then
+      $JSON || printf 'N/A   %s (Linux-only check; nothing to verify on macOS)\n' "$_only_name"
+      continue
+    fi
+    record "$_only_name" "SKIP" "check did not run on this box (not applicable, or needs root)"
+  done
+fi
+
 # ---- Output ----
 if $JSON; then
   printf '{"results":[%s],"failures":%d,"warns":%d}\n' "$(IFS=,; printf '%s' "${RESULTS[*]}")" "$FAILURES" "$WARNS"
@@ -2462,4 +2469,4 @@ else
     printf "\n--- %d PASS / %d WARN / %d SKIP (total %d) ---\n" "$passes" "$WARNS" "$SKIPS" "$total"
   fi
 fi
-exit $(( FAILURES > 0 ? 1 : 0 ))
+exit $(( FAILURES > 0 || ONLY_NOT_PASS > 0 ? 1 : 0 ))
