@@ -2044,7 +2044,6 @@ EOF
   fi
 
   # dconf system policies (CIS 1.8.3-1.8.8) — only relevant on GNOME systems
-  # Sway/i3 systems use greetd not GDM; dconf policies are GNOME-specific.
   if ! systemctl cat gdm.service &>/dev/null; then
     record "dconf-policies" "PASS" "GDM not installed — dconf system policies are GNOME-specific (Sway/i3 systems not affected)"
   elif $CSB_HOST && $_is_rhel; then
@@ -2054,7 +2053,7 @@ EOF
   # Compiled databases are produced by 'dconf update'; absence means it never ran.
   if [[ -f /etc/dconf/db/local ]]; then record "dconf-db-local" "PASS"
   else record "dconf-db-local" "FAIL" "compiled database /etc/dconf/db/local missing (run: dconf update)"; fi
-  # GDM database — WARN not FAIL: Sway uses greetd, not GDM
+  # GDM database — WARN not FAIL: not every session uses GDM
   if [[ -f /etc/dconf/db/gdm ]]; then record "dconf-db-gdm" "PASS"
   else record "dconf-db-gdm" "WARN" "/etc/dconf/db/gdm missing although gdm.service exists — run: make system"; fi
   # Media-handling automount/autorun (CIS 1.8.6-1.8.8)
@@ -2086,7 +2085,7 @@ EOF
       record "dconf-screensaver-locks" "PASS"
     else record "dconf-screensaver-locks" "FAIL" "screensaver/idle/lock-delay keys not locked in /etc/dconf/db/local.d/locks/51-screensaver"; fi
   fi
-  # GDM login screen: hide user list (CIS 1.8.3) — WARN not FAIL: Sway uses greetd, not GDM
+  # GDM login screen: hide user list (CIS 1.8.3) — WARN not FAIL: not every session uses GDM
   if grep -q '^disable-user-list=true' /etc/dconf/db/gdm.d/03-hardening 2>/dev/null; then
     record "dconf-gdm-user-list" "PASS"
   elif [[ ! -f /etc/dconf/db/gdm.d/03-hardening ]]; then

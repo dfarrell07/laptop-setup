@@ -113,8 +113,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   CHUNK=desktop` shows changed=0 and no dconf warning, then log in again from a TTY or second session.
 - **Before:** `dconf dump / > ~/dconf-before.ini` (the system snapshot block also takes it; do it before the first desktop run).
 - **Undo:** `dconf reset <key>` for each key the role wrote (`/org/gnome/desktop/interface/color-scheme` under sway; the
-  `desktop_gnome_*_dconf` keys in `roles/desktop/defaults/main.yml` under gnome), then `dconf load -f / < ~/dconf-before.ini` (load
-  merges and never unsets keys, so reset first; `-f` skips IT-locked keys, without it the first one cancels the load). Never
+  `desktop_gnome_hardening_dconf` and `desktop_gnome_ui_dconf` keys in `roles/desktop/defaults/main.yml` under gnome), then
+  `dconf load -f / < ~/dconf-before.ini` (load merges and never unsets keys, so reset first; `-f` skips IT-locked keys, without it the first one cancels the load). Never
   `dconf reset /org/gnome/`: it wipes every GNOME setting. Restore or delete `~/.config/sway/config`, `~/.config/swaylock/config`,
   `~/.config/i3/config`, `~/.config/i3status/config`, `~/.config/xdg-desktop-portal/sway-portals.conf`,
   `~/.config/gtk-3.0/settings.ini`, `~/.config/gtk-4.0/settings.ini`, `~/.config/alacritty/alacritty.toml` (in the `make backup`

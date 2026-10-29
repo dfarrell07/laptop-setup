@@ -31,9 +31,8 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
 - **CI supply chain** — actionlint, zizmor and gitleaks run as SHA256-verified binary downloads (no third-party node actions); all GitHub
   Actions are SHA-pinned; OSSF Scorecard runs weekly
 - **Privilege escalation** — `become_exe = /usr/bin/sudo` in `ansible.cfg` prevents PATH-based sudo trojans
-- **Desktop hardening** — lock screen notifications hidden, USB automount disabled, idle lock (GNOME dconf, i3lock,
-  swaylock; timeouts in
-  `roles/desktop/defaults/main.yml` and `system_logind_idle_sec`)
+- **Desktop hardening** — lock screen notifications hidden, USB automount disabled, idle lock (GNOME dconf and logind from
+  `system_logind_idle_sec`; i3lock and swaylock from `desktop_wm_idle_*` in `roles/desktop/defaults/main.yml`)
 - **Secret scanning** — GitHub secret scanning and push protection (server-side complement to the gitleaks hook)
 
 Audit rules watch credential directories; absent credential files stay absent so the kernel can watch their later creation. Changing
