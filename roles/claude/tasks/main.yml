@@ -326,8 +326,6 @@
   when: is_linux
   notify: Apply claude-privacy tmpfiles
 
-# --- Git safety (defense-in-depth) ---
-# core.fsmonitor, safe.bareRepository, core.hooksPath are set via gitconfig.j2
 # --- Task queue (systemd timer + poller script) ---
 - name: Assert claude_queue_repo is set when queue is enabled
   ansible.builtin.assert:
@@ -638,7 +636,7 @@
     label: "{{ item.label }}"
   when: is_macos
 
-# --- macOS: launchd services ---
+# --- Queue log directory ---
 - name: Ensure log directory exists
   ansible.builtin.file:
     path: "{{ claude_log_dir }}"
