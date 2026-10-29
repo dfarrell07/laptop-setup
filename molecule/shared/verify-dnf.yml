@@ -392,8 +392,8 @@
     - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
-- name: Check login.defs INACTIVE={{ system_inactive_days }}
-  ansible.builtin.command: grep -q '^INACTIVE\s\+{{ system_inactive_days }}\s*$' /etc/login.defs
+- name: Check useradd INACTIVE={{ system_inactive_days }}
+  ansible.builtin.command: grep -q '^INACTIVE={{ system_inactive_days }}$' /etc/default/useradd
   changed_when: false
   become: true
   when:
@@ -453,7 +453,7 @@
   changed_when: false
   become: true
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
 - name: Check /etc/dnf/automatic.conf apply_updates = yes
@@ -461,7 +461,7 @@
   changed_when: false
   become: true
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
 - name: Verify dnf-automatic timer enabled
@@ -471,7 +471,7 @@
   become: true
   failed_when: false
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
 
 - name: Assert dnf-automatic timer is enabled
@@ -479,7 +479,7 @@
     that: (verify_dnf_auto.status.UnitFileState | default('')) == 'enabled'
     fail_msg: "dnf-automatic timer UnitFileState is '{{ verify_dnf_auto.status.UnitFileState | default('') }}', expected 'enabled'"
   when:
-    - not (csb_rhel | default(false))
+    - not (csb_detected | default(false))
     - not (system_is_container | default(false))
     # CI gap: dnf-automatic timer not installed in Podman container CI
     # (dnf_automatic.yml guards all tasks with not system_is_container);

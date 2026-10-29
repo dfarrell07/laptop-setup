@@ -3,6 +3,7 @@
 # SELinux enforcement + core hardening sub-orchestrator. Included from main.yml.
 # --- SELinux enforcement check ---
 - name: SELinux enforcement check
+  tags: [sys_baseline]
   when:
     - is_dnf
     - not csb_rhel
@@ -122,18 +123,24 @@
 
 - name: Mount hardening
   ansible.builtin.include_tasks: mounts.yml
+  tags: [sys_mounts]
 
 - name: Kernel module blacklist
   ansible.builtin.include_tasks: kernel_modules_blacklist.yml
+  tags: [sys_sysctl]
 
 - name: Sysctl hardening
   ansible.builtin.include_tasks: sysctl.yml
+  tags: [sys_sysctl]
 
 - name: Firewall configuration
   ansible.builtin.include_tasks: firewall.yml
+  tags: [sys_remote_access]
 
 - name: Kernel lockdown
   ansible.builtin.include_tasks: kernel_lockdown.yml
+  tags: [sys_lockdown]
 
 - name: Core dumps
   ansible.builtin.include_tasks: coredumps.yml
+  tags: [sys_sysctl]

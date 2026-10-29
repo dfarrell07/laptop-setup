@@ -1450,11 +1450,11 @@
 - name: Check sudoers drop-in has full hardening directive set
   ansible.builtin.command: grep -qxF '{{ item }}' /etc/sudoers.d/99-hardening
   loop:
-    - Defaults log_input,log_output
+    - Defaults:!root log_input,log_output
     - Defaults passwd_timeout=5
     - Defaults passwd_tries=3
-    - Defaults umask=0027
-    - Defaults use_pty
+    - Defaults:!root umask=0027
+    - Defaults:!root use_pty
   changed_when: false
   become: true
   when:
@@ -1797,7 +1797,7 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
     - system_chrony_service_enabled | default(true) | bool
 
 # CI gap: system_is_container=true in all container scenario verify pre_tasks — chrony skipped via not system_is_container;
@@ -1814,7 +1814,7 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
     - system_chrony_service_enabled | default(true) | bool
     - verify_chronyd is not skipped
 
@@ -1829,7 +1829,7 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
     - system_chrony_service_enabled | default(not (system_is_container | default(false))) | bool
 
 # CI gap: system_is_container=true in all container scenario verify pre_tasks — chrony skipped via not system_is_container;
@@ -1841,7 +1841,7 @@
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
     - system_chrony_service_enabled | default(not (system_is_container | default(false))) | bool
 
 # --- Chrony NTS template render guard (container-safe) ---
@@ -1870,8 +1870,6 @@
       {{ hostvars[inventory_hostname].system_chrony_minsources | default(_chrony_render_defaults.system_chrony_minsources) }}
     system_chrony_authselectmode: >-
       {{ hostvars[inventory_hostname].system_chrony_authselectmode | default(_chrony_render_defaults.system_chrony_authselectmode) }}
-    system_chrony_dhcp_sourcedir: >-
-      {{ hostvars[inventory_hostname].system_chrony_dhcp_sourcedir | default(_chrony_render_defaults.system_chrony_dhcp_sourcedir) }}
     system_chrony_ntsdumpdir: >-
       {{ hostvars[inventory_hostname].system_chrony_ntsdumpdir | default(_chrony_render_defaults.system_chrony_ntsdumpdir) }}
     system_chrony_driftfile: >-

@@ -87,7 +87,7 @@
       # {{ ansible_managed }}
       # CIS 1.8.4/1.8.5: GNOME screen lock on idle (≤900s per benchmark)
       [org/gnome/desktop/session]
-      idle-delay=uint32 300
+      idle-delay=uint32 {{ system_logind_idle_sec | int }}
 
       [org/gnome/desktop/screensaver]
       lock-enabled=true

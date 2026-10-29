@@ -18,8 +18,10 @@
     - name: Warn if git-lfs is not installed
       ansible.builtin.debug:
         msg: >-
-          git-lfs is not installed. Repos with LFS-tracked files will clone with
-          pointer text files instead of real content.
+          git-lfs is not installed. A repo with LFS-tracked files fails to check out when
+          the git config marks the lfs filter required (dotfiles sets it), and otherwise clones
+          with pointer text files. A failed clone stays on disk and is not retried: after
+          installing git-lfs run 'git -C DIR restore --source=HEAD --staged --worktree :/' in it.
           Install git-lfs ('{{ is_dnf | ternary('dnf', is_apt |
           ternary('apt', is_macos | ternary('brew', 'your-package-manager')))
           }} install git-lfs') before cloning repos that track large files.

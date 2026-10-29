@@ -4,13 +4,6 @@
 # Included from main.yml; inherits become from the calling play.
 # Guarded by _packages_linux_x86_work (is_linux + x86_64 + profile==work +
 # packages_install_binaries); do not include directly without that guard.
-- name: Reject stable track (no independent checksum trust anchor)
-  ansible.builtin.assert:
-    that: packages_oc_version != 'stable'
-    fail_msg: >-
-      stable track disabled — pin packages_oc_version in config.yml for
-      supply-chain integrity (checksum comes from the same server as the binary)
-
 - name: Install oc and kubectl
   block:
     - name: Assert oc SHA256 is set for pinned version

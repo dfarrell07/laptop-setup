@@ -104,11 +104,6 @@
 
 [credential "https://github.com"]
 	helper = !gh auth git-credential
-{% if profile == 'work' and _system == 'Linux' and dotfiles_internal_git_host != '' %}
-
-[http "https://{{ dotfiles_internal_git_host | trim | regex_replace('[^a-zA-Z0-9._-]', '') }}"]
-	sslCAInfo = {{ dotfiles_internal_ca_path | regex_replace('\n', '') | trim }}
-{% endif %}
 
 {% if profile == 'work' %}{% for org in dotfiles_work_src_dirs %}
 [includeIf "gitdir:~/src/{{ org | regex_replace('[^a-zA-Z0-9_-]', '') }}/"]

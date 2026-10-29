@@ -1,5 +1,9 @@
 # {{ ansible_managed }}
 {% set _system = ansible_facts['system'] | default('Linux') %}
+{% if _system == 'Linux' %}
+# Fedora/RHEL: /etc/bashrc runs /etc/profile.d (TMOUT, bash-completion) for non-login shells, as /etc/skel/.bashrc does
+[ -f /etc/bashrc ] && . /etc/bashrc
+{% endif %}
 {% if _system == 'Darwin' %}
 export PATH="{{ dotfiles_homebrew_prefix | trim }}/bin:$PATH"
 {% endif %}

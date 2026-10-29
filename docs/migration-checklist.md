@@ -1,212 +1,136 @@
 # Laptop migration checklist
 
-Prepare the automation on this source, then run it from the destination side for
-Linux and macOS. Keep launcher arguments; skip AI history transfer and use
-repo-owned skills plus the tracked instruction baseline. See [the plan](old-laptop-migration-plan.md)
-for validation limits and [the inventory](old-laptop-inventory.md) for dated source
-paths. Run destination provisioning at its local console. Keep the source until
-all acceptance checks below pass.
+Prepare on the source laptop, provision from the destination at its local console, and keep the source until the
+acceptance checks pass. Skip AI transcript and session history; restore AI tooling from the tracked baseline
+(section 4). Provisioning itself is chunked: see [README.md](../README.md) and [rollout-plan.md](rollout-plan.md).
 
 ## 1. Preserve source state
 
-1. Run `make migration-inventory` and `make workstation-audit`. Both write private
-   JSON reports in your home. Review probe errors and omissions; keep reports in
-   encrypted storage. Git status counts do not establish that work was pushed.
-2. Run `make backup-dry-run`, inspect copied paths and skipped-link warnings, then
-   `make backup`. Transfer its timestamped home directory through your encrypted
-   backup channel. The root has mode 0700; ordinary copied files lose group/other
-   access, while GnuPG key/database copies preserve source modes. Keep it out of Git.
-3. Check coverage against your actual account/config paths. The helper backs up
-   fixed defaults, selected files/trees and top-level regular SSH files. Only
-   named legacy dotfile links resolving inside `~/.dotfiles` are followed, including
-   `.ssh/config`. Other links, nested SSH files and custom AI homes need separate
-   transfer. It does not read Ansible overrides to discover custom account paths.
-4. Default AI coverage includes selected config/credentials, local skills, Claude
-   saved plans/project memory in `.claude`, `.claude-work`, `.claude-personal` and
-   `.claude-per2`, plus selected Codex config in `.codex`/`.codex-personal`.
-   Claude plugin registration files are captured only for `.claude`/`.claude-per2`;
-   save other registrations separately. Symlinked skills are skipped.
-5. This rollout skips AI transcripts/session databases and raw memory restoration;
-   do not use the helper's optional `--ai-history` snapshot. Use the tracked baseline
-   below and retain needed project facts in their owning repositories. For GnuPG,
-   use a consistent export/backup separately if needed; a live keybox copy is not
-   a verified snapshot.
-6. For each important Git repository, preserve all local refs with
-   `git bundle create <backup-file> --all` and verify with
-   `git bundle verify <backup-file>` in that repository. Save staged/unstaged
-   patches and untracked files separately, or copy the closed workspace. Bundles
-   include stash refs, but exclude working files, reflogs and Git LFS objects;
-   transfer required LFS objects separately. Unborn repositories need file copies.
-7. For linked worktrees, retain the common Git directory and each working tree.
-   A copied worktree alone has a broken `.git` pointer. Recreate worktrees from
-   saved branches or copy the complete workspace and use
-   `git worktree repair <moved-path>`. Review submodules and their Git storage separately.
-8. Prioritize release-management/recovery worktrees, dotfiles/notes, OVN and
-   ai-helpers work. Include clean repositories with local branches and the local
-   `.claude` Git root. `notes-backup`/`backup-notes-dir` have no remote. Inspect
-   generated fixtures before discarding them; the reports do not read their diffs.
-9. Separately export needed VPN/Wi-Fi, browser, complete radio/wallet and VM/container
-   data. The helper captures selected CHIRP config, not all radio profiles. Recreate
-   Tailscale membership and hardware-key access; do not copy live agent sockets
-   or live container storage. Wallet recovery material belongs outside this repo.
-10. Verify the transferred backup and test recovery of important files/refs before
-    proceeding. A dry-run count or successful clone is not proof of recoverability.
+1. Run `make migration-inventory` and `make workstation-audit`. Both write private JSON reports in your home;
+   review probe errors and omissions and keep the reports in encrypted storage. Git status counts do not show
+   that work was pushed.
+2. Run `make backup-dry-run`, inspect the copied paths and skipped-link warnings, then `make backup`. Move its
+   timestamped home directory (mode 0700) over an encrypted channel and keep it out of Git. Ordinary copied files
+   lose group/other access; GnuPG key and database copies keep their source modes.
+3. Check coverage against your real paths. The helper copies fixed defaults, selected files and trees, and
+   top-level regular SSH files. It follows only named legacy dotfile links that resolve inside `~/.dotfiles`
+   (including `.ssh/config`). When the checkout is under `~/` and the files exist, it also copies the repo's
+   `config.yml`, `group_vars/all/vault.yml`, `scripts/vault-pass.sh` and `CLAUDE.local.md` (a plaintext vault or
+   `vault-pass.sh` aborts the run). Other links, nested SSH files and custom AI homes need separate transfer.
+4. AI coverage is selected config and credentials, local skills, Claude plans and project memory in
+   `.claude`, `.claude-work`, `.claude-personal` and `.claude-per2`, and selected Codex config in `.codex` and
+   `.codex-personal`. Claude plugin registrations are captured for `.claude` and `.claude-per2` only, and
+   symlinked skills are skipped. Do not use the optional `--ai-history` snapshot; keep project facts in their
+   owning repositories. For GnuPG, make a consistent export: a live keybox copy is not a verified snapshot.
+5. For each important Git repository, run `git bundle create <file> --all` then `git bundle verify <file>`.
+   Bundles include stash refs but not working files, reflogs or Git LFS objects: save patches and untracked
+   files separately (or copy the closed workspace) and transfer LFS objects yourself. Unborn repositories need
+   file copies. For linked worktrees keep the common Git directory and each working tree, then
+   `git worktree repair <moved-path>`; review submodules and their storage separately. Include clean
+   repositories that hold local branches, and repositories with no remote.
+6. Export separately: VPN and Wi-Fi profiles, browser data, wallet and device profiles, VM and container data.
+   Recreate Tailscale membership and hardware-key access; never copy agent sockets or live container storage.
+   Keep wallet recovery material out of this repo.
+7. Restore a sample of the backup (files and refs) on another path before continuing. A dry-run count or a
+   successful clone is not proof of recoverability.
 
-## 2. Prepare destination configuration and authentication
+## 2. Prepare the destination
 
-1. Follow [CLAUDE.md](../CLAUDE.md) for OS prerequisites, `make bootstrap`, identity,
-   USB/hardware prerequisites and reboot requirements. Start from
-   `default.config.yml`; merge reviewed source overrides into private `config.yml`.
-   Set profile, desktop, timezone and identity; replace every `CHANGE_ME` sentinel.
-   macOS supports `desktop_environment: aerospace`; Linux selects GNOME/i3/Sway.
-   Claude native installation also requires a reviewed `claude_install_sha256`
-   and `claude_pinned_version`. The role passes the version as an installer argument
-   and verifies the result; installer hashing does not freeze later auto-updates.
-2. Reuse your encrypted vault and reviewed `scripts/vault-pass.sh` with the existing
-   hardware keys. After restoring the helper, use `chmod 700 scripts/vault-pass.sh`
-   and refresh its local integrity file from the reviewed contents:
-   `(cd scripts && sha256sum vault-pass.sh > vault-pass.sh.sha256)`.
-   Verify decryption with `make vault-view` in a private terminal. **Do not run
-   `make setup-yubikeys` just to move laptops**: it generates a new secret and can
-   overwrite slot 2, invalidating access to the existing vault. Use that workflow
-   only for an intentional key/secret setup. Keep `vault_*` values out of config.yml.
-3. Native power management is the baseline (tuned/tuned-ppd on recent Fedora).
-   TLP and charge thresholds require explicit `system_tlp_enabled: true`. Keep
-   the native default unless the destination needs that change. See
-   [transition limits](old-laptop-second-pass.md#power-transition-limits).
-4. Connect RH VPN and configure `ssh_work_keyscan_hosts` for
-   the internal Git host with an independently verified fingerprint before work
-   provisioning. Optionally set `git_repos_vpn_check_host` to that host; its check
-   warns about connectivity and does not supply authentication. Existing internal
-   access grants and the RH key are still required.
-5. Run `make preflight`, then stage prerequisites before cloning: `make repos_dnf`
-   on DNF hosts, `make packages`, `make ssh`, and `make dotfiles`, in that order.
-   These targets still run common/preflight checks and may need sudo/hardware-key
-   access. Restore the RH key if it is not vault-managed, using the configured
-   `dotfiles_ssh_redhat_key_basename`. Authenticate with `gh auth login` and verify
-   both GitHub SSH and internal Git access. Review old host entries instead of
-   replacing managed `.ssh/config`; put compatible extras in `.ssh/config.local`.
-   SSH uses the first obtained value for each setting, so late includes do not
-   override already-set managed values.
-6. Keep managed Git CA/directory-trust policy. Do not restore source
-   `sslVerify=false`, `safe.directory=*` or `GONOSUMDB=*` as defaults. Review
-   `.config/go/env`; work shells and Go installs use explicit no-match/private
-   defaults. Deliberate private patterns belong in `dotfiles_goprivate` and
-   `dotfiles_gonosumdb`; local shell overrides can change the effective policy.
+1. Follow the README quick start through `make bootstrap`, then `cp default.config.yml config.yml`; merge reviewed
+   source overrides into it. Set `profile`, `desktop_environment` (GNOME, i3 or Sway; `aerospace` on macOS),
+   timezone and identity, and replace every `CHANGE_ME`. The Claude native install also needs a reviewed
+   `claude_install_sha256` and `claude_pinned_version`; the pin does not freeze later auto-updates.
+2. Reuse the encrypted vault and a reviewed `scripts/vault-pass.sh` with your existing hardware keys. After
+   restoring the helper, `chmod 700 scripts/vault-pass.sh` and refresh its integrity file:
+   `(cd scripts && sha256sum vault-pass.sh > vault-pass.sh.sha256)`. Check with `make vault-view` in a private
+   terminal. **Do not run `make setup-yubikeys` just to move laptops**: it generates a new secret and can
+   overwrite slot 2, which locks you out of the existing vault. Keep `vault_*` values out of `config.yml`.
+3. Power: native management (tuned) is the baseline. TLP and charge thresholds need `system_tlp_enabled: true`;
+   switching stacks is best effort and needs working repositories.
+4. Work profile: connect the corporate VPN and set `ssh_work_keyscan_hosts` for the internal Git host with an
+   independently verified fingerprint. `git_repos_vpn_check_host` warns when its host is unreachable and skips the
+   repos on that host for the run; existing access grants and your work SSH key (`dotfiles_ssh_redhat_key_basename`)
+   are still required.
+5. Choose chunks with `rollout_enable`, run `make preflight`, then stage prerequisites chunk by chunk, in this
+   order: `make chunk-repos_dnf` (DNF hosts), `make chunk-packages`, `make chunk-ssh_client`,
+   `make chunk-dotfiles`. Avoid `make ssh`: it also rewrites `~/.ssh/authorized_keys` to exactly the vault key.
+   Run `gh auth login`, then check GitHub and internal Git access over SSH. Review old host entries instead of
+   replacing the managed `.ssh/config`; put compatible extras in `.ssh/config.local` (SSH keeps the first value
+   it sees per setting, so late includes cannot override managed values).
+6. Keep the managed Git CA and directory-trust policy: do not restore `sslVerify=false`, `safe.directory=*` or
+   `GONOSUMDB=*`. Put deliberate private Go patterns in `dotfiles_goprivate` and `dotfiles_gonosumdb`.
 
 ## 3. Provision and recover workspaces
 
-1. Run `make all` after authentication. Inspect failed-clone reports: the repo role
-   can succeed when some clones fail. Reconnect VPN if system/network changes
-   interrupted it, and rerun the affected category. Reboot and run `make smoke-test`.
-   Check GNOME preference warnings/readback in a real desktop session and verify
-   the selected power stack, suspend/resume and charging on the new hardware.
-2. Work defaults include EVPN/RH-context; personal defaults exclude them. Explicit
-   `make repos-evpn` or `make repos-rh-context` overrides profile category selection.
-   An EVPN-only run does not clone shared Konflux/OVN references: also use
-   `make repos-konflux`/`make repos-ovnk` when needed.
-3. Default project paths are `~/src/evpn/openshift/evpn-gateway-appliance` (with a
-   `fork` remote for your GitHub fork),
-   `~/src/evpn/<github-user>/evpn-gateway-appliance-context`, and
-   `~/src/rh-context/<internal-namespace>/<repo>`. The manifest defines other
-   layouts. Provisioning leaves old source locations in place; it does not migrate
-   their state. Import saved refs/files, repair worktrees and update absolute paths.
-4. Recover optional tools through additive `packages_extra_dnf`,
-   `packages_extra_apt`, `packages_extra_brew`, `packages_extra_pipx` and
-   `packages_extra_npm` overrides; see [config examples](../default.config.yml).
-   Native entries are package names; npm/pipx require explicit version pins.
-   Only Codex has a committed transitive npm integrity lock. Choose one Gemini
-   provider; `gper` launches the separate Antigravity `agy` vendor CLI.
-5. Reinstall jinjanator, pipeline-migration-tool and CHIRP from their original
-   specs with the new Python; rebuild the two broken source pipx environments. Restore needed ACLI/Jira/GCP/release config
-   selectively. Reinstall vendor desktop apps and browser PWAs; Slack is
-   installed manually on Linux (no Flatpak install is provisioned) and via the
-   work Homebrew cask on macOS. Avoid old
-   Homebrew Cellars/toolchains and the source
-   `.local/bin/aws` link that shadowed the native AWS package.
+1. Apply the remaining chunks one at a time (`make status`, `make plan CHUNK=x`, `make chunk-x`,
+   `make verify CHUNK=x`) or `make all`. The repo role succeeds when some clones fail: read its failed-clone
+   report, reconnect the VPN if network changes dropped it, and re-run the affected category. Reboot, run
+   `make smoke-test`, and check GNOME preference warnings, suspend/resume and charging in a real session.
+2. Work defaults include the EVPN and internal-context repo categories; personal defaults exclude them. An
+   explicit `make repos-evpn` or `make repos-rh-context` overrides the profile, and does not clone the shared
+   `konflux` and `ovnk` categories: add `make repos-konflux` or `make repos-ovnk` when needed. Layouts are in
+   `group_vars/all/repos.yml`. Provisioning leaves old source locations alone and does not migrate their state:
+   import saved refs and files, repair worktrees and fix absolute paths.
+3. Recover optional tools with the additive `packages_extra_dnf`, `packages_extra_apt` and `packages_extra_brew`
+   overrides (package names; examples in [default.config.yml](../default.config.yml)). Reinstall pipx tools from
+   their original specs with the new Python, restore vendor desktop apps and browser PWAs, and restore needed
+   cloud and Jira config selectively. Do not carry over old Homebrew Cellars or toolchains.
+4. `make codex` runs the common checks plus Codex (`codex_install_method: skip` only seeds config).
+   `make offline` sets `packages_install_binaries: false`, skipping gated binary and npm installs including
+   Codex; native packages, clones and other network operations still run, so it is not an air-gapped workflow.
 
-`make codex` runs common checks plus Codex; bootstrap/config/vault and npm
-prerequisites still apply. `codex_install_method: skip` seeds config only.
-`make offline` sets `packages_install_binaries: false`, skipping gated binary/npm
-installs including Codex; native package installs, Git clones and other network
-operations can still occur. It is not an air-gapped workflow.
+## 4. Restore AI accounts and preferences
 
-## 4. Restore AI accounts and local preferences
-
-The following homes are defaults; substitute configured paths in login/restore
-commands and transfer custom homes separately.
+Homes below are defaults; substitute configured paths and transfer custom homes separately.
 
 | Launcher | Home/backend | Recovery |
 | --- | --- | --- |
-| `cwork` (work profile) | `.claude-work`, Vertex | Restore legacy Vertex env and authenticate GCP |
+| `cwork` (work profile) | `.claude-work`, Vertex | Restore the Vertex env and authenticate GCP |
 | `cper` | `.claude`, personal | Sign in separately |
 | `cper2` | `.claude-per2`, personal | Sign in separately |
 | `owork` (work profile) | `.codex` | `CODEX_HOME="$HOME/.codex" codex login` |
 | `oper` | `.codex-personal` | `CODEX_HOME="$HOME/.codex-personal" codex login` |
 | `gper` | Separate `agy` CLI | Vendor install and login |
 
-`cwork` sources managed `~/.config/claude/work-env`, which sources the restored
-`~/.config/claude-code-vertex/env.sh` when present, and forces Vertex. Old work
-and first personal Claude launchers shared `.claude`; copy desired preferences
-selectively into the new work home. `cw`/`ccp` tmux workflows remain available;
-`ccp` uses the separate `.claude-personal` home.
+`cwork` sources the managed `~/.config/claude/work-env`, which sources a restored
+`~/.config/claude-code-vertex/env.sh` when present and forces Vertex. For GCP, macOS work provisioning installs
+the `gcloud-cli` cask; on DNF hosts set `repo_google_cloud_sdk: true` (any `csb_detected` host skips that
+repository, RHEL CSB or hybrid Fedora CSB); other Linux hosts use the
+[vendor install](https://docs.cloud.google.com/sdk/docs/install-sdk). Authentication and private project settings stay outside Git.
 
-For GCP/Vertex authentication, macOS work provisioning includes the
-[gcloud-cli cask](https://formulae.brew.sh/cask/gcloud-cli). On supported DNF hosts,
-set `repo_google_cloud_sdk: true` to use the existing SDK install/versionlock path;
-RHEL CSB skips that external repository. Other Linux hosts need the
-[vendor installation](https://docs.cloud.google.com/sdk/docs/install-sdk).
-Authentication and private project/region settings remain outside Git.
-
-Familiar launchers retain observed bypass arguments: Claude
-`--dangerously-skip-permissions --plugin-dir .`, Codex
-`--ask-for-approval=never --sandbox=danger-full-access`. Do not rely on managed
-sandbox/deny config as an enforcement guarantee with those defaults. To omit
-these arguments, set:
+The launchers keep their old bypass arguments: Claude `--dangerously-skip-permissions --plugin-dir .`, Codex
+`--ask-for-approval=never --sandbox=danger-full-access`. Do not treat the managed sandbox and deny config as an
+enforcement guarantee while they are in place. To drop them:
 
 ```yaml
 dotfiles_claude_launcher_args: []
 dotfiles_codex_launcher_args: []
 ```
 
-Codex config and `AGENTS.md` are seeded once; existing user files are preserved.
-Claude user preferences are also seeded once, including fullscreen UI and repository
-marketplace declarations. Common personal skills are declared for each account;
-shipyard/release plugins and ai-helpers sources are added only to the work home.
-Review/install these sources in the client after authentication; declarations do
-not certify a downloaded plugin or its hooks. Override `claude_personal_plugin_settings`
-and `claude_work_plugin_settings` to change the seed. Keep skills in those repos.
+Codex config and `AGENTS.md` are seeded once, and Claude preferences (fullscreen UI, repository marketplace
+declarations) are seeded once; existing user files are kept and not merged with new defaults. Managed Claude
+`settings.json` is reapplied every run, so put policy changes in Ansible config. Override
+`claude_personal_plugin_settings` and `claude_work_plugin_settings` to change the seed. Declarations do not vouch
+for a downloaded plugin or its hooks: review and install them in the client after authenticating. Old cached
+plugin registrations are references, not portable installs.
 
-The shared [working agreements](../roles/common/files/agent-baseline.md) are copied
-into Codex homes and rendered into managed Claude instructions. Keep project facts
-in project instructions rather than restoring machine-path-specific memory folders.
-Review MCP/trusted-project paths in any restored preferences. Managed
-Claude `settings.json` is reapplied, so put intended policy changes in
-Ansible config. Reinstall bundled Codex plugins and desktop-dependent servers
-through the app; register ai-helpers from its durable checkout. Existing Claude
-settings are not merged with new defaults: add missing repository declarations
-through the client if reusing those files. Old cached registrations are references,
-not portable installed plugins.
+The shared [working agreements](../roles/common/files/agent-baseline.md) are copied into Codex homes and rendered
+into the managed Claude instructions; keep project facts in project instructions, not machine-specific memory
+folders. Review MCP and trusted-project paths in anything restored.
 
-Put hardware commands and personal aliases in `~/.config/zsh/local.zsh`, seeded
-once and sourced last. `gi` retains forgit's meaning; `gri` is the old grep helper.
-Opt into `dotfiles_legacy_grep_alias_enabled: true` only to override forgit's `gi`.
-Review old `.zlogin` wake commands, display connectors, Bluetooth IDs and local
-intel_vbtn/USB rules for the new hardware. GNOME preferences use typed
-`desktop_gnome_*` overrides. If restoring Chrome MIME/PWA handlers on Fedora,
-select `repo_google_chrome: true` and `desktop_wm_browser: google-chrome` before
-provisioning; otherwise review saved MIME/launcher files for the chosen browser.
+Put hardware commands and personal aliases in `~/.config/zsh/local.zsh` (seeded once, sourced last); `gi` keeps
+forgit's meaning and `gri` is the old grep helper. Review old login-shell wake commands, display connectors,
+Bluetooth IDs and udev rules for the new hardware. GNOME preferences use typed `desktop_gnome_*` overrides. To
+install Chrome on Fedora, set `repo_google_chrome: true` (adds the vendor repo only) and add `google-chrome-stable` to
+`packages_extra_dnf` before provisioning. Set `desktop_wm_browser: google-chrome` only for the Sway/i3 `$mod+Shift+b`
+binding. The playbook configures no MIME or PWA handlers; `make backup` copies `~/.config/mimeapps.list`.
 
-## 5. Acceptance before source retirement
+## 5. Acceptance before retiring the source
 
-- [ ] Encrypted backup is readable; important files, Git refs, untracked work,
-  worktree relationships and required LFS/submodule state recover successfully.
-- [ ] Destination has rebooted, smoke checks pass, and reported clone/desktop
-  warnings are resolved; real power behavior is verified.
-- [ ] Each needed AI/Git/cloud account and plugin works; EVPN and release workflows
-  run with the restored local work and correct identity/remotes.
-- [ ] Fresh Git/workstation reports are compared with the source. Every needed
-  omission has a transfer, reinstall or deliberate discard decision; transient
-  package/repository counts need not match.
-- [ ] Browser/VPN/radio/wallet/VM data and hardware-key/vault access are verified.
-  Keep encrypted recovery material after retiring the source.
+- [ ] The encrypted backup is readable; files, Git refs, untracked work, worktrees and LFS/submodule state recover.
+- [ ] The destination has rebooted, `make smoke-test` passes, and clone and desktop warnings are resolved.
+- [ ] Each needed AI, Git and cloud account and plugin works, with the right identity and remotes.
+- [ ] Fresh inventory and audit reports match the source: every omission is a transfer, reinstall or deliberate
+  discard. Package and repository counts need not match.
+- [ ] Browser, VPN, device and wallet data, and hardware-key and vault access are verified. Keep encrypted
+  recovery material after retiring the source.

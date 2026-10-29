@@ -10,14 +10,9 @@ server {{ server | regex_replace("[\n\r].*","") }} iburst nts
 pool {{ system_chrony_fallback_pool | regex_replace('[\\n\\r].*','') }} iburst
 {% endif %}
 
-# prefer: unauthenticated sources (pool{% if system_chrony_dhcp_sourcedir %}, DHCP{% endif %}) are selectable only when no NTS source is usable
+# prefer: unauthenticated sources (pool) are selectable only when no NTS source is usable
 # require: reject all unauthenticated sources; time sync fails if NTS-KE (TCP 4460) is blocked (no fallback)
 authselectmode {{ system_chrony_authselectmode | regex_replace("[\n\r].*","") }}
-
-{% if system_chrony_dhcp_sourcedir and system_chrony_authselectmode != 'require' %}
-# Use NTP servers from DHCP
-sourcedir {{ system_chrony_dhcp_sourcedir | regex_replace("[\n\r].*","") }}
-{% endif %}
 
 # Persist NTS cookies across restarts
 ntsdumpdir {{ system_chrony_ntsdumpdir | regex_replace("[\n\r].*","") }}

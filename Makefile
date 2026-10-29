@@ -1,4 +1,4 @@
-.PHONY: bootstrap-hooks help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check diff test smoke-test \
+.PHONY: status plan verify rollout-banner bootstrap-hooks help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check diff test smoke-test \
        dotfiles packages repos notes \
        ssh desktop system repos_dnf redhat containers claude codex distrobox container \
        container-rebuild csb-audit vault-edit vault-view vault-diff update hooks \
@@ -8,7 +8,7 @@
        repos-% \
        preflight guard-not-root guard-libvirt-group \
        pip-lock pip-sync npm setup-yubikeys vendor-collections migration-inventory workstation-audit usb-add aide-rebaseline \
-       test-vm repos-dnf test-ssti-guard
+       test-vm repos-dnf
 
 # *** ORDERING CRITICAL — DO NOT MOVE THESE BLOCKS ***
 # The make -n check MUST precede 'override MAKEFLAGS :=' because:
@@ -86,6 +86,7 @@ export ANSIBLE_DISPLAY_OK_HOSTS = $(if $(QUIET),false,true)
 export ANSIBLE_CALLBACK_RESULT_FORMAT = yaml
 
 help:
+	@echo "Start here: make status  (which chunks are on)  then  make plan CHUNK=<name>, make chunk-<name>, make verify CHUNK=<name>"
 	@echo "Primary:    all minimal offline container container-rebuild update  (distrobox=alias for container)"
 	@echo "Roles:      dotfiles packages repos notes ssh desktop system repos_dnf"
 	@echo "            redhat containers claude codex"
@@ -104,19 +105,16 @@ guard-not-root:
 	@[ "$$(id -u)" != "0" ] || \
 		{ echo "ERROR: Do not run as root. Use -K for privilege escalation (make all)." >&2; exit 1; }
 
-all: guard-not-root preflight
+all: guard-not-root rollout-banner preflight
 	$(VERIFY_AND_RUN) --run-log=all ansible-playbook site.yml --ask-become-pass
-	@if command -v npm >/dev/null 2>&1 && [ ! -d node_modules ]; then \
-		npm ci --ignore-scripts; \
-	fi
 
-minimal: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,dotfiles,ssh,repos --skip-tags become
+minimal: guard-not-root rollout-banner
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,dotfiles,ssh,git_repos --skip-tags become
 
-offline: guard-not-root
+offline: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --ask-become-pass -e packages_install_binaries=false
 
-container: guard-not-root
+container: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,distrobox --skip-tags become
 
 container-rebuild: guard-not-root
@@ -153,6 +151,8 @@ bootstrap: guard-not-root bootstrap-hooks
 	@if [ ! -f scripts/vault-pass.sh ]; then \
 		cd scripts && cat vault-pass-ci.sh > vault-pass.sh && chmod 700 vault-pass.sh && sha256sum vault-pass.sh > vault-pass.sh.sha256 && cd .. && \
 		echo "SECURITY: Created stub vault-pass.sh — you MUST replace with YubiKey/keyring/encrypted-file before encrypting vault.yml"; \
+	elif [ ! -f scripts/vault-pass.sh.sha256 ]; then \
+		(cd scripts && sha256sum vault-pass.sh > vault-pass.sh.sha256); \
 	fi
 	@chmod 700 scripts/vault-pass.sh scripts/vault-pass-ci.sh
 	@# Verify vault-pass.sh integrity after creation/update (FATAL if check fails)
@@ -318,7 +318,7 @@ aide-rebaseline: guard-not-root
 			&& echo "Baseline updated (previous kept as /var/lib/aide/aide.db.gz.prev).";; \
 		*) rm -f aide.db.new.gz; echo "Baseline unchanged." >&2; exit 1;; esac'
 
-update: guard-not-root preflight
+update: guard-not-root rollout-banner preflight
 	$(MAKE) npm
 	cd collections-dist && sha256sum -c SHA256SUMS
 	$(INSTALL_COLLECTIONS)
@@ -328,46 +328,46 @@ update: guard-not-root preflight
 
 # Targets without --ask-become-pass skip become-tagged tasks: the always-tagged system
 # audits in the sudo play would otherwise call sudo with no password and fail.
-dotfiles: guard-not-root
+dotfiles: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,dotfiles --skip-tags become
 
-packages: guard-not-root
+packages: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,packages --ask-become-pass
 
-repos: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,repos --skip-tags become
+repos: guard-not-root rollout-banner
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,git_repos --skip-tags become
 
-notes: guard-not-root
+notes: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,notes --skip-tags become
 
-repos-%: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,repos -e repo_category=$* --skip-tags become
+repos-%: guard-not-root rollout-banner
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,git_repos -e repo_category=$* --skip-tags become
 
-ssh: guard-not-root
+ssh: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,ssh --skip-tags become
 
-desktop: guard-not-root
+desktop: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,desktop --ask-become-pass
 
-system: guard-not-root
+system: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,system --ask-become-pass
 
 repos-dnf:
 	@echo 'ERROR: Did you mean: make repos_dnf (underscore) -- manages DNF package repositories' >&2 && exit 1
 
-repos_dnf: guard-not-root
+repos_dnf: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,repos_dnf --ask-become-pass
 
-redhat: guard-not-root
+redhat: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,redhat --ask-become-pass
 
-containers: guard-not-root
+containers: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,containers --ask-become-pass
 
-claude: guard-not-root
+claude: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,claude --ask-become-pass
 
-codex: guard-not-root
+codex: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,codex --skip-tags become
 
 distrobox: container  # alias for backwards compatibility
@@ -389,11 +389,34 @@ csb-audit: guard-not-root preflight
 
 # Full dry run of every play, including the sudo system play; run before 'make all'.
 # 'make check' and 'make all' log to ~/.cache/laptop-setup/logs/<target>-latest.log.
-check: guard-not-root preflight
+check: guard-not-root rollout-banner preflight
 	$(VERIFY_AND_RUN) --run-log=check ansible-playbook site.yml --check --diff --ask-become-pass
 
-diff: guard-not-root
+diff: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --check --diff --tags dotfiles --skip-tags become
+
+# --- Chunks (registry: group_vars/all/rollout.yml; design: docs/rollout-plan.md) ---
+# status: which chunks are on (config.yml rollout_enable). plan: preview one chunk (CHUNK=name). chunk-<name>: apply exactly one enabled chunk. verify: run only the smoke checks mapped to it.
+# Validate rollout_enable (config.yml) first and print which chunks are skipped, before preflight or any sudo prompt.
+rollout-banner:
+	@if [ -x .venv/bin/python3 ]; then .venv/bin/python3 -I scripts/rollout.py banner || exit 2; fi
+
+status: .venv
+	@.venv/bin/python3 -I scripts/rollout.py status
+
+plan: guard-not-root .venv rollout-banner
+	@[ -n "$$CHUNK" ] || { echo "usage: make plan CHUNK=<name>  (the whole enabled list: make check; names: make status)" >&2; exit 2; }
+	@args=$$(.venv/bin/python3 -I scripts/rollout.py chunk-args --preview "$$CHUNK") || exit 2; \
+	  $(VERIFY_AND_RUN) ansible-playbook site.yml $$args --check --diff
+
+# The chunk name reaches the recipe through the environment, never as shell text (no injection via the target name).
+chunk-%: export ROLLOUT_CHUNK = $*
+chunk-%: guard-not-root .venv
+	@args=$$(.venv/bin/python3 -I scripts/rollout.py chunk-args "$$ROLLOUT_CHUNK") || exit 2; \
+	  $(VERIFY_AND_RUN) ansible-playbook site.yml $$args && echo "Next: make verify CHUNK=$$ROLLOUT_CHUNK"
+
+verify: .venv
+	@.venv/bin/python3 -I scripts/rollout.py verify "$$CHUNK"
 
 # NOTE: includes test-macos — requires macOS runner. On Linux use: make test
 ci: lint syntax-check test-scripts test-poller test-gitleaks test-fedora test-rocky test-debian test-macos test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role test-ssti-guard
@@ -412,6 +435,7 @@ check-vars-sync: .venv
 
 .venv: requirements-test.lock
 	@test -x .venv/bin/python || python3 -m venv .venv
+	@touch -t 197001010000 .venv  # stale until the final touch: a failed pip step is retried next run
 	.venv/bin/pip install --no-deps --require-hashes -r requirements-bootstrap.txt
 	.venv/bin/pip install --require-hashes -r requirements-test.lock
 	touch .venv
@@ -485,6 +509,7 @@ test-scripts: .venv
 	.venv/bin/python3 scripts/test-ansible-input-guards.py
 	.venv/bin/python3 scripts/test-usb-add.py
 	.venv/bin/python3 scripts/test-collection-source-verifier.py
+	.venv/bin/python3 scripts/test-rollout.py
 	bash test-var-override.sh
 
 # Regression checks for the pinned secret scanner configuration.

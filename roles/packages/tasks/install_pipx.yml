@@ -61,28 +61,3 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           Re-run `make packages` when online.
       when: not csb_rhel
-
-- name: Validate optional pipx package pins
-  ansible.builtin.assert:
-    that:
-      - item is match('^[a-zA-Z0-9_.-]+==[0-9]+\.[0-9]+(\.[0-9]+)?$')
-  loop: "{{ packages_extra_pipx }}"
-
-- name: Install optional pinned pipx tools
-  community.general.pipx:
-    name: "{{ item }}"
-    state: install
-  loop: "{{ packages_extra_pipx }}"
-  register: _packages_extra_pipx_results
-  ignore_errors: true  # noqa: ignore-errors — optional tooling; failures are reported by the warning below
-
-- name: Warn about optional pipx tools that failed to install
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: optional pipx tools failed to install (continuing):
-      {{ _packages_extra_pipx_results.results | selectattr('failed', 'defined')
-         | selectattr('failed') | map(attribute='item') | join(', ') }}.
-      Re-run `make packages` when online.
-  when: >-
-    _packages_extra_pipx_results.results | default([]) | selectattr('failed', 'defined')
-    | selectattr('failed') | list | length > 0

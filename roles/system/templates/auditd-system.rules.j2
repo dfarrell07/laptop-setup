@@ -4,6 +4,8 @@
 # Kernel queue settings (Fedora's /usr/share/audit-rules/10-base-config.rules values, which
 # nothing installs here). Without -b the kernel default backlog of 64 overflows under the
 # syscall rules below during builds, dropping events; augenrules hoists these to the top.
+# -D clears loaded rules first so a reload after a rule change does not hit "Rule exists".
+-D
 -b 8192
 --backlog_wait_time 60000
 -f 1

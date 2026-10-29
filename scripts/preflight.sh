@@ -148,15 +148,6 @@ for tool in ansible-playbook git python3 curl make ssh; do
     fi
   fi
 done
-if command -v shellcheck &>/dev/null; then
-  record "linttools_shellcheck" "pass" "$(shellcheck --version | awk '/^version:/{print "shellcheck " $2}')"
-else
-  if [[ "$OS_FAMILY" == "darwin" ]]; then
-    record "linttools_shellcheck" "warn" "not installed — needed for make lint/CI (run: brew install shellcheck or: make bootstrap)"
-  else
-    record "linttools_shellcheck" "warn" "not installed — needed for make lint/CI (run: sudo dnf install ShellCheck or: make bootstrap)"
-  fi
-fi
 
 # --- Ansible collections ---
 missing_cols=()
@@ -167,21 +158,6 @@ if [[ ${#missing_cols[@]} -eq 0 ]]; then
   record "ansible_collections" "pass" "all required collections installed"
 else
   record "ansible_collections" "fail" "missing: ${missing_cols[*]} — run: make bootstrap"
-fi
-
-# --- GitHub CLI authentication (required for attestation verification) ---
-if [[ "$PROFILE" == "work" ]]; then
-  if command -v gh &>/dev/null; then
-    if gh auth status &>/dev/null; then
-      record "gh_cli_auth" "pass" "GitHub CLI authenticated"
-    else
-      record "gh_cli_auth" "warn" "GitHub CLI installed but not authenticated — run 'gh auth login'"
-    fi
-  else
-    record "gh_cli_auth" "warn" "GitHub CLI not installed — needed for actionlint/zizmor attestation verification"
-  fi
-else
-  record "gh_cli_auth" "skip" "not required for profile=personal"
 fi
 
 # --- YubiKey presence ---
@@ -364,7 +340,7 @@ for netlabel_url in "${net_urls[@]}"; do
     if [[ "$_http_code" =~ ^[23] || ( "$nlabel" == registry && "$_http_code" == 401 ) ]]; then
       record "net_${nlabel}" "pass" "$nurl reachable (HTTP $_http_code)"
     # Only GitHub is required (binary downloads); collections are vendored and the registry is
-    # used for image pulls (RH subctl extraction needs a login), so those are warnings
+    # used for image pulls (oc image extract needs a login), so those are warnings
     elif [[ "$nlabel" == github ]]; then record "net_${nlabel}" "fail" "$nurl unreachable (HTTP ${_http_code:-000})"
     else record "net_${nlabel}" "warn" "$nurl unreachable (HTTP ${_http_code:-000})"; fi
   else
@@ -372,13 +348,13 @@ for netlabel_url in "${net_urls[@]}"; do
   fi
 done
 
-# --- registry.redhat.io authentication (required for RH subctl download) ---
+# --- registry.redhat.io authentication ---
 if [[ "$PROFILE" == "work" ]]; then
   if command -v podman &>/dev/null; then
     if podman login --get-login registry.redhat.io &>/dev/null; then
       record "registry_redhat_auth" "pass" "authenticated with registry.redhat.io"
     else
-      record "registry_redhat_auth" "warn" "not authenticated with registry.redhat.io — run 'podman login registry.redhat.io' before using packages_subctl_rh_versions"
+      record "registry_redhat_auth" "warn" "not authenticated with registry.redhat.io — run 'podman login registry.redhat.io' before pulling from registry.redhat.io"
     fi
   else
     record "registry_redhat_auth" "warn" "podman not installed — registry.redhat.io auth not verifiable; install podman or run 'make packages' first"
@@ -416,18 +392,6 @@ else
   record "container_tier" "pass" "host-only — run 'make all' for full provisioning"
 fi
 
-# --- Transcrypt (for notes repo) ---
-notes_enabled=false
-grep -qiE '^notes_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null && notes_enabled=true
-if command -v transcrypt &>/dev/null; then
-  record "installed_transcrypt" "pass" "$(transcrypt --version 2>&1)"
-else
-  if [[ "$notes_enabled" == true ]]; then
-    record "installed_transcrypt" "warn" "not installed — needed for encrypted notes repo"
-  else
-    record "installed_transcrypt" "skip" "not installed — only needed when notes_enabled: true in config.yml"
-  fi
-fi
 
 # --- Sudo scope ---
 if sudo_out=$(sudo -n -l 2>/dev/null); then
@@ -522,46 +486,6 @@ if [[ -f /proc/sys/kernel/yama/ptrace_scope ]]; then
 else
   record "ptrace_scope" "skip" "YAMA not available (macOS or kernel without CONFIG_SECURITY_YAMA)"
 fi
-
-# --- AIDE pre-provisioning integrity check (Linux only) ---
-# Files planted in monitored paths before 'aide --init' are baked into the DB as
-# known-good. Running aide --check here surfaces any pre-provisioning changes before
-# the playbook starts. Skips when no DB exists (AIDE not yet initialized).
-if [[ "$OS_FAMILY" == "fedora" || "$OS_FAMILY" == "rhel" ]]; then
-  _aide_db="/var/lib/aide/aide.db.gz"
-  if [[ -f "$_aide_db" ]]; then
-    if command -v aide &>/dev/null; then
-      if sudo -n true &>/dev/null; then
-        _aide_rc=0
-        sudo -n aide --check &>/dev/null || _aide_rc=$?
-        if [[ $_aide_rc -eq 0 ]]; then
-          record "aide_check" "pass" "AIDE integrity check clean"
-        else
-          record "aide_check" "warn" "AIDE detected changes (exit ${_aide_rc}) — review before provisioning: sudo aide --check"
-        fi
-      else
-        record "aide_check" "warn" "passwordless sudo unavailable — verify manually: sudo aide --check"
-      fi
-    else
-      record "aide_check" "skip" "AIDE DB exists but 'aide' binary not found"
-    fi
-  else
-    record "aide_check" "skip" "no AIDE DB — AIDE not yet initialized or system_aide_enabled: false"
-  fi
-fi
-
-# --- Existing installations ---
-for tool in claude podman distrobox toolbox; do
-  if command -v "$tool" &>/dev/null; then
-    if ver=$("$tool" --version 2>/dev/null | head -1) && [[ -n "$ver" ]]; then
-      record "installed_${tool}" "pass" "$ver"
-    else
-      record "installed_${tool}" "warn" "found but --version failed or returned empty"
-    fi
-  else
-    record "installed_${tool}" "skip" "not found"
-  fi
-done
 
 # --- Output ---
 if [[ "$JSON" == true ]]; then

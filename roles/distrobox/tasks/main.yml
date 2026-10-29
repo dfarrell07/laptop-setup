@@ -6,8 +6,7 @@
 - name: SECURITY assert distrobox variables are injection-safe
   # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always.
   # Do NOT add tags: [always] as that allows --skip-tags always to bypass this check.
-  # Duplicates the namespace assertion in pre_flight_checks.yml to protect against
-  # --start-at-task bypassing play-level pre_tasks which contain that assertion.
+  # Protects against --start-at-task bypassing play-level pre_tasks.
   ansible.builtin.assert:
     that:
       - distrobox_host_exec_commands | default([]) | map('string') | select('search', '[^a-zA-Z0-9_-]') | list | length == 0
@@ -30,9 +29,8 @@
       - distrobox_oc_mirror_url | string is match('^https://[a-zA-Z0-9._-]+(:[0-9]+)?(/[a-zA-Z0-9._-]+)*$')
       - "'..' not in distrobox_oc_mirror_url | string"
     fail_msg: >-
-      SECURITY: distrobox variable contains unsafe value. This check is duplicated in
-      pre_flight_checks.yml; it runs again here to protect against --start-at-task
-      bypassing play-level pre_tasks.
+      SECURITY: distrobox variable contains unsafe value. This check protects against
+      --start-at-task bypassing play-level pre_tasks.
       distrobox_host_exec_commands={{ distrobox_host_exec_commands | default([]) }} --
         entries must be alphanumeric/underscore/hyphen (newline injects shell commands into
         flatpak-spawn wrapper scripts and init_hooks in distrobox.ini via container-provision.yml);
@@ -54,7 +52,7 @@
 
 - name: SECURITY assert distrobox_host_exec_commands allowlist
   # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always.
-  # Duplicates the allowlist check in pre_flight_checks.yml as defense-in-depth.
+  # Defense-in-depth against --start-at-task.
   vars:
     _allowed_exec_commands: [podman, flatpak, kind, docker]
     _unlisted_exec: "{{ distrobox_host_exec_commands | default([]) | map('string') | difference(_allowed_exec_commands) | list }}"
@@ -68,8 +66,9 @@
       A shell name (bash, sh, zsh) creates a trivial host-shell escape from the container.
       Fix: remove unlisted entries from distrobox_host_exec_commands in config.yml.
 
-# The container is provisioned with the vault SSH keys; without them, defer it rather than
-# failing the whole run. 'make container' completes it once the vault is populated.
+# Deferred (not failed) while the vault is the empty stub; 'make container' completes it once the
+# vault is populated. Play 3 asserts non-empty vault_ssh_auth_key(_pub) (site.yml vault healthcheck)
+# although provisioning reads neither; defer here instead of failing that play.
 - name: Defer container provisioning until vault SSH keys exist
   when:
     - not (_pf_is_molecule | default(false))
@@ -164,32 +163,6 @@
   when:
     - distrobox_tool != 'none'
     - (distrobox_subuid_check.rc != 0) or (distrobox_subgid_check.rc != 0)
-
-- name: Check Podman socket is active  # noqa: command-instead-of-module
-  ansible.builtin.command:  # user-scope systemd requires command; service_facts uses system scope
-    cmd: systemctl --user is-active podman.socket
-  # verify-ansible-args.sh clears XDG_RUNTIME_DIR, without which systemctl --user cannot
-  # find the user bus and always reports inactive.
-  environment:
-    XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['user_uid'] }}"
-  register: distrobox_podman_socket_active
-  changed_when: false
-  failed_when: false
-  check_mode: false  # always executes, even with --check (read-only, no state change)
-  when:
-    - distrobox_tool != 'none'
-    - not system_is_container
-
-- name: Warn if Podman socket failed
-  ansible.builtin.debug:
-    msg: >-
-      Podman socket is not active. kind will not work without it.
-      Fix: systemctl --user enable --now podman.socket.
-      If that fails, check: systemctl --user status podman.socket
-  when:
-    - distrobox_tool != 'none'
-    - not system_is_container
-    - distrobox_podman_socket_active.rc != 0
 
 # --- Check if container exists ---
 - name: Check if container exists

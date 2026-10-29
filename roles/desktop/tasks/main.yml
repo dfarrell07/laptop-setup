@@ -200,27 +200,6 @@
 
     # sway-portals.conf applies only when XDG_CURRENT_DESKTOP=sway; a plain portals.conf would
     # also route GNOME sessions' screen sharing to the wlr backend, which fails on mutter.
-    - name: Check for an earlier desktop-agnostic portals.conf
-      ansible.builtin.stat:
-        path: "{{ ansible_facts['user_dir'] }}/.config/xdg-desktop-portal/portals.conf"
-      register: _desktop_portals_conf_stat
-
-    - name: Find the earlier desktop-agnostic portals.conf written by this role
-      ansible.builtin.find:
-        paths: "{{ ansible_facts['user_dir'] }}/.config/xdg-desktop-portal"
-        patterns: portals.conf
-        contains: '.*Ansible managed'  # find matches from the start of each line
-      register: _desktop_legacy_portals_conf
-      when: _desktop_portals_conf_stat.stat.exists
-
-    - name: Remove the earlier desktop-agnostic portals.conf
-      ansible.builtin.file:
-        path: "{{ item.path }}"
-        state: absent
-      loop: "{{ _desktop_legacy_portals_conf.files | default([]) }}"
-      loop_control:
-        label: "{{ item.path }}"
-
     - name: Deploy xdg-desktop-portal sway-portals.conf (Sway screen sharing)
       ansible.builtin.copy:
         dest: "{{ ansible_facts['user_dir'] }}/.config/xdg-desktop-portal/sway-portals.conf"
@@ -283,41 +262,6 @@
         mode: "0644"
         backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
 
-# --- Chrome managed policies ---
-- name: Chrome and Chromium managed policies
-  when:
-    - desktop_deploy_chrome_policies
-    - is_linux
-    - not system_is_container
-  block:
-    - name: Stat CSB Chrome managed policy file
-      ansible.builtin.stat:
-        path: /etc/opt/chrome/policies/managed/csb-chrome-policies.json
-      register: desktop_csb_chrome
-
-    - name: Deploy local Chrome policies when no CSB policy exists
-      when: not desktop_csb_chrome.stat.exists
-      become: true
-      tags: [become]
-      block:
-        - name: Create managed policies directory
-          ansible.builtin.file:
-            path: "{{ item }}/policies/managed"
-            state: directory
-            mode: "0755"
-          loop:
-            - /etc/opt/chrome
-            - /etc/chromium
-
-        - name: Deploy security policy
-          ansible.builtin.copy:
-            src: chrome-security-policy.json
-            dest: "{{ item }}/policies/managed/security.json"
-            mode: "0644"
-          loop:
-            - /etc/opt/chrome
-            - /etc/chromium
-
 # --- Shell ---
 # ansible.builtin.user calls usermod, which cannot modify SSSD/LDAP-only accounts
 # that have no /etc/passwd entry. Probe first; for SSSD/LDAP accounts, chsh and
@@ -334,12 +278,14 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
+  tags: [login_shell]
   when: is_linux
 
 - name: Check if zsh is installed
   ansible.builtin.stat:
     path: /bin/zsh
   register: _zsh_binary_stat
+  tags: [login_shell]
   when: is_linux
 
 - name: Fail if zsh binary is missing (prevents broken login)
@@ -348,6 +294,7 @@
       Cannot set zsh as default shell: /bin/zsh does not exist.
       The packages role may have failed to install zsh, or this role was run
       without packages. Run 'make packages' first to install zsh, then retry.
+  tags: [login_shell]
   when:
     - is_linux
     - not _zsh_binary_stat.stat.exists
@@ -356,6 +303,7 @@
 - name: Report zsh not installed yet in check mode
   ansible.builtin.debug:
     msg: "CHECK MODE: /bin/zsh is absent; the packages role installs it before this step in a real run."
+  tags: [login_shell]
   when:
     - is_linux
     - not _zsh_binary_stat.stat.exists
@@ -366,7 +314,7 @@
     name: "{{ ansible_facts['user_id'] }}"
     shell: /bin/zsh
   become: true
-  tags: [become]
+  tags: [become, login_shell]
   when:
     - is_linux
     - _zsh_local_user_check.rc | default(1) == 0
@@ -391,6 +339,7 @@
   failed_when: false
   become: true
   check_mode: false  # read-only probe — must run in check mode
+  tags: [login_shell]
   when:
     - is_linux
     - _zsh_local_user_check.rc | default(1) != 0
@@ -404,7 +353,7 @@
     path: /etc/sssd/sssd.conf
   register: _sssd_conf_stat
   become: true
-  tags: [become]
+  tags: [become, login_shell]
   when:
     - is_linux
     - _zsh_local_user_check.rc | default(1) != 0
@@ -421,7 +370,7 @@
     group: "{{ _sssd_conf_stat.stat.gr_name | default('root') }}"
     mode: "{{ '0640' if (_sssd_conf_stat.stat.gr_name | default('root')) != 'root' else '0600' }}"
   become: true
-  tags: [become]
+  tags: [become, login_shell]
   register: _sssd_override_shell_result
   when:
     - is_linux
@@ -435,7 +384,7 @@
     name: sssd
     state: restarted
   become: true
-  tags: [become]
+  tags: [become, login_shell]
   when:
     - is_linux
     - _sssd_override_shell_result is defined
@@ -450,6 +399,7 @@
       Manual fix: add 'override_shell = /bin/zsh' to the [domain/...] stanza in a
       root-owned /etc/sssd/conf.d/*.conf (same group/mode as sssd.conf), then run
       'systemctl restart sssd'.
+  tags: [login_shell]
   when:
     - is_linux
     - _zsh_local_user_check.rc | default(1) != 0

@@ -52,7 +52,8 @@ containers_policy_enabled: true
 containers_policy_rh_gpg_key: /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
 # Registries pulled without signature checks; anything else is rejected. Covers the
 # public registries kind (docker.io kindest/node, registry.k8s.io), molecule
-# (docker.io), OVN-K/OpenShift CI and GitHub-hosted images use. Replace in config.yml
+# (docker.io), OVN-K/OpenShift CI, GitHub-hosted, Microsoft (mcr.microsoft.com) and
+# AWS public (public.ecr.aws) images use. Replace in config.yml
 # to tighten or extend. Local archive transports (docker-archive, oci-archive, oci, dir, docker-daemon, containers-storage)
 # are always accepted so podman load and skopeo copy keep working.
 containers_policy_unsigned_registries:
@@ -63,6 +64,8 @@ containers_policy_unsigned_registries:
   - registry.k8s.io
   - gcr.io
   - registry.ci.openshift.org
+  - mcr.microsoft.com
+  - public.ecr.aws
 
 is_dnf: false  # fallback; authoritative value in group_vars/all/vars.yml
 

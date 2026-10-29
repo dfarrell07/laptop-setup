@@ -65,7 +65,6 @@ claude_work_plugin_settings:
     shipyard@submariner: true
     release-management@submariner-release: true
 
-claude_cleanup_period_days: 7
 claude_enable_all_project_mcp_servers: false  # true = auto-trust all project-local MCP servers; false = prompt (more secure)
 
 claude_queue_enabled: false
@@ -82,8 +81,6 @@ claude_queue_timeout: 1800    # seconds before SIGTERM is sent to claude process
 claude_queue_max_issues_per_run: 5    # max issues processed per poller invocation; caps lock hold time
 claude_queue_host_label: ""   # optional human-readable label posted in issue comments; leave empty to omit host identity
 claude_queue_config_dir: "{{ claude_work_config_dir if profile == 'work' else claude_default_config_dir }}"  # config dir for queue daemon
-claude_remote_control_enabled: false  # macOS-only (launchd); Linux emits warning only, no unit; run claude --remote-control manually
-claude_remote_control_config_dir: "{{ claude_personal_config_dir }}"  # config dir for remote-control; override to use a different instance
 
 claude_deny_sensitive:
   - "~/.claude.json"  # default instance's account state and MCP servers (other instances keep it in their dir)

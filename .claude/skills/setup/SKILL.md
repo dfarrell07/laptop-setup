@@ -2,269 +2,110 @@
 name: laptop-setup
 description: >-
   This skill should be used when the user wants to provision or re-provision
-  their workstation with Ansible. It orchestrates pre-flight checks, runs
-  each Ansible role individually for diagnostic granularity, diagnoses
-  failures by reading role task files and troubleshooting docs, guides
-  interactive auth steps, runs smoke tests, and generates CSB IT ticket
-  templates when needed. Safe to re-run (idempotent).
-version: 1.0.0
-argument-hint: "[target] (e.g., dotfiles, packages, repos, or blank for all)"
+  their workstation with Ansible. It walks the owner through pre-flight checks,
+  one chunk at a time (make status, plan, chunk, verify), diagnoses failures
+  from role task files and troubleshooting docs, guides interactive auth steps,
+  runs smoke tests, and drafts CSB IT ticket text when needed. Safe to re-run
+  (idempotent).
+version: 1.1.0
+argument-hint: "[chunk or role] (e.g., dotfiles, packages, repos, or blank to start from make status)"
 user-invocable: true
-allowed-tools: Bash, Read, Write, Edit, Glob
+allowed-tools: Bash, Read, Edit, Glob
 ---
 
 # Workstation Setup
 
-Provision this machine using Ansible roles with diagnostic review at each step.
+Guide the owner through provisioning this machine one chunk at a time. Conventions, variables and warnings are in `CLAUDE.md`; failure
+modes are in `references/troubleshooting.md`; undo steps are in `docs/rollout-recovery.md`. Do not restate them; read them when needed.
 
 **Arguments:** $ARGUMENTS
 
-If a specific target is provided (e.g., `dotfiles`, `packages`), run only that
-target. Otherwise run the full workflow below.
+If a chunk or role is given, handle only that. Otherwise follow the phases below.
+
+**Who runs what.** Agents do not run provisioning (`docs/design-principles.md` § 6). Run read-only and no-sudo commands yourself
+(`make status`, `scripts/preflight.sh --json`, `make verify`, `scripts/smoke-test.sh --user-only`). For anything that applies changes or
+needs sudo (`make plan`, `make chunk-x`, role targets, `make check`), give the owner the exact command to run at the console and read the
+output they paste back. Never use `--start-at-task`, `-e` overrides or `--skip-tags` to get around the chunk wrapper.
 
 ## Phase 1: Pre-flight
-
-Run the pre-flight check script and parse the JSON output.
 
 ```bash
 scripts/preflight.sh --json
 ```
 
-If any check has `"status": "fail"`, stop and report what is missing. Guide the
-user to fix failures before proceeding. Warnings (`"status": "warn"`) and skips
-(`"status": "skip"`) can be continued past if the failing check is not needed
-for the targets the user wants to run.
+Any `"status": "fail"` stops the run until fixed, unless the check is irrelevant to the requested targets (for example `make dotfiles`
+needs no YubiKey; `make ssh` does). `warn` and `skip` can be passed. `--json` skips the interactive vault/YubiKey checks; the owner runs
+`make preflight` before a first provision and `make check` for a full dry run.
 
-<!-- AGENT DECISION POINT: Non-critical failures (e.g., missing optional vault
-tier, no YubiKey for non-vault operations) may be acceptable. Decide whether
-to continue based on which roles the user wants to run and which pre-flight
-checks failed. For example, running `make dotfiles` does not require a YubiKey,
-but `make ssh` does. -->
+Confirm the owner connected their USB devices and ran `make usb-add` before any USBGuard chunk (CLAUDE.md § USBGuard).
 
-## Phase 2: Detect Environment
-
-Determine the OS and profile before running roles.
+## Phase 2: Environment
 
 ```bash
 ansible -m setup -a 'filter=ansible_os_family,ansible_distribution*' localhost
-```
-
-CSB is detected when internal CA certs are present and the host is RHEL with
-fapolicyd installed, or Fedora with a `.csb` FQDN or fapolicyd installed (see `common/tasks/csb_detect.yml`).
-The playbook sets `csb_detected`/`csb_restricted` facts.
-
-Check sudo access level. This determines which targets can run:
-
-```bash
 sudo -n -l 2>/dev/null || echo "no-sudo"
 ```
 
-<!-- AGENT DECISION POINT: If sudo is unavailable or scoped, skip targets that
-require become (repos_dnf, system, packages, redhat, containers, desktop). Inform the user which
-targets are being skipped and why. On CSB, suggest `make minimal` if full
-sudo is unavailable. -->
+CSB detection is `common/tasks/csb_detect.yml` (`csb_detected`, `csb_restricted`). Without sudo, skip chunks that need it (`make status`
+shows which) and say so; on CSB, `make minimal` is the no-sudo path.
 
-## Phase 3: Run Roles Individually
+## Phase 3: Chunks, one at a time
 
-Run each role as a separate `make` invocation in dependency order. Do NOT run
-`make all` in one shot -- individual targets give clear per-role pass/fail.
+Do not run `make all` in one shot: one chunk per invocation gives a clear pass/fail.
 
-Before Play 1 targets, run `make preflight` (includes vault/YubiKey checks that
-`--json` skips) and suggest `make check` (dry run) on first provision. On a first provision, confirm
-the user has run `lsusb`/`make usb-add` so USBGuard does not block their devices. `make system` restarts
-sshd: run it only from the local console or tmux, never over SSH.
+1. `make status`: report each chunk's state (`rollout_enable`, shown as ON/off), risk and sudo need. `make status` does not print
+   `requires` (chunks that must also be on); read it from `group_vars/all/rollout.yml`. Disabled chunks are skipped by every make
+   target; do not work around that.
+2. Pick chunks with the owner in `make status` order (low risk first).
+3. Per chunk, the owner runs `make plan CHUNK=x` (read the diff together), `make chunk-x`, then `make verify CHUNK=x`. Say what a sudo
+   chunk will change and get a go-ahead before each; do not chain them.
+4. High-risk chunks (`sys_mounts`, `sys_lockdown`, `sys_auditd`, `sys_usbguard`, `sys_signin`, `ssh_authorized_keys`, `sys_remote_access`):
+   only at the local console or in tmux, a second session open, after reading `docs/rollout-recovery.md`. Use `make chunk-x`, which asks
+   for typed confirmation; role targets do not. `sys_*` chunks restart sshd or change boot settings: never over SSH.
+5. Role targets (`make dotfiles`, `packages`, `ssh`, `repos`, `notes`, `redhat`, `containers`, `desktop`, `claude`, `codex`, `container`)
+   suit a whole role once all its chunks are enabled. `make container` and molecule container tests exceed the 120 s Bash default: use
+   `timeout=600000` or `run_in_background=true`.
 
-Before running any sudo target (Play 1, plus packages, redhat, containers, desktop), tell the user what it
-will change and get their go-ahead; do not chain these without it.
+### On failure
 
-Run targets in this order, matching the plan's three-play structure (skip
-targets that do not apply to this OS/profile or that the user did not request):
+Read the error, find the failing task in `roles/<role>/tasks/`, then check `references/troubleshooting.md`. Classify:
 
-*Play 1 targets (need sudo):*
-1. `make repos_dnf` (third-party RPM repos — dnf-based OS only)
-2. `make system` (firewall, kernel, services)
+- **CSB restriction** (permission denied, fapolicyd, blocked repo): record it for Phase 6, do not retry, continue.
+- **Missing auth** (registry login, `gh`): queue it for Phase 4, continue.
+- **Transient** (network, download): suggest one retry of the single target.
+- **Role bug** (wrong path, template, variable): show the task and a proposed fix; apply it only with approval, then the owner re-runs.
+- **Missing prerequisite**: name the earlier chunk that should have provided it and re-run that first.
 
-*Play 2 targets (no play-level sudo, per-task escalation):*
-3. `make dotfiles`
-4. `make packages` (some tasks need sudo)
-5. `make ssh`
-6. `make repos`
-7. `make notes` (clones + transcrypt-decrypts private ~/notes repo)
-8. `make redhat` (work profile, needs sudo)
-9. `make containers` (some tasks need sudo)
-10. `make desktop` (Linux and macOS desktop, needs sudo on Linux)
-11. `make distrobox` (creates container + provisions via Play 3)
-    **Long-running**: this step and any molecule container test (`molecule test -s container`)
-    exceed the default 150-second Bash tool timeout. Pass `timeout=600000` to the Bash
-    tool call, or use `run_in_background=true` and wait for the completion notification
-    before reading results.
-12. `make claude`
-13. `make codex` (user-space Codex CLI; no sudo)
+Never retry automatically. Finish with a list of passed, failed and skipped chunks.
 
-Note: `common` role is tagged `always` and runs automatically with any target.
+## Phase 4: Authentication
 
-For each target:
+Check each tool and skip what is already logged in. If an auth step fails with connection errors, ask whether the VPN is up.
 
-```bash
-make <target> 2>&1
-```
+| Tool | Check | If missing |
+| --- | --- | --- |
+| GitHub CLI | `gh auth status` | owner runs `gh auth login` (HTTPS), then `make packages repos notes` |
+| Notes (transcrypt) | `make notes` warned about the password | `make vault-edit` to add `vault_notes_transcrypt_password`, then `make notes` |
+| OpenShift (work) | `oc whoami` | `oc login --web`; cluster name is in `CLAUDE.local.md` |
+| Registries (work) | `podman login --get-login registry.redhat.io` (and `quay.io`) | `umask 077 && podman login --authfile ~/.config/containers/auth.json <registry>` |
+| Google Cloud (work) | `gcloud auth list --filter='status:ACTIVE'` | `gcloud auth login` and `gcloud auth application-default login` |
 
-Capture the exit code. If the target succeeds (exit 0), report it and move to
-the next target.
-
-### On Failure
-
-When a target fails:
-
-1. Read the error output. Identify the failing task name and module.
-2. Read the role's tasks file to understand what the task was doing:
-   ```bash
-   cat roles/<role_name>/tasks/main.yml
-   ```
-3. Check the troubleshooting guide for known issues:
-   ```bash
-   cat references/troubleshooting.md
-   ```
-4. If the role has a `handlers/` or `defaults/` directory, read those for
-   additional context.
-
-<!-- AGENT DECISION POINT: Classify the failure:
-- **CSB restriction** (permission denied, fapolicyd block, repo blocked):
-  Log it for the CSB report in Phase 6. Do not retry. Continue to next target.
-- **Missing auth** (registry login needed, gh not authenticated):
-  Queue the auth step for Phase 4. Continue to next target.
-- **Transient** (network timeout, download failure):
-  Suggest retrying. If user approves, re-run the single target.
-- **Bug in role** (wrong path, bad template, missing variable):
-  Show the error context and the relevant task. Suggest a fix. If user
-  approves, apply the fix and re-run with `make <target>`.
-- **Missing prerequisite** (package from earlier role not installed):
-  Identify which earlier target should have provided it. Suggest re-running
-  that target first.
-
-Do not retry automatically without user confirmation. -->
-
-After all targets complete, summarize: which passed, which failed, which were
-skipped and why.
-
-## Phase 4: Interactive Authentication
-
-Check status of each auth tool before prompting. Skip any that are already
-authenticated.
-
-### GitHub CLI
-
-```bash
-gh auth status 2>&1
-```
-
-If not authenticated, tell the user to run `gh auth login` and select HTTPS
-protocol. Wait for them to confirm completion, then verify.
-
-### Notes Repo (transcrypt)
-
-If `make notes` warned about missing transcrypt password, the user needs to
-populate `vault_notes_transcrypt_password` in vault.yml. Guide them:
-
-```bash
-make vault-edit  # add vault_notes_transcrypt_password: "<password>"
-make notes       # re-run to initialize transcrypt
-```
-
-If clone failed (no GitHub auth), resolve GitHub CLI auth first (above), then
-re-run `make notes`.
-
-### OpenShift (work profile only)
-
-```bash
-oc whoami 2>&1
-```
-
-If not authenticated, tell the user to run `oc login --web` to the appropriate
-cluster. The cluster name is in `CLAUDE.local.md`. Wait for confirmation.
-
-### Container Registries (work profile only)
-
-Check each registry:
-
-```bash
-podman login --get-login registry.redhat.io 2>&1
-podman login --get-login quay.io 2>&1
-```
-
-For each unauthenticated registry, tell the user to run:
-```
-umask 077 && podman login --authfile ~/.config/containers/auth.json <registry>
-```
-
-Remind them to `chmod 0600 ~/.config/containers/auth.json` afterward.
-
-### Google Cloud (work profile only)
-
-```bash
-gcloud auth list --filter='status:ACTIVE' --format='value(account)' 2>&1
-```
-
-If no active account, tell the user to run `gcloud auth login` and
-`gcloud auth application-default login`.
-
-<!-- AGENT DECISION POINT: Some auth steps require VPN (Red Hat internal
-registries, internal git servers). If auth fails with connection errors, ask
-the user whether they are connected to VPN before suggesting the auth step
-is broken. -->
-
-## Phase 5: Smoke Test
-
-Run the post-provisioning smoke test and report results.
+## Phase 5: Smoke test
 
 ```bash
 scripts/smoke-test.sh --json
 ```
 
-Parse each check line. Report a summary table of pass/fail results.
+Summarize pass/fail. Tie each failure to a Phase 3 failure; if the role passed but the check fails, read the check in `smoke-test.sh` and
+compare it with what the role deployed. Tell "not configured yet" (hardware, VPN, auth pending) from "broken".
 
-For any failing smoke test, cross-reference with Phase 3 failures. If the
-smoke test failure maps to a role that failed earlier, note the connection.
-If a smoke test fails but the corresponding role passed, investigate -- read
-the smoke test script to understand what it checks and compare against what
-the role actually deployed.
+## Phase 6: CSB report (only when `csb_detected`)
 
-<!-- AGENT DECISION POINT: Some smoke tests require hardware (YubiKey, Tailscale)
-or active network (VPN for internal services). Distinguish between "not
-configured yet" and "broken" based on whether the relevant role ran and
-whether auth steps in Phase 4 were completed. -->
-
-## Phase 6: CSB Report (RHEL CSB only)
-
-Skip this phase if `csb_detected` is not true.
-
-Parse the CSB compatibility report generated during Phase 3:
-
-```bash
-cat ~/csb-report.md 2>/dev/null
-```
-
-For each blocked item in the report, generate an IT ticket template with:
-
-- **Subject**: What is being requested (e.g., "Enable third-party RPM repo: tailscale")
-- **Justification**: Why the tool is needed for development work
-- **Requested change**: Specific configuration change (repo file, fapolicyd rule,
-  USBGuard allowlist entry, firewall port)
-- **Risk assessment**: Security impact of the change
-- **Alternatives tried**: What was attempted without IT intervention
-
-Present the templates to the user for review. Do not submit tickets
-automatically.
+Read `~/csb-report.md` (written by `common/tasks/csb-report.yml`). For each blocked item draft IT ticket text: subject, justification,
+requested change (repo file, fapolicyd rule, USBGuard entry, firewall port), risk, and what was tried without IT. Present drafts for
+review; never submit them.
 
 ## Phase 7: Summary
 
-Report:
-
-1. **Completed**: Roles that ran successfully
-2. **Failed**: Roles that failed with brief failure reason
-3. **Skipped**: Roles skipped and why (wrong OS, no sudo, user did not request)
-4. **Auth status**: Which services are authenticated, which still need setup
-5. **Smoke tests**: Pass/fail count and any failing checks
-6. **CSB actions** (if applicable): Number of IT tickets drafted
-7. **Next steps**: Concrete actions the user should take (re-run a failed target
-   after fixing something, complete an auth step, submit IT tickets)
+Report completed, failed (with reason) and skipped (with reason) chunks, auth status, smoke-test counts, drafted tickets, and the concrete
+next steps for the owner.

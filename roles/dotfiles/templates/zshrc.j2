@@ -370,12 +370,7 @@ alias ts='tailscale status'
 
 # --- General aliases ---
 command -v gvim &>/dev/null && alias gv="gvim -vp"
-{% if dotfiles_legacy_grep_alias_enabled | bool %}
-alias gi="grep -rniI --color=always --exclude-dir=vendor"
-{% endif %}
 alias gri="grep -rniI --color=always --exclude-dir=vendor"  # gi is reserved for forgit::ignore
-{% if _system == 'Linux' %}
-{% endif %}
 alias pingg="ping www.google.com"
 alias ping8="ping 8.8.8.8"
 alias mtrg="mtr google.com"

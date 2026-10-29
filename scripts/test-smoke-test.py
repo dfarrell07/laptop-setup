@@ -16,7 +16,7 @@ class SmokeTests(unittest.TestCase):
     def test_native_power_baseline_does_not_require_tlp(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
         start = source.index('  # TLP is an explicit opt-in;')
-        end = source.index('\n  # Chrome policies', start)
+        end = source.index('\n  # dconf system policies', start)
         with tempfile.TemporaryDirectory() as directory:
             # A native stack is active and TLP is absent. No hardware/service probes
             # should run at all when the managed TLP choice is disabled.
@@ -265,6 +265,29 @@ class SmokeTests(unittest.TestCase):
                     home.chmod(0o700)
                     self.assertEqual(data['failures'], sum(status == 'FAIL' for status in checks.values()))
 
+
+    def test_gitconfig_check_fails_when_signing_key_file_is_missing(self):
+        """dotfiles can enable commit signing before ssh_client deploys the key; verify must not PASS then."""
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('_gc="$HOME/.config/git/config"')
+        end = source.index('if [[ -f "$HOME/.gitconfig" ]]', start)
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            config = home / '.config/git/config'
+            config.parent.mkdir(parents=True)
+            config.write_text('# Ansible managed\n[user]\n\tsigningkey = ~/.ssh/id_ed25519_sk_signing.pub\n')
+
+            def run():
+                return subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c',
+                    'record() { printf "%s %s\\n" "$1" "$2"; };\n' + source[start:end]],
+                    env=dict(os.environ, HOME=str(home)), capture_output=True, text=True).stdout.strip()
+            self.assertEqual(run(), 'dotfile-gitconfig FAIL')
+            (home / '.ssh').mkdir()
+            (home / '.ssh/id_ed25519_sk_signing.pub').write_text('key\n')
+            self.assertEqual(run(), 'dotfile-gitconfig PASS')
+            config.write_text('# Ansible managed\n[user]\n\tname = x\n')  # no signing configured: unaffected
+            (home / '.ssh/id_ed25519_sk_signing.pub').unlink()
+            self.assertEqual(run(), 'dotfile-gitconfig PASS')
 
     def test_scripts_run_on_macos_bash_3(self):
         """macOS /bin/bash is 3.2: no ${var,,}/${var^^} case conversion, declare -A or mapfile."""

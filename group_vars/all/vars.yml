@@ -13,8 +13,8 @@ ssh_signing_key: "{{ vault_ssh_signing_key | default('') }}"
 ssh_signing_key_pub: "{{ vault_ssh_signing_key_pub | default('') }}"
 
 # Git signing
-# Separate from ssh_signing_key_pub to allow config.yml override during vault bootstrap;
-# same vault source after vault is populated (see default.config.yml).
+# Same vault source as ssh_signing_key_pub. Not overridable in config.yml (pre-flight rejects it):
+# the signing key files are deployed only from the vault, so an override would enable signing with no key.
 ssh_git_signing_pubkey: "{{ vault_ssh_signing_key_pub | default('') }}"
 
 # Red Hat internal git key
