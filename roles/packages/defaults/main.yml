@@ -270,8 +270,8 @@ packages_kubectl_sha256: "ebbd080e7c2e275093b55915722043257eb24004363e20acb3c4d7
 packages_go_install: []  # no universal Go tools; all dev tools are profile-scoped below
 # GOTOOLCHAIN env for go install; 'local' prevents runtime toolchain downloads (aligns with SHA256-pinned pattern).
 packages_gotoolchain: local
-  # Set 'auto' in config.yml only when intentionally allowing toolchain self-replacement
-  # (only needed where the distro Go is older than the tools need, e.g. Debian 13).
+# Set 'auto' in config.yml only when intentionally allowing toolchain self-replacement
+# (only needed where the distro Go is older than the tools need, e.g. Debian 13).
 
 # Work-profile-only Go tools (OVN-K codegen + Submariner + Kubernetes + Go IDE/CI toolchain)
 # Integrity via GOSUMDB (sum.golang.org) — not post-compilation SHA256. Built binaries depend on the
@@ -306,13 +306,13 @@ packages_go_install_work:
   # Kubernetes log viewer — multi-pod log tail for OVN-K/Konflux debugging
   - "github.com/stern/stern@v{{ packages_stern_version }}"
 
+packages_code_generator_version: "0.36.2"  # governs all k8s.io/code-generator/* tools; bump with OVN-K k8s upgrade
+packages_subctl_version: "0.24.0"  # governs go install and distrobox_subctl_version; bump together
+
 # Versioned subctl installs: each entry becomes subctl<major><minor> in ~/.local/bin.
 # Example: {version: "0.18.0", suffix: "18"} → installs ~/.local/bin/subctl18
 # Useful when managing Submariner clusters at different broker API versions.
 # The latest version should also be in packages_go_install_work (as plain 'subctl').
-packages_code_generator_version: "0.36.2"  # governs all k8s.io/code-generator/* tools; bump with OVN-K k8s upgrade
-packages_subctl_version: "0.24.0"  # governs go install and distrobox_subctl_version; bump together
-
 packages_subctl_versioned:
   - version: "0.18.0"
     suffix: "18"

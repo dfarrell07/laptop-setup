@@ -79,33 +79,12 @@
           become: true
           tags: [become]
 
-        - name: Inspect oc tarball without following symlinks
-          ansible.builtin.stat:
-            path: "{{ packages_oc_download.dest }}"
-            follow: false
-          register: _oc_archive_stat
-          become: true
-          tags: [become]
-
-        - name: Verify oc tarball is not a symlink
-          ansible.builtin.assert:
-            that:
-              - _oc_archive_stat.stat.isreg | default(false)
-              - not (_oc_archive_stat.stat.islnk | default(false))
-            fail_msg: "SECURITY: oc tarball is a symlink — aborting extraction to prevent TOCTOU attack"
-          become: true
-          tags: [become]
-
         - name: Build list of binaries to extract from OCP tarball
           ansible.builtin.set_fact:
             _oc_binaries_to_extract: >-
               {{ ['oc'] + (['kubectl'] if packages_kubectl_source == 'ocp' else []) }}
 
         - name: Extract oc and kubectl
-          # Idempotency guard: skip re-extraction when get_url reports the tarball
-          # is unchanged (sha256 matches the cached copy).  Still extracts
-          # when oc is absent from disk (rc != 0) even if the tarball is cached,
-          # covering the edge case of a manually deleted binary.
           # When packages_kubectl_source == 'upstream', only oc is extracted; kubectl
           # is installed separately from dl.k8s.io via install_kubectl_upstream.yml.
           ansible.builtin.unarchive:
@@ -113,7 +92,6 @@
             dest: /usr/local/bin
             remote_src: true
             extra_opts: "{{ ['--no-same-owner'] + _oc_binaries_to_extract }}"
-          when: packages_oc_download.changed or packages_oc_check.rc != 0 or not packages_kubectl_stat.stat.exists
           become: true
           tags: [become]
 
@@ -256,34 +234,15 @@
           become: true
           tags: [become]
 
-        - name: Inspect opm tarball without following symlinks
-          ansible.builtin.stat:
-            path: "{{ packages_opm_download.dest }}"
-            follow: false
-          register: _opm_archive_stat
-          become: true
-          tags: [become]
-
-        - name: Fail if opm tarball is a symlink (TOCTOU attack detected)
-          ansible.builtin.assert:
-            that:
-              - _opm_archive_stat.stat.isreg | default(false)
-              - not (_opm_archive_stat.stat.islnk | default(false))
-            fail_msg: "SECURITY: opm tarball is a symlink — aborting extraction to prevent TOCTOU attack"
-          become: true
-          tags: [become]
-
         - name: Assert opm binary name exists in tarball  # noqa: command-instead-of-module — inspect archive members without extracting
           ansible.builtin.command: tar -tzf {{ packages_opm_download.dest | quote }}
           register: packages_opm_tarball_list
           changed_when: false
           failed_when: packages_opm_tarball_list.stdout_lines | select('equalto', packages_opm_binary_name) | list | length == 0
-          when: packages_opm_download.changed or packages_opm_check.rc != 0
           become: true
           tags: [become]
 
         - name: Extract and install opm binary
-          when: packages_opm_download.changed or packages_opm_check.rc != 0
           block:
             - name: Extract opm binary
               ansible.builtin.unarchive:

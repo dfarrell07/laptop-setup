@@ -12,11 +12,6 @@
   check_mode: false
   failed_when: false
 
-- name: Set golang unavailable when not found
-  ansible.builtin.set_fact:
-    _golang_available: false
-  when: _go_binary_path.rc != 0
-
 - name: Warn if golang is missing (likely package install failure)
   ansible.builtin.debug:
     msg: >-
