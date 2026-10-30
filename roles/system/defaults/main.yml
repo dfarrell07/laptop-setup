@@ -652,7 +652,7 @@ system_perf_event_paranoid: 2      # CIS-compliant (>=2) and Fedora 44 default; 
 
 # Logrotate /etc/logrotate.d whitelist — files allowed to exist after sudo config deploy.
 # Unexpected files are rejected by logrotate_sudo.yml to prevent planted postrotate root execution.
-# Extend in config.yml if your system installs additional logrotate drop-ins (e.g. chrony, sssd).
+# Extend in config.yml for logrotate drop-ins not owned by any RPM (e.g. a vendor agent's own rotation file).
 system_logrotated_whitelist:
   - sudo
   - btmp
