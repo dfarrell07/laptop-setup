@@ -48,14 +48,13 @@
       become: true
       tags: [become]
 
-    - name: Write kubectl source marker for upstream  # noqa: no-handler — marker must exist before subsequent package-source decisions
+    - name: Write kubectl source marker for upstream
       ansible.builtin.copy:
         content: "upstream"
         dest: /var/lib/ansible-packages/kubectl-source
         mode: "0644"
       become: true
       tags: [become]
-      when: _kubectl_upstream_download.changed
 
   rescue:
     - name: Record kubectl download failure (CSB)

@@ -13,12 +13,12 @@
 #   csb_action         — manual install instructions
 #   csb_ticket_summary — CSB ticket one-liner
 #   csb_ticket_body    — CSB ticket detail
+#   binary_in_archive  — path inside the tarball to extract
 #
 # Note: tarball path is now created atomically via tempfile (no longer required as input var)
 #
 # Optional vars:
 #   strip_components      — integer; adds --strip-components=N to tar (default: omit)
-#   binary_in_archive     — path inside the tarball to extract (default: extract all)
 #   download_timeout      — get_url timeout in seconds (default: 120)
 #   version_check_timeout — version check shell timeout in seconds (default: 10)
 
@@ -73,7 +73,7 @@
             extra_opts: >-
               {{ ['--no-same-owner']
                  + (['--strip-components=' ~ strip_components] if strip_components is defined else [])
-                 + ([binary_in_archive] if binary_in_archive is defined else []) }}
+                 + [binary_in_archive] }}
           become: true
           tags: [become]
 
