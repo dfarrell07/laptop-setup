@@ -128,7 +128,7 @@ binding. The playbook configures no MIME or PWA handlers; `make backup` copies `
 
 ## 5. Acceptance before retiring the source
 
-- [ ] The encrypted backup is readable; files, Git refs, untracked work, worktrees and LFS/submodule state recover.
+- [ ] The transferred backup is readable; files, Git refs, untracked work, worktrees and LFS/submodule state recover.
 - [ ] The destination has rebooted, `make smoke-test` passes, and clone and desktop warnings are resolved.
 - [ ] Each needed AI, Git and cloud account and plugin works, with the right identity and remotes.
 - [ ] Fresh inventory and audit reports match the source: every omission is a transfer, reinstall or deliberate

@@ -76,14 +76,14 @@
             _is_encrypted: >-
               {{ _vaultfile_first_line is search('^\$ANSIBLE_VAULT') }}
             _is_stub: >-
-              {{ _vpass_content is search("pass='CHANGE_ME'") }}
+              {{ _vpass_content is search("pass='CHANGE_ME'|ci-dummy-vault-password") }}
           ansible.builtin.assert:
             that:
               - >-
                 (not _is_stub) or (not _is_encrypted)
             fail_msg: >-
-              SECURITY CRITICAL: vault.yml is encrypted with the placeholder password 'CHANGE_ME'.
-              Input: scripts/vault-pass.sh contains pass='CHANGE_ME' stub.
+              SECURITY CRITICAL: vault.yml is encrypted with a placeholder password ('CHANGE_ME' or the CI dummy).
+              Input: scripts/vault-pass.sh is the CHANGE_ME stub or the CI dummy script.
               Mechanism: ansible-vault uses vault-pass.sh output as the encryption key; the
               'CHANGE_ME' placeholder produces a trivially guessable key.
               Example: echo CHANGE_ME | ansible-vault decrypt group_vars/all/vault.yml decrypts all secrets.
