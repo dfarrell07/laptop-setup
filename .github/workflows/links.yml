@@ -30,7 +30,8 @@ jobs:
         env:
           LYCHEE_SHA256: 0d48569e2dc11c1917fa98321dfd7aa675fba03b79f41e8e74afa3223e30d379
         run: |
-          curl -sSLO https://github.com/lycheeverse/lychee/releases/download/lychee-v0.18.1/lychee-x86_64-unknown-linux-gnu.tar.gz
+          curl -fsSLO --retry 3 \
+            https://github.com/lycheeverse/lychee/releases/download/lychee-v0.18.1/lychee-x86_64-unknown-linux-gnu.tar.gz
           echo "${LYCHEE_SHA256}  lychee-x86_64-unknown-linux-gnu.tar.gz" | sha256sum -c -
           tar xzf lychee-x86_64-unknown-linux-gnu.tar.gz lychee
           chmod +x lychee

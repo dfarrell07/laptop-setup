@@ -244,6 +244,8 @@ packages_ec_sha256_arm64: "3b828381befb917db1a626f449cc6464b94371b765ea0f650f521
 
 packages_yamllint_version: "1.38.0"
 packages_ansible_lint_version: "26.6.0"
+# ansible-lint needs ansible-core, which supports Python up to 3.14, but Homebrew's python3 is already 3.15.
+packages_pipx_python: "{{ 'python3.14' if is_macos else 'python3' }}"
 
 # Also governs opm download — opm co-releases with oc on mirror.openshift.com.
 # kubectl is extracted from the same OCP tarball (openshift-client-linux.tar.gz)
@@ -382,6 +384,7 @@ packages_brew_cask_personal:
 packages_brew:
   - bash  # macOS /bin/bash is 3.2; queue and setup scripts use modern Bash
   - python3  # ensure unversioned Python is available for the repository venv
+  - python@3.14  # pipx venvs for ansible-lint (ansible-core supports Python up to 3.14); see packages_pipx_python
   - coreutils  # GNU checksum/timeout commands used by provisioning and verification
   - node  # npm runtime for the integrity-locked Codex CLI and repository tooling on both profiles
   - git  # Xcode CLT git is stale; brew git tracks upstream releases

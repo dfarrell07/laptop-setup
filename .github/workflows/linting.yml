@@ -29,6 +29,10 @@ jobs:
       - name: Set up CI environment
         uses: ./.github/actions/ci-setup
 
+      # The advisory database changes without code changes, so audit the lockfile in one job only.
+      - name: Audit locked dependencies for known CVEs
+        run: pip-audit -r requirements-test.lock
+
       - name: Run ansible-lint
         run: ansible-lint
 
@@ -854,7 +858,7 @@ jobs:
         env:
           ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
         run: |
-          curl -sSLO https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          curl -fsSLO --retry 3 https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
           echo "${ACTIONLINT_SHA256}  actionlint_1.7.12_linux_amd64.tar.gz" | sha256sum -c -
           tar xzf actionlint_1.7.12_linux_amd64.tar.gz actionlint
           chmod +x actionlint
@@ -870,7 +874,7 @@ jobs:
         env:
           ZIZMOR_SHA256: dd96df044a6e8538d5f423790f453bdd03d49e5b2bcc38214acc41a2f1297839
         run: |
-          curl -sSLO https://github.com/zizmorcore/zizmor/releases/download/v1.29.0/zizmor-x86_64-unknown-linux-gnu.tar.gz
+          curl -fsSLO --retry 3 https://github.com/zizmorcore/zizmor/releases/download/v1.29.0/zizmor-x86_64-unknown-linux-gnu.tar.gz
           echo "${ZIZMOR_SHA256}  zizmor-x86_64-unknown-linux-gnu.tar.gz" | sha256sum -c -
           tar xzf zizmor-x86_64-unknown-linux-gnu.tar.gz zizmor
           chmod +x zizmor
