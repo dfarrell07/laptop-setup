@@ -24,6 +24,7 @@
     - name: Yamllint present at {{ packages_yamllint_version }}
       community.general.pipx:
         executable: pipx
+        python: "{{ packages_pipx_python }}"
         name: "yamllint=={{ packages_yamllint_version }}"
         state: install
       timeout: 300
@@ -31,6 +32,7 @@
     - name: Ansible-lint present at {{ packages_ansible_lint_version }}
       community.general.pipx:
         executable: pipx
+        python: "{{ packages_pipx_python }}"
         name: "ansible-lint=={{ packages_ansible_lint_version }}"
         state: install
       timeout: 300

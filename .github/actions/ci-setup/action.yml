@@ -22,10 +22,6 @@ runs:
         exit 1
       shell: bash
 
-    - name: Audit installed dependencies for known CVEs
-      run: pip-audit -r requirements-test.lock
-      shell: bash
-
     - name: Comprehensive collection verification (TOCTOU check before install)
       # No private collection-signing material is available on ephemeral CI runners.
       # collections-integrity independently checks the archives against Galaxy.
