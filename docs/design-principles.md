@@ -37,10 +37,8 @@ what pace. `make all` means "every chunk enabled in `config.yml`", never more.
 - Defaults preserve today's behaviour: every new variable defaults to "apply everything", so CI, molecule and
   `make all` are unchanged unless the owner opts out in the gitignored `config.yml`.
 - Reuse existing concepts (`profile`, `csb_detected`, `needs_container_tier`, `is_dnf`, `is_apt`, `is_macos`).
-- Smallest mechanism that works. The first chunking design (stage counter, presets, per-subsystem gates, derived
-  state, about 1,250 lines and 63 mostly fail-open gate sites) existed mainly to make its own gates safe. It was
-  replaced by tag-skip (about 350 lines, no fail-open sites). Justify new machinery with a concrete failure it
-  prevents.
+- Smallest mechanism that works: chunking is tag-skip, with no per-subsystem gates to fail open. Justify new machinery
+  with a concrete failure it prevents.
 
 ## 4. Safety invariants
 
@@ -82,8 +80,7 @@ what pace. `make all` means "every chunk enabled in `config.yml`", never more.
 
 - Do not run provisioning (`make all`, `system`, `check`, any `--ask-become-pass` target): it needs sudo and may
   restart services or reboot. The owner runs it at the console. Read-only audits and no-sudo checks are fine.
-- Verify every agent finding before applying it; about 30 percent of FIX claims were wrong in past audits. Cheap
-  model inventory, stronger-model verdict, independent refutation, then a decision.
+- Verify every agent finding before applying it; audit agents are often wrong.
 - Audits are read-only: scratch files in the session scratchpad, no deletes unless asked, `git rm` for tracked files.
 - Prefer small, default-preserving, independently mergeable commits, each with the focused tests plus
   `make lint`, `make syntax-check`, `make test-scripts` and `make check-vars-sync`. Regenerate hash baselines
