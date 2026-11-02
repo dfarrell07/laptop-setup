@@ -1,7 +1,5 @@
 # Chunk selection
 
-<!-- markdownlint-disable MD013 -->
-
 How chunked provisioning works and how to roll it out on a managed corporate laptop (CSB). Intent and
 constraints: [design-principles.md](design-principles.md). Undo steps: [rollout-recovery.md](rollout-recovery.md).
 

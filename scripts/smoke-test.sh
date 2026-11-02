@@ -75,7 +75,7 @@ profile="work"
 grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && profile="personal"
 [[ -z "$PROFILE_OVERRIDE" ]] || profile="$PROFILE_OVERRIDE"
 _codex_enabled=true
-grep -qiE '^codex_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _codex_enabled=false
+grep -qiE '^(codex_enabled|packages_install_binaries):[[:space:]]*(false|no|off)([[:space:]]|$)|^codex_install_method:[[:space:]]*["'"'"']?skip["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _codex_enabled=false
 _init_on_free=true
 grep -qiE '^system_init_on_free:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _init_on_free=false
 _tlp_enabled=false
@@ -217,7 +217,7 @@ if [[ -x "$HOME/.krew/bin/kubectl-krew" ]]; then
   else record "krew" "FAIL" "krew installed but version failed"; fi
 else record "krew" "$_tool_absent" "not found"; fi
 if ! $_codex_enabled; then
-  record "codex" "PASS" "codex_enabled: false"
+  record "codex" "PASS" "codex install disabled in config"
 elif [[ -n "$CONTAINER" ]]; then
   record "codex" "SKIP" "host-only CLI"
 elif exec_cmd codex --version &>/dev/null; then
@@ -297,7 +297,7 @@ if $IS_LINUX && command -v podman &>/dev/null; then
   if ! $_containers_enforce_fqin; then
     record "fqin-enforcement" "PASS" "FQIN enforcement disabled (containers_enforce_fqin: false)"
   elif [[ ! -f "$HOME/.config/containers/registries.conf" ]] && [[ -f /etc/containers/registries.conf ]] && grep -qE '^unqualified-search-registries\s*=' /etc/containers/registries.conf; then
-    record "fqin-enforcement" "WARN" "system /etc/containers/registries.conf allows unqualified image names and no user-level registries.conf overrides it — 'podman pull nginx' resolves against docker.io"
+    record "fqin-enforcement" "WARN" "system /etc/containers/registries.conf allows unqualified image names and no user-level registries.conf overrides it — 'podman pull nginx' resolves against docker.io (set containers_enforce_fqin_override: true in config.yml, then make containers)"
   else
     record "fqin-enforcement" "PASS"
   fi
