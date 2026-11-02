@@ -118,7 +118,7 @@ container: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,distrobox --skip-tags become
 
 container-rebuild: guard-not-root
-	@printf 'Destroy and rebuild container $(CONTAINER)? Anything installed inside it (outside $$HOME) is lost. [y/N] '; \
+	@printf 'Destroy and rebuild the configured dev container? Anything installed inside it (outside $$HOME) is lost. [y/N] '; \
 		read -r a; [ "$$a" = y ] || [ "$$a" = Y ] || { echo "Aborted."; exit 1; }
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,distrobox -e container_replace=true --skip-tags become
 
@@ -312,7 +312,7 @@ usb-add: guard-not-root
 # new tools). aide --update exits 1-7 when it found changes; 8+ is an error.
 aide-rebaseline: guard-not-root
 	@# Review the changes aide reports before accepting them: anything listed becomes trusted.
-	sudo sh -c 'cd /var/lib/aide && aide --update; rc=$$?; \
+	sudo sh -c 'cd /var/lib/aide || exit 1; aide --update; rc=$$?; \
 		if [ $$rc -ge 8 ]; then rm -f aide.db.new.gz; echo "aide --update failed (exit $$rc); baseline unchanged" >&2; exit 1; fi; \
 		printf "Accept the changes above as the new baseline? [y/N] "; read -r a; \
 		case "$$a" in y|Y) cp -p aide.db.gz aide.db.gz.prev && mv aide.db.new.gz aide.db.gz \
