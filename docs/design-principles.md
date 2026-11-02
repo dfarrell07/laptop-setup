@@ -65,7 +65,7 @@ what pace. `make all` means "every chunk enabled in `config.yml`", never more.
   the agent (its sandbox may block sudo, `~/.ssh`, shell rc files); keep `rollout-recovery.md` accurate.
 - **Cleanups can break secondary targets.** Removing a "dead" probe broke older chrony; tests caught it. A test
   that cannot fail is worse than none: prove each new test against a deliberately broken input.
-- **Locked dependencies.** A new CVE in a locked dependency fails every CI job that audits the lock: bump only the
+- **Locked dependencies.** A new CVE in a locked dependency fails the CI job that audits the lock (Ansible Lint): bump only the
   affected pins, do not regenerate the lock on another Python version.
 
 ## 5. Public-repo hygiene
