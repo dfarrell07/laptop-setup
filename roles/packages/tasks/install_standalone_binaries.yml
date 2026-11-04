@@ -1,12 +1,12 @@
 ---
-# Standalone binary/script downloads (most are work-profile only; transcrypt installs on both profiles).
+# Standalone binary/script downloads (most are work-profile only; transcrypt and gitleaks install on both profiles).
 #
 # To add a new binary:
 #   1. Add packages_BINARY_version and packages_BINARY_sha256 to defaults/main.yml
 #   2. Use include_tasks: install_binary.yml (single binary) or install_tarball.yml (archive)
 #   3. For binaries with upstream signatures: add verification after download (see cosign pattern)
 #   4. Gate with: when: _packages_linux_x86_work (Linux x86_64 work profile) or is_linux/is_macos
-#   5. Handle CSB restriction: set csb_action/csb_ticket_* vars for fapolicyd environments
+#   5. Set csb_action (manual install instructions); it feeds the CSB ticket body and the non-CSB warning
 
 - name: Install transcrypt
   # Both profiles: the notes role (transcrypt-encrypted repo) works on any profile, and
@@ -23,10 +23,6 @@
     version_string: "{{ packages_transcrypt_version }}"
     csb_action: >-
       Install transcrypt manually from https://github.com/elasticdog/transcrypt
-    csb_ticket_summary: "Cannot download transcrypt binary on CSB"
-    csb_ticket_body: >-
-      transcrypt script could not be downloaded from github.com/elasticdog/transcrypt.
-      Install manually from https://github.com/elasticdog/transcrypt
 
 - name: Install SOPS
   when:
@@ -45,10 +41,6 @@
     version_string: "{{ packages_sops_version }}"
     csb_action: >-
       Install sops manually from https://github.com/getsops/sops/releases
-    csb_ticket_summary: "Cannot download sops binary on CSB"
-    csb_ticket_body: >-
-      sops binary could not be downloaded from github.com/getsops/sops.
-      Install manually from https://github.com/getsops/sops/releases
 
 - name: Install gitleaks (secret scanner; version pinned to match CI linting.yml)
   # No profile guard — gitleaks is useful for personal repos; macOS brew also installs it universally.
@@ -69,13 +61,8 @@
       else packages_gitleaks_sha256 }}
     version_check_cmd: /usr/local/bin/gitleaks version
     version_string: "{{ packages_gitleaks_version }}"
-    binary_in_archive: gitleaks
     csb_action: >-
       Install gitleaks manually from https://github.com/gitleaks/gitleaks/releases
-    csb_ticket_summary: "Cannot download gitleaks binary on CSB"
-    csb_ticket_body: >-
-      gitleaks binary could not be downloaded from github.com/gitleaks/gitleaks.
-      Install manually from https://github.com/gitleaks/gitleaks/releases
 
 - name: Install actionlint (GitHub Actions linter; version pinned to match CI linting.yml)
   when:
@@ -92,13 +79,8 @@
     checksum: "sha256:{{ packages_actionlint_sha256 }}"
     version_check_cmd: /usr/local/bin/actionlint --version
     version_string: "{{ packages_actionlint_version }}"
-    binary_in_archive: actionlint
     csb_action: >-
       Install actionlint manually from https://github.com/rhysd/actionlint/releases
-    csb_ticket_summary: "Cannot download actionlint binary on CSB"
-    csb_ticket_body: >-
-      actionlint binary could not be downloaded from github.com/rhysd/actionlint.
-      Install manually from https://github.com/rhysd/actionlint/releases
 
 - name: Install zizmor
   when:
@@ -115,13 +97,8 @@
     checksum: "sha256:{{ packages_zizmor_sha256 }}"
     version_check_cmd: /usr/local/bin/zizmor --version
     version_string: "{{ packages_zizmor_version }}"
-    binary_in_archive: zizmor
     csb_action: >-
       Install zizmor manually from https://github.com/zizmorcore/zizmor/releases
-    csb_ticket_summary: "Cannot download zizmor binary on CSB"
-    csb_ticket_body: >-
-      zizmor binary could not be downloaded from github.com/zizmorcore/zizmor.
-      Install manually from https://github.com/zizmorcore/zizmor/releases
 
 - name: Install operator-sdk
   when:
@@ -144,11 +121,6 @@
     csb_action: >-
       Install operator-sdk manually from
       https://github.com/operator-framework/operator-sdk/releases
-    csb_ticket_summary: "Cannot download operator-sdk binary on CSB"
-    csb_ticket_body: >-
-      operator-sdk binary could not be downloaded from
-      github.com/operator-framework/operator-sdk.
-      Install manually from https://github.com/operator-framework/operator-sdk/releases
 
 # --- Cosign pre-install self-verification (second trust root on re-provisioning) ---
 # TRUST MODEL: cosign uses Sigstore (Google OIDC keyless signing). The verification below
@@ -315,10 +287,6 @@
     download_timeout: 300
     csb_action: >-
       Install cosign manually from https://github.com/sigstore/cosign/releases
-    csb_ticket_summary: "Cannot download cosign binary on CSB"
-    csb_ticket_body: >-
-      cosign binary could not be downloaded from github.com/sigstore/cosign.
-      Install manually from https://github.com/sigstore/cosign/releases
 
 - name: Install tkn (Tekton CLI for Konflux pipeline inspection)
   # VERIFICATION: NOT IMPLEMENTED. tektoncd/cli releases provide only checksums.txt
@@ -345,13 +313,8 @@
     version_check_cmd: /usr/local/bin/tkn version --component=client
     version_string: "{{ packages_tkn_version }}"
     download_timeout: 300
-    binary_in_archive: tkn
     csb_action: >-
       Install tkn manually from https://github.com/tektoncd/cli/releases
-    csb_ticket_summary: "Cannot download tkn binary on CSB"
-    csb_ticket_body: >-
-      tkn (Tekton CLI) binary could not be downloaded from github.com/tektoncd/cli.
-      Install manually from https://github.com/tektoncd/cli/releases
 
 - name: Install ec CLI (Enterprise Contract policy enforcement for Konflux releases)
   # VERIFICATION: NOT IMPLEMENTED. ec-cli moved from github.com/enterprise-contract/ec-cli
@@ -381,7 +344,3 @@
     download_timeout: 300
     csb_action: >-
       Install ec manually from https://github.com/conforma/cli/releases
-    csb_ticket_summary: "Cannot download ec binary on CSB"
-    csb_ticket_body: >-
-      ec (Enterprise Contract CLI) binary could not be downloaded from github.com/conforma/cli.
-      Install manually from https://github.com/conforma/cli/releases

@@ -208,7 +208,7 @@ set -e
 _ur_gh=$(cat "$_UR_GH_LOG")
 rm -rf "$_UR_TMPBIN" "$_UR_TMPHOME" "$_UR_PATCHED" "$_UR_GH_LOG"
 assert_contains "unknown repo: issue marked failed" "issue edit 8 --repo test/q --remove-label processing --remove-label queued --add-label failed" "$_ur_gh"
-assert_contains "unknown repo: comment names the repo" 'Unknown repo: `nosuchrepo`' "$_ur_gh"
+assert_contains "unknown repo: comment names the repo" 'Unknown or incomplete repo: `nosuchrepo`' "$_ur_gh"
 
 # --- Integration: main while-loop processes a queued issue end-to-end ---
 _INT_TMPBIN=$(mktemp -d)

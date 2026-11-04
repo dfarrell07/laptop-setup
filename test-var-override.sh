@@ -32,6 +32,7 @@ bypass_cases=(
   '--skip-tags= always' '--skip-tags=packages, always ,dotfiles'
   '-erollout_enable=all' '-e_rollout_disabled=[]' '--extra-vars=rollout_catalog={}'
   '-vecsb_rhel=true' '-vvecommon_project_root=/x' '-Ke_pf_vault_asserted=true' '-verollout_enable=all'
+  '-e=@/x.yml' '-e={"\x63sb_rhel":true}' '-ve=@/x' '-ve{"\x63sb_rhel":true}'
 )
 for flag in "${bypass_cases[@]}"; do
   if scripts/verify-ansible-args.sh true "$flag" >/dev/null 2>&1; then
@@ -54,6 +55,16 @@ done
 for cluster in -ve -vve -Ke; do
   if scripts/verify-ansible-args.sh true "$cluster" 'csb_rhel=true' >/dev/null 2>&1; then
     echo "FAIL: wrapper accepted $cluster csb_rhel=true" >&2
+    exit 1
+  fi
+  if scripts/verify-ansible-args.sh true "$cluster" '{"\x63sb_rhel":true}' >/dev/null 2>&1; then
+    echo "FAIL: wrapper accepted $cluster with escaped structured value" >&2
+    exit 1
+  fi
+done
+for bare in --vault-password-file --vault-id --vault-pass-file; do
+  if scripts/verify-ansible-args.sh true "$bare" x >/dev/null 2>&1; then
+    echo "FAIL: wrapper accepted bare $bare" >&2
     exit 1
   fi
 done

@@ -247,7 +247,7 @@
             - name: Extract opm binary
               ansible.builtin.unarchive:
                 src: "{{ packages_opm_download.dest }}"
-                dest: /usr/local/bin
+                dest: "{{ packages_opm_tempdir.path }}"
                 remote_src: true
                 extra_opts:
                   - --no-same-owner
@@ -257,7 +257,7 @@
 
             - name: Copy opm binary to /usr/local/bin/opm
               ansible.builtin.copy:
-                src: /usr/local/bin/{{ packages_opm_binary_name }}
+                src: "{{ packages_opm_tempdir.path }}/{{ packages_opm_binary_name }}"
                 dest: /usr/local/bin/opm
                 remote_src: true
                 mode: '0755'
@@ -288,14 +288,6 @@
           when: packages_opm_tempdir is defined
           become: true
           tags: [become]
-
-        - name: Remove source opm binary artifact (safety cleanup)
-          ansible.builtin.file:
-            path: /usr/local/bin/{{ packages_opm_binary_name }}
-            state: absent
-          become: true
-          tags: [become]
-          when: packages_opm_download is defined
 
   rescue:
     - name: Record opm download failure (CSB)

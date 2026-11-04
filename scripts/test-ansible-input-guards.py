@@ -142,7 +142,7 @@ class InputGuardTests(unittest.TestCase):
         tasks = yaml.safe_load((ROOT / 'roles/ssh/tasks/main.yml').read_text())
         block = next(t['block'] for t in tasks if t.get('name', '').startswith('Validate existing authorized_keys'))
         # Execute the production parser and assertions with slurped fixture data.
-        checks = block[1:]
+        checks = block
         cases = [
             ('ssh-ed25519 AAAA comment\n', True),
             ('sk-ssh-ed25519@openssh.com AAAA comment\n', True),
@@ -160,12 +160,12 @@ class InputGuardTests(unittest.TestCase):
                 expected = accepted or (not over_ssh and content != 'malformed entry\n')
                 with self.subTest(content=content, over_ssh=over_ssh):
                     self.check(checks, {
-                        '_existing_authkeys': {'content': base64.b64encode(content.encode()).decode()},
+                        '_authkeys_slurp': {'content': base64.b64encode(content.encode()).decode()},
                         'ssh_pubkey_accepted_algorithms': ['ssh-ed25519', 'sk-ssh-ed25519@openssh.com'],
                     }, expected, SSH_ENV if over_ssh else None)
 
     def test_go_checksum_server(self):
-        task = guard('roles/packages/tasks/install_go_tools.yml', '(2/3)')
+        task = guard('roles/packages/tasks/install_go_tools.yml', '(1/2)')
         valid = ['sum.golang.org', 'sum.corp.com:443', '1sum.example.com', 'sum.1corp.example.com:65535']
         invalid = ['off', '', 'localhost', 'localhost:443', '127.0.0.1', '127.0.0.1:443',
                    'sum.corp.com:0', 'sum.corp.com:65536', 'sum.-corp.com', 'sum.corp.com/path', 'sum.golang.org\n', 123]

@@ -61,7 +61,7 @@ class SysctlTemplateTests(unittest.TestCase):
                                 'ansible.builtin.set_fact': {'system_core_pattern': INJECTED_CORE_PATTERN}},
                                {'name': 'Resolve the merged production policy',
                                 'ansible.builtin.set_fact': {'system_sysctl_hardening':
-                                    '{{ system_sysctl_hardening | combine(_system_sysctl_work_defaults) | combine(_system_sysctl_performance_defaults) | combine({"kernel.core_pattern": system_core_pattern, "kernel.modules_disabled": system_modules_disabled | int}) }}'}},
+                                    '{{ system_sysctl_hardening | combine(_system_sysctl_work_defaults) | combine(_system_sysctl_performance_defaults) | combine({"kernel.core_pattern": system_core_pattern}) }}'}},
                                {'name': 'Render complete production sysctl template',
                                 'ansible.builtin.template': {
                                     'src': str(ROOT / 'roles/system/templates/sysctl-hardening.conf.j2'),
@@ -76,8 +76,6 @@ class SysctlTemplateTests(unittest.TestCase):
                 capture_output=True, text=True, timeout=60)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             expected = json.loads((output / 'expected.json').read_text())
-            # The one-way module lock belongs to the ordered service, not early sysctl.
-            expected.pop('kernel.modules_disabled', None)
             assignments = {}
             for line in (output / 'sysctl.conf').read_text().splitlines():
                 if not line.strip() or line.lstrip().startswith('#'):

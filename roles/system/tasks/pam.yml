@@ -18,12 +18,14 @@
 #     are detected so the operator knows to close them and log in fresh under the new PAM stack.
 
 # --- PAM faillock (account lockout after failed attempts) ---
-- name: Configure pam_faillock value settings
+- name: Configure pam_faillock settings
   community.general.ini_file:
     path: /etc/security/faillock.conf
     section: null
     option: "{{ item.key }}"
-    value: "{{ item.value }}"
+    value: "{{ item.value | default(omit) }}"
+    state: "{{ item.state | default('present') }}"
+    allow_no_value: "{{ item.value is not defined }}"  # true with a value re-adds a bare key on reruns
     no_extra_spaces: true
     mode: "0644"
   loop:
@@ -31,50 +33,17 @@
       value: "{{ system_faillock_deny }}"
     - key: unlock_time
       value: "{{ system_faillock_unlock_time }}"
+    - key: audit
+      state: "{{ 'present' if system_faillock_audit | bool else 'absent' }}"
+    - key: local_users_only  # prevent double-lockout with SSSD/IPA domain users
+      state: "{{ 'present' if system_faillock_local_users_only | bool else 'absent' }}"
+    - key: even_deny_root
+      state: "{{ 'present' if system_faillock_even_deny_root | bool else 'absent' }}"
   loop_control:
     label: "{{ item.key }}"
   when:
     - not csb_rhel
     - not system_is_container  # /etc/security/ writes trigger PAM re-evaluation; crashes Debian 13 container PID 1
-
-- name: Set pam_faillock audit flag
-  community.general.ini_file:
-    path: /etc/security/faillock.conf
-    section: null
-    option: audit
-    state: "{{ 'present' if system_faillock_audit | bool else 'absent' }}"
-    allow_no_value: true
-    no_extra_spaces: true
-    mode: "0644"
-  when:
-    - not csb_rhel
-    - not system_is_container
-
-- name: Set pam_faillock local_users_only flag
-  community.general.ini_file:
-    path: /etc/security/faillock.conf
-    section: null
-    option: local_users_only  # prevent double-lockout with SSSD/IPA domain users
-    state: "{{ 'present' if system_faillock_local_users_only | bool else 'absent' }}"
-    allow_no_value: true
-    no_extra_spaces: true
-    mode: "0644"
-  when:
-    - not csb_rhel
-    - not system_is_container
-
-- name: Set pam_faillock even_deny_root flag
-  community.general.ini_file:
-    path: /etc/security/faillock.conf
-    section: null
-    option: even_deny_root
-    state: "{{ 'present' if system_faillock_even_deny_root | bool else 'absent' }}"
-    allow_no_value: true
-    no_extra_spaces: true
-    mode: "0644"
-  when:
-    - not csb_rhel
-    - not system_is_container
 
 - name: Check if authselect with-faillock feature is already enabled
   ansible.builtin.command:
@@ -487,28 +456,21 @@
     - _pam_pwhistory_control_flag_check.rc | default(0) != 0
     - _pam_pwhistory_control_flag_check is not skipped
 
-- name: Configure pam_pwhistory remember count (CIS 5.3.5)
+- name: Configure pam_pwhistory (CIS 5.3.5)
   community.general.ini_file:
     path: /etc/security/pwhistory.conf
     section: null
-    option: remember
-    value: "{{ system_pwhistory_remember | int }}"
+    option: "{{ item.key }}"
+    value: "{{ item.value | default(omit) }}"
+    allow_no_value: "{{ item.value is not defined }}"  # true with a value re-adds a bare key on reruns
     no_extra_spaces: true
     mode: "0644"
-  when:
-    - (system_authselect_bin.stat | default({})).exists | default(false)
-    - not csb_rhel
-    - not system_is_container
-    - not is_apt
-
-- name: Enforce pam_pwhistory for root (CIS 5.3.5)
-  community.general.ini_file:
-    path: /etc/security/pwhistory.conf
-    section: null
-    option: enforce_for_root
-    allow_no_value: true
-    no_extra_spaces: true
-    mode: "0644"
+  loop:
+    - key: remember
+      value: "{{ system_pwhistory_remember | int }}"
+    - key: enforce_for_root
+  loop_control:
+    label: "{{ item.key }}"
   when:
     - (system_authselect_bin.stat | default({})).exists | default(false)
     - not csb_rhel
@@ -521,7 +483,8 @@
     path: /etc/security/pwquality.conf
     section: null
     option: "{{ item.key }}"
-    value: "{{ item.value }}"
+    value: "{{ item.value | default(omit) }}"
+    allow_no_value: "{{ item.value is not defined }}"  # true with a value re-adds a bare key on reruns
     no_extra_spaces: true
     mode: "0644"
   loop:
@@ -541,20 +504,9 @@
       value: "{{ system_pwquality_maxrepeat | int }}"
     - key: maxsequence
       value: "{{ system_pwquality_maxsequence | int }}"
+    - key: enforce_for_root
   loop_control:
     label: "{{ item.key }}"
-  when:
-    - not csb_rhel
-    - not system_is_container
-
-- name: Enforce pwquality for root (CIS 5.3.4)
-  community.general.ini_file:
-    path: /etc/security/pwquality.conf
-    section: null
-    option: enforce_for_root
-    allow_no_value: true
-    no_extra_spaces: true
-    mode: "0644"
   when:
     - not csb_rhel
     - not system_is_container

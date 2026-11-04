@@ -19,7 +19,8 @@ desktop_environment: CHANGE_ME  # Linux: sway/i3/gnome; macOS: aerospace; set ex
 #
 # !unsafe: Ansible loads config.yml with trusted_as_template=True, so a Jinja2 expression ({{ ... }}) in a
 # string runs as a template (SSTI risk). !unsafe marks a value as plain data; plain names, emails and paths
-# do not need it. The preflight scan rejects {{ and {% even in !unsafe values.
+# do not need it. The SSTI guard (common/tasks/config_ssti_guard.yml) rejects {{ and {% even in !unsafe values at play start;
+# make preflight does not check this.
 dotfiles_github_user: !unsafe 'CHANGE_ME'
 dotfiles_user_name: !unsafe 'CHANGE_ME'
 dotfiles_user_email_work: !unsafe 'CHANGE_ME'
@@ -152,10 +153,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #                                        (value 1 is suppressed by the kernel when system_enable_ip_forward is true, the default)
 #   system_bpf_jit_harden: 1           (group_vars/all/vars.yml) — BPF JIT hardening (1=unprivileged only, default here;
 #                                        2=all incl root for strict CIS/STIG but breaks bpftool prog dump jited)
-#   system_unprivileged_bpf_disabled: 2 (group_vars/all/vars.yml) — unprivileged BPF block (1=block non-root, root can re-enable;
-#                                        2=write-once locked, even root cannot re-enable; 0=allow all;
-#                                        NOTE: on stock Fedora 44 (BPF_UNPRIV_DEFAULT_OFF=y) only 0 and 2 are
-#                                        effective — value 1 requires a custom kernel with CONFIG_BPF_UNPRIV_DEFAULT_OFF=n)
+#   system_unprivileged_bpf_disabled: 2 (group_vars/all/vars.yml) — unprivileged BPF block (1=block non-root, locked until reboot;
+#                                        2=block non-root, root can still write 0/1 (Fedora default); 0=allow all)
 #   system_sysctl_extra: <profile-conditional>  (roles/system/defaults) — work profile default:
 #                                        {net.netfilter.nf_conntrack_max: 524288, net.core.rmem_max: 16777216,
 #                                        net.core.wmem_max: 16777216, net.bridge.bridge-nf-call-iptables: 1,
@@ -285,7 +284,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #                                        system_sysctl_hardening); it is hardening-critical and cannot be overridden
 #                                        via system_sysctl_extra or system_sysctl_extra_additional.
 #   system_coredump_process_size_max: 2G  (roles/system/defaults) — max core dump size; 0 disables collection;
-#                                           2G matches systemd upstream default
+#                                           2G is a custom limit (upstream default 32G)
 #   system_core_pattern: "|/usr/lib/systemd/systemd-coredump ..."  (roles/system/defaults) — kernel core_pattern sysctl;
 #                                        config.yml overrides must be plain paths (pipes are rejected); to discard dumps
 #                                        use system_coredump_storage: none
@@ -304,8 +303,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   system_pass_min_days: 1               (group_vars/all/vars.yml) — login.defs PASS_MIN_DAYS; minimum days between changes
 #   system_pass_warn_age: 7               (group_vars/all/vars.yml) — login.defs PASS_WARN_AGE; days warning before expiry
 #   system_umask: "027"                   (group_vars/all/vars.yml) — login.defs UMASK; set 022 to allow group reads
-#   system_inactive_days: 30              (group_vars/all/vars.yml) — days inactive before account lock (/etc/default/useradd INACTIVE,
-#                                           useradd -D -f, chage -I); CIS 5.5.1.5
+#   system_inactive_days: 30              (group_vars/all/vars.yml) — days inactive before account lock (/etc/default/useradd INACTIVE
+#                                           and chage -I for the existing user); CIS 5.5.1.5
 #   system_gid0_allowed_accounts: [root, sync, shutdown, halt, operator]  (roles/system/defaults) — accounts exempt from
 #                                           the CIS 6.2.x GID-0 primary-group assert; add custom service accounts here
 #                                           if they legitimately use GID 0
@@ -328,15 +327,14 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #                                        overriding containers_registries
 #                                        (login-status check only; pulls need containers_policy_unsigned_registries)
 #   containers_enforce_fqin: true  (roles/containers/defaults) — set false only if short image names are required (smoke-test honours it)
-#   containers_enforce_fqin_override: false  (roles/containers/defaults) — set true to deploy user-level
-#                                        registries.conf (unqualified-search-registries=[]) even when
-#                                        /etc/containers/registries.conf already exists. By default the
-#                                        role skips FQIN enforcement when a system-level file is present
-#                                        to avoid breaking IT-managed corporate registry short-name pulls.
+#   containers_enforce_fqin_override: false  (roles/containers/defaults) — set true to deploy the user-level
+#                                        registries.conf.d/50-fqin.conf drop-in (unqualified-search-registries=[])
+#                                        even when /etc/containers/registries.conf already exists; by default the
+#                                        role skips it so IT-managed corporate registry short-name pulls keep
+#                                        working, and prints IT's unqualified-search-registries instead.
 #                                        On hybrid CSB Fedora machines the system file is the stock OS
-#                                        default (not IT-managed), so this override is safe. Verify first:
+#                                        default (not IT-managed), so enforcing is safe. Verify first:
 #                                          grep unqualified /etc/containers/registries.conf
-#                                        If the output is non-empty, set this to true in config.yml.
 #   desktop_sway_hidpi_scale: "1.0"    (roles/desktop/defaults) — override for HiDPI (e.g. "1.5" for 2560x1600)
 #   desktop_sway_cursor_size: 24       (roles/desktop/defaults) — computed as
 #                                        (24 * desktop_sway_hidpi_scale | float) | int (24 at scale 1.0, 36 at 1.5);
@@ -345,8 +343,10 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   desktop_sway_libva_driver: ""       (roles/desktop/defaults) — VA-API driver; "" = auto-detect; radeonsi (AMD) or iHD (Intel)
 #   desktop_sway_xwayland: ''           (roles/desktop/defaults) — '' = on (default); "disable" = pure-Wayland (breaks XWayland apps)
 #   desktop_wm_idle_lock_timeout: 300  (roles/desktop/defaults) — idle seconds before lock; avoid 0 (Sway: at once; i3: 1 min)
+#     (i3: applied only when ~/.config/i3/config is first seeded; delete it and re-run make desktop to re-seed)
 #   desktop_wm_idle_display_timeout: 600  (roles/desktop/defaults) — seconds idle before display off
 #   desktop_wm_lock_color: "000000"  (roles/desktop/defaults) — screen lock background hex color (no #) — swaylock (Sway) and i3lock (i3)
+#     (i3: applied only when ~/.config/i3/config is first seeded; delete it and re-run make desktop to re-seed)
 #   desktop_sway_keyboard_layout: ''   (roles/desktop/defaults) — XKB layout; empty = sway/XKB default (e.g. us, de, fr)
 #   desktop_sway_keyboard_variant: ''   (roles/desktop/defaults) — XKB variant (e.g. 'intl', 'altgr-intl'); empty = none
 #   desktop_sway_keyboard_options: ''   (roles/desktop/defaults) — XKB options (e.g. 'caps:escape', 'ctrl:nocaps'); empty = none
@@ -384,6 +384,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #                                        desktop_wm_border_width
 #   desktop_wm_hide_edge_borders: ''       (roles/desktop/defaults) — hide edge borders; empty = omit
 #                                        (sway/i3 default: none); both/vertical/horizontal/smart/smart_no_gaps
+#     (i3: applied only when ~/.config/i3/config is first seeded; delete it and re-run make desktop to re-seed)
 #   desktop_sway_focus_follows_mouse: ''  (roles/desktop/defaults) — empty omits directive, set yes/no/always to override
 #   desktop_terminal: per-OS             (roles/desktop/defaults) — default: ghostty on macOS, alacritty on Linux
 #   desktop_gtk_theme: Adwaita-dark    (roles/desktop/defaults) — GTK theme for Sway (written to gtk-3.0/4.0 settings.ini)
@@ -392,8 +393,9 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   desktop_alacritty_font_size: 12.0   (roles/desktop/defaults) — Alacritty font size
 #   desktop_wm_font_family: "DejaVu Sans Mono"  (roles/desktop/defaults) — WM status-bar font
 #   desktop_wm_font_size: 10            (roles/desktop/defaults) — WM status-bar font size
-#   desktop_alacritty_color_bg / _fg / _normal_* / _bright_*  (roles/desktop/defaults) — Catppuccin Mocha terminal
+#   desktop_alacritty_color_bg / _fg / _normal_* / _bright_black / _bright_white  (roles/desktop/defaults) — Catppuccin Mocha terminal
 #     palette (bg #1e1e2e, fg #cdd6f4); override individual keys in config.yml to switch themes
+#     (other bright slots reuse the normal_* values)
 #   system_lid_switch: suspend         (roles/system/defaults) — action on lid close (suspend/lock/ignore)
 #   system_lid_switch_external: lock   (roles/system/defaults) — lid close action when external monitor connected
 #   system_lid_switch_docked: ignore   (roles/system/defaults) — lid close action when docked (ignore keeps display on)
@@ -402,16 +404,18 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     set true to fetch upstream with --ff-only (done automatically by `make update`)
 #   git_repos_work_categories: [personal, bpfman, ...]     (roles/git_repos/defaults) — repo categories cloned on work profile
 #   git_repos_personal_categories: [personal, ovnk]        (roles/git_repos/defaults) — repo categories cloned on personal profile;
-#     this list replaces (not appends to) the default — dropping ovnk here removes OVN-K repo clones on personal profile
-#   git_repos_vpn_check_host: ''  (roles/git_repos/defaults) — set to internal GitLab FQDN to enable
-#     VPN pre-check before cloning downstream/konflux repos
+#     this list replaces (not appends to) the default — dropping ovnk here stops cloning OVN-K repos
+#     on personal profile (existing clones are left alone)
+#   git_repos_vpn_check_host: ''  (roles/git_repos/defaults) — set to the internal Git host FQDN to enable a reachability pre-check;
+#     repos on that host (any category) are skipped for the run when it is unreachable
 #   notes_enabled: false               (roles/notes/defaults) — opt-in: set true in config.yml
 #     opt-in: requires a GitHub repo named notes_repo_name (default 'notes') under dotfiles_github_user (or override
 #     notes_remote_url / notes_remote_url_https); cloned over SSH, then HTTPS fallback (private repos need gh auth)
 #   claude_install_method: native      (roles/claude/defaults) — native (default) or skip
 #     (bypasses install; useful for CI/testing or machines where Claude should not be installed)
-#   claude_pinned_version: ""           (roles/claude/defaults) — minimum Claude version (e.g. "1.0.3"); REQUIRED when
-#     claude_install_sha256 is set (native install); empty only with claude_install_method: skip
+#   claude_pinned_version: ""           (roles/claude/defaults) — minimum Claude version (e.g. "1.0.3"); REQUIRED for a
+#     native install with binary downloads on (same as claude_install_sha256); may be empty with claude_install_method: skip
+#     or packages_install_binaries: false
 #   claude_install_sha256: ""           (roles/claude/defaults) — REQUIRED for fresh installs; SHA256 of the installer script.
 #     Provisioning hard-fails when unset (native method, binary downloads on), even if Claude is already installed. Fetch with:
 #       curl -fsSL https://claude.ai/install.sh -o /tmp/claude-install.sh && sha256sum /tmp/claude-install.sh
@@ -434,7 +438,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     all project-local MCP servers; false = prompt per server (more secure)
 #   distrobox_enabled: true               (roles/distrobox/defaults) — set false to skip
 #     container creation and Play 3 entirely (Linux users who do not want a dev container)
-#   distrobox_use_host_network: false     (roles/distrobox/defaults) — true shares the host network + CAP_NET_ADMIN (OVN-K/bpfman only)
+#   distrobox_use_host_network: false     (roles/distrobox/defaults) — true shares the host network (OVN-K/bpfman only)
 #   Dotfiles / shell preferences (roles/dotfiles/defaults) — override in config.yml:
 #   dotfiles_oh_my_zsh_theme: gallois     — oh-my-zsh theme name
 #   dotfiles_oh_my_zsh_plugins: [git, kubectl, forgit, python, history-substring-search]  — oh-my-zsh plugin list
@@ -462,7 +466,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     only; ssh client uses a capability-detected list in ssh_config.j2 (dotfiles_ssh_kex_pq_enabled)
 #   ssh_host_key_algorithms: ssh-ed25519  (group_vars/all/vars.yml) — HostKeyAlgorithms for sshd;
 #     override to add ecdsa-sha2-nistp256 for servers that do not offer ed25519 host keys
-#   ssh_signing_key_basename: id_ed25519_sk_signing  — basename of the SSH signing key files (no extension)
+#   ssh_signing_key_basename: id_ed25519_sk_signing  (group_vars/all/vars.yml) — basename of the SSH signing key files
+#     (no extension); keep the default: scripts/smoke-test.sh checks this fixed name
 #   dotfiles_ssh_hardware_key_basename: id_ed25519_sk  — YubiKey auth key stub basename (no extension)
 #   dotfiles_ssh_redhat_key_basename: id_rsa_redhat    — Red Hat internal git key basename (no extension)
 #   dotfiles_gonosumdb: ""   — GONOSUMDB for internal Go modules (default: ""; e.g. "*.example.internal")
@@ -480,9 +485,9 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     in .envrc; upstream default false; set false if .envrc uses unset vars
 #   dotfiles_direnv_disable_stdin: true  (roles/dotfiles/defaults) — block stdin
 #     in .envrc; upstream default false; set false if .envrc needs stdin
-#   ssh_git_signing_pubkey: ""            (group_vars/all/vars.yml) — SSH public key for git commit signing.
+#   ssh_signing_key_pub: ""               (group_vars/all/vars.yml) — SSH public key for git commit signing.
 #     Vault-backed: set vault_ssh_signing_key_pub in group_vars/all/vault.yml; do NOT set
-#     ssh_git_signing_pubkey in config.yml (include_vars precedence 18 would shadow the vault value).
+#     ssh_signing_key_pub in config.yml (include_vars precedence 18 would shadow the vault value).
 #   Binary version pins (roles/packages/defaults and roles/distrobox/defaults) — override in config.yml:
 #     packages_kind_version, packages_helm_version, packages_kustomize_version, packages_oc_version,
 #     packages_k9s_version, packages_transcrypt_version, packages_sops_version, packages_gitleaks_version,
@@ -492,7 +497,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     packages_govulncheck_version, packages_gci_version, packages_gopls_version,
 #     packages_controller_gen_version, packages_stern_version, packages_code_generator_version,
 #     packages_subctl_version, packages_aerospace_version, packages_krew_bootstrap_version,
-#     packages_krew_plugin_ctx_version, packages_krew_plugin_ns_version, and others in
+#     packages_kubectx_version, and others in
 #     roles/packages/defaults/main.yml; distrobox_oc_version, distrobox_golangci_lint_version
 #     in roles/distrobox/defaults/main.yml.
 #     SECURITY: All version strings must be semantic versioning only (e.g. "1.2.3" or "1.2.3-beta").

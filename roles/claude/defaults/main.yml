@@ -11,7 +11,7 @@ claude_install_method: native  # native (recommended) or skip (CI/testing — by
 claude_install_url: "https://claude.ai/install.sh"  # Fetches latest at provision time; post-install upgrades use `claude update`
 # SECURITY: SHA256 integrity verification is MANDATORY — set in config.yml before make all
 claude_install_sha256: ""
-claude_pinned_version: ""  # minimum version; REQUIRED when claude_install_sha256 is set (native), e.g. "1.0.3"
+claude_pinned_version: ""  # minimum version; REQUIRED for native install with packages_install_binaries on (like the sha256), e.g. "1.0.3"
 claude_bin_path: "{{ ansible_facts['user_dir'] }}/.local/bin/claude"
 claude_queue_poller_path: "{{ ansible_facts['user_dir'] }}/.local/bin/claude-queue-poller.sh"
 
@@ -28,13 +28,8 @@ claude_telemetry_env:
   # Do NOT set DISABLE_TELEMETRY — breaks feature flags (extended context window models)
   # Do NOT set CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC — same + disables updater
 
-# Keys must match Claude settings.json camelCase format — do NOT convert to snake_case
-claude_sandbox_config:
-  enabled: true
-  allowUnsandboxedCommands: false
-  failIfUnavailable: true
-# The weaker nested sandbox is added by settings-policy.json.j2 only when this instance runs inside a
-# container (system_is_container, distrobox, CSB container tier); it is false on normal hosts.
+# settings-policy.json.j2 always writes sandbox.enableWeakerNestedSandbox; its value is true only when this instance runs inside a
+# container (system_is_container, distrobox, CSB container tier) and false on normal hosts.
 claude_nested_sandbox: "{{ (system_is_container | default(false)) or (needs_container_tier | default('host-only')) == 'container' }}"
 
 # Seed-only user preferences; CLI edits remain user-owned.
@@ -70,7 +65,7 @@ claude_enable_all_project_mcp_servers: false  # true = auto-trust all project-lo
 claude_queue_enabled: false
 claude_queue_allowed_authors: []  # GitHub logins allowed to trigger queue; MUST set when enabled — empty makes the poller refuse to run
 claude_log_dir: "{{ ansible_facts['user_dir'] }}/.local/state/claude/logs"
-claude_queue_runtime_config_dir: "{{ ansible_facts['user_dir'] }}/.config/claude"
+claude_runtime_config_dir: "{{ ansible_facts['user_dir'] }}/.config/claude"
 claude_queue_repo: ""
 claude_queue_poll_interval_sec: 120
 claude_queue_boot_delay_sec: 60

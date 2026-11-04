@@ -33,8 +33,11 @@ LINTING_CI_FILE = REPO_ROOT / ".github/workflows/linting.yml"
 # Cross-role mirror: vars.yml is authoritative; these role defaults must match.
 # Checked so standalone molecule invocations use the same defaults as full playbook runs.
 CROSS_ROLE_MIRROR_KEYS = {
-    # Standalone ssh role invocation needs the same accepted-algorithms list.
-    "ssh_pubkey_accepted_algorithms": [REPO_ROOT / "roles/ssh/defaults/main.yml"],
+    # Standalone ssh and system role invocations need the same accepted-algorithms list.
+    "ssh_pubkey_accepted_algorithms": [
+        REPO_ROOT / "roles/ssh/defaults/main.yml",
+        REPO_ROOT / "roles/system/defaults/main.yml",
+    ],
     "profile": [
         REPO_ROOT / "roles/claude/defaults/main.yml",
         REPO_ROOT / "roles/dotfiles/defaults/main.yml",
@@ -161,7 +164,6 @@ CROSS_ROLE_MIRROR_KEYS = {
     ],
     "csb_rhel": [
         REPO_ROOT / "roles/claude/defaults/main.yml",
-        REPO_ROOT / "roles/distrobox/defaults/main.yml",
         REPO_ROOT / "roles/packages/defaults/main.yml",
         REPO_ROOT / "roles/redhat/defaults/main.yml",
         REPO_ROOT / "roles/repos_dnf/defaults/main.yml",

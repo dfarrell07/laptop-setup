@@ -270,6 +270,8 @@
 
 - name: "Service masking"
   ansible.builtin.import_tasks: service_masking.yml
+  # RHEL CSB: IT manages these units; mask/stop/daemon-reload crash privileged Podman/Debian containers
+  when: [not csb_rhel, not system_is_container]
   tags: [sys_baseline]
 
 - name: "Logind configuration"
@@ -300,7 +302,7 @@
       - system_ssh_extra_allow_users | default([]) is not string
       - >-
         system_ssh_extra_allow_users | default([])
-        | map('string') | select()
+        | map('string')
         | reject('match', '^[a-z_][a-z0-9_.@-]{0,31}$') | list | length == 0
     fail_msg: >-
       SECURITY: system_ssh_extra_allow_users contains an invalid entry.

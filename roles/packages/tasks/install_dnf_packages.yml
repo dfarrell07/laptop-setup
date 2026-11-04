@@ -19,11 +19,7 @@
              + (packages_security_rhel if ansible_distribution != 'Fedora' else [])
              + packages_containers
              + (packages_containers_work if profile == 'work' else [])
-             + (packages_containers_kubectl
-                if (profile != 'work'
-                    or ansible_facts['architecture'] != 'x86_64'
-                    or not (packages_install_binaries | bool))
-                else [])
+             + (packages_containers_kubectl if not _packages_linux_x86_work else [])
              + (packages_networking | reject('equalto', 'tailscale') | list
                 if not repo_tailscale else packages_networking)
              + (packages_networking_work if profile == 'work' else [])
@@ -109,7 +105,8 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(300) }}.
           Fix the cause (network, repo access, a package name) and re-run make packages.
           On RHEL/Rocky, gh and tailscale come from repos added by the repos_dnf chunk: apply it first
-          (make chunk-repos_dnf), or set repo_gh_cli / repo_tailscale to false in config.yml.
+          (make chunk-repos_dnf), or set repo_gh_cli / repo_tailscale to false in config.yml and
+          list gh / tailscale in packages_extra_dnf if you still want them.
       when: not csb_rhel
 
 # OVS/OVN units are masked by the system role (service_masking.yml); masking works before the

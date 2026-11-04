@@ -1,10 +1,10 @@
 ---
 # roles/containers/tasks/main.yml
-# Podman/Docker config, registry auth.
+# Podman user config: image pull policy, FQIN drop-in, containers.conf, podman.socket, environment.d, vault registry auth.
 
-# Flush handlers so update-ca-trust runs before registry auth checks.
+# Flush handlers so update-ca-trust runs before registry auth and container registry use.
 # The redhat role notifies Update CA trust; without flushing here it
-# would fire at the end of the play — after container registry operations.
+# would fire at the end of the play, after registry logins and image pulls (distrobox).
 - name: Flush handlers before container registry auth
   ansible.builtin.meta: flush_handlers
 
@@ -277,10 +277,8 @@
     backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
   when: is_linux
 
-# SECURITY: Deploy registries.conf to enforce fully-qualified image references.
-# Clears unqualified-search-registries so `podman pull nginx` (short/unqualified name)
-# fails rather than silently querying docker.io where namespace squatting can deliver
-# a malicious image. Users must use full names (e.g. docker.io/library/nginx).
+# SECURITY: clear unqualified-search-registries so short names fail instead of resolving to docker.io
+# (rationale: containers_enforce_fqin in defaults).
 - name: Stat system-level registries.conf (preserve existing IT-managed policies)
   ansible.builtin.stat:
     path: /etc/containers/registries.conf
@@ -298,49 +296,87 @@
     - is_linux
     - containers_registries_system_stat.stat.exists | default(false)
 
-- name: Deploy registries.conf to enforce fully-qualified image references
-  ansible.builtin.template:
-    src: registries.conf.j2
-    dest: "{{ containers_config_dir }}/registries.conf"
-    mode: "0644"
-    backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
+- name: Set FQIN drop-in deployment fact
+  ansible.builtin.set_fact:
+    _containers_fqin_deploy: >-
+      {{ (containers_enforce_fqin | bool)
+         and (not (containers_registries_system_stat.stat.exists | default(false))
+              or (containers_enforce_fqin_override | bool)) }}
+  when: is_linux
+
+- name: Create user registries.conf.d directory
+  ansible.builtin.file:
+    path: "{{ containers_config_dir }}/registries.conf.d"
+    state: directory
+    mode: "0700"
   when:
     - is_linux
-    - containers_enforce_fqin | bool
-    - not (containers_registries_system_stat.stat.exists | default(false))
-      or (containers_enforce_fqin_override | bool)
+    - _containers_fqin_deploy | bool
+
+- name: Deploy registries.conf.d drop-in to enforce fully-qualified image references
+  ansible.builtin.template:
+    src: registries.conf.j2
+    dest: "{{ containers_config_dir }}/registries.conf.d/50-fqin.conf"
+    mode: "0644"
+  when:
+    - is_linux
+    - _containers_fqin_deploy | bool
 
 - name: Warn when system-level registries.conf skips FQIN enforcement
   ansible.builtin.debug:
-    # NOTE: user-level registries.conf TAKES PRECEDENCE over the system-level file
-    # (Podman uses ~/.config/containers/registries.conf if it exists, otherwise falls
-    # back to /etc/containers/registries.conf — they are mutually exclusive, not merged).
-    # We intentionally do NOT deploy user-level FQIN enforcement here because overriding
-    # IT's unqualified-search-registries would break short-name pulls from corporate
-    # registries. If IT's system file does not define unqualified-search-registries,
-    # FQIN enforcement can safely be deployed — set containers_enforce_fqin_override: true
-    # in config.yml to force user-level deployment even when the system file exists.
+    # A user-level drop-in overrides IT's unqualified-search-registries, which would break
+    # short-name pulls from corporate registries. If IT's system file does not define
+    # unqualified-search-registries, FQIN enforcement can safely be deployed: set
+    # containers_enforce_fqin_override: true in config.yml.
     # Verify IT's file: grep unqualified-search-registries /etc/containers/registries.conf
     msg: >-
       WARN: System-level /etc/containers/registries.conf exists; user-level FQIN enforcement
       not deployed to avoid overriding IT-managed unqualified-search-registries policy.
-      IT unqualified-search-registries: {{ containers_fqin_it_uqsr.stdout | default('(not set — FQIN enforced by IT)') }}.
+      IT unqualified-search-registries:
+      {{ containers_fqin_it_uqsr.stdout | default('(not set — FQIN enforced by IT)', true) }}.
       If IT allows short-name pulls (docker.io listed above), namespace-squatting attacks are possible.
       Set containers_enforce_fqin_override: true in config.yml to force user-level enforcement.
     verbosity: 0
   when:
     - is_linux
     - containers_enforce_fqin | bool
-    - containers_registries_system_stat.stat.exists | default(false)
-    - not (containers_enforce_fqin_override | bool)
+    - not (_containers_fqin_deploy | bool)
 
-- name: Remove registries.conf (fully-qualified image enforcement disabled)
+- name: Remove registries.conf.d drop-in (fully-qualified image enforcement disabled or skipped)
   ansible.builtin.file:
-    path: "{{ containers_config_dir }}/registries.conf"
+    path: "{{ containers_config_dir }}/registries.conf.d/50-fqin.conf"
     state: absent
   when:
     - is_linux
-    - not (containers_enforce_fqin | bool)
+    - not (_containers_fqin_deploy | bool)
+
+# Migration: older releases deployed a full user-level registries.conf, which replaces the system file
+# entirely (IT registries and aliases included). Remove it only when it holds nothing but the generated setting.
+- name: Stat legacy user-level registries.conf
+  ansible.builtin.stat:
+    path: "{{ containers_config_dir }}/registries.conf"
+  register: _containers_legacy_registries_stat
+  when: is_linux
+
+- name: Read legacy user-level registries.conf
+  ansible.builtin.slurp:
+    src: "{{ containers_config_dir }}/registries.conf"
+  register: _containers_legacy_registries
+  when:
+    - is_linux
+    - _containers_legacy_registries_stat.stat.isreg | default(false)
+
+- name: Remove legacy generated user-level registries.conf
+  ansible.builtin.file:
+    path: "{{ containers_config_dir }}/registries.conf"
+    state: absent
+  vars:
+    _legacy_lines: "{{ (_containers_legacy_registries.content | b64decode).splitlines() }}"
+  when:
+    - is_linux
+    - _containers_legacy_registries.content is defined
+    - _legacy_lines | first | default('') is search('Ansible managed')
+    - _legacy_lines | map('trim') | reject('match', '^(#|$)') | list == ['unqualified-search-registries = []']
 
 # --- periodic container storage cleanup ---
 - name: Assert containers_prune_schedule contains only valid OnCalendar characters
@@ -488,16 +524,8 @@
     - _prune_remove_daemon_reload.failed | default(false)
 
 # --- environment.d: DOCKER_HOST and KIND_EXPERIMENTAL_PROVIDER for make-spawned sh ---
-# SECURITY WARNING: environment.d exports DOCKER_HOST system-wide via
-# systemd-environment-d-generator. Every process in the graphical session — VS Code
-# extensions, language servers, browser-spawned helpers — inherits DOCKER_HOST and can
-# reach the Podman socket without any explicit configuration. A malicious extension or
-# plugin can use the Docker/Podman API against the host daemon.
-# This is opt-in (containers_environment_d_enabled: false by default). Enable in config.yml
-# when 'make kind' (OVN-K/Submariner) is required: DOCKER_HOST must be set for sh-spawned
-# Make sub-processes (sh does not source .zshrc/.bashrc). Only enable on hosts where all
-# graphical session processes are trusted. KIND_EXPERIMENTAL_PROVIDER is low-risk
-# (a provider hint only), but is scoped alongside DOCKER_HOST as they are used together.
+# environment.d exports DOCKER_HOST to every graphical-session process; opt-in, see
+# containers_environment_d_enabled in defaults/main.yml. Needed so sh-spawned make finds the Podman socket.
 - name: Deploy containers environment.d config (KIND and Podman socket)
   ansible.builtin.copy:
     content: |
@@ -514,10 +542,6 @@
     # systemd-environment-d-generator not active inside containers
     - not (system_is_container)
     - containers_environment_d_enabled | bool
-  # environment.d is processed by systemd-environment-d-generator at user session start,
-  # processes in the graphical session including Make — unlike .zshrc which is
-  # skipped by 'sh' (spawned by make). Without this, 'make kind' in OVN-K or
-  # Submariner finds no Docker socket and fails even though Podman is available.
 
 # Opt-out must take effect: a file left by an earlier opt-in keeps exporting DOCKER_HOST to
 # every graphical-session process.

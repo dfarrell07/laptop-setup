@@ -318,8 +318,11 @@ class PowerPolicyTests(unittest.TestCase):
                             task['mock_power'] = {'operation': operation, 'arguments': arguments,
                                                   'fixture': '{{ fixture }}', 'logfile': str(logfile)}
             mock(tasks)
-            gate = next(t['when'] for t in yaml.safe_load((ROOT / 'roles/system/tasks/service_masking.yml').read_text())
-                        if t.get('name') == 'Configure laptop power management')
+            # Production gate: main.yml's service_masking import guard plus the power import's own guard.
+            gate = next(t['when'] for t in yaml.safe_load((ROOT / 'roles/system/tasks/main.yml').read_text())
+                        if t.get('name') == 'Service masking')
+            gate = gate + [next(t['when'] for t in yaml.safe_load((ROOT / 'roles/system/tasks/service_masking.yml').read_text())
+                                if t.get('name') == 'Configure laptop power management')]
             play = [{'name': 'Production power policy with isolated package/service probes', 'hosts': 'localhost',
                      'gather_facts': False, 'vars': {
                          'is_dnf': True, 'system_is_container': container, 'csb_rhel': csb,
@@ -567,16 +570,14 @@ class PortablePreferencesTests(unittest.TestCase):
 
 class GoPolicyTests(unittest.TestCase):
     def test_effective_private_pattern_guard(self):
-        task = next(task for task in yaml.safe_load((ROOT / 'roles/packages/tasks/install_go_tools.yml').read_text())
-                    if '(1/3)' in task.get('name', ''))
+        task = next(task for task in yaml.safe_load((ROOT / 'roles/packages/tasks/main.yml').read_text())
+                    if task.get('name') == 'Validate GONOSUMDB checksum exceptions')
         for private, expected in [('corp.invalid', 0), ('*.redhat.com', 0), ('github.com/private-owner', 0),
                                   ('github.com', 2), ('github.com/*', 2), ('github.*', 2), ('*.*', 2), ('*', 2)]:
             with tempfile.TemporaryDirectory() as name:
                 playbook = Path(name) / 'play.yml'
                 playbook.write_text(yaml.safe_dump([{'name': 'Effective checksum exception guard', 'hosts': 'localhost',
-                    'gather_facts': False, 'vars': {'dotfiles_gonosumdb': '', 'dotfiles_goprivate': private}, 'tasks': [task,
-                        next(t for t in yaml.safe_load((ROOT / 'roles/packages/tasks/install_subctl_versions.yml').read_text())
-                             if t.get('name') == 'Validate versioned subctl checksum exceptions')]}]))
+                    'gather_facts': False, 'vars': {'dotfiles_gonosumdb': '', 'dotfiles_goprivate': private}, 'tasks': [task]}]))
                 result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(playbook)],
                     cwd=ROOT, env=dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh'),
                                        ANSIBLE_FILTER_PLUGINS=str(ROOT / 'roles/packages/filter_plugins')),

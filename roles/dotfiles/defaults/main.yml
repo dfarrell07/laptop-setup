@@ -1,7 +1,5 @@
 ---
-# --- Task-only vars (referenced in tasks/main.yml, not in any .j2 template) ---
-dotfiles_ohmyzsh_version: "076d692dac8b6969039ec0c6c1b54462f8ba59e5"  # used in tasks/main.yml, not templates
-dotfiles_forgit_version: "15db0016623b87472c0b6ff7488b123a74b82c7e"  # tag 26.08.0; used in tasks/main.yml, not templates
+# --- Template vars (consumed by zshrc.j2) ---
 dotfiles_oh_my_zsh_theme: gallois
 dotfiles_oh_my_zsh_plugins:
   - git
@@ -10,6 +8,9 @@ dotfiles_oh_my_zsh_plugins:
   - python
   - history-substring-search
 
+# --- Task-only vars (referenced in tasks/main.yml, not in any .j2 template) ---
+dotfiles_ohmyzsh_version: "076d692dac8b6969039ec0c6c1b54462f8ba59e5"  # used in tasks/main.yml, not templates
+dotfiles_forgit_version: "15db0016623b87472c0b6ff7488b123a74b82c7e"  # tag 26.08.0; used in tasks/main.yml, not templates
 dotfiles_gh_editor: vim  # seed-only gh editor (force: false); to change: gh config set editor; used in tasks/main.yml, not templates
 
 dotfiles_aws_profile: ""  # set in config.yml to your AWS CLI named profile; e.g. "aws-acm-subm"
@@ -24,11 +25,10 @@ dotfiles_goprivate: ""   # set in config.yml for private Go repos; e.g. "git.exa
 # defaults to the login name. Set in config.yml.
 dotfiles_ssh_work_hosts: []
 
-profile: work  # playbook-level variable shared across 7 roles
+profile: work  # playbook-level variable; fallback for standalone invocation (see group_vars/all/vars.yml)
 
 dotfiles_tmux_prefix: "C-a"
 dotfiles_tmux_history_limit: 50000  # 50k lines; tmux default 2000 — increase for long debug sessions
-
 
 dotfiles_ssh_agent_timeout: 28800  # 8-hour key lifetime (workday policy); ssh-agent default is 0 = unlimited
 dotfiles_ssh_kex_pq_enabled: false  # runtime-overridden by set_fact after ssh -Q kex probe;
@@ -62,7 +62,7 @@ ssh_port: 722  # fallback for standalone molecule invocation; authoritative valu
 ssh_signing_key_basename: id_ed25519_sk_signing  # fallback; authoritative value in group_vars/all/vars.yml
 # Fallback; authoritative in group_vars/all/vars.yml (vault-backed). Not settable in config.yml: pre-flight rejects it,
 # because the key file is deployed only from the vault.
-ssh_git_signing_pubkey: ""
+ssh_signing_key_pub: ""
 # fallback; authoritative in group_vars/all/vars.yml
 ssh_ciphers: 'chacha20-poly1305@openssh.com,aes256-gcm@openssh.com'
 ssh_macs: 'hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com'
@@ -81,7 +81,7 @@ dotfiles_gemini_launcher_args: [--mode=accept-edits, --dangerously-skip-permissi
 dotfiles_claude_max_subagents: 2000
 # Cross-role fallbacks for standalone dotfiles provisioning.
 claude_default_config_dir: "{{ ansible_facts['user_dir'] }}/.claude"
-claude_queue_runtime_config_dir: "{{ ansible_facts['user_dir'] }}/.config/claude"
+claude_runtime_config_dir: "{{ ansible_facts['user_dir'] }}/.config/claude"
 claude_personal_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-personal"
 claude_personal2_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-per2"
 claude_personal2_instance_enabled: true

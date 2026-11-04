@@ -1,4 +1,8 @@
 ---
+# Imported only when not csb_rhel and not system_is_container (main.yml): on RHEL CSB IT manages these units
+# (bluetooth, power daemons, modems, CUPS, mDNS, cockpit, Ctrl+Alt+Delete); in privileged Debian/Podman
+# containers mask/stop and the resulting daemon-reload crash container systemd. No per-task guards for either.
+
 # Security: remove any pre-existing drop-in directories for units this file manages as masked.
 # An attacker can pre-create /etc/systemd/system/<unit>.service.d/persist.conf before provisioning;
 # the masking symlink prevents startup but the drop-in survives and activates if ever unmasked.
@@ -37,15 +41,12 @@
     - cockpit.socket
     - ctrl-alt-del.target
   when:
-    - not system_is_container
-    - not csb_rhel
     - not csb_detected  # csb_detected (hybrid) may have IT-managed drop-ins; main.yml's drop-in whitelist audit covers it
     # Native power-stack overrides must survive this cleanup even if those units are added to the
     # loop later (power_management.yml manages them; scripts/test-workstation-audit.py guards it).
     - item not in ['tuned.service', 'tuned-ppd.service', 'power-profiles-daemon.service']
     # A drop-in dir the operator whitelisted (passed main.yml's audit) is deliberate, so keep it.
     - (item ~ '.d') not in (system_systemd_dropin_whitelist | default([]))
-
 # --- Mask bluetooth (default: masked; set system_disable_bluetooth: false in config.yml to keep it) ---
 - name: Mask bluetooth service
   ansible.builtin.systemd:
@@ -53,17 +54,11 @@
     masked: true
     force: true
     state: stopped
-  when:
-    - system_disable_bluetooth | bool
-    - not csb_rhel  # RHEL CSB: IT manages bluetooth hardware policy
-    - not system_is_container  # bluetooth not present in containers; mask+stop crash container systemd
+  when: system_disable_bluetooth | bool
   failed_when: false
 
 - name: Bluetooth service enable and configure (system_disable_bluetooth disabled)
-  when:
-    - not (system_disable_bluetooth | bool)
-    - not csb_rhel  # RHEL CSB: IT manages bluetooth hardware policy
-    - not system_is_container  # bluetooth config resets in containers; handler restart reverts changes
+  when: not (system_disable_bluetooth | bool)
   block:
     - name: Unmask bluetooth service when system_disable_bluetooth disabled
       ansible.builtin.systemd:
@@ -109,10 +104,7 @@
     masked: "{{ not _intel }}"
     enabled: "{{ _intel }}"
     state: "{{ 'stopped' if not _intel else 'started' }}"
-  when:
-    - not system_is_container  # thermald not present in containers; mask/stop crash container systemd
-    - not csb_rhel  # RHEL CSB: IT manages power management daemons
-    - is_dnf
+  when: is_dnf
   failed_when: false
 
 # --- Mask ModemManager (WWAN/USB modems) ---
@@ -122,20 +114,14 @@
     masked: true
     force: true
     state: stopped
-  when:
-    - system_disable_modemmanager | bool
-    - not system_is_container  # no WWAN interfaces in containers; mask+stop crash container systemd
-    - not csb_rhel  # RHEL CSB: IT manages modem hardware policy
+  when: system_disable_modemmanager | bool
   failed_when: false
 
 - name: Verify ModemManager masking succeeded (covert modem guard)
   ansible.builtin.systemd_service:
     name: ModemManager.service
   register: _modemmanager_facts
-  when:
-    - system_disable_modemmanager | bool
-    - not system_is_container
-    - not csb_rhel
+  when: system_disable_modemmanager | bool
 
 - name: Fail if ModemManager is not masked (covert cellular network risk)
   ansible.builtin.fail:
@@ -145,8 +131,6 @@
       Investigate: systemctl mask --force ModemManager.service; journalctl -u ModemManager.
   when:
     - system_disable_modemmanager | bool
-    - not system_is_container
-    - not csb_rhel
     - not ansible_check_mode  # the mask above is only simulated in check mode
     - _modemmanager_facts.status is defined
     - (_modemmanager_facts.status.UnitFileState | default('')) != 'masked'
@@ -155,19 +139,13 @@
   ansible.builtin.systemd:
     name: ModemManager.service
     masked: false
-  when:
-    - not (system_disable_modemmanager | bool)
-    - not system_is_container  # no WWAN interfaces in containers
-    - not csb_rhel  # RHEL CSB: IT manages modem hardware policy
+  when: not (system_disable_modemmanager | bool)
   failed_when: false
 
 # --- Power management: exactly one TLP/native stack ---
 - name: Configure laptop power management
   ansible.builtin.import_tasks: power_management.yml
-  when:
-    - is_dnf
-    - not csb_rhel
-    - not system_is_container
+  when: is_dnf
   tags: [sys_baseline]
 
 # --- cups-browsed (CVE-2024-47176) and cups service/socket/path ---
@@ -181,20 +159,14 @@
     name: cups-browsed
     masked: true
     state: stopped
-  when:
-    - system_disable_printing | bool
-    - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
-    - not system_is_container  # mask+stop ops crash Debian privileged Podman containers via daemon-reload
+  when: system_disable_printing | bool
   failed_when: false
 
 - name: Verify cups-browsed masking succeeded (CVE-2024-47176 guard)
   ansible.builtin.systemd_service:
     name: cups-browsed
   register: _cups_browsed_facts
-  when:
-    - system_disable_printing | bool
-    - not csb_rhel
-    - not system_is_container
+  when: system_disable_printing | bool
 
 - name: Fail if cups-browsed is not masked (CVE-2024-47176 RCE risk)
   ansible.builtin.fail:
@@ -204,8 +176,6 @@
       Investigate: systemctl mask cups-browsed; journalctl -u cups-browsed.
   when:
     - system_disable_printing | bool
-    - not csb_rhel
-    - not system_is_container
     - not ansible_check_mode  # the mask above is only simulated in check mode
     - _cups_browsed_facts.status is defined
     - (_cups_browsed_facts.status.UnitFileState | default('')) != 'masked'
@@ -215,10 +185,7 @@
     name: cups-browsed
     masked: false
     # intentionally not started: CVE-2024-47176 RCE risk; start manually if network discovery required
-  when:
-    - not (system_disable_printing | bool)
-    - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
-    - not system_is_container
+  when: not (system_disable_printing | bool)
   failed_when: false
 
 - name: Disable cups.service when system_disable_printing
@@ -226,10 +193,7 @@
     name: cups
     state: stopped
     enabled: false
-  when:
-    - system_disable_printing | bool
-    - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
-    - not system_is_container  # stopping active socket units crashes Debian privileged Podman containers
+  when: system_disable_printing | bool
   register: _system_cups_disable
   ignore_errors: true  # noqa: ignore-errors  (failed_when: false would clear .failed and kill the warning below)
 
@@ -240,8 +204,6 @@
       {{ _system_cups_disable.msg | default('') }}
   when:
     - system_disable_printing | bool
-    - not csb_rhel
-    - not system_is_container
     - _system_cups_disable is failed
     - not (_system_cups_disable.msg | default('') is search(_system_unit_absent_re))
 
@@ -250,10 +212,7 @@
     name: cups
     state: started
     enabled: true
-  when:
-    - not (system_disable_printing | bool)
-    - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
-    - not system_is_container
+  when: not (system_disable_printing | bool)
   failed_when: false
 
 - name: Mask cups.socket and cups.path when system_disable_printing
@@ -264,10 +223,7 @@
   loop:
     - cups.socket
     - cups.path
-  when:
-    - system_disable_printing | bool
-    - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
-    - not system_is_container  # masking active socket units triggers daemon-reload, crashes Debian containers
+  when: system_disable_printing | bool
   register: _system_cups_mask
   ignore_errors: true  # noqa: ignore-errors  (failed_when: false would clear .failed and kill the warning below)
 
@@ -281,8 +237,6 @@
           | map(attribute='item') | list }}
   when:
     - system_disable_printing | bool
-    - not csb_rhel
-    - not system_is_container
     - (_system_cups_mask.results | default([]) | selectattr('failed', 'defined')
         | selectattr('failed')
         | rejectattr('msg', 'search', _system_unit_absent_re) | list)
@@ -297,10 +251,7 @@
   loop:
     - cups.socket
     - cups.path
-  when:
-    - not (system_disable_printing | bool)
-    - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
-    - not system_is_container
+  when: not (system_disable_printing | bool)
   failed_when: false
 
 - name: Mask ABRT services (redundant with systemd-coredump)
@@ -317,16 +268,12 @@
     - abrt-xorg.service
   when:
     - system_mask_abrt | bool
-    - not csb_rhel
-    - not system_is_container
     - is_dnf
   failed_when: false
 
 - name: Unmask ABRT services (system_mask_abrt disabled)
   when:
     - not (system_mask_abrt | bool)
-    - not csb_rhel
-    - not system_is_container
     - is_dnf
   block:
     - name: Unmask ABRT services when system_mask_abrt disabled
@@ -366,9 +313,6 @@
     - avahi-daemon.service
     - avahi-daemon.socket
   register: _avahi_mask_result
-  when:
-    - not csb_rhel  # RHEL CSB: IT manages mDNS/avahi policy
-    - not system_is_container  # mask+stop ops crash Debian privileged Podman containers via daemon-reload
   # ignore_errors (not failed_when: false) keeps item.failed set, so the warning below can fire.
   ignore_errors: true  # noqa: ignore-errors
 
@@ -380,8 +324,6 @@
       avahi-daemon may remain active, exposing mDNS on UDP 5353.
   when:
     - system_disable_avahi | bool
-    - not csb_rhel
-    - not system_is_container
     - _avahi_mask_result.results is defined
     - _avahi_mask_result.results | selectattr('failed', 'equalto', true) | list | length > 0
 
@@ -396,9 +338,6 @@
     - nfs-server.service
     - rpcbind.service
     - rpcbind.socket
-  when:
-    - not csb_rhel
-    - not system_is_container  # rpcbind.socket masking triggers daemon-reload, crashes Debian containers
   failed_when: false
 
 # Note: iSCSI units stay stopped/disabled even when unmasked — workstations never initiate iSCSI sessions.
@@ -419,10 +358,7 @@
     - iscsid.socket
     - iscsiuio.socket
     - iscsiuio.service
-  when:
-    - not csb_rhel
-    - not system_is_container  # socket masking triggers daemon-reload, crashes Debian containers
-    - is_dnf
+  when: is_dnf
   failed_when: false
 
 # --- Cockpit (web console — port 9090; disabled by default) ---
@@ -440,19 +376,13 @@
   loop:
     - cockpit.service
     - cockpit.socket
-  when:
-    - not csb_rhel  # RHEL CSB: IT manages cockpit access; do not mask
-    - not system_is_container  # socket masking triggers daemon-reload, crashes Debian containers
-    - _cockpit_stat.stat.exists
+  when: _cockpit_stat.stat.exists
 
 - name: Mask Ctrl+Alt+Delete reboot target
   ansible.builtin.systemd:
     name: ctrl-alt-del.target
     masked: true
     force: true
-  when:
-    - not csb_rhel  # RHEL CSB: IT manages Ctrl+Alt+Delete policy via Satellite
-    - not system_is_container  # target masking can trigger daemon-reload in privileged containers
 
 # OVN/openvswitch service masking — kind manages OVS and OVN in containers, system-level
 # OVS/OVN daemons conflict with kind's container-based management for OVN-K dev.
@@ -465,8 +395,5 @@
     - ovsdb-server.service
     - ovn-controller.service
     - ovn-northd.service
-  when:
-    - profile == 'work'  # OVN-K/kind dev workstation
-    - not csb_rhel  # User-managed Fedora hybrid CSB
-    - not system_is_container
+  when: profile == 'work'  # OVN-K/kind dev workstation
   failed_when: false  # openvswitch/ovn packages may not be installed

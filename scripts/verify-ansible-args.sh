@@ -9,7 +9,7 @@ unset BASH_ENV  # SECURITY: prevent BASH_ENV=/tmp/evil.sh sourcing before saniti
 #
 # Defense-in-depth layers:
 #   1. Makefile VERIFY_AND_RUN calls this script (Makefile layer — blocks direct users)
-#   2. Arg scanner — rejects --start-at-task, --vault-password-file, --vault-id, --skip-tags=always, -e @file, _pf_is_molecule, _pf_vault_asserted, csb_rhel/_csb_molecule_force, system_sysctl_hardening, common_project_root (this script)
+#   2. Arg scanner — rejects --start-at-task, --vault-password-file, --vault-id, --skip-tags always, and extra-vars that are @file or name a protected key (generic scan; this script)
 #   3. site.yml Play 0 has tags: [always] with pre-flight checks (Ansible layer)
 #   5. Each role's tasks/main.yml has a tags: [always] defense-in-depth assertion (role layer)
 #   6. ENV sanitization — pins/clears 90+ vars: ANSIBLE_*, LD_*, PYTHON*, GIT_*, Go, Sigstore, socket/temp (env-injection layer)
@@ -68,27 +68,11 @@ for ((_ci=0; _ci<${#args[@]}; _ci++)); do
 done
 unset _ci _ca _cn _cr _cg
 
-# YAML/JSON extra-vars with backslash escapes ("\x63sb_rhel") decode to protected key names after the
-# literal-substring guards below have run; no legitimate caller passes escaped structured values.
-for ((_ci=0; _ci<${#args[@]}; _ci++)); do
-    _ca="${args[$_ci]}"
-    _cv=""
-    case "$_ca" in
-        --extra-vars=*) _cv="${_ca#--extra-vars=}" ;;
-        -e?*)           _cv="${_ca#-e}" ;;
-        -e|--extra-vars) _cv="${args[$((_ci+1))]:-}" ;;
-    esac
-    if [[ "$_cv" == [\{\[]* && "$_cv" == *\\* ]]; then
-        echo "ERROR: backslash escapes in structured extra-vars rejected by VERIFY_AND_RUN (could hide protected variable names)" >&2
-        exit 1
-    fi
-done
-unset _ci _ca _cv
-
 # Reject specific dangerous flags only
 # NOTE: --tags and --skip-tags are NOT blocked globally — they're needed for role-specific
-# make targets (make claude, make system, etc.). Only --start-at-task and --skip-tags always
-# are blocked, as they specifically bypass pre-flight security checks.
+# make targets (make claude, make system, etc.). The checks below also reject --start-at-task
+# and abbreviations, --skip-tags always, --vault-password-file, --vault-id, @file extra-vars and
+# protected-key extra-vars; see the header.
 for arg in "${args[@]}"; do
     # Abbreviated long options (argparse accepts any unambiguous prefix): reject every
     # --start-at*/--start-t* spelling and every --skip-t* spelling that is not exactly
@@ -102,23 +86,11 @@ for arg in "${args[@]}"; do
         echo "ERROR: --skip-tags abbreviation or always-skip '$arg' rejected by VERIFY_AND_RUN" >&2
         exit 1
     fi
-    # Block --start-at-task: skips pre_tasks entirely, bypassing all Play 0 security checks
-    if [[ "$arg" == '--start-at-task' || "$arg" == --start-at-task=* || "$arg" == '--start-task' ]]; then
-        cat >&2 <<EOF
-ERROR: --start-at-task rejected by VERIFY_AND_RUN
-Reason: --start-at-task skips pre_tasks (even with tags: [always] on Play 0),
-        allowing bypass of ALL security assertions in pre_flight_checks.yml.
-
-SECURITY RISK: Enables attacker to inject malicious values via -e without validation.
-Solution: Use a scoped make target instead (make claude, make packages, make ssh, etc.)
-EOF
-        exit 1
-    fi
-    # Block --vault-password-file (single-arg = form)
+    # Block --vault-password-file (bare or = form)
     # ANSIBLE_VAULT_PASSWORD_FILE is already pinned; a CLI-supplied --vault-password-file
     # adds a second vault source and executes the named script as the invoking user before
     # the first task runs. No legitimate caller needs this flag.
-    if [[ "$arg" == --vault-password-file=* ]]; then
+    if [[ "$arg" == '--vault-password-file' || "$arg" == --vault-password-file=* ]]; then
         cat >&2 <<EOF
 ERROR: --vault-password-file rejected by VERIFY_AND_RUN
 Reason: ANSIBLE_VAULT_PASSWORD_FILE is already pinned to scripts/vault-pass.sh.
@@ -145,122 +117,11 @@ Solution: Vault decryption is handled by ANSIBLE_VAULT_PASSWORD_FILE (vault-pass
 EOF
         exit 1
     fi
-    # Block --skip-tags=always (single-arg form with =); match always anywhere in comma-separated list
-    if [[ "$arg" =~ ^--skip-tags=(.*,)?[[:space:]]*always[[:space:]]*(,.*)?$ ]]; then
-        cat >&2 <<EOF
-ERROR: --skip-tags=always rejected by VERIFY_AND_RUN
-Reason: --skip-tags=always bypasses Play 2's [always]-tagged pre_tasks (vault
-        healthcheck, CSB re-detection, identity assertions); Play 0 tasks are
-        untagged and are NOT skipped by --skip-tags=always.
-Solution: Do not use --skip-tags always with site.yml.
-         Use a scoped make target instead (make claude, make packages, make ssh, etc.).
-EOF
-        exit 1
-    fi
-    # Block -e @file / --extra-vars=@file (single-arg =value and no-space forms)
-    # Ansible's @file extra-vars syntax loads arbitrary YAML from the named file, bypassing
-    # all per-variable checks below (a file can set _pf_vault_asserted, csb_rhel,
-    # common_project_root, etc. in one flag). All legitimate callers pass key=value pairs.
-    if [[ "$arg" == --extra-vars=@* || "$arg" == -e@* ]]; then
-        cat >&2 <<EOF
-ERROR: @file extra-vars rejected by VERIFY_AND_RUN
-Reason: Ansible's @file syntax loads arbitrary YAML from a file, bypassing all
-        per-variable guards (csb_rhel, _pf_vault_asserted, common_project_root,
-        system_sysctl_hardening, etc.) in a single flag.
-Solution: Pass key=value pairs directly instead of using a @file reference.
-EOF
-        exit 1
-    fi
-    # Block -e _pf_is_molecule=* / --extra-vars=_pf_is_molecule=* (single-arg =value form)
-    # extra-vars (precedence 22) beats set_fact (18); pre-defining _pf_is_molecule=true
-    # forces the flag permanently true, bypassing all 7 `when: not _pf_is_molecule` guards
-    # in pre_flight_checks.yml for the entire play (vault checks, SSTI guard, URL validation).
-    if [[ "$arg" == --extra-vars=_pf_is_molecule=* || "$arg" == -e_pf_is_molecule=* ]] || [[ "$arg" == --extra-vars=*_pf_is_molecule* ]]; then
-        cat >&2 <<EOF
-ERROR: -e _pf_is_molecule rejected by VERIFY_AND_RUN
-Reason: Pre-defining _pf_is_molecule via extra-vars (precedence 22) overrides the
-        set_fact (precedence 18) that derives it from the environment, permanently
-        forcing it true and bypassing all 7 pre_flight_checks.yml security assertions.
-Solution: Do not pass _pf_is_molecule as an extra-var.
-EOF
-        exit 1
-    fi
-    # Block -e _pf_vault_asserted=* / --extra-vars=_pf_vault_asserted=* (single-arg =value form)
-    # Passing this via extra-vars (precedence 22) would pre-define the flag that gates the
-    # vault_*/secret-key/security-policy assertions in pre_flight_checks.yml, silently skipping
-    # all four checks and allowing vault_* keys in config.yml to shadow vault.yml undetected.
-    if [[ "$arg" == --extra-vars=_pf_vault_asserted=* || "$arg" == -e_pf_vault_asserted=* ]] || [[ "$arg" == --extra-vars=*_pf_vault_asserted* ]]; then
-        cat >&2 <<EOF
-ERROR: -e _pf_vault_asserted rejected by VERIFY_AND_RUN
-Reason: Pre-defining _pf_vault_asserted via extra-vars bypasses vault_* key detection,
-        secret-key shadowing checks, claude security-policy checks, and the
-        redhat_splunk_nologin_shell assertion in pre_flight_checks.yml.
-Solution: Do not pass _pf_vault_asserted as an extra-var.
-EOF
-        exit 1
-    fi
-    # Block --extra-vars=csb_rhel=* and --extra-vars=_csb_molecule_force=* (single-arg = form)
-    # extra-vars precedence 22 beats set_fact precedence 18; injecting these facts bypasses CSB
-    # classification and silently skips hardening tasks (sysctl, cron, authselect, chrony, etc.)
-    if [[ "$arg" == --extra-vars=csb_rhel=* || "$arg" == --extra-vars=_csb_molecule_force=* ]]; then
-        cat >&2 <<EOF
-ERROR: --extra-vars=csb_rhel= or --extra-vars=_csb_molecule_force= rejected by VERIFY_AND_RUN
-Reason: these facts gate CSB/RHEL classification; injecting via --extra-vars silently
-        disables hardening tasks (sysctl, cron, authselect, firmware, chrony) on Fedora.
-SECURITY RISK: Misclassifies the host as RHEL CSB, bypassing the OS hardening stack.
-Solution: Do not override csb_rhel or _csb_molecule_force on the command line.
-EOF
-        exit 1
-    fi
-    # Block any --extra-vars containing system_sysctl_hardening (key=value or JSON dict form)
-    # extra-vars (precedence 22) beats set_fact (18); injecting system_sysctl_hardening replaces
-    # the role-default hardening dict before the merge set_fact runs, AND remains authoritative
-    # after it (22 > 18), so the deployed 90-hardening.conf silently drops all static entries.
-    if [[ "$arg" == --extra-vars=*system_sysctl_hardening* || "$arg" == -e*system_sysctl_hardening* ]]; then
-        cat >&2 <<EOF
-ERROR: --extra-vars=system_sysctl_hardening rejected by VERIFY_AND_RUN
-Reason: extra-vars (precedence 22) overrides the role-default hardening dict and beats
-        set_fact (18); the deployed /etc/sysctl.d/90-hardening.conf would contain only
-        the injected keys, silently dropping kptr_restrict, dmesg_restrict, tcp_syncookies,
-        and all other static hardening entries.
-SECURITY RISK: Full erasure of sysctl hardening baseline on the provisioned host.
-Solution: Do not override system_sysctl_hardening on the command line.
-EOF
-        exit 1
-    fi
-    # Block any --extra-vars containing common_project_root (key=value or JSON dict form)
-    # extra-vars (precedence 22) beats set_fact (18); injecting common_project_root redirects
-    # every include_tasks: "{{ common_project_root }}/..." to attacker-controlled task files,
-    # silently bypassing SSTI guards, vault_* assertions, URL validation, and CSB classification.
-    if [[ "$arg" == --extra-vars=*common_project_root* || "$arg" == -e*common_project_root* ]]; then
-        cat >&2 <<EOF
-ERROR: --extra-vars=common_project_root rejected by VERIFY_AND_RUN
-Reason: extra-vars (precedence 22) override set_fact (18) and redirect all
-        include_tasks: "{{ common_project_root }}/..." security checks to attacker-
-        controlled task files, bypassing SSTI guards, vault_* key assertions, URL
-        validation, and CSB classification across Play 0, Play 1, and Play 2.
-SECURITY RISK: Empty YAML at attacker path silently passes all pre-flight checks.
-Solution: Do not override common_project_root on the command line.
-EOF
-        exit 1
-    fi
 done
 
-# Check for space-separated two-arg forms: --skip-tags always, -e _pf_vault_asserted=*, --extra-vars _pf_vault_asserted=*
+# Check for the space-separated two-arg form: --skip-tags always.
 # This requires scanning consecutive arg pairs since the loop above only sees individual args.
 for ((i=0; i<${#args[@]}-1; i++)); do
-    # Block space-separated: --vault-password-file /tmp/evil.py
-    if [[ "${args[$i]}" == '--vault-password-file' ]]; then
-        cat >&2 <<EOF
-ERROR: --vault-password-file rejected by VERIFY_AND_RUN
-Reason: ANSIBLE_VAULT_PASSWORD_FILE is already pinned to scripts/vault-pass.sh.
-        A CLI-supplied --vault-password-file executes an additional script as the
-        invoking user before any task runs, bypassing vault source controls.
-SECURITY RISK: Arbitrary code execution via attacker-controlled vault password script.
-Solution: Do not pass --vault-password-file on the command line.
-EOF
-        exit 1
-    fi
     # Any value containing 'always' is rejected, like the single-arg form: Ansible strips surrounding whitespace
     # (including non-ASCII spaces that [[:space:]] misses), so ' always' still skips the always-tagged guards.
     if [[ "${args[$i]}" == '--skip-tags' && "${args[$((i+1))]}" == *always* ]]; then
@@ -274,105 +135,26 @@ Solution: Do not use --skip-tags always with site.yml.
 EOF
         exit 1
     fi
-    # Block space-separated two-arg --vault-id form: --vault-id attacker@/tmp/evil.py
-    if [[ "${args[$i]}" == '--vault-id' ]]; then
-        cat >&2 <<EOF
-ERROR: --vault-id rejected by VERIFY_AND_RUN
-Reason: Ansible 2.8+ vault-id unification executes the vault-id source script
-        alongside vault-pass.sh before any task runs. --vault-id attacker@/tmp/evil.py
-        achieves code execution as the invoking user; ANSIBLE_VAULT_PASSWORD_FILE does
-        not suppress CLI-supplied vault-id sources.
-Solution: Vault decryption is handled by ANSIBLE_VAULT_PASSWORD_FILE (vault-pass.sh).
-          Do not supply --vault-id on the command line.
-EOF
-        exit 1
-    fi
-    # Block space-separated: -e @file and --extra-vars @file
-    # @file loads arbitrary YAML, bypassing all per-variable guards in one flag.
-    if [[ ( "${args[$i]}" == '-e' || "${args[$i]}" == '--extra-vars' ) && "${args[$((i+1))]}" == @* ]]; then
-        cat >&2 <<EOF
-ERROR: @file extra-vars rejected by VERIFY_AND_RUN
-Reason: Ansible's @file syntax loads arbitrary YAML from a file, bypassing all
-        per-variable guards (csb_rhel, _pf_vault_asserted, common_project_root,
-        system_sysctl_hardening, etc.) in a single flag.
-Solution: Pass key=value pairs directly instead of using a @file reference.
-EOF
-        exit 1
-    fi
-    # Block space-separated: -e _pf_is_molecule=<value> and --extra-vars _pf_is_molecule=<value>
-    if [[ ( "${args[$i]}" == '-e' || "${args[$i]}" == '--extra-vars' ) && "${args[$((i+1))]}" == _pf_is_molecule=* ]] || [[ ( "${args[$i]}" == '-e' || "${args[$i]}" == '--extra-vars' ) && "${args[$((i+1))]}" == *_pf_is_molecule* ]]; then
-        cat >&2 <<EOF
-ERROR: -e _pf_is_molecule rejected by VERIFY_AND_RUN
-Reason: Pre-defining _pf_is_molecule via extra-vars (precedence 22) overrides the
-        set_fact (precedence 18) that derives it from the environment, permanently
-        forcing it true and bypassing all 7 pre_flight_checks.yml security assertions.
-Solution: Do not pass _pf_is_molecule as an extra-var.
-EOF
-        exit 1
-    fi
-    # Block space-separated: -e _pf_vault_asserted=<value> and --extra-vars _pf_vault_asserted=<value>
-    if [[ ( "${args[$i]}" == '-e' || "${args[$i]}" == '--extra-vars' ) && "${args[$((i+1))]}" == _pf_vault_asserted=* ]] || [[ ( "${args[$i]}" == '-e' || "${args[$i]}" == '--extra-vars' ) && "${args[$((i+1))]}" == *_pf_vault_asserted* ]]; then
-        cat >&2 <<EOF
-ERROR: -e _pf_vault_asserted rejected by VERIFY_AND_RUN
-Reason: Pre-defining _pf_vault_asserted via extra-vars bypasses vault_* key detection,
-        secret-key shadowing checks, claude security-policy checks, and the
-        redhat_splunk_nologin_shell assertion in pre_flight_checks.yml.
-Solution: Do not pass _pf_vault_asserted as an extra-var.
-EOF
-        exit 1
-    fi
-    # Block space-separated: -e csb_rhel=<value>, --extra-vars csb_rhel=<value>,
-    # -e _csb_molecule_force=<value>, --extra-vars _csb_molecule_force=<value>
-    if [[ ( "${args[$i]}" == '-e' || "${args[$i]}" == '--extra-vars' ) && \
-          ( "${args[$((i+1))]}" == csb_rhel=* || "${args[$((i+1))]}" == _csb_molecule_force=* || "${args[$((i+1))]}" == *csb_rhel* || "${args[$((i+1))]}" == *_csb_molecule_force* ) ]]; then
-        cat >&2 <<EOF
-ERROR: -e csb_rhel= or -e _csb_molecule_force= rejected by VERIFY_AND_RUN
-Reason: these facts gate CSB/RHEL classification; injecting via -e silently
-        disables hardening tasks (sysctl, cron, authselect, firmware, chrony) on Fedora.
-SECURITY RISK: Misclassifies the host as RHEL CSB, bypassing the OS hardening stack.
-Solution: Do not override csb_rhel or _csb_molecule_force on the command line.
-EOF
-        exit 1
-    fi
-    # Block space-separated: -e system_sysctl_hardening=* or JSON dict containing the key
-    if [[ ( "${args[$i]}" == '-e' || "${args[$i]}" == '--extra-vars' ) && \
-          "${args[$((i+1))]}" == *system_sysctl_hardening* ]]; then
-        cat >&2 <<EOF
-ERROR: -e system_sysctl_hardening rejected by VERIFY_AND_RUN
-Reason: extra-vars (precedence 22) overrides the role-default hardening dict and beats
-        set_fact (18); the deployed /etc/sysctl.d/90-hardening.conf would contain only
-        the injected keys, silently dropping kptr_restrict, dmesg_restrict, tcp_syncookies,
-        and all other static hardening entries.
-SECURITY RISK: Full erasure of sysctl hardening baseline on the provisioned host.
-Solution: Do not override system_sysctl_hardening on the command line.
-EOF
-        exit 1
-    fi
-    # Block space-separated: -e common_project_root=<value> or JSON dict containing the key
-    if [[ ( "${args[$i]}" == '-e' || "${args[$i]}" == '--extra-vars' ) && \
-          "${args[$((i+1))]}" == *common_project_root* ]]; then
-        cat >&2 <<EOF
-ERROR: -e common_project_root rejected by VERIFY_AND_RUN
-Reason: extra-vars (precedence 22) override set_fact (18) and redirect all
-        include_tasks: "{{ common_project_root }}/..." security checks to attacker-
-        controlled task files, bypassing SSTI guards, vault_* key assertions, URL
-        validation, and CSB classification across Play 0, Play 1, and Play 2.
-SECURITY RISK: Empty YAML at attacker path silently passes all pre-flight checks.
-Solution: Do not override common_project_root on the command line.
-EOF
-        exit 1
-    fi
 done
 
-# Generic extra-vars scan: argparse accepts abbreviated long options (--extra=, --extra-v=)
-# and attached short forms (-ecsb_rhel=true), none of which match the exact-form checks
-# above. Normalise every extra-vars spelling (attached or separate value) and test the
-# value against every protected key.
+# Generic extra-vars scan: the single guard for @file and protected keys, whatever the spelling
+# (argparse accepts abbreviated long options --extra=, --extra-v= and attached short forms
+# -ecsb_rhel=true). Extra-vars (precedence 22) beat set_fact (18), so a protected key set here
+# would override the pre-flight facts. Normalise every extra-vars spelling (attached or
+# separate value) and test the value against every protected key.
+# _pf_* covers _pf_vault_asserted: pre-defining it via extra-vars would target vault_* key detection,
+# secret-key shadowing checks, claude security-policy checks, and the
+# redhat_splunk_nologin_shell assertion in pre_flight_checks.yml.
 _protected_keys='csb_rhel|_csb_molecule_force|_pf_[A-Za-z0-9_]*|system_sysctl_hardening|common_project_root|rollout_enable|rollout_catalog|_rollout_[A-Za-z0-9_]*'
 _check_extra_value() {
     local v="$1"
     if [[ "$v" == @* ]]; then
         echo "ERROR: @file extra-vars rejected by VERIFY_AND_RUN" >&2
+        exit 1
+    fi
+    # Escapes ("\x63sb_rhel") decode to protected key names after the literal-substring test below.
+    if [[ "$v" == [\{\[]* && "$v" == *\\* ]]; then
+        echo "ERROR: backslash escapes in structured extra-vars rejected by VERIFY_AND_RUN (could hide protected variable names)" >&2
         exit 1
     fi
     if [[ "$v" =~ ($_protected_keys) ]]; then
@@ -392,12 +174,14 @@ for ((i=0; i<${#args[@]}; i++)); do
         if [[ "$_a" == -e ]]; then
             (( i+1 < ${#args[@]} )) && _check_extra_value "${args[$((i+1))]}"
         else
-            _check_extra_value "${_a#-e}"
+            _v="${_a#-e}"
+            _check_extra_value "${_v#=}"
         fi
     elif [[ "$_a" == -[A-Za-z]* && "$_a" == *e* ]]; then
         # Clustered short options such as -ve, -vve or -vecsb_rhel=true: the first e takes the rest of the
         # argument (or the next argument) as its value, so scan it like -e.
         _rest="${_a#*e}"
+        _rest="${_rest#=}"
         if [[ -z "$_rest" ]]; then
             (( i+1 < ${#args[@]} )) && _check_extra_value "${args[$((i+1))]}"
         else
@@ -405,7 +189,7 @@ for ((i=0; i<${#args[@]}; i++)); do
         fi
     fi
 done
-unset _a _rest
+unset _a _rest _v
 
 # Override or clear critical env vars to prevent environment-injection attacks.
 # Key high-risk vectors (see also inline comments below for ANSIBLE_LIBRARY, ANSIBLE_FORCE_HANDLERS, ANSIBLE_BECOME_*, NSS_WRAPPER_*, TMPDIR, MOLECULE_*): — SET known-safe values; UNSET those that must be clean:
@@ -459,7 +243,6 @@ unset _a _rest
 unset NSS_WRAPPER_PASSWD NSS_WRAPPER_GROUP
 unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT LD_DEBUG LD_DEBUG_OUTPUT LD_ORIGIN_PATH GLIBC_TUNABLES MALLOC_CONF
 unset OPENSSL_CONF  # prevent attacker [provider_sect] loading a malicious .so into every OpenSSL-using process (Python ssl import, curl, gpg) before become:true strips env
-unset BASH_ENV  # prevent BASH_ENV payload executing in vault-pass.sh: non-interactive bash reads BASH_ENV before set +x; cleared here before exec so it does not propagate to the vault password subprocess
 
 _repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -585,7 +368,7 @@ if [[ -n "$_run_log_name" ]]; then
 fi
 export ANSIBLE_NOCOWS=1  # ANSIBLE_NOCOWS causes set_cowsay_info() to return before reading ANSIBLE_COW_PATH; load-bearing mitigation; unset above is defense-in-depth for child processes
 export ANSIBLE_HASH_BEHAVIOUR=replace  # pin dict merge semantics — ANSIBLE_HASH_BEHAVIOUR=merge lets attacker-supplied -e dicts merge key-by-key with role-default security dicts instead of replacing them, potentially injecting keys without triggering replacement-based detection; 'replace' is the Ansible default and the only safe mode
-export ANSIBLE_INJECT_FACT_VARS=True  # pin fact injection — ANSIBLE_INJECT_FACT_VARS=False disables injection of ansible_facts dict keys as bare vars (ansible_distribution, ansible_user_dir, etc.); bare-var references in install_dnf_packages.yml (lines 13,19) and csb-report.yml (lines 98,108) evaluate as Undefined when injection is off; Undefined != 'Fedora' is True in Jinja2 so packages_security_rhel is appended on Fedora and repo_gh_cli guard evaluates incorrectly; bare ansible_user_dir in csb-report.yml becomes Undefined causing a template error; dict-form ansible_facts['key'] references used in pre_flight_checks.yml and csb_detect.yml are immune but the bare-var paths are not
+export ANSIBLE_INJECT_FACT_VARS=True  # pin fact injection — ANSIBLE_INJECT_FACT_VARS=False disables injection of ansible_facts dict keys as bare vars (ansible_distribution, ansible_user_dir, etc.); bare-var references in the _packages_dnf_all set_fact in install_dnf_packages.yml and csb-report.yml evaluate as Undefined when injection is off; Undefined != 'Fedora' is True in Jinja2 so packages_security_rhel is appended on Fedora and repo_gh_cli guard evaluates incorrectly; bare ansible_user_dir in csb-report.yml becomes Undefined causing a template error; dict-form ansible_facts['key'] references used in pre_flight_checks.yml and csb_detect.yml are immune but the bare-var paths are not
 export ANSIBLE_BECOME_FLAGS='-H -S -n'  # pin to the sudo plugin default (empty drops -S, so sudo ignores the piped --ask-become-pass password and every become task fails); strips injected become flags — ANSIBLE_BECOME_FLAGS='-l' constructs 'sudo -l -u root ...' which prints allowed commands and exits without running the play; other flags can alter sudo behavior per policy in subtle ways; the playbook requires no non-default become flags so forcing empty is safe
 export ANSIBLE_BECOME_ASK_PASS=False  # prevent interactive become-password prompt — ANSIBLE_BECOME_ASK_PASS=True forces Ansible to open /dev/tty for the sudo password; in tmux sessions without a controlling tty or in CI this hangs or errors immediately, blocking all Play 1 become tasks (provisioning DoS); playbook uses vault or the invoking user's cached sudo credentials, so ask-pass is never needed
 export ANSIBLE_DIFF_ALWAYS=False  # suppress forced diff output — ANSIBLE_DIFF_ALWAYS=1 enables --diff globally for every file-writing task; in a logged tmux session or with stdout piped to tee/CI artifact this prints vault-derived content: authorized_keys (vault_ssh_public_keys), SSH private key material written to ~/.ssh/, registry token files, sshd drop-in contents, PAM config; False matches Ansible's default and ensures no caller-set value forces diff mode
@@ -600,9 +383,9 @@ export ANSIBLE_LOOKUP_PLUGINS=/dev/null  # shadowed env plugin can forge _pf_is_
 # --- Container/registry ---
 unset CONTAINERS_CONF CONTAINER_STORAGE_CONF CONTAINER_HOST DOCKER_HOST PODMAN_HOST  # prevent socket/runtime hijacking — attacker-set CONTAINERS_CONF=/tmp/evil/containers.conf can point [engine] runtime at a malicious OCI runtime binary that executes with every podman call (distrobox assemble create, podman login, podman pull) while exiting 0; attacker-set CONTAINER_HOST/DOCKER_HOST/PODMAN_HOST redirects podman API calls (including vault credential writes via podman login) to an attacker-controlled socket
 unset SIGNATURE_POLICY  # prevent signature-policy bypass — SIGNATURE_POLICY overrides the policy.json path at the libpod level, superseding the containers role's write to ~/.config/containers/policy.json; attacker sets SIGNATURE_POLICY=/tmp/evil/policy.json containing {"default":[{"type":"insecureAcceptAnything"}]} and all subsequent podman pull calls accept unsigned images from any registry, bypassing the pinned signature enforcement policy
-unset REGISTRIES_CONFIG_PATH  # prevent registry mirror hijack — REGISTRIES_CONFIG_PATH overrides XDG_CONFIG_HOME-derived paths at the libpod level; attacker sets REGISTRIES_CONFIG_PATH=/tmp/evil/registries.conf containing a [[registry]] mirror entry redirecting the configured container image (e.g. registry.fedoraproject.org/fedora:44) to an attacker-controlled registry; the containers role writing ~/.config/containers/registries.conf in the same run does not protect because REGISTRIES_CONFIG_PATH takes precedence over XDG_CONFIG_HOME paths entirely
-unset REGISTRY_AUTH_FILE  # prevent registry auth hijack — REGISTRY_AUTH_FILE has higher lookup priority than $XDG_CONFIG_HOME/containers/auth.json in both podman and oc; attacker pre-sets REGISTRY_AUTH_FILE=/tmp/evil-auth.json before invoking make all; the variable propagates via exec to ansible-playbook and then to every child process including oc image extract in install_subctl_versions.yml and podman pull invoked by distrobox assemble create; both read REGISTRY_AUTH_FILE at highest priority, overriding the XDG_CONFIG_HOME-based auth path, sending registry.redhat.io auth tokens to an attacker-controlled endpoint; the XDG_CONFIG_HOME pin at 4d0367da does not cover this because REGISTRY_AUTH_FILE bypasses XDG entirely
-unset DOCKER_CONFIG  # prevent Docker-compat auth token theft — some oc versions, buildah, and skopeo fall back to $DOCKER_CONFIG/config.json for registry auth when REGISTRY_AUTH_FILE is absent; attacker pre-sets DOCKER_CONFIG=/tmp/evil-dir and plants a crafted config.json that routes registry auth tokens to an attacker-controlled endpoint during packages role oc image extract and containers role podman login flows; unsetting eliminates the Docker-compatibility auth fallback as an injection vector
+unset REGISTRIES_CONFIG_PATH  # prevent registry mirror hijack — REGISTRIES_CONFIG_PATH overrides XDG_CONFIG_HOME-derived paths at the libpod level; attacker sets REGISTRIES_CONFIG_PATH=/tmp/evil/registries.conf containing a [[registry]] mirror entry redirecting the configured container image (e.g. registry.fedoraproject.org/fedora:44) to an attacker-controlled registry; the containers role registries.conf.d/50-fqin.conf drop-in does not protect because REGISTRIES_CONFIG_PATH takes precedence over XDG_CONFIG_HOME paths entirely
+unset REGISTRY_AUTH_FILE  # prevent registry auth hijack — REGISTRY_AUTH_FILE has higher lookup priority than $XDG_CONFIG_HOME/containers/auth.json in both podman and oc; attacker pre-sets REGISTRY_AUTH_FILE=/tmp/evil-auth.json before invoking make all; the variable propagates via exec to ansible-playbook and then to every child process including podman pull invoked by distrobox assemble create; both read REGISTRY_AUTH_FILE at highest priority, overriding the XDG_CONFIG_HOME-based auth path, sending registry.redhat.io auth tokens to an attacker-controlled endpoint; the XDG_CONFIG_HOME pin at 4d0367da does not cover this because REGISTRY_AUTH_FILE bypasses XDG entirely
+unset DOCKER_CONFIG  # prevent Docker-compat auth token theft — some oc versions, buildah, and skopeo fall back to $DOCKER_CONFIG/config.json for registry auth when REGISTRY_AUTH_FILE is absent; attacker pre-sets DOCKER_CONFIG=/tmp/evil-dir and plants a crafted config.json that routes registry auth tokens to an attacker-controlled endpoint during containers role podman login flows; unsetting eliminates the Docker-compatibility auth fallback as an injection vector
 unset XDG_RUNTIME_DIR  # prevent XDG socket hijack — podman CLI falls back to $XDG_RUNTIME_DIR/podman/podman.sock when CONTAINER_HOST/DOCKER_HOST/PODMAN_HOST are unset; attacker sets XDG_RUNTIME_DIR=/tmp/evil and creates /tmp/evil/podman/podman.sock to intercept all podman pull/run/login calls in the containers and distrobox roles; the local connection plugin does not require XDG_RUNTIME_DIR; systemd sets the canonical value at session start for interactive use outside provisioning
 export MOLECULE_PODMAN_EXECUTABLE=podman  # pin podman executable — molecule-podman driver reads this via os.environ.get('MOLECULE_PODMAN_EXECUTABLE', 'podman'); an attacker-set path bypasses PATH pin and routes privileged container calls (privileged:true in fedora/rocky scenarios) through an arbitrary binary
 # --- Git plumbing ---
@@ -627,7 +410,7 @@ unset _xrd
 # the per-task environment block is the correct enforcement point for git subprocesses.
 unset GIT_HTTP_PROXY_AUTHMETHOD  # defense-in-depth: prevents downgrade of proxy auth to basic-auth when HTTPS_PROXY is set, which would send GitHub tokens in cleartext to the proxy
 unset KUBECONFIG KUBE_CONFIG_PATH KUBE_CONTEXT KUBE_APISERVER KUBE_TOKEN KUBE_CERT_AUTH KUBE_CLIENT_CERT KUBE_CLIENT_KEY  # prevent kubeconfig hijack — attacker-set KUBECONFIG=/tmp/evil-kubeconfig redirects any future cluster-touching task (helm install, kubectl apply, kind create cluster, krew plugin) to an attacker-controlled cluster; current blast radius is zero but defense-in-depth prevents silent redirection if cluster tasks are added
-unset HTTPS_PROXY HTTP_PROXY ALL_PROXY https_proxy http_proxy all_proxy  # prevent proxy interception — caller-set proxy vars pass through to ansible-playbook and every child task (binary downloads, go module fetches, git clones); a MITM proxy sees all version strings and can 502-abort selective tasks; use network_proxied in config.yml for the supported go-module proxy mechanism
+unset HTTPS_PROXY HTTP_PROXY ALL_PROXY https_proxy http_proxy all_proxy  # prevent proxy interception — caller-set proxy vars pass through to ansible-playbook and every child task (binary downloads, go module fetches, git clones); a MITM proxy sees all version strings and can 502-abort selective tasks
 unset SIGSTORE_NO_VERIFY SIGSTORE_ROOT_FILE SIGSTORE_REKOR_PUBLIC_KEY COSIGN_EXPERIMENTAL  # Sigstore/cosign trust chain — SIGSTORE_NO_VERIFY=1 skips all Rekor/Fulcio verification; SIGSTORE_ROOT_FILE=/tmp/evil.pem substitutes a malicious root CA; SIGSTORE_REKOR_PUBLIC_KEY=/tmp/evil.pub replaces Rekor's transparency log key; COSIGN_EXPERIMENTAL=1 changes verification semantics; any of these bypass cosign verify-blob trust chain for cosign self-verification and sops checksums verification
 unset GNUPGHOME GPG_AGENT_INFO  # GPG homedir injection — GNUPGHOME=/tmp/evil-gpg points gpg at an attacker-controlled keyring containing only the attacker's own key; attacker pre-signs a malicious SHA256SUMS.asc with that key and replaces collection tarballs whose hashes match a replacement SHA256SUMS; verify-collections.sh gpg --verify exits 0 (good signature by the attacker key), sha256sum -c passes against the malicious tarballs, and the Python manifest delta check passes if both tarball and disk were replaced consistently; result: attacker-controlled collection code is loaded as root across all 13 roles; verify-collections.sh also unsets GNUPGHOME immediately before its gpg call (defence-in-depth), but clearing it here prevents propagation to the subprocess in the first place; GPG_AGENT_INFO cleared to prevent agent socket hijack
 unset GOPROXY GOSUMDB GONOSUMDB GOFLAGS GOENV GOPRIVATE GOCACHE GOMODCACHE GOROOT GOWORK GOTMPDIR  # Go env injection: GOPROXY redirects module downloads to attacker proxy; GOSUMDB=off disables checksum database verification entirely (defence-in-depth — distrobox go install tasks pin GOSUMDB=sum.golang.org in their environment blocks, but unsetting here prevents inheritance from outer shell); GONOSUMDB=* disables checksum verification for all modules; GOFLAGS injects arbitrary go build flags; GOENV=/tmp/evil sets all of the above via a file the Go toolchain reads before per-command env vars (printenv shows no suspicious values yet go uses them); GOPRIVATE=* causes Go to set effective GONOSUMDB=* when GONOSUMDB is unset (Go's documented behavior: GONOSUMDB defaults to GOPRIVATE), bypassing checksum database for all go install tasks (golangci-lint, subctl); GOCACHE=/tmp/attacker_cache pre-stages malicious compiled binaries at precomputed ActionID cache keys — Go installs a cache hit without recompiling, so an attacker who knows the pinned module versions (public in roles/packages/defaults/main.yml) can precompute the exact cache key offline and substitute an attacker binary; unsetting forces Go to use its default per-user cache (~/.cache/go-build) which is not attacker-writable under normal conditions; GOWORK=/tmp/evil/go.work activates Go workspace mode which reads replace directives from the specified go.work file — replace directives redirect module resolution to local paths that are never checked against GOSUMDB (workspace mode bypasses the checksum database by design), allowing an attacker to substitute arbitrary code for any Go module used by go install (golangci-lint, subctl, gofumpt) across all three go install sites (install_go_tools.yml, install_subctl_versions.yml, container-provision.yml); unsetting disables workspace mode entirely (equivalent to GOWORK=off)
@@ -636,9 +419,9 @@ unset CC CXX CFLAGS CXXFLAGS CGO_CFLAGS CGO_CXXFLAGS LDFLAGS CGO_LDFLAGS CGO_ENA
 unset SSL_CERT_FILE SSL_CERT_DIR  # TLS CA injection for Ansible uri:/get_url: — Ansible's module_utils.urls uses Python ssl, not the requests library; ssl.create_default_context(cafile=None) calls load_default_certs() which calls set_default_verify_paths(), invoking OpenSSL's SSL_CTX_set_default_verify_paths() which reads SSL_CERT_FILE (single PEM file) and SSL_CERT_DIR (directory of PEM/CRT files); an attacker-set SSL_CERT_FILE=/tmp/evil.pem injects an attacker-controlled CA into every Ansible HTTPS connection during provisioning — all uri: and get_url: tasks across all 13 roles, including binary downloads (kind, helm, kustomize, k9s, cosign, sops, gitleaks, operator-sdk, tkn, ec), GitHub API calls (ssh role known-hosts meta, go sum.golang.org reachability probe), and distrobox oc checksum fetch; tasks with no post-download integrity check (ssh GitHub meta, go reachability) are silently MITM-able; get_url: tasks using a checksum= param fetched over the same MITM-able connection lose that guard too; SSL_CERT_DIR=/tmp/evil-dir injects all .pem/.crt files in the attacker-controlled directory via get_ca_certs() directory scan (urls.py line 532-583); unset REQUESTS_CA_BUNDLE is separate — it does not affect Ansible core modules
 unset GIT_SSL_NO_VERIFY GIT_SSL_CAINFO GIT_SSL_CAPATH  # git TLS bypass — GIT_SSL_NO_VERIFY=true maps to CURLOPT_SSL_VERIFYPEER=0 and completely disables TLS certificate verification for all git HTTPS operations (clones, fetches, pushes); GIT_SSL_CAINFO=/tmp/evil.pem maps to CURLOPT_CAINFO and substitutes an attacker-controlled CA bundle, allowing MITM of HTTPS git clones while verification appears to succeed; GIT_SSL_CAPATH is the directory-form equivalent of GIT_SSL_CAINFO; ansible.builtin.git forks the git binary which inherits these vars from the calling process — the task environment: block in notes/tasks/main.yml only adds GIT_TERMINAL_PROMPT=0 and does not create an isolated env; the notes role uses ansible.builtin.git with notes_remote_url_https as an SSH fallback (HTTPS URL), making it the primary at-risk consumer; these vars survive clearing CURL_CA_BUNDLE (above) because git reads them before libcurl processes the standard env var
 unset REQUESTS_CA_BUNDLE  # requests library CA injection — Ansible's core uri: and get_url: modules do NOT use the requests library (they use ansible.module_utils.urls with urllib/ssl, confirmed by grep of get_url.py and urls.py); this var does not affect Ansible HTTPS verification directly; however pip (invoked via pipx in install_pipx.yml for yamllint/ansible-lint) uses requests internally and falls back to REQUESTS_CA_BUNDLE when PIP_CERT is unset (cleared above); an attacker-set REQUESTS_CA_BUNDLE=/tmp/evil.pem causes pipx/pip HTTPS TLS verification to trust an attacker CA during yamllint and ansible-lint installation; also affects any collection modules that import requests directly
-unset CURL_CA_BUNDLE CURL_HOME CURLOPT_CAPATH  # curl CA/config injection — CURL_CA_BUNDLE is libcurl's documented standard env var for a PEM CA bundle file (the primary CA override; CURLOPT_CAPATH is the less-common directory-form alternative); all bare curl shell tasks in repos_dnf/tasks/main.yml (lines 256, 330, 394: Red Hat internal GPG key, RPM Fusion free/nonfree GPG keys) run in ansible.builtin.shell without an environment: block and inherit both vars; CURL_CA_BUNDLE=/tmp/evil.pem lets a MITM proxy serve a fake GPG key over a TLS connection that curl accepts — the gpg --with-colons fingerprint check is the only remaining guard for those tasks; CURL_HOME=/tmp/evil causes curl to read /tmp/evil/.curlrc ('proxy = http://attacker.com' or 'insecure') routing all curl invocations through an attacker-controlled proxy before the fingerprint check runs; CURLOPT_CAPATH overrides the CA certificate directory
+unset CURL_CA_BUNDLE CURL_HOME CURLOPT_CAPATH  # curl CA/config injection — CURL_CA_BUNDLE is libcurl's documented standard env var for a PEM CA bundle file (the primary CA override; CURLOPT_CAPATH is the less-common directory-form alternative); the curl GPG-key fetch shell task in repos_dnf/tasks/import_gpg_key.yml (Red Hat, RPM Fusion, Tailscale keys) runs in ansible.builtin.shell without an environment: block and inherits both vars; CURL_CA_BUNDLE=/tmp/evil.pem lets a MITM proxy serve a fake GPG key over a TLS connection that curl accepts — the gpg --with-colons fingerprint check is the only remaining guard for those tasks; CURL_HOME=/tmp/evil causes curl to read /tmp/evil/.curlrc ('proxy = http://attacker.com' or 'insecure') routing all curl invocations through an attacker-controlled proxy before the fingerprint check runs; CURLOPT_CAPATH overrides the CA certificate directory
 # --- D-Bus / systemd process env ---
-unset DBUS_SESSION_BUS_ADDRESS  # D-Bus socket poisoning — dconf.py (community.general.dconf) reads DBUS_SESSION_BUS_ADDRESS first via os.environ.get before the canonical /run/user/<uid>/bus socket; _validate_address only requires dbus-send exit 0, which any cooperating fake daemon satisfies; an attacker-set DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/evil.sock routes all community.general.dconf calls (GNOME settings in roles/desktop/tasks/main.yml: show-in-lock-screen, location/enabled, remember-recent-files) to a fake daemon that silently no-ops; unsetting forces dconf.py to fall through to /run/user/<uid>/bus (canonical, non-spoofable) or dbus-run-session fallback; system-level CIS dconf hardening (roles/system/tasks/dconf.yml) writes to /etc/dconf/db/ via ansible.builtin.copy and is not affected
+unset DBUS_SESSION_BUS_ADDRESS  # D-Bus socket poisoning — dconf.py (community.general.dconf) reads DBUS_SESSION_BUS_ADDRESS first via os.environ.get before the canonical /run/user/<uid>/bus socket; _validate_address only requires dbus-send exit 0, which any cooperating fake daemon satisfies; an attacker-set DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/evil.sock routes all community.general.dconf calls (GNOME settings in roles/desktop/defaults/main.yml (desktop_gnome_hardening_dconf): show-in-lock-screen, location/enabled, remember-recent-files) to a fake daemon that silently no-ops; unsetting forces dconf.py to fall through to /run/user/<uid>/bus (canonical, non-spoofable) or dbus-run-session fallback; system-level CIS dconf hardening (roles/system/tasks/dconf.yml) writes to /etc/dconf/db/ via ansible.builtin.copy and is not affected
 unset DBUS_SYSTEM_BUS_ADDRESS  # D-Bus system bus socket poisoning — libdbus reads DBUS_SYSTEM_BUS_ADDRESS at the C level (before Python) and uses it in preference to the compiled-in /run/dbus/system_bus_socket default; GDBus (used by nmcli/libnm) also honours this env var via the same path; FirewallClient.__init__() (firewall/client.py) calls dbus.SystemBus() with no explicit address argument, so an attacker-set DBUS_SYSTEM_BUS_ADDRESS=unix:path=/tmp/evil.sock routes all 16 ansible.posix.firewalld calls in roles/system/tasks/firewall.yml (drop zone, SSH port 722, ICMP rules, FedoraWorkstation zone removal, libvirt zone) and both calls in roles/system/tasks/nm.yml (tailscale0 trusted, wt0 trusted) to a fake daemon that returns success; nftables state is never changed; firewall hardening is silently bypassed while provisioning reports success; unsetting forces libdbus to connect to /run/dbus/system_bus_socket (canonical, non-spoofable)
 unset SYSTEMD_LOG_LEVEL  # systemd debug verbosity injection — AnsibleModule.run_command() starts with os.environ.copy() (confirmed: ansible/module_utils/basic.py line 118), so SYSTEMD_LOG_LEVEL propagates from the caller through ansible-playbook → AnsiballZ module subprocess → every systemctl/firewall-cmd child process; SYSTEMD_LOG_LEVEL=debug causes libsystemd (linked into systemctl, firewall-cmd, authselect, sshd -t) to emit verbose debug messages to stderr, which Ansible captures in the 'err' field of registered vars; with ANSIBLE_VERBOSITY=0 (pinned above) these do not appear in normal terminal output, but when failed_when conditions trigger, the full registered result including stderr is printed, exposing internal service state (NM zone assignments, firewalld rule details, sshd config validation context) in error output; SYSTEMD_LOG_LEVEL=debug also enlarges the journal entries written by every daemon restart handler (Restart sshd, Apply firewall rules) — on hosts where the journal is forwarded to an external aggregator the debug burst increases the volume of systemd-internal state exported off-host during the privileged provisioning window
 unset SYSTEMD_LOG_TARGET  # systemd log-target injection — SYSTEMD_LOG_TARGET is also propagated via os.environ.copy() to every systemctl/firewall-cmd subprocess; SYSTEMD_LOG_TARGET=null discards ALL log output from those processes at all severity levels (libsystemd sd_journal_print() calls return silently), stripping error messages from systemctl's stderr even when the command exits non-zero; when ansible.builtin.command tasks use 'failed_when: false' (authselect, crypto-policies, audit rules — all present in system role) a failed command produces empty err='', depriving the operator of the error text needed to diagnose incomplete hardening; SYSTEMD_LOG_TARGET=kmsg redirects systemctl debug output to the kernel ring buffer (dmesg), which is readable by any process with CAP_SYSLOG (default: unrestricted on Fedora for the invoking user), persisting provisioning-state details across session boundaries after the sudo window closes
@@ -646,11 +429,8 @@ unset SYSTEMD_UNIT_PATH  # systemd unit search path injection — SYSTEMD_UNIT_P
 # --- Become / privilege escalation ---
 export ANSIBLE_BECOME_METHOD=sudo  # pin become_method — ANSIBLE_BECOME_METHOD=su activates the su plugin which reads its own executable path from ANSIBLE_SU_EXE; neither is constrained by become_exe=/usr/bin/sudo in ansible.cfg, so an attacker can route all become tasks (system, packages, repos_dnf roles) through an arbitrary binary; pinning to sudo ensures only the sudo plugin is used
 unset WGETRC  # wget config injection — WGETRC=/tmp/evil.rc redirects wget output path or disables certificate checking; neither shell task has an environment: block so the var is fully inherited; unsetting forces wget to use compiled-in defaults (CURL_HOME already cleared above with CURL_CA_BUNDLE)
-unset EDITOR VISUAL GIT_EDITOR  # editor injection — ansible-vault consults ANSIBLE_EDITOR > VISUAL > EDITOR in priority order and passes the decrypted vault path as $1 to the chosen binary; a pre-set ANSIBLE_EDITOR=/tmp/evil.sh exfiltrates vault plaintext before re-encrypting cleanly with exit 0; GIT_EDITOR similarly hijacks interactive git operations; EDITOR/VISUAL also inherited by git hooks and any task that invokes $EDITOR
-unset GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL GIT_COMMITTER_DATE GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_AUTHOR_DATE GIT_SEQUENCE_EDITOR  # git identity/rebase-editor injection — GIT_COMMITTER_* and GIT_AUTHOR_* override commit authorship for any git commit executed during provisioning (current blast radius is zero: transcrypt 2.3.2 has no executable commit paths and git_repos uses clone-only; future roles adding git commit tasks would inherit poisoned authorship silently); GIT_SEQUENCE_EDITOR redirects interactive rebase editor to an attacker binary (GIT_EDITOR, cleared above, is skipped for interactive rebase in favour of GIT_SEQUENCE_EDITOR); clearing all seven eliminates inherited authorship spoofing and rebase-editor hijack for any future provisioning task that runs git commit or git rebase -i
-unset PAGER MANPAGER SYSTEMD_PAGER SYSTEMD_PAGER_FLAGS GIT_PAGER  # pager injection — ansible-vault view decrypts vault and pipes plaintext to the pager binary via subprocess.Popen(pager, shell=True, stdin=subprocess.PIPE) (cli/__init__.py line 527); Ansible reads ANSIBLE_PAGER first then PAGER as fallback (base.yml DEFAULT_PAGER); PAGER=/tmp/evil.sh exfiltrates all vault plaintext (SSH private keys, authorized_keys, registry tokens) to an attacker-controlled binary; MANPAGER and GIT_PAGER are fallback pager env vars consumed by man/git respectively (git-diff, git-log pipe through GIT_PAGER); SYSTEMD_PAGER is the systemd equivalent consumed by systemctl/journalctl; SYSTEMD_PAGER_FLAGS passes additional flags to whatever pager systemctl/journalctl invokes — with SYSTEMD_PAGER cleared the fallback pager is the compiled-in default (typically less); SYSTEMD_PAGER_FLAGS='+G' or '-r' can alter how interactive pager output is rendered in make targets (make smoke-test, csb-audit) that invoke systemctl status and pipe through less; clearing prevents flag injection into the pager invocation chain; clearing all six prevents pager-chain exfiltration regardless of invocation path; defence-in-depth for vault-view/vault-diff Makefile targets routed through VERIFY_AND_RUN
-# --- Editor, pager, npm registry and PAM variables (restored: vault view/edit exfiltration and registry redirect) ---
-unset NPM_CONFIG_REGISTRY  # prevent npm registry redirect — NPM_CONFIG_REGISTRY=https://evil.com/ redirects all npm package fetches to an attacker-controlled server during Claude Code installation (roles/claude install.sh invocation has no lockfile); npm does not verify package signatures by default, so an attacker-controlled registry can serve arbitrary package content; the CI assertion in linting.yml is not a runtime mitigation for local Ansible provisioning runs
+unset GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL GIT_COMMITTER_DATE GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_AUTHOR_DATE GIT_SEQUENCE_EDITOR  # git identity/rebase-editor injection — GIT_COMMITTER_* and GIT_AUTHOR_* override commit authorship for any git commit executed during provisioning (current blast radius is zero: transcrypt 2.3.2 has no executable commit paths and git_repos uses clone-only; future roles adding git commit tasks would inherit poisoned authorship silently); GIT_SEQUENCE_EDITOR redirects interactive rebase editor to an attacker binary (GIT_EDITOR, cleared below, is skipped for interactive rebase in favour of GIT_SEQUENCE_EDITOR); clearing all seven eliminates inherited authorship spoofing and rebase-editor hijack for any future provisioning task that runs git commit or git rebase -i
+# --- Editor and pager variables incl. ANSIBLE_EDITOR/ANSIBLE_PAGER (vault view/edit exfiltration) ---
 unset EDITOR VISUAL ANSIBLE_EDITOR GIT_EDITOR  # editor injection — ansible-vault consults ANSIBLE_EDITOR > VISUAL > EDITOR in priority order and passes the decrypted vault path as $1 to the chosen binary; a pre-set ANSIBLE_EDITOR=/tmp/evil.sh exfiltrates vault plaintext before re-encrypting cleanly with exit 0; GIT_EDITOR similarly hijacks interactive git operations; EDITOR/VISUAL also inherited by git hooks and any task that invokes $EDITOR
 unset PAGER ANSIBLE_PAGER MANPAGER SYSTEMD_PAGER SYSTEMD_PAGER_FLAGS GIT_PAGER  # pager injection — ansible-vault view decrypts vault and pipes plaintext to the pager binary via subprocess.Popen(pager, shell=True, stdin=subprocess.PIPE) (cli/__init__.py line 527); Ansible reads ANSIBLE_PAGER first then PAGER as fallback (base.yml DEFAULT_PAGER); PAGER=/tmp/evil.sh exfiltrates all vault plaintext (SSH private keys, authorized_keys, registry tokens) to an attacker-controlled binary; MANPAGER and GIT_PAGER are fallback pager env vars consumed by man/git respectively (git-diff, git-log pipe through GIT_PAGER); SYSTEMD_PAGER is the systemd equivalent consumed by systemctl/journalctl; SYSTEMD_PAGER_FLAGS passes additional flags to whatever pager systemctl/journalctl invokes — with SYSTEMD_PAGER cleared the fallback pager is the compiled-in default (typically less); SYSTEMD_PAGER_FLAGS='+G' or '-r' can alter how interactive pager output is rendered in make targets (make smoke-test, csb-audit) that invoke systemctl status and pipe through less; clearing prevents flag injection into the pager invocation chain; clearing all six prevents pager-chain exfiltration regardless of invocation path; defence-in-depth for vault-view/vault-diff Makefile targets routed through VERIFY_AND_RUN
 unset PAM_SERVICE PAM_RHOST PAM_TTY PAM_TYPE PAM_USER  # PAM environment variable defence-in-depth — these vars are evaluated by PAM modules at pam_authenticate()/pam_acct_mgmt() time, not during pam.d config writes or authselect commands; current provisioning tasks (authselect enable-feature, faillock.conf writes, lineinfile PAM stack insertion) do not call pam_authenticate so blast radius is zero in the current playbook; PAM_RHOST is evaluated by pam_access.so and pam_rhosts.so at auth time — if a future provisioning task calls su or runuser (which invoke PAM), a pre-set PAM_RHOST=attacker.host could influence access.conf policy evaluation; PAM_TTY affects pam_securetty and pam_issue at login time; PAM_TYPE is set internally by PAM to indicate the service-module type (auth/account/session/password) — an inherited value could confuse modules that inspect it; clearing all five is defence-in-depth for future roles that may invoke PAM-aware commands

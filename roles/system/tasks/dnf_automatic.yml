@@ -22,14 +22,13 @@
         mode: "0644"
       notify: Restart dnf-automatic timer
 
-    - name: Set dnf-automatic service/timer name facts
+    - name: Set dnf-automatic service name fact
       ansible.builtin.set_fact:
         _dnf_auto_svc: "{{ 'dnf5-automatic.service' if is_dnf5 else 'dnf-automatic.service' }}"
-        _dnf_auto_timer: "{{ 'dnf5-automatic.timer' if is_dnf5 else 'dnf-automatic.timer' }}"
 
     - name: Enable dnf-automatic timer
       ansible.builtin.systemd:
-        name: "{{ _dnf_auto_timer }}"
+        name: "{{ 'dnf5-automatic.timer' if is_dnf5 else 'dnf-automatic.timer' }}"
         state: started
         enabled: true
       # check mode only simulates the install, so the timer unit does not exist yet
@@ -54,7 +53,6 @@
     - system_aide_enabled | bool
     - system_dnf_automatic_apply_updates | bool
     - not system_is_container
-    - _dnf_auto_svc is defined
 
 # NOTE: aide_cleanup.yml removes this drop-in when system_aide_enabled=false
 - name: Deploy AIDE update hook for dnf-automatic
@@ -76,7 +74,6 @@
     - system_aide_enabled | bool
     - system_dnf_automatic_apply_updates | bool  # hook only meaningful when packages are applied
     - not system_is_container
-    - _dnf_auto_svc is defined
   notify: Restart dnf-automatic timer
 
 - name: Remove AIDE update hook when dnf-automatic is download-only
@@ -88,5 +85,4 @@
     - system_aide_enabled | bool
     - not (system_dnf_automatic_apply_updates | bool)
     - not system_is_container
-    - _dnf_auto_svc is defined
   notify: Restart dnf-automatic timer

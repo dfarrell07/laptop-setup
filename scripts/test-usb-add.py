@@ -23,7 +23,7 @@ class UsbAddTests(unittest.TestCase):
                          'allow id 3297:1969 name "Moonlander Mark I" with-interface { 03:01:01 03:00:00 }')
 
     def test_unsafe_or_empty_names_are_dropped(self):
-        for name in ('', 'a"b', 'x{{y', 'tab\there', 'café', 'pct%'):
+        for name in ('', 'a"b', 'x{{y', 'tab\there', 'café', 'pct%', 'a*b'):
             self.assertEqual(usb.safe_name(name), '')
         device = usb.parse_device_line('2: block id 10ab:9309 serial "" name "" with-interface e0:01:01')
         self.assertEqual(usb.build_rule(device), 'allow id 10ab:9309 with-interface e0:01:01')

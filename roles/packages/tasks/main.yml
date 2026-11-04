@@ -15,6 +15,17 @@
     - "{{ packages_extra_apt }}"
     - "{{ packages_extra_brew }}"
 
+- name: Validate GONOSUMDB checksum exceptions
+  ansible.builtin.assert:
+    that:
+      - >-
+        ((dotfiles_gonosumdb | default('')) or (dotfiles_goprivate | default('')))
+        | go_checksum_exceptions_safe((packages_go_install | default([])) + (packages_go_install_work | default([]))
+                                     + ['github.com/submariner-io/subctl/cmd'])
+    fail_msg: >-
+      The effective checksum exception (GONOSUMDB or its GOPRIVATE fallback) contains a public pattern that bypasses Go checksum-database
+      verification, or uses unsupported pattern syntax. Use private domain prefixes
+      (e.g. '*.redhat.com') or literal private owners; only literals and '*' globs are supported.
 
 - name: SECURITY assert binary version variables contain no path traversal (defense-in-depth)
   vars:
@@ -48,8 +59,7 @@
       - packages_subctl_version
       - packages_aerospace_version
       - packages_krew_bootstrap_version
-      - packages_krew_plugin_ctx_version
-      - packages_krew_plugin_ns_version
+      - packages_kubectx_version
       - packages_kubectl_version
   ansible.builtin.assert:
     that:
@@ -98,13 +108,21 @@
     - needs_container_tier == 'hybrid'
     - packages_install_binaries | bool
 
+- name: Set Linux x86 work binary install fact
+  ansible.builtin.set_fact:
+    _packages_linux_x86_work: "{{ packages_install_binaries | bool
+      and is_linux
+      and ansible_facts['architecture'] == 'x86_64'
+      and profile == 'work' }}"
+
 - name: Install dnf packages
   ansible.builtin.include_tasks: install_dnf_packages.yml
 
 # Enable bpfman.socket here (Play 2 packages role) to catch the case where bpfman
 # was just installed in this play. The system role (Play 1) also attempts this, but
 # on first provision bpfman is not yet installed when Play 1 runs, so that attempt
-# is a no-op.
+# is a no-op. The probe runs only when bpfman is enabled (work profile), and the
+# three tasks below key off its result.
 # noqa: command-instead-of-module — probe optional unit without starting it
 - name: Detect bpfman.socket for packages role enable attempt (may not be installed)
   ansible.builtin.command:  # noqa: command-instead-of-module
@@ -115,8 +133,9 @@
   check_mode: false
   when:
     - is_dnf
-    - not system_is_container
+    - not system_is_container  # bpfman.socket enable crashes container PID 1
     - profile == 'work'
+    - packages_bpfman_enabled | bool
 
 - name: Enable bpfman.socket after package install (required for bpfman load/list to work)
   ansible.builtin.systemd:
@@ -126,10 +145,6 @@
   become: true
   tags: [become]
   when:
-    - packages_bpfman_enabled | bool
-    - is_dnf
-    - not system_is_container  # bpfman.socket enable crashes container PID 1
-    - profile == 'work'
     - (_packages_bpfman_check.rc | default(-1)) == 0
 
 - name: Check bpfman SELinux context for unconfined warning
@@ -145,10 +160,6 @@
   changed_when: false
   failed_when: false
   when:
-    - packages_bpfman_enabled | bool
-    - is_dnf
-    - not system_is_container
-    - profile == 'work'
     - (_packages_bpfman_check.rc | default(-1)) == 0
 
 - name: Warn if bpfman is running unconfined (no SELinux policy)
@@ -158,10 +169,6 @@
       A compromised bpfman has CAP_SYS_ADMIN and can load arbitrary kernel eBPF programs.
       Consider manual bpftool for one-off tasks instead of persistent bpfman daemon.
   when:
-    - packages_bpfman_enabled | bool
-    - is_dnf
-    - not system_is_container
-    - profile == 'work'
     - (_packages_bpfman_check.rc | default(-1)) == 0
     - _bpfman_selinux_context.stdout is defined
     - "':bin_t:' in _bpfman_selinux_context.stdout"
@@ -265,13 +272,6 @@
       tags: [become]
       when: _packages_tailscaled_unit.stdout == 'loaded'
 
-- name: Set Linux x86 work binary install fact
-  ansible.builtin.set_fact:
-    _packages_linux_x86_work: "{{ packages_install_binaries | bool
-      and is_linux
-      and ansible_facts['architecture'] == 'x86_64'
-      and profile == 'work' }}"
-
 - name: Install binary downloads
   ansible.builtin.import_tasks: install_binary_downloads.yml
 
@@ -288,15 +288,6 @@
   when:
     - packages_install_binaries | bool
     - not ansible_check_mode
-
-# --- golang verification (defense-in-depth before GOTOOLCHAIN=local) ---
-
-- name: Verify golang binary after installation
-  ansible.builtin.include_tasks: verify_golang.yml
-  when:
-    - profile == 'work'
-    - (is_dnf or is_apt or is_macos)
-    - packages_install_binaries | bool
 
 # go install runs only for real: its temp GOBIN/subctl dirs (tempfile) are not created in
 # check mode, so templating their .path would abort make check once Go is installed.
@@ -348,9 +339,8 @@
   ansible.builtin.include_tasks: install_subctl_versions.yml
 
 - name: Krew post-install — plugin index update and SHA256-pinned plugin installation
-  # Guard: skip entirely if krew binary is absent (e.g., CSB install failed silently above).
-  # Without this guard, `krew update` hard-fails the play when the binary is missing, with no
-  # CSB rescue handler to record the failure and continue provisioning.
+  # Guard: skip when the krew binary is absent (install failed or was skipped) so the rescue
+  # below does not record a second, misleading krew-plugins failure.
   when:
     - _packages_linux_x86_work
     - _krew_binary_stat.stat.exists | default(false)
@@ -379,13 +369,13 @@
       loop:
         - name: ctx
           binary: kubectx
-          version: "{{ packages_krew_plugin_ctx_version }}"
-          archive_sha256: "{{ packages_krew_ctx_archive_sha256 }}"
+          version: "{{ packages_kubectx_version }}"
+          archive_sha256: "{{ packages_kubectx_archive_sha256 }}"
           binary_sha256: "{{ packages_krew_plugin_ctx_sha256 }}"
         - name: ns
           binary: kubens
-          version: "{{ packages_krew_plugin_ns_version }}"
-          archive_sha256: "{{ packages_krew_ns_archive_sha256 }}"
+          version: "{{ packages_kubectx_version }}"
+          archive_sha256: "{{ packages_kubectx_archive_sha256 }}"
           binary_sha256: "{{ packages_krew_plugin_ns_sha256 }}"
       loop_control:
         label: "{{ item.name }}@{{ item.version }}"

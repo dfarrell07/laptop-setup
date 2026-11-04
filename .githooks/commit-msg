@@ -107,7 +107,7 @@ if echo "$msg" | grep -qE '\.$'; then
   exit 1
 fi
 
-# Sync message-format rules with roles/dotfiles/files/git-template-commit-msg.
+# The global template (git-template-commit-msg) only enforces Signed-off-by; subject-style rules live in this hook and commitlint.
 # The supply-chain signing configuration check above is repository-specific.
 if command -v npx >/dev/null 2>&1; then
   if [ -x "./node_modules/.bin/commitlint" ]; then

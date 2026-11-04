@@ -219,19 +219,25 @@
       changed_when: false
       failed_when: false
 
+    # The packages and system roles enable bpfman.socket only when packages_bpfman_enabled is true;
+    # otherwise the system role stops and disables it.
     - name: Check bpfman.socket is enabled
       ansible.builtin.command: systemctl is-enabled bpfman.socket  # noqa: command-instead-of-module
       register: verify_bpfman_socket
       changed_when: false
       become: true
       failed_when: false
-      when: verify_bpfman_bin.rc == 0
+      when:
+        - verify_bpfman_bin.rc == 0
+        - packages_bpfman_enabled | default(false) | bool
 
     - name: Assert bpfman.socket is enabled
       ansible.builtin.assert:
         that: verify_bpfman_socket.rc == 0
         fail_msg: "bpfman.socket is not enabled — bpfman load/list will fail at runtime"
-      when: verify_bpfman_bin.rc == 0
+      when:
+        - verify_bpfman_bin.rc == 0
+        - packages_bpfman_enabled | default(false) | bool
 
     - name: Check sysctl net.ipv4.conf.all.rp_filter
       ansible.builtin.command: sysctl -n net.ipv4.conf.all.rp_filter
@@ -516,17 +522,20 @@
         fail_msg: "AIDE check timer not enabled"
       when: system_aide_enabled | default(false)
 
-    - name: Stat AIDE database
+    # The baseline is built by site.yml post_tasks, not by converge; the system role only requests it.
+    - name: Stat AIDE rebaseline marker
       ansible.builtin.stat:
-        path: /var/lib/aide/aide.db.gz
-      register: verify_aide_db
+        path: /var/lib/aide/.rebaseline-pending
+      register: verify_aide_marker
       become: true
       when: system_aide_enabled | default(false)
 
-    - name: Assert AIDE database is initialized
+    - name: Assert AIDE rebaseline was requested
       ansible.builtin.assert:
-        that: verify_aide_db.stat.exists
-        fail_msg: "AIDE database /var/lib/aide/aide.db.gz not initialized"
+        that: verify_aide_marker.stat.exists
+        fail_msg: >-
+          AIDE rebaseline marker /var/lib/aide/.rebaseline-pending not requested by system role
+          (baseline is built by site.yml post_tasks, not by converge)
       when: system_aide_enabled | default(false)
 
     - name: Check AIDE service RestrictAddressFamilies sandbox setting

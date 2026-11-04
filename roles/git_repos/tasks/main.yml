@@ -27,22 +27,12 @@
   failed_when: false
   check_mode: false  # read-only probe — must run even in --check mode
 
-- name: Warn if gh not installed
+- name: Warn if gh missing or not authenticated
   ansible.builtin.debug:
     msg: >-
-      gh not found in PATH — run 'make packages' first.
-      Cloning will fail for private repos.
-  # The command module reports a missing binary as rc 2 with "No such file" (not shell rc 127).
-  when: "'No such file' in (git_repos_gh_auth.msg | default(''))"
-
-- name: Warn if gh not authenticated
-  ansible.builtin.debug:
-    msg: >-
-      GitHub CLI not authenticated. Run 'gh auth login' before
-      'make repos'. Cloning will fail for private repos.
-  when:
-    - git_repos_gh_auth.rc != 0
-    - "'No such file' not in (git_repos_gh_auth.msg | default(''))"
+      gh not found or not authenticated: run 'make packages', then
+      'gh auth login', before 'make repos'. Cloning will fail for private repos.
+  when: git_repos_gh_auth.rc != 0
 
 - name: Determine active categories for profile
   ansible.builtin.set_fact:
@@ -123,8 +113,8 @@
       Skipping repos at {{ git_repos_vpn_check_host }} this run; connect to VPN and re-run 'make repos'.
   when: git_repos_vpn_check.failed | default(false)
 
-# Without this, the known_hosts assertion below aborts the role whenever the VPN is down,
-# because the ssh role could not keyscan the VPN-gated host either.
+# Drop repos on the VPN-gated host for this run so their clones are not attempted and
+# reported as failures while it is unreachable.
 - name: Skip VPN-gated repos while the VPN host is unreachable
   ansible.builtin.set_fact:
     git_repos_filtered: >-
@@ -161,7 +151,8 @@
 
 # accept_newhostkey below would trust an unseen host key, so SSH repos are cloned only from
 # hosts the ssh role already seeded (pinned fingerprint, TOFU keyscan or the pinned github.com key).
-# Unseeded hosts (off VPN, fingerprint not yet pinned) are deferred to a later 'make ssh repos' instead of failing the run.
+# Unseeded hosts (off VPN, fingerprint not yet pinned) are deferred to a later 'make chunk-ssh_client', then
+# 'make chunk-repos', instead of failing the run.
 - name: Check SSH git repo hosts are in known_hosts
   ansible.builtin.command:
     cmd: >-
@@ -190,7 +181,7 @@
         msg: >-
           Skipping SSH repos on {{ _unseeded | join(', ') }}: no known_hosts entry (host
           unreachable or its fingerprint is not pinned in ssh_work_keyscan_hosts). Pin the
-          fingerprint, then run 'make ssh repos' on a network that reaches the host.
+          fingerprint, then run 'make chunk-ssh_client' and 'make chunk-repos' on a network that reaches the host.
 
     - name: Drop SSH repos on unseeded hosts
       ansible.builtin.set_fact:

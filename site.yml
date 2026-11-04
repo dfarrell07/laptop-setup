@@ -44,12 +44,6 @@
   tags: [become]
 
   pre_tasks:
-    # become:false so --check mode works without requiring sudo
-    - name: Gather facts
-      ansible.builtin.gather_facts:
-      become: false
-      tags: [always]
-
     - name: Verify sudo authentication (Play 1)
       ansible.builtin.import_tasks: common/tasks/become_probe.yml
       # always + become, not chunk names: the probe must run for every sudo target and be skipped by the no-sudo ones
@@ -81,7 +75,7 @@
   roles:
     - role: repos_dnf
       tags: [repos_dnf]
-      when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+      when: is_dnf | bool
 
     - role: system
       tags: [system]
@@ -213,11 +207,10 @@
       when: ansible_facts['system'] | default('Linux') == 'Linux' and distrobox_enabled | bool
 
   post_tasks:
-    # AIDE's first baseline is built in the system play; packages and later roles then add
-    # binaries under /usr/local/bin and edit monitored /etc paths, so the first scheduled check
-    # would report all of it. The system role leaves a marker when it (re)initializes the
-    # baseline; it is rebuilt here once and the marker removed, so a run that fails before
-    # this point is caught up by the next successful one.
+    # AIDE's baseline is built here, once, after later roles add binaries under /usr/local/bin
+    # and edit monitored /etc paths (else the first scheduled check would report all of it).
+    # The system role requests a baseline build via the marker; it is built here and the marker removed,
+    # so a run that fails before this point is caught up by the next successful one.
     - name: Check for a pending AIDE baseline rebuild
       ansible.builtin.stat:
         path: /var/lib/aide/.rebaseline-pending
@@ -225,6 +218,14 @@
       register: _aide_rebaseline_marker
       when: ansible_facts['system'] == 'Linux'  # no AIDE (and no reason to escalate) on macOS
       tags: [always, become, sys_optional]
+
+    - name: Warn that the AIDE baseline build takes several minutes
+      ansible.builtin.debug:
+        msg: >-
+          Building the AIDE baseline: 5-10 minutes on a minimal filesystem, 20-30+ with container
+          images or large source trees. No output appears during the scan; do not cancel.
+      when: _aide_rebaseline_marker.stat.exists | default(false)
+      tags: [always, sys_optional]
 
     - name: Rebuild the AIDE baseline after provisioning
       ansible.builtin.shell:  # noqa: command-instead-of-module

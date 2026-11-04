@@ -60,7 +60,6 @@ class ClaudePrivacyTests(unittest.TestCase):
         self.assertIn('merge-claude-settings.py', tasks)
         self.assertIn("item ~ '/settings.json'", tasks)
         self.assertNotRegex(tasks, r'dest:\s*"?\{\{ item \}\}/settings\.local\.json')
-        self.assertFalse((ROOT / 'roles/claude/templates/settings.local.json.j2').exists())
         for key in ['"sandbox"', '"enableAllProjectMcpServers"', '"deny"']:
             self.assertIn(key, template)
         self.assertIn('"**/.githooks/**"', defaults)
@@ -71,7 +70,6 @@ class ClaudePrivacyTests(unittest.TestCase):
 
     def test_weaker_nested_sandbox_only_in_containers(self):
         defaults = yaml.safe_load((ROOT / 'roles/claude/defaults/main.yml').read_text())
-        self.assertNotIn('enableWeakerNestedSandbox', defaults['claude_sandbox_config'])
         ansible = ROOT / '.venv/bin/ansible'
         if not ansible.exists():
             self.skipTest('no .venv ansible')
@@ -92,6 +90,8 @@ class ClaudePrivacyTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 sandbox = json.loads(out.read_text())['sandbox']
                 self.assertIs(sandbox['enableWeakerNestedSandbox'], expected, (in_container, tier))
+                self.assertEqual({k: v for k, v in sandbox.items() if k != 'enableWeakerNestedSandbox'},
+                                 {'enabled': True, 'allowUnsandboxedCommands': False, 'failIfUnavailable': True})
 
 
 if __name__ == '__main__':

@@ -30,47 +30,8 @@
             ]{{ ',' if not loop.last else '' }}
 {% endfor %}
         },
-        "docker-daemon": {
-            "": [
-                {
-                    "type": "insecureAcceptAnything"
-                }
-            ]
-        },
-        "containers-storage": {
-            "": [
-                {
-                    "type": "insecureAcceptAnything"
-                }
-            ]
-        },
-        "docker-archive": {
-            "": [
-                {
-                    "type": "insecureAcceptAnything"
-                }
-            ]
-        },
-        "oci-archive": {
-            "": [
-                {
-                    "type": "insecureAcceptAnything"
-                }
-            ]
-        },
-        "dir": {
-            "": [
-                {
-                    "type": "insecureAcceptAnything"
-                }
-            ]
-        },
-        "oci": {
-            "": [
-                {
-                    "type": "insecureAcceptAnything"
-                }
-            ]
-        }
+{% for t in ['docker-daemon', 'containers-storage', 'docker-archive', 'oci-archive', 'dir', 'oci'] %}
+        "{{ t }}": {"": [{"type": "insecureAcceptAnything"}]}{{ ',' if not loop.last else '' }}
+{% endfor %}
     }
 }

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Security test for git hooks: verify no malicious behavior patterns detected
-# Used by CI linting.yml as behavioral validation complementing shellcheck syntax checks
+# Run by make test-scripts (locally and in CI) as behavioral validation complementing shellcheck syntax checks
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

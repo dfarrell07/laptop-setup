@@ -93,7 +93,7 @@ check_vault_blob() {
 zero_sha=0000000000000000000000000000000000000000
 critical_pattern='^(scripts/|\.githooks/|collections-dist/|\.github/'
 critical_pattern+='|Makefile(\.sha256)?$|roles/(packages|repos_dnf)/defaults/main\.yml$'
-critical_pattern+='|requirements-(test\.lock|bootstrap\.txt)$|package(-lock)?\.json$|\.gitleaks\.toml$|\.gpg-enforcement$)'
+critical_pattern+='|requirements-test\.lock$|package(-lock)?\.json$|\.gitleaks\.toml$|\.gpg-enforcement$)'
 
 for update in ${updates[@]+"${updates[@]}"}; do
   read -r _local_ref local_sha remote_ref remote_sha <<< "$update"

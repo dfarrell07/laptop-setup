@@ -14,13 +14,11 @@
 #     piped without --force to avoid /proc/<pid>/cmdline exposure; fragile —
 #     relies on Click reading key prompt then confirm prompt sequentially from stdin)
 #   - Secret is NOT written to disk
-#   - EXIT-trap zeroization is best-effort (bash heap; old allocation not zeroed);
-#     effective suppression requires system_coredump_storage: none (not system_mask_abrt)
 #   - Verifies each key produces identical challenge-response output
 #   - Writes scripts/vault-pass.sh atomically with 700 permissions
 #   - Prompts for further keys; finish with Enter (no key inserted) or by answering n
 #   - HMAC-SHA1 vault derivation: 80-bit post-quantum security (Grover);
-#     acceptable for now (SECURITY.md has the migration plan); monitor for HMAC-SHA256 YubiKey OTP support
+#     acceptable for now (see SECURITY.md 'Vault password strength'); monitor for HMAC-SHA256 YubiKey OTP support
 set -euo pipefail
 # SECURITY: this script handles the HMAC secret and the vault password; never let xtrace record them.
 { set +x; } 2>/dev/null
@@ -45,13 +43,8 @@ die_loop() {
 _key_inserted() { local s; s=$("$_timeout" 10 ykman list --serials 2>/dev/null) || return 2; [[ -n "$s" ]]; }
 
 # ── Ctrl+C / signal cleanup ───────────────────────────────────────────────────
-# Zero-reassignment is best-effort: bash allocates a new string; the old heap
-# allocation is not zeroed. Effective mitigation: system_coredump_storage: none.
-_tmp='' _prog_err='' _ykcr_err='' _vault_err=''
-trap 'rm -f "$_tmp" "$_prog_err" "$_ykcr_err" "$_vault_err"
-      HMAC_SECRET="0000000000000000000000000000000000000000"; unset HMAC_SECRET
-      EXPECTED_OUTPUT="0000000000000000000000000000000000000000"; unset EXPECTED_OUTPUT
-      ACTUAL_OUTPUT="0000000000000000000000000000000000000000"; unset ACTUAL_OUTPUT' EXIT
+_tmp='' _prog_err='' _ykcr_err=''
+trap 'rm -f "$_tmp" "$_prog_err" "$_ykcr_err"' EXIT
 _cleanup_msg() {
   printf "\n\nInterrupted.\n" >&2
   if [[ ${PROGRAMMED_COUNT:-0} -gt 0 || ${_slot_write_started:-false} == true ]]; then
@@ -207,17 +200,7 @@ while true; do
   # we pipe without --force: ykman reads the key from stdin (click_prompt), then reads
   # the confirmation from stdin (click.confirm uses err=True — prompt text goes to
   # stderr, but the answer is still read from stdin). Input order: <key>\n<y>\n.
-  # This relies on Click's undocumented stdin behaviour and may break if ykman changes
-  # its prompt order. The alternative is Option A: ykman otp chalresp --touch --force 2
-  # "$HMAC_SECRET" — key in argv, /proc exposure accepted.
-  #
-  # Flag mapping from ykpersonalize:
-  #   -ochal-resp/-ochal-hmac  → implicit (chalresp subcommand always sets these)
-  #   -ohmac-lt64              → always on in ykman (not configurable, cannot be disabled)
-  #   -ochal-btn-trig          → --touch
-  #   -oserial-api-visible     → dropped (not exposed in ykman otp chalresp)
-  #   -2                       → positional slot argument 2
-  #   -y                       → --force (requires key in argv; avoided here via stdin)
+  # This relies on Click's undocumented stdin behaviour and may break if ykman changes its prompt order.
   _prog_err=$(mktemp)
   _slot_write_started=true  # an interrupt from here on may leave the new secret in slot 2
   if ! printf '%s\ny\n' "$HMAC_SECRET" | \
@@ -294,22 +277,19 @@ if [[ $PROGRAMMED_COUNT -lt 2 ]]; then
   printf "Computing vault password from YubiKey (touch it if it blinks)...\n"
   # Get the vault password for display and backup
   VAULT_PASSWORD=""
-  _vault_err=$(mktemp)
   _vault_rc=0
-  VAULT_PASSWORD=$("$_timeout" "$CHALRESP_TIMEOUT" ykman otp calculate 2 "$_CHALRESP_HEX" 2>"$_vault_err") || _vault_rc=$?
+  VAULT_PASSWORD=$("$_timeout" "$CHALRESP_TIMEOUT" ykman otp calculate 2 "$_CHALRESP_HEX" 2>/dev/null) || _vault_rc=$?
 
   if [[ $_vault_rc -ne 0 ]]; then
     printf "Touch YubiKey when ready (%ds timeout)... " "$CHALRESP_TIMEOUT"
     _vault_rc=0
-    VAULT_PASSWORD=$("$_timeout" "$CHALRESP_TIMEOUT" ykman otp calculate 2 "$_CHALRESP_HEX" 2>"$_vault_err") || _vault_rc=$?
+    VAULT_PASSWORD=$("$_timeout" "$CHALRESP_TIMEOUT" ykman otp calculate 2 "$_CHALRESP_HEX" 2>/dev/null) || _vault_rc=$?
   fi
 
   if [[ $_vault_rc -ne 0 ]]; then
-    rm -f "$_vault_err"
     warn "Failed to compute the vault password. The key is programmed: re-insert it, touch it when it blinks, and run: ykman otp calculate 2 $_CHALRESP_HEX"
     die "YubiKey unavailable or timed out; vault-pass.sh was NOT rewritten (re-run to start over)"
   fi
-  rm -f "$_vault_err"
 
   if [[ -z "$VAULT_PASSWORD" ]]; then
     die "Vault password computation failed (empty response); vault-pass.sh was NOT rewritten (re-run to start over)"
@@ -420,12 +400,9 @@ printf "  3. Populate group_vars/all/vault.yml with your keys:\n"
 printf "       ansible-vault encrypt group_vars/all/vault.yml  # encrypt first\n"
 printf "       ansible-vault edit group_vars/all/vault.yml     # then paste keys\n\n"
 printf "  4. Deploy the keys:\n"
-printf "       make ssh\n\n"
-printf "  5. Optional: Set up PIV key for age-plugin-yubikey (EC P-384; stronger encryption):\n"
-printf "       ykman piv keys generate --algorithm ECCP384 9a\n"
-printf "       ykman piv certificates generate --subject 'age-yubikey' 9a\n"
-printf "       age-plugin-yubikey  # follow prompts to get recipient string\n\n"
-printf "  6. Reboot only after steps 3-4 deployed authorized_keys; otherwise SSH login on port 722 fails.\n\n"
+printf "       make chunk-ssh_client\n\n"
+printf "  5. Last, at the console with a second session open: make chunk-ssh_authorized_keys (see docs/rollout-plan.md).\n"
+printf "     Reboot only after it wrote authorized_keys; otherwise SSH login on port 722 fails.\n\n"
 warn "Store each YubiKey in a different physical location."
 if [[ $PROGRAMMED_COUNT -ge 2 ]]; then
   warn "Multiple YubiKeys programmed — vault is protected by hardware redundancy."

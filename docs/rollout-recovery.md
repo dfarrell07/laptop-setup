@@ -20,7 +20,9 @@ chunk exists, how it breaks, how to verify it and how to undo it. Replace `<...>
    `cp -a`, then `restorecon -Rv <path>`. Never `sudo tee` into a managed directory.
 4. **Restore single files, not whole directories.** IT automation rewrites some files on its own schedule.
 5. After `sys_signin`, sudo sessions of non-root users may be I/O-logged (`log_input,log_output`): type no secrets into a root shell.
-6. After any rollback or reboot, run IT's compliance job once and confirm it reports success, then `make verify CHUNK=<name>` (a chunk you removed from `rollout_enable` is refused as not enabled: run `scripts/smoke-test.sh --user-only --only <its checks from its Verify line>` instead, where WARN on the settings the undo reverted is expected). It exits
+6. After any rollback or reboot, run IT's compliance job once and confirm it reports success, then `make verify CHUNK=<name>` (a chunk you
+   removed from `rollout_enable` is refused as not enabled: run `scripts/smoke-test.sh --user-only --only <its checks from its Verify line>`
+   instead, where WARN on the settings the undo reverted is expected). It exits
    non-zero on any mapped check that is FAIL, WARN or SKIP. Root-only checks are WARN or SKIP for a normal user: run
    `sudo scripts/smoke-test.sh --system-only --only <checks>` (`make verify` prints the exact command after a failure).
 
@@ -28,7 +30,8 @@ chunk exists, how it breaks, how to verify it and how to undo it. Replace `<...>
 
 ```bash
 sudo install -d -m 0700 /var/lib/laptop-setup-rollback
-sudo sh -c 'umask 077; tar --xattrs --acls --selinux --numeric-owner -czf /var/lib/laptop-setup-rollback/etc-$(date +%Y%m%d-%H%M).tar.gz /etc'
+snap=/var/lib/laptop-setup-rollback/etc-$(date +%Y%m%d-%H%M).tar.gz
+sudo sh -c "umask 077; tar --xattrs --acls --selinux --numeric-owner -czf $snap /etc"
 sudo authselect current --raw | sudo tee /var/lib/laptop-setup-rollback/authselect-current.txt >/dev/null
 sudo cp -a /etc/default/grub /etc/kernel/cmdline /var/lib/laptop-setup-rollback/
 { firewall-cmd --get-default-zone; firewall-cmd --get-active-zones; update-crypto-policies --show; } > ~/net-before.txt
@@ -70,7 +73,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   skips the standalone binaries, Go tools, krew plugins and the group add. Check those with
   `scripts/smoke-test.sh --user-only --only sops,transcrypt,gitleaks,krew`.
 - **Undo:** do not `dnf remove` the `roles/packages/defaults` lists: they include packages the machine already had (podman, gh, zsh).
-  Right after the run use `sudo dnf history list`, then `sudo dnf history info <id>` for the run's transaction(s): `sudo dnf history undo <id>`
+  Right after the run use `sudo dnf history list`, then `sudo dnf history info <id>` for the run's transaction(s):
+  `sudo dnf history undo <id>`
   also downgrades anything listed as Upgraded there, so if there are Upgraded lines, `sudo dnf remove` only the Installed ones
   instead. Undo this chunk after `login_shell`, `distrobox`, `containers` and `agents`, and keep zsh while it is the login shell.
   Then `sudo gpasswd -d "$USER" libvirt; sudo gpasswd -d "$USER" kvm`,
@@ -81,20 +85,25 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 
 ## ssh_client
 
-- **Why:** pinned GitHub `known_hosts` and vault-backed SSH and signing keys (`~/.ssh/config` and the git signing settings come from `dotfiles`).
+- **Why:** pinned GitHub `known_hosts` and vault-backed SSH and signing keys (`~/.ssh/config` and the git signing settings come from
+  `dotfiles`).
 - **Breaks if wrong:** the role removes ALL `github.com` `known_hosts` entries and re-adds only the pinned ED25519 key
   (`roles/ssh/defaults/main.yml`). Never repair with `ssh-keyscan` (it trusts whatever answers).
 - **Verify:** `make verify CHUNK=ssh_client` (`known-hosts-github`: a github.com key is in `known_hosts`).
 - **Undo:** run `make backup` BEFORE the chunk (the role overwrites key files without a copy), then restore `~/.ssh` files from
   that directory (`~/laptop-setup-backup-<timestamp>`), or re-run `make chunk-ssh_client` to
-  re-seed `known_hosts` (not `make ssh`: it also rewrites `~/.ssh/authorized_keys`). Stop commit signing (on when the vault holds a signing key) with `git config --global commit.gpgsign false`;
+  re-seed `known_hosts` (not `make ssh`: it also rewrites `~/.ssh/authorized_keys`). Stop commit signing (on when the vault holds a signing
+  key) with `git config --global commit.gpgsign false`;
   `make dotfiles` re-enables it until `vault_ssh_signing_key_pub` is cleared in the vault.
 
 ## dotfiles
 
-- **Why:** shell, git, tmux and tool config, plus `~/.ssh/config` (it needs the pinned GitHub `known_hosts` from `ssh_client`, hence the requirement).
-- **Breaks if wrong:** a bad `~/.zshrc`/`~/.bashrc`/`~/.gitconfig` affects every new shell and commit; a bad `~/.ssh/config` affects every SSH connection.
-- **Verify:** `make verify CHUNK=dotfiles` (`dotfile-gitconfig`, `git-hooks-path`, `ssh-config-hash-known-hosts`, `ssh-config-github-strict`).
+- **Why:** shell, git, tmux and tool config, plus `~/.ssh/config` (it needs the pinned GitHub `known_hosts` from `ssh_client`, hence the
+  requirement).
+- **Breaks if wrong:** a bad `~/.zshrc`/`~/.bashrc`/`~/.config/git/config` affects every new shell and commit; a bad `~/.ssh/config` affects
+  every SSH connection.
+- **Verify:** `make verify CHUNK=dotfiles` (`dotfile-gitconfig`, `git-hooks-path`, `ssh-config-hash-known-hosts`,
+  `ssh-config-github-strict`).
 - **Undo:** run `make backup` BEFORE the chunk (an older backup predates earlier deploys), then restore the file from that
   `~/laptop-setup-backup-<timestamp>` directory. Replaced `.zshrc`, `.bashrc`, `.ssh/config`, `.config/git/config` and
   `.config/tmux/tmux.conf` also keep a copy beside them named `<file>.<pid>.<date>@<time>~`. Unmanaged git template hooks and
@@ -103,7 +112,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   wanted) and a stock `~/.oh-my-zsh` is deleted (re-clone it). The chunk also adds the `cwork`/`cper`/`cper2` launchers to `~/.zshrc`
   and switches the SSH agent: `systemctl --user unmask gcr-ssh-agent.socket gcr-ssh-agent.service`,
   `systemctl --user disable --now ssh-agent`, delete `~/.config/autostart/gnome-keyring-ssh.desktop`,
-  `~/.config/environment.d/ssh-agent.conf` and `~/.config/systemd/user/ssh-agent.service`, then log in again so `SSH_AUTH_SOCK` changes back.
+  `~/.config/environment.d/ssh-agent.conf` and `~/.config/systemd/user/ssh-agent.service`, then log in again so `SSH_AUTH_SOCK` changes
+  back.
 
 ## desktop
 
@@ -114,7 +124,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Before:** `dconf dump / > ~/dconf-before.ini` (the system snapshot block also takes it; do it before the first desktop run).
 - **Undo:** `dconf reset <key>` for each key the role wrote (`/org/gnome/desktop/interface/color-scheme` under sway; the
   `desktop_gnome_hardening_dconf` and `desktop_gnome_ui_dconf` keys in `roles/desktop/defaults/main.yml` under gnome), then
-  `dconf load -f / < ~/dconf-before.ini` (load merges and never unsets keys, so reset first; `-f` skips IT-locked keys, without it the first one cancels the load). Never
+  `dconf load -f / < ~/dconf-before.ini` (load merges and never unsets keys, so reset first; `-f` skips IT-locked keys, without it the first
+  one cancels the load). Never
   `dconf reset /org/gnome/`: it wipes every GNOME setting. Restore or delete `~/.config/sway/config`, `~/.config/swaylock/config`,
   `~/.config/i3/config`, `~/.config/i3status/config`, `~/.config/xdg-desktop-portal/sway-portals.conf`,
   `~/.config/gtk-3.0/settings.ini`, `~/.config/gtk-4.0/settings.ini`, `~/.config/alacritty/alacritty.toml` (in the `make backup`
@@ -125,10 +136,19 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 ## agents
 
 - **Why:** Claude Code and Codex installs and settings.
-- **Breaks if wrong:** it installs `bubblewrap` and `socat` with dnf (Claude Code refuses to start without them, `failIfUnavailable: true`), and it overwrites each instance `CLAUDE.md` and deletes a legacy-shaped `settings.local.json` with no backup of its own; settings merges can drop local edits. Run `make backup` right before `make chunk-agents` and check that `~/laptop-setup-backup-<timestamp>/` holds `.claude*/CLAUDE.md` and `.claude*/settings.local.json`.
-- **Verify:** `make verify CHUNK=agents` (`claude-privacy-tmpfiles`: the tmpfiles file exists; `codex`: `codex --version` runs, so a failed Codex npm install, which the role only warns about, shows up here). Claude's sandbox settings are not mapped: check `jq .sandbox ~/.claude/settings.json`.
-- **Undo:** per instance, restore the oldest `~/.claude*/settings.json.bak-<timestamp>` (written by the merge, which keeps every backup); if the instance had no `settings.json` before the chunk, delete `settings.json` instead (the backup then holds only the seeded file), and delete instance directories the chunk created (for example `~/.claude-per2`). The replaced `CLAUDE.md` and legacy
-  `settings.local.json` are only in the `make backup` directory if you ran it before the chunk. Delete `~/.local/share/codex-cli`, `~/.local/bin/codex`, the seeded `config.toml` and `AGENTS.md` in `~/.codex` and `~/.codex-personal` (keep the directories: they also hold the Codex login and history), `~/.config/claude/` and `~/.config/user-tmpfiles.d/claude-privacy.conf`. If `claude_queue_enabled` was on:
+- **Breaks if wrong:** it installs `bubblewrap` and `socat` with dnf (Claude Code refuses to start without them, `failIfUnavailable: true`),
+  and it overwrites each instance `CLAUDE.md` and deletes a legacy-shaped `settings.local.json` with no backup of its own; settings merges
+  can drop local edits. Run `make backup` right before `make chunk-agents` and check that `~/laptop-setup-backup-<timestamp>/` holds
+  `.claude*/CLAUDE.md` and `.claude*/settings.local.json`.
+- **Verify:** `make verify CHUNK=agents` (`claude-privacy-tmpfiles`: the tmpfiles file exists; `codex`: `codex --version` runs, so a failed
+  Codex npm install, which the role only warns about, shows up here). Claude's sandbox settings are not mapped: check
+  `jq .sandbox ~/.claude/settings.json`.
+- **Undo:** per instance, restore the oldest `~/.claude*/settings.json.bak-<timestamp>` (written by the merge, which keeps every backup); if
+  the instance had no `settings.json` before the chunk, delete `settings.json` instead (the backup then holds only the seeded file), and
+  delete instance directories the chunk created (for example `~/.claude-per2`). The replaced `CLAUDE.md` and legacy
+  `settings.local.json` are only in the `make backup` directory if you ran it before the chunk. Delete `~/.local/share/codex-cli`,
+  `~/.local/bin/codex`, the seeded `config.toml` and `AGENTS.md` in `~/.codex` and `~/.codex-personal` (keep the directories: they also hold
+  the Codex login and history), `~/.config/claude/` and `~/.config/user-tmpfiles.d/claude-privacy.conf`. If `claude_queue_enabled` was on:
   `systemctl --user disable --now claude-queue.timer`, delete `~/.config/systemd/user/claude-queue.{service,timer}` and
   `~/.local/bin/claude-queue-poller.sh`, `systemctl --user daemon-reload`, and `sudo rm /etc/logrotate.d/claude-queue-poller`.
   The `bubblewrap` and `socat` packages can stay (restoring `settings.json` removes the sandbox requirement); `sudo dnf remove socat` if
@@ -137,37 +157,49 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 ## repos
 
 - **Why:** git clones under `~/src`, plus the opt-in notes clone.
-- **Breaks if wrong:** nothing system-level, but only missing directories are cloned, so `~/src` (and `~/notes`, when `notes_enabled`) can hold
-  clones that predate the chunk, and any clone can hold unpushed commits, stashes or untracked files.
+- **Breaks if wrong:** nothing system-level, but only missing directories are cloned, so `~/src` (and `~/notes`, when `notes_enabled`) can
+  hold clones that predate the chunk, and any clone can hold unpushed commits, stashes or untracked files.
 - **Verify:** no check mapped, so `make verify CHUNK=repos` exits 1 ("state is unknown") by design; run `make plan CHUNK=repos` and
   confirm changed=0. Repos on an unreachable VPN host or an unseeded SSH host are filtered out before cloning, so changed=0 does not
   cover them.
 - **Undo:** delete only the clones this run created (the "Clone repositories" items that `make plan CHUNK=repos` showed as changed before
   the run), and only after `git -C <dir> status --porcelain`, `git -C <dir> stash list` and
   `git -C <dir> log --branches --not --remotes` are all empty. Never delete `~/src` or `~/notes` (`notes_repo_path` in
-  `roles/notes/defaults/main.yml`) wholesale. The lfs filter in `~/.gitconfig` belongs to `dotfiles`; undo it there.
+  `roles/notes/defaults/main.yml`) wholesale. The lfs filter in `~/.config/git/config` belongs to `dotfiles`; undo it there.
 
 ## containers
 
 - **Why:** rootless podman pull policy and fully-qualified image names.
-- **Breaks if wrong:** pulls from registries outside `containers_policy_unsigned_registries` (and, on DNF hosts, the Red Hat registries, which need a valid signature) are rejected; short image names fail. The chunk also writes `containers.conf` (`k8s-file` log driver, so `journalctl --user` no longer shows container logs; pids and nofile limits) and enables `podman.socket`.
+- **Breaks if wrong:** pulls from registries outside `containers_policy_unsigned_registries` (and, on DNF hosts, the Red Hat registries,
+  which need a valid signature) are rejected; short image names fail once the FQIN drop-in is deployed (only without a system
+  `/etc/containers/registries.conf`, or with `containers_enforce_fqin_override: true`). The chunk also writes `containers.conf`
+  (`k8s-file` log driver, so `journalctl --user` no longer shows container logs; pids and nofile limits) and enables `podman.socket`.
   Rootless podman needs `/etc/subuid`, `/etc/subgid` and `loginctl enable-linger`, which `sys_signin` writes except on RHEL CSB
   (`csb_rhel`), where IT owns them; on an SSSD account without them (not RHEL CSB), enable `sys_signin` first or run
   `echo "$USER:165536:165536" | sudo tee -a /etc/subuid /etc/subgid` and `loginctl enable-linger $USER` (`usermod` cannot see an SSSD-only
   account); on RHEL CSB, ask IT.
-- **Verify:** `make verify CHUNK=containers` (`fqin-enforcement`, `containers-policy`).
-- **Undo:** if `distrobox` is enabled, remove it from `rollout_enable` as well (it requires `containers`; `make containers` refuses the config otherwise). Then set `containers_policy_enabled: false` and/or `containers_enforce_fqin: false` (and `containers_environment_d_enabled: false` to remove
-  `~/.config/environment.d/containers.conf`, `containers_prune_enabled: false` to stop `podman-prune.timer`) in `config.yml`, run `make containers`
-  (removes `~/.config/containers/policy.json` and `registries.conf`, keeping no backup). The flags do not touch the rest of the chunk: run `systemctl --user disable --now podman.socket`, and restore the pre-chunk `~/.config/containers/containers.conf` from its oldest `containers.conf.<timestamp>~` (or delete the file if there was none). Restore the oldest `policy.json.<timestamp>~` or `registries.conf.<timestamp>~` only if you had your own file before the chunk; newer backups are older generated files.
+- **Verify:** `make verify CHUNK=containers` (`fqin-enforcement`, `containers-policy`). With the stock Fedora
+  `/etc/containers/registries.conf` (it lists unqualified search registries) and `containers_enforce_fqin_override: false` (the default),
+  the drop-in is skipped, `fqin-enforcement` is WARN and the command exits 1; that is expected. Set the override to `true` to enforce.
+- **Undo:** if `distrobox` is enabled, remove it from `rollout_enable` as well (it requires `containers`; `make containers` refuses the
+  config otherwise). Then set `containers_policy_enabled: false` and/or `containers_enforce_fqin: false` (and
+  `containers_environment_d_enabled: false` to remove
+  `~/.config/environment.d/containers.conf`, `containers_prune_enabled: false` to stop `podman-prune.timer`) in `config.yml`,
+  run `make containers`
+  (removes `~/.config/containers/policy.json` and `registries.conf.d/50-fqin.conf`, keeping no backup). The flags do not touch the rest of
+  the chunk: run `systemctl --user disable --now podman.socket`, and restore the pre-chunk `~/.config/containers/containers.conf` from its
+  oldest `containers.conf.<timestamp>~` (or delete the file if there was none). Restore the oldest `policy.json.<timestamp>~` only if you
+  had your own file before the chunk; newer backups are older generated files.
 
 ## distrobox
 
 - **Why:** dev container for tools the host cannot run (CSB).
 - **Breaks if wrong:** needs the rootless-podman prerequisites from `## containers`, and `distrobox` from the `packages` chunk applied
-  first. Without the `distrobox` binary the role falls back to Toolbx when `toolbox` exists: no `distrobox.ini` network or capability
+  first. Without the `distrobox` binary the role falls back to Toolbx when `toolbox` exists: no `distrobox.ini` network or cgroup
   settings. Apply `packages`, then rebuild with `make container-rebuild`.
-- **Verify:** `make verify CHUNK=distrobox` (`distrobox-container`). WARN while the vault is still the empty stub: the role defers
-  container creation until `vault_ssh_auth_key(_pub)` are set (`make setup-yubikeys`, then `make container`).
+- **Verify:** `make verify CHUNK=distrobox` (`distrobox-container`). With the vault still the empty stub the role defers container
+  creation, the check is WARN and the command exits 1; that is expected, not a failed chunk. Populate the vault
+  (`make setup-yubikeys`), then `make container` and re-verify.
 - **Undo:** `podman rm -f fedora-dev` (or the configured `container_name`; works for Distrobox and Toolbx containers). Then remove the
   exported wrappers that would shadow host tools:
   `for f in oc kubectl golangci-lint; do grep -q '^# distrobox_binary' ~/.local/bin/$f 2>/dev/null && rm ~/.local/bin/$f; done`.
@@ -175,10 +207,15 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 
 ## login_shell
 
-- **Why:** zsh as the login shell. Before applying, record the current shell: `[ -e ~/login-shell-before.txt ] || getent passwd $USER | cut -d: -f7 | tee ~/login-shell-before.txt` (the guard keeps a second run from overwriting it with `/bin/zsh`).
-- **Breaks if wrong:** sudo and login resolve the account through sssd, so a broken sssd change can lock out the only account. If sssd will not start, sudo stops working: use `## Rescue boot` and in the chroot delete `/etc/sssd/conf.d/90-laptop-setup-shell.conf`. Have a local root break-glass first, as for system chunks.
+- **Why:** zsh as the login shell. Before applying, record the current shell:
+  `[ -e ~/login-shell-before.txt ] || getent passwd $USER | cut -d: -f7 | tee ~/login-shell-before.txt` (the guard keeps a second run from
+  overwriting it with `/bin/zsh`).
+- **Breaks if wrong:** sudo and login resolve the account through sssd, so a broken sssd change can lock out the only account. If sssd will
+  not start, sudo stops working: use `## Rescue boot` and in the chroot delete `/etc/sssd/conf.d/90-laptop-setup-shell.conf`. Have a local
+  root break-glass first, as for system chunks.
 - **Verify:** `make verify CHUNK=login_shell` (`login-shell-zsh`) and a fresh TTY login.
-- **Undo:** on a local account `sudo usermod -s "$(cat ~/login-shell-before.txt 2>/dev/null || echo /bin/bash)" $USER`. On an SSSD account, in order:
+- **Undo:** on a local account `sudo usermod -s "$(cat ~/login-shell-before.txt 2>/dev/null || echo /bin/bash)" $USER`. On an SSSD account,
+  in order:
   1. Remove `login_shell` from `rollout_enable`.
   2. `sudo rm /etc/sssd/conf.d/90-laptop-setup-shell.conf`.
   3. `sudo sssctl config-check && sudo systemctl restart sssd`; `getent passwd $USER` must show the old shell.
@@ -187,7 +224,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 ## redhat
 
 - **Why:** Red Hat IT tooling (VPN client, certificates).
-- **Breaks if wrong:** on RHEL CSB the role sets the IT-owned `splunk` account shell to nologin (`roles/redhat/tasks/main.yml`).
+- **Breaks if wrong:** a bad VPN or certificate package fails the dnf transaction; failures are recorded in the CSB report, not
+  fatal. On RHEL CSB the role sets the IT-owned `splunk` account shell to nologin (`roles/redhat/tasks/main.yml`).
 - **Verify:** no check mapped.
 - **Undo:** `sudo dnf remove` the VPN client and certificate packages the role installed; IT's own VPN client is untouched. For
   `splunk`: `sudo usermod -s <old shell> splunk` (old shell from the snapshot `/etc/passwd`); tell IT first, it is their account.
@@ -205,9 +243,11 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 
 - **Why:** baseline settings: SELinux enforcing, service masking, logind, journald, cron access, dconf/GDM locks, banners, firmware,
   timezone and locale.
-- **Breaks if wrong:** masked units stop working (Bluetooth, ModemManager, avahi, ABRT, openvswitch/OVN, cups-browsed, depending on
-  toggles); `cron.allow` blocks non-root crontabs.
-- **Verify:** `make verify CHUNK=sys_baseline` (`selinux`, `login-banner`, `cron-allow-root`, `journald-persistent`, `ctrl-alt-del-masked`, `logind-idle-sec`, `fwupd-refresh-timer`).
+- **Breaks if wrong:** masked units stop working (ABRT, cockpit, NFS/iSCSI by default (system_mask_nfs_server / system_mask_iscsi);
+  openvswitch/OVN on the work profile; Bluetooth,
+  ModemManager, avahi, cups-browsed depending on toggles); `cron.allow` blocks non-root crontabs.
+- **Verify:** `make verify CHUNK=sys_baseline` (`selinux`, `login-banner`, `cron-allow-root`, `journald-persistent`, `ctrl-alt-del-masked`,
+  `logind-idle-sec`, `fwupd-refresh-timer`).
 - **Undo:** delete what the role created (restore from the snapshot where IT or the package owns the file), then
   `sudo systemctl daemon-reload`:
   - `/etc/systemd/logind.conf.d/99-hardening.conf`, `/etc/systemd/journald.conf.d/99-hardening.conf`;
@@ -228,7 +268,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Breaks if wrong:** `ptrace_scope=1` blocks debugger attach to non-children; IPv6 router advertisements are off by default. The
   Bluetooth modules are blacklisted and unloaded live (`rfcomm bnep btusb bluetooth`), so a Bluetooth keyboard or mouse drops at this
   step: use a wired or dongle keyboard, or set `system_disable_bluetooth: false`.
-- **Verify:** `make verify CHUNK=sys_sysctl` (`coredump-configured`, `modprobe-hardening`); `sysctl-ptrace-scope` and `sysctl-no-accept-ra` read the expected value from the deployed file; other sysctl values are not mapped.
+- **Verify:** `make verify CHUNK=sys_sysctl` (`coredump-configured`, `modprobe-hardening`); `sysctl-ptrace-scope` and `sysctl-no-accept-ra`
+  read the expected value from the deployed file; other sysctl values are not mapped.
 - **Undo:** delete `/etc/sysctl.d/90-hardening.conf`, `/etc/modprobe.d/hardening.conf`,
   `/etc/systemd/coredump.conf.d/coredump.conf`, `/etc/security/limits.d/90-coredump.conf` and the kind modules in `/etc/modules-load.d`
   (iptables, bridge, overlay, `tun`, KVM, vhost; check `ls /etc/modules-load.d`). On RHEL CSB the role writes
@@ -241,7 +282,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Breaks if wrong:** DoT fails on restricted networks (see `references/troubleshooting.md` § DNS). On a CSB host (`csb_detected`)
   chrony NTS, dnf-automatic and the DoT drop-in are not applied (an existing `99-dot.conf` is removed), so the chunk does not add chrony
   or dnf-automatic there. On hybrid CSB it still enables systemd-resolved and writes `98-llmnr.conf`. `make verify` passes
-  `dnf-automatic` by design and FAILs `chronyd-service` unless IT already runs chronyd. IT-owned time, update and DNS config is never replaced.
+  `dnf-automatic` by design and FAILs `chronyd-service` unless IT already runs chronyd. IT-owned time, update and DNS config is never
+  replaced.
 - **Verify:** `make verify CHUNK=sys_time_dns` (`chronyd-service`, `dnf-automatic`).
 - **Undo:** on a CSB host (`csb_detected`) delete only `/etc/systemd/resolved.conf.d/98-llmnr.conf` and run
   `sudo systemctl restart systemd-resolved`; the rest applies elsewhere: restore `/etc/chrony.conf` and `/etc/dnf/automatic.conf` from the
@@ -254,8 +296,10 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Why:** session timeout, AIDE, weekly setuid scan, GRUB password, kernel module-load lock; each is off or opt-in except the scan.
 - **Breaks if wrong:** `system_tmout` ends idle shells; AIDE adds log volume; a GRUB password blocks the `e` edit in
   `## Rescue boot`; the module lock is one-way (below).
-- **After later system chunks:** with AIDE on, each later system chunk edits monitored paths; run `make aide-rebaseline` after each, or the daily check alerts.
-- **Verify:** `make verify CHUNK=sys_optional` (`setuid-scan-timer` only; the timeout, AIDE and GRUB password are opt-in and have no mapped check).
+- **After later system chunks:** with AIDE on, each later system chunk edits monitored paths; run `make aide-rebaseline` after each, or the
+  daily check alerts.
+- **Verify:** `make verify CHUNK=sys_optional` (`setuid-scan-timer` only; the timeout, AIDE and GRUB password are opt-in and have no mapped
+  check).
 - **Undo:**
   - Timeout: `system_tmout: 0` and re-run; the role removes it from `/etc/profile.d/tmout.sh`, `/etc/zshrc`, `/etc/zsh/zshrc` and
     `/etc/bash.bashrc`, so deleting the profile.d file alone is not enough.
@@ -274,7 +318,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 
 - **Why:** `nosuid`, `nodev`, `noexec` on world-writable mounts.
 - **Breaks if wrong:** an invalid `fstab` stops boot; `/home` `nosuid` can break `sudo` inside the dev container (not verified).
-- **Verify:** `make verify CHUNK=sys_mounts` (`tmp-hardening`, `shm-hardening`, `home-nosuid`, `boot-hardening`, `boot-efi-hardening`); `sudo findmnt --verify`.
+- **Verify:** `make verify CHUNK=sys_mounts` (`tmp-hardening`, `shm-hardening`, `home-nosuid`, `boot-hardening`, `boot-efi-hardening`);
+  `sudo findmnt --verify`.
 - **Undo:** restore the backup with the oldest date in its name (`ls /etc/fstab.*~ | sort -t. -k3 | head -1`; names start with the
   PID, so do not sort by name alone; each edit made one), then `sudo findmnt --verify` before rebooting. Delete
   `/etc/systemd/system/tmp.mount.d/hardening.conf` and the remount units the role wrote under `/etc/systemd/system`
@@ -304,14 +349,16 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   Restore `/etc/audit/auditd.conf` from the snapshot (overwritten with no backup; skipped on CSB-detected hosts). Empty watch-parent
   directories the helper created (for example `/etc/usbguard`, `/var/lib/aide`, `~/.gnupg`, `~/.aws`, `~/.kube`) are harmless. The role
   also deletes `-a task,never` lines from the `/etc/audit/rules.d/*.rules` files (for example a copy of the packaged
-  `10-no-audit.rules`, where present) with no backup: restore that file from the snapshot. With AIDE on, run `make aide-rebaseline` afterwards.
+  `10-no-audit.rules`, where present) with no backup: restore that file from the snapshot. With AIDE on, run `make aide-rebaseline`
+  afterwards.
 
 ## sys_usbguard
 
 - **Why:** block unknown USB devices.
 - **Breaks if wrong:** a keyboard, dock or security key not allowed before USBGuard starts is blocked. Run `make usb-add` with every
   device you use attached first.
-- **Verify:** `make verify CHUNK=sys_usbguard` (`usbguard`, `usbguard-implicit-policy`, `usbguard-yubikey-rule`; the last two read 0600 files, so run as root).
+- **Verify:** `make verify CHUNK=sys_usbguard` (`usbguard`, `usbguard-implicit-policy`, `usbguard-yubikey-rule`; the last two read 0600
+  files, so run as root).
 - **Undo:** `sudo systemctl disable --now usbguard`, or `system_install_usbguard: false` and re-run (the role stops and disables it).
   Restore `/etc/usbguard/rules.conf` and `usbguard-daemon.conf` from the snapshot (overwritten/edited, no backup).
 
@@ -321,7 +368,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Breaks if wrong:** PAM changes can lock the account out. The sudoers drop-in scopes `log_input,log_output`, `umask=0027` and
   `use_pty` to non-root invokers (`Defaults:!root`), so IT's root-run automation is unaffected. On non-CSB hosts root is locked
   (`password_lock`), so a "known root password" break-glass no longer works: use `## Rescue boot`.
-- **Verify:** `make verify CHUNK=sys_signin` (`authselect-check`, `authselect-faillock`, `authselect-pwhistory`, `sudoers-hardening`, `pam-wheel`).
+- **Verify:** `make verify CHUNK=sys_signin` (`authselect-check`, `authselect-faillock`, `authselect-pwhistory`, `sudoers-hardening`,
+  `pam-wheel`).
 - **Undo:**
   - PAM: `sudo authselect select <saved profile> <saved features> --force` from `authselect-current.txt` (the role's own PAM backup
     is deleted after the run).
@@ -340,7 +388,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Why:** key-only login needs exactly the vault key in `authorized_keys`.
 - **Breaks if wrong:** the exclusive write removes every other key, including any backup key; with sshd hardened an RSA key is rejected.
 - **Verify:** `make verify CHUNK=ssh_authorized_keys`; log in from a second device with the new key before closing any session.
-- **Undo:** restore `~/.ssh/authorized_keys` from `~/authorized_keys.before` (the `cp -a ~/.ssh/authorized_keys` line of the snapshot block: run it
+- **Undo:** restore `~/.ssh/authorized_keys` from `~/authorized_keys.before` (the `cp -a ~/.ssh/authorized_keys` line of the snapshot block:
+  run it
   just before this chunk if no system chunk has been run yet, the role takes no copy; `make backup` also copies this file, but the copy
   taken just before the write is the reliable restore point), keeping a console or second session open until then.
 
@@ -353,7 +402,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Breaks if wrong:** an unaccepted key or a firewall/sshd mismatch locks out remote access. On hybrid CSB Fedora with `ssh_port`
   other than 22, the firewalld `ssh` service is repointed to the sshd port; `tailscale0` is in the `trusted` zone, so no port rule is
   needed for the tailnet.
-- **Verify:** `make verify CHUNK=sys_remote_access` (`sshd-hardening`, `sshd-port`, `sshd-port-bound`, `firewall-ssh-port`, `firewall-tailscale-permanent`); login from a second tailnet
+- **Verify:** `make verify CHUNK=sys_remote_access` (`sshd-hardening`, `sshd-port`, `sshd-port-bound`, `firewall-ssh-port`,
+  `firewall-tailscale-permanent`); login from a second tailnet
   device, `sudo sshd -T`, and a local console login.
 - **Undo:** keep a working session open until a fresh login succeeds. Most of these steps are skipped on RHEL CSB.
   1. sshd: delete `/etc/ssh/sshd_config.d/00-hardening.conf`, `sudo systemctl reload sshd`. The role also adds an `Include` line to
@@ -363,10 +413,13 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
      `sudo systemctl unmask sshd.socket` (the role masks it; skipped on RHEL CSB).
   2. Firewall: delete `/etc/firewalld/services/ssh.xml`. The default zone becomes `drop`, physical interfaces move into it with a
      permanent `722/tcp` rule. Using `~/net-before.txt` from the snapshot:
-     `sudo firewall-cmd --set-default-zone=<previous>`, `sudo firewall-cmd --permanent --zone=drop --remove-port=722/tcp`, for each interface that `--get-active-zones` in `~/net-before.txt`
+     `sudo firewall-cmd --set-default-zone=<previous>`, `sudo firewall-cmd --permanent --zone=drop --remove-port=722/tcp`, for each
+     interface that `--get-active-zones` in `~/net-before.txt`
      lists in another zone `sudo firewall-cmd --permanent --zone=<its zone> --change-interface=<if>`,
-     on non-CSB hosts only, `sudo firewall-cmd --permanent --zone=FedoraWorkstation --add-service={ssh,dhcpv6-client,samba-client}` (the role also removed the
-     1025-65535 tcp/udp ports there: re-add only if wanted), then `sudo firewall-cmd --reload`. Zone files are also in the snapshot `/etc/firewalld/`.
+     on non-CSB hosts only, `sudo firewall-cmd --permanent --zone=FedoraWorkstation --add-service={ssh,dhcpv6-client,samba-client}` (the
+     role also removed the
+     1025-65535 tcp/udp ports there: re-add only if wanted), then `sudo firewall-cmd --reload`. Zone files are also in the snapshot
+     `/etc/firewalld/`.
   3. SELinux: `sudo semanage port -d -t ssh_port_t -p tcp 722`, only after sshd is back on port 22.
   4. Crypto policy: only on hosts that are not `csb_detected` (a CSB host keeps IT's policy, nothing to undo), `sshd.yml` runs
      `update-crypto-policies --set DEFAULT:NO-SHA1`, which also affects TLS, dnf and Kerberos, and restarts

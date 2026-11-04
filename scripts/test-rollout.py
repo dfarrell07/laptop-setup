@@ -71,6 +71,13 @@ class RegistryTests(unittest.TestCase):
                     # --only treats anything but PASS as unverified: a check that can never PASS is useless here
                     self.assertRegex(script, r'record [\'"]' + re.escape(check) + r'[\'"] [\'"]PASS[\'"]')
 
+    def test_kernel_cmdline_check_runs_in_system_scope(self):
+        # sys_lockdown verifies it; --user-only skips the system block, so it must not sit in user-level code
+        script = (ROOT / 'scripts/smoke-test.sh').read_text()
+        opener = script.index('if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then')
+        closer = script.index('\nunset _csb_non_fedora', opener)
+        self.assertTrue(opener < script.index('record "kernel-cmdline" "PASS"') < closer)
+
     def test_ssh_client_verify_checks_what_the_ssh_role_writes(self):
         # ~/.ssh/config belongs to the dotfiles role; an ssh_client check on it passes or skips whatever ssh_client did
         checks = CATALOG['ssh_client']['verify']

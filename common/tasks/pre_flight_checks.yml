@@ -32,7 +32,7 @@
           silently skipping the entire hardening stack (SELinux, sysctl, firewall, PAM, auditd, AIDE).
           Input: ansible_connection={{ ansible_connection }}, virtualization_type={{ ansible_facts['virtualization_type'] |
           default('unknown') }}.
-          Mechanism: system_is_container guards in roles/system/tasks/*.yml skip ~25 hardening sub-tasks when true.
+          Mechanism: system_is_container guards in roles/system/tasks/*.yml skip the hardening sub-tasks gated on it when true.
           Example: podman run --privileged fedora:40 bash; make all — play succeeds, zero hardening applied.
           Impact: machine appears fully provisioned but carries no OS hardening.
           Fix: run make all on a bare-metal host, VM, or WSL target — not from inside a container.
@@ -124,18 +124,16 @@
               Restrict it: chmod 0600 group_vars/all/vault.yml.
 
     - name: Assert ssh_port in config.yml is a plain decimal port number (sshd injection guard)
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('ssh_port', 722) | int >= 1
-          - _raw.get('ssh_port', 722) | int <= 65535
-          - _raw.get('ssh_port', 722) | int != 22
+          - _config_raw.get('ssh_port', 722) | int >= 1
+          - _config_raw.get('ssh_port', 722) | int <= 65535
+          - _config_raw.get('ssh_port', 722) | int != 22
         fail_msg: >-
           SECURITY: ssh_port in config.yml must be a plain decimal integer (1-65535) and must not be 22.
           Threat: setting ssh_port: 22 silently removes the port-obscurity layer, exposing hardened sshd
           to direct internet scanning and automated credential-stuffing on the standard SSH port.
-          Input: ssh_port={{ _raw.get('ssh_port', 722) }} in config.yml.
+          Input: ssh_port={{ _config_raw.get('ssh_port', 722) }} in config.yml.
           Mechanism: the SELinux relabeling block in sshd.yml is gated `when: ssh_port | int != 22`
           and silently skips; sshd.socket masking leaves the standard port-22 path unchanged.
           Impact: all auth hardening remains intact but port-obscurity is lost without operator awareness.
@@ -143,15 +141,13 @@
           decision and remove this assertion — do not silently accept the reduced security posture.
 
     - name: Assert system_selinux_policy is an allowlisted value (SELinux policy weakening guard)
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('system_selinux_policy', 'targeted') in ['targeted', 'strict']
+          - _config_raw.get('system_selinux_policy', 'targeted') in ['targeted', 'strict']
         fail_msg: >-
           SECURITY: system_selinux_policy in config.yml must be 'targeted' or 'strict'.
           Threat: setting system_selinux_policy: minimum applies near-permissive MAC enforcement.
-          Input: system_selinux_policy='{{ _raw.get('system_selinux_policy', 'targeted') }}' in config.yml.
+          Input: system_selinux_policy='{{ _config_raw.get('system_selinux_policy', 'targeted') }}' in config.yml.
           Mechanism: ansible.posix.selinux applies the named policy; the post-apply assertion in
           hardening_core.yml checks ansible_facts['selinux'].type == system_selinux_policy, so
           'minimum' passes verification while SELinux is effectively near-permissive.
@@ -160,11 +156,9 @@
           set it to one of the allowlisted values: 'targeted', 'strict'.
 
     - name: Assert system_tmout in config.yml contains only safe digits (shell injection guard)
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('system_tmout', '0') | string is match('^[0-9]*$')
+          - _config_raw.get('system_tmout', '0') | string is match('^[0-9]*$')
         fail_msg: >-
           SECURITY: system_tmout in config.yml must be a non-negative integer (seconds).
           This value is rendered verbatim into /etc/profile.d/tmout.sh, /etc/bash.bashrc,
@@ -173,17 +167,15 @@
           integer (e.g. 300, 600, 900). No spaces, newlines, or special characters allowed.
 
     - name: Assert system_umask and system_keymap contain only safe characters (login.defs/vconsole injection guard)
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('system_umask', '027') is string
-          - _raw.get('system_umask', '027') | string is match('^[0-7]+$')
-          - _raw.get('system_keymap', 'us') | string is match('^[a-zA-Z0-9_-]+$')
+          - _config_raw.get('system_umask', '027') is string
+          - _config_raw.get('system_umask', '027') | string is match('^[0-7]+$')
+          - _config_raw.get('system_keymap', 'us') | string is match('^[a-zA-Z0-9_-]+$')
         fail_msg: >-
           SECURITY: system_umask or system_keymap in config.yml contains unsafe characters.
-          system_umask is rendered into /etc/login.defs with grep -F matching; regex
-          metacharacters (.*+?[]{}()^$|) embedded in the value can escape literal matching.
+          system_umask is written into /etc/login.defs via lineinfile line:; the octal-only
+          check blocks newline injection of extra directives.
           system_keymap is rendered into /etc/vconsole.conf; shell metacharacters allow
           injection of arbitrary configuration directives.
           Allowed: system_umask must be a quoted string of octal digits (0-7, e.g. "027", "077", "022");
@@ -205,14 +197,12 @@
           Fix: use a plain integer 0-60 (e.g., 0 for re-auth on every sudo, 15 for default).
 
     - name: Assert system_core_pattern contains only safe characters (sysctl VALUE injection guard)
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           # system_core_pattern is a sysctl VALUE, not a key; blocks newlines and shell metacharacters.
           # Pipe-based coredump handlers (e.g. '|/usr/lib/systemd/systemd-coredump ...') are reserved
           # for role defaults only and must not be overridden via config.yml — pipe exec runs as root.
-          - _raw.get('system_core_pattern', '') | string is match('^[a-zA-Z0-9/_.%-]*$')
+          - _config_raw.get('system_core_pattern', '') | string is match('^[a-zA-Z0-9/_.%-]*$')
         fail_msg: >-
           SECURITY: system_core_pattern in config.yml contains unsafe characters or a pipe handler.
           Threat: kernel.core_pattern with a leading pipe ('|') causes the kernel to exec the named
@@ -227,11 +217,9 @@
           shell metacharacters, or pipe characters are permitted in config.yml overrides.
 
     - name: Assert system_ssh_rekey_limit in config.yml has safe format (sshd config injection guard)
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('system_ssh_rekey_limit', '1G 1h') | string is match('^[0-9]+[KMG]?( [0-9]+[smhdw])?$|^(none|default)$')
+          - _config_raw.get('system_ssh_rekey_limit', '1G 1h') | string is match('^[0-9]+[KMG]?( [0-9]+[smhdw])?$|^(none|default)$')
         fail_msg: >-
           SECURITY: system_ssh_rekey_limit in config.yml contains unsafe characters.
           This value is rendered into RekeyLimit in sshd_config.d/00-hardening.conf;
@@ -241,14 +229,12 @@
           No spaces, letters, or punctuation other than the unit suffixes are permitted.
 
     - name: Assert SSH integer vars contain only plain non-negative integers (sshd injection guard)
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('system_ssh_max_sessions', '10') | string is match('^[0-9]+$')
-          - _raw.get('system_ssh_client_alive_interval', '300') | string is match('^[0-9]+$')
-          - _raw.get('system_ssh_client_alive_count_max', '2') | string is match('^[0-9]+$')
-          - _raw.get('system_ssh_unused_connection_timeout', '600') | string is match('^[0-9]*$')
+          - _config_raw.get('system_ssh_max_sessions', '10') | string is match('^[0-9]+$')
+          - _config_raw.get('system_ssh_client_alive_interval', '300') | string is match('^[0-9]+$')
+          - _config_raw.get('system_ssh_client_alive_count_max', '2') | string is match('^[0-9]+$')
+          - _config_raw.get('system_ssh_unused_connection_timeout', '600') | string is match('^[0-9]*$')
         fail_msg: >-
           SECURITY: system_ssh_max_sessions, system_ssh_client_alive_interval,
           system_ssh_client_alive_count_max, or system_ssh_unused_connection_timeout
@@ -258,15 +244,13 @@
           the file. Remove any non-digit characters from the value.
 
     - name: Assert SSH algorithm vars contain only safe characters (sshd injection guard)
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('ssh_host_key_algorithms', 'ssh-ed25519') | string is match('^[a-zA-Z0-9@.,_-]+$')
-          - _raw.get('ssh_ciphers', '') | string is match('^[a-zA-Z0-9@.,_-]*$')
-          - _raw.get('ssh_macs', '') | string is match('^[a-zA-Z0-9@.,_-]*$')
-          - _raw.get('ssh_kex_algorithms', '') | string is match('^[a-zA-Z0-9@.,_-]*$')
-          - _raw.get('ssh_pubkey_accepted_algorithms', []) | map('string') | join(',') is match('^[a-zA-Z0-9@.,_-]*$')
+          - _config_raw.get('ssh_host_key_algorithms', 'ssh-ed25519') | string is match('^[a-zA-Z0-9@.,_-]+$')
+          - _config_raw.get('ssh_ciphers', '') | string is match('^[a-zA-Z0-9@.,_-]*$')
+          - _config_raw.get('ssh_macs', '') | string is match('^[a-zA-Z0-9@.,_-]*$')
+          - _config_raw.get('ssh_kex_algorithms', '') | string is match('^[a-zA-Z0-9@.,_-]*$')
+          - _config_raw.get('ssh_pubkey_accepted_algorithms', []) | map('string') | join(',') is match('^[a-zA-Z0-9@.,_-]*$')
         fail_msg: >-
           SECURITY: ssh_host_key_algorithms, ssh_ciphers, ssh_macs, ssh_kex_algorithms, or
           ssh_pubkey_accepted_algorithms in config.yml contains unsafe characters. These values
@@ -278,12 +262,10 @@
           Allowed: alphanumeric, @, dot, comma, underscore, hyphen (algorithm name characters).
 
     - name: Assert system_bluetooth_* vars contain no newlines (BlueZ config injection guard)
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('system_bluetooth_name', 'Bluetooth') | string is not search('\n')
-          - _raw.get('system_bluetooth_privacy', 'device') | string is not search('\n')
+          - _config_raw.get('system_bluetooth_name', 'Bluetooth') | string is not search('\n')
+          - _config_raw.get('system_bluetooth_privacy', 'device') | string is not search('\n')
         fail_msg: >-
           SECURITY: system_bluetooth_name or system_bluetooth_privacy in config.yml
           contains embedded newlines. These values are rendered verbatim into
@@ -296,16 +278,14 @@
           Disallowed: embedded literal newlines from YAML block/folded scalars.
 
     - name: Assert system_chrony_* vars in config.yml contain only safe characters (chrony.conf injection guard)
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('system_chrony_logdir', '') | string is match('^[a-zA-Z0-9/._-]*$')
-          - _raw.get('system_chrony_driftfile', '') | string is match('^[a-zA-Z0-9/._-]*$')
-          - _raw.get('system_chrony_ntsdumpdir', '') | string is match('^[a-zA-Z0-9/._-]*$')
-          - _raw.get('system_chrony_leapsecmode', '') | string is match('^[a-zA-Z0-9-]*$')
-          - _raw.get('system_chrony_leapseclist', '') | string is match('^[a-zA-Z0-9/._-]*$')
-          - _raw.get('system_chrony_minsources', '') | string is match('^[0-9]*$')
+          - _config_raw.get('system_chrony_logdir', '') | string is match('^[a-zA-Z0-9/._-]*$')
+          - _config_raw.get('system_chrony_driftfile', '') | string is match('^[a-zA-Z0-9/._-]*$')
+          - _config_raw.get('system_chrony_ntsdumpdir', '') | string is match('^[a-zA-Z0-9/._-]*$')
+          - _config_raw.get('system_chrony_leapsecmode', '') | string is match('^[a-zA-Z0-9-]*$')
+          - _config_raw.get('system_chrony_leapseclist', '') | string is match('^[a-zA-Z0-9/._-]*$')
+          - _config_raw.get('system_chrony_minsources', '') | string is match('^[0-9]*$')
         fail_msg: >-
           SECURITY: system_chrony_logdir, system_chrony_driftfile, system_chrony_ntsdumpdir,
           system_chrony_leapsecmode, system_chrony_leapseclist,
@@ -313,18 +293,16 @@
           are rendered verbatim into /etc/chrony/chrony.conf (Debian) or /etc/chrony.conf
           (Fedora); embedded newlines can inject arbitrary chrony directives (e.g. run-shell
           for RCE). Allowed: alphanumeric, dot, slash, underscore, hyphen (paths); 0-9
-          (minsources). nts_servers, fallback_pool, makestep and authselectmode are validated
-          in the play-namespace block.
+          (minsources). nts_servers and authselectmode=prefer need an explicit ack (below); fallback_pool,
+          makestep and the other rendered values are cut at the first newline by chrony-nts.conf.j2.
 
     - name: Assert system_chrony_nts_servers override requires explicit trust acknowledgement
       when:
         - _config_yml_raw.content is defined
         - _config_raw.get('system_chrony_nts_servers') is not none
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('system_chrony_nts_servers_confirmed', false) | bool
+          - _config_raw.get('system_chrony_nts_servers_confirmed', false) | bool
         fail_msg: >-
           SECURITY: system_chrony_nts_servers is set in config.yml but
           system_chrony_nts_servers_confirmed is not true. NTS servers are clock
@@ -336,11 +314,9 @@
       when:
         - _config_yml_raw.content is defined
         - _config_raw.get('system_chrony_authselectmode', '') == 'prefer'
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('system_chrony_authselectmode_prefer_confirmed', false) | bool
+          - _config_raw.get('system_chrony_authselectmode_prefer_confirmed', false) | bool
         fail_msg: >-
           SECURITY: system_chrony_authselectmode=prefer is set in config.yml but
           system_chrony_authselectmode_prefer_confirmed is not true. prefer mode allows
@@ -357,17 +333,9 @@
         that:
           - _unsafe_entries | length == 0
         fail_msg: >-
-          SECURITY: system_aide_monitoring_etc_paths in config.yml contains entries with
-          unsafe characters. Each path must contain only alphanumeric characters, dots,
-          underscores, hyphens, and slashes (standard filesystem path characters).
-          Regex metacharacters like brackets, parentheses, asterisks, plus signs, pipes, or
-          carets can break the AIDE lineinfile regexp pattern, bypassing integrity monitoring
-          for critical system files.
-          Example attack: system_aide_monitoring_etc_paths: ['/etc/[sshd_config]'] converts
-          to regexp '^/etc/[sshd_config][$]?\\s' where [sshd_config] becomes a character class
-          matching any single character, not the literal string. The regexp fails to match
-          '/etc/sshd_config NORMAL', preventing the monitoring entry from being inserted.
-          Use standard filesystem paths only (e.g., /etc/ssh/sshd_config.d, not /etc/[sshd_config]).
+          SECURITY: system_aide_monitoring_etc_paths entries must contain only alphanumerics, dots,
+          underscores, hyphens and slashes; a newline or other character would be written into
+          /etc/aide.conf as extra directives.
           Unsafe entries found: {{ _unsafe_entries }}.
 
     # NOTE: vault assertion is NOT gated by _pf_is_molecule — catching vault_* in config.yml is always an error, even in CI.
@@ -392,29 +360,28 @@
             # Update this list when new direct-secret keys are added to group_vars/all/vault.yml
             that: >-
               (_config_raw.keys() | select('in', ['ssh_auth_key', 'ssh_auth_key_pub',
-               'ssh_signing_key', 'ssh_signing_key_pub', 'ssh_git_signing_pubkey', 'rh_git_key',
+               'ssh_signing_key', 'ssh_signing_key_pub', 'rh_git_key',
                'notes_transcrypt_password', 'registry_tokens', 'system_grub_password_hash']) | list | length == 0)
             fail_msg: >-
               config.yml must not define these indirection-layer keys — include_vars
               outranks group_vars/all/vars.yml (precedence 18 vs 4-5), silently
               bypassing vault for: {{ (_config_raw | default({})).keys()
               | select('in', ['ssh_auth_key', 'ssh_auth_key_pub', 'ssh_signing_key',
-              'ssh_signing_key_pub', 'ssh_git_signing_pubkey', 'rh_git_key', 'notes_transcrypt_password',
+              'ssh_signing_key_pub', 'rh_git_key', 'notes_transcrypt_password',
               'registry_tokens', 'system_grub_password_hash']) | list }}. Use group_vars/all/vault.yml for these secrets instead.
 
         - name: Assert config.yml contains no security-policy key overrides
           ansible.builtin.assert:
             that: >-
               (_config_raw.keys() | select('in', ['claude_deny_sensitive',
-               'claude_sandbox_config', 'claude_deny_write_only',
+               'claude_deny_write_only',
                'claude_own_instance_deny_read', 'claude_own_instance_deny_write']) | list | length == 0)
             fail_msg: >-
-              config.yml must not override claude_deny_sensitive, claude_sandbox_config,
-              claude_deny_write_only, claude_own_instance_deny_read or
-              claude_own_instance_deny_write — these variables control the Claude settings.json
-              deny-list and sandbox policy. include_vars (precedence 18) outranks role defaults
-              (precedence 2), so defining them in config.yml silently empties deny-lists or
-              degrades sandbox enforcement. Remove them from config.yml; set them in
+              config.yml must not override claude_deny_sensitive, claude_deny_write_only,
+              claude_own_instance_deny_read or claude_own_instance_deny_write — these variables
+              control the Claude settings.json deny-list. include_vars (precedence 18) outranks
+              role defaults (precedence 2), so defining them in config.yml silently empties
+              deny-lists. Remove them from config.yml; set them in
               roles/claude/defaults/main.yml if policy change is intentional.
 
         - name: Assert redhat_splunk_nologin_shell is a non-login shell (CIS 5.6)
@@ -542,7 +509,7 @@
               system_resolved_llmnr={{ system_resolved_llmnr | default('DEFAULT') }},
               system_resolved_multicast_dns={{ system_resolved_multicast_dns | default('DEFAULT') }}.
 
-    - name: Non-molecule pre-flight assertions
+    - name: Work identity and desktop_environment assertions
       block:
         - name: Assert work identity vars are not CHANGE_ME placeholders
           when: profile == 'work'
@@ -562,8 +529,8 @@
             fail_msg: >-
               desktop_environment must be one of: sway, i3, gnome, aerospace (macOS).
               Got: '{{ desktop_environment }}'.
-              {% if desktop_environment == 'CHANGE_ME' %}This is the CHANGE_ME sentinel — set sway, i3, or gnome in
-              config.yml.{% else %}Check config.yml for typos.{% endif %}
+              {% if desktop_environment == 'CHANGE_ME' %}This is the CHANGE_ME sentinel — set sway, i3 or gnome (Linux),
+              or aerospace (macOS), in config.yml.{% else %}Check config.yml for typos.{% endif %}
 
     - name: Read existing authorized_keys for an ed25519 bootstrap key
       when:

@@ -213,18 +213,6 @@
     - csb_rhel
     - system_dev_shm_enable.failed | default(false)
 
-# --- Pre-initialize mount check results for container environments ---
-# The three root findmnt probe tasks (home/boot/boot/efi) carry when: not system_is_container
-# so they are skipped in containers. A skipped register result has no 'rc' attribute;
-# downstream when conditions like system_home_mountpoint.rc == 0 would raise a Jinja2
-# error. Pre-seeding rc=1 ('not found') makes all dependent tasks skip safely.
-- name: Pre-initialize mountpoint check results for container environments
-  ansible.builtin.set_fact:
-    system_home_mountpoint: "{{ {'rc': 1, 'stdout': '', 'stderr': ''} }}"
-    system_boot_mountpoint: "{{ {'rc': 1, 'stdout': '', 'stderr': ''} }}"
-    system_boot_efi_mountpoint: "{{ {'rc': 1, 'stdout': '', 'stderr': ''} }}"
-  when: system_is_container
-
 # --- Harden /home mount options (CIS 1.1.9) ---
 # nosuid prevents any setuid binary a user copies into their home directory from
 # gaining elevated privileges on exec. No standard Fedora package installs setuid
@@ -253,7 +241,7 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
-  when: not system_is_container  # pre-initialized above (rc=1); skip in container — findmnt output unused and can trigger systemd reactions
+  when: not system_is_container  # skip in container: findmnt output unused and can trigger systemd reactions
 
 - name: Check /home fstab options (CIS 1.1.9)
   ansible.builtin.command:
@@ -373,7 +361,7 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
-  when: not system_is_container  # pre-initialized above (rc=1); skip in container — /boot absent in container images
+  when: not system_is_container  # skip in container: /boot absent in container images
 
 - name: Check /boot fstab options
   ansible.builtin.command:
@@ -541,7 +529,7 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
-  when: not system_is_container  # pre-initialized above (rc=1); skip in container — /boot/efi absent in container images
+  when: not system_is_container  # skip in container: /boot/efi absent in container images
 
 - name: Check /boot/efi fstab options
   ansible.builtin.command:

@@ -3,7 +3,7 @@
 [user]
 	name = {{ dotfiles_user_name | trim | regex_replace('[\r\n].*', '') }}
 	email = {{ (dotfiles_user_email_work if profile == 'work' else dotfiles_user_email_personal) | regex_replace('[\r\n].*', '') }}
-{% if ssh_git_signing_pubkey | trim | length > 0 %}
+{% if ssh_signing_key_pub | trim | length > 0 %}
 	signingkey = ~/.ssh/{{ ssh_signing_key_basename }}.pub
 
 [commit]
@@ -20,7 +20,7 @@
 	sort = -committerdate
 
 [tag]
-{% if ssh_git_signing_pubkey | trim | length > 0 %}
+{% if ssh_signing_key_pub | trim | length > 0 %}
 	gpgsign = true
 {% endif %}
 	sort = -version:refname
@@ -111,7 +111,7 @@
 {% endfor %}{% endif %}
 {% if dotfiles_github_user != 'CHANGE_ME' %}
 # Personal email override — only active for repos under ~/src/{{ dotfiles_github_user }}/
-# Repos cloned elsewhere (~/personal/, ~/tmp/, etc.) use the work email above.
+# Repos cloned elsewhere (~/personal/, ~/tmp/, etc.) use the base [user] email above.
 [includeIf "gitdir:~/src/{{ dotfiles_github_user | regex_replace('[^a-zA-Z0-9_-]', '') }}/"]
 	path = ~/.config/git/config-personal
 {% endif %}

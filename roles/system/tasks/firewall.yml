@@ -32,7 +32,7 @@
   ansible.builtin.debug:
     msg: >-
       WARNING: firewalld is not running. Firewall hardening tasks in this file
-      (drop zone, port 722, ICMP rules, libvirt zone changes) will be skipped. The
+      (drop zone, port {{ ssh_port }}, ICMP rules, libvirt zone changes) will be skipped. The
       nm.yml tailscale0 trusted-zone task also guards on this fact.
       Install and start firewalld before re-running if firewall management is
       required.
@@ -55,7 +55,7 @@
     - system_firewalld_running | bool
     - system_firewall_info.firewalld_info.default_zone is defined
     - system_firewall_info.firewalld_info.default_zone != 'drop'
-    - system_firewall_manage_zone | bool  # CSB IT manages zone policy; drop zone breaks VPN/management
+    - system_firewall_manage_zone | bool
   notify:
     - Apply firewall rules
 
@@ -91,8 +91,7 @@
     - samba-client
   # ssh, dhcpv6-client, samba-client: all confirmed present in firewalld 2.4.x / Fedora 44 FedoraWorkstation.xml
   # mdns is NOT in the Fedora 44 FedoraWorkstation zone (removed by Red Hat); no removal needed.
-  # cockpit is NOT in FedoraWorkstation.xml; its port (9090/tcp) is managed separately via the drop zone task above.
-  register: _system_fw_zone_svc_remove
+  # cockpit is NOT in FedoraWorkstation.xml; its port (9090/tcp) is managed separately via the drop zone task below.
   notify: Apply firewall rules
   when:
     - system_firewalld_running | bool
@@ -111,7 +110,6 @@
     - 1025-65535/tcp
     - 1025-65535/udp
   # Both ranges confirmed present in firewalld 2.4.4 / Fedora 44 FedoraWorkstation.xml
-  register: _system_fw_zone_port_remove
   notify: Apply firewall rules
   when:
     - system_firewalld_running | bool
@@ -187,6 +185,7 @@
         immediate: true
         state: "{{ 'enabled' if system_enable_cockpit else 'disabled' }}"
       notify: Apply firewall rules
+
 - name: Open SSH port in default zone (zone management disabled)
   ansible.posix.firewalld:
     port: "{{ ssh_port }}/tcp"

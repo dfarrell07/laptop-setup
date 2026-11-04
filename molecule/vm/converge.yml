@@ -101,9 +101,7 @@
         # Full audited DNF initialization on constrained nested VMs is slow.
         distrobox_create_timeout: 3600
         dotfiles_github_user: "molecule-ci"
-        # Enable git signing configuration with a valid public-only fixture.
-        ssh_git_signing_pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO75wHkWbQR8wfCmzR0LhcCtlFHfzYq5+3uSSgYhkU1w molecule-test@ci"
-        # Facts must override the vault-backed value loaded by include_vars.
+        # Enables git signing with a public-only fixture; facts must override the vault-backed value loaded by include_vars.
         ssh_signing_key_pub: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO75wHkWbQR8wfCmzR0LhcCtlFHfzYq5+3uSSgYhkU1w molecule-test@ci"
 
     - name: Create mock notes repo structure for CI

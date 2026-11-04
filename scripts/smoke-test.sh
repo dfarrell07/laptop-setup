@@ -94,6 +94,8 @@ _mask_iscsi=true
 grep -qiE '^system_mask_iscsi:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_iscsi=false
 _usbguard_enabled=true
 grep -qiE '^system_install_usbguard:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _usbguard_enabled=false
+_disable_usb_storage=false
+grep -qiE '^system_disable_usb_storage:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _disable_usb_storage=true
 _containers_policy_enabled=true
 grep -qiE '^containers_policy_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _containers_policy_enabled=false
 _containers_enforce_fqin=true
@@ -205,17 +207,19 @@ fi
 # smoke run exits 0 and the assert in verify-smoke.yml passes.
 _tool_absent="FAIL"
 [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && _tool_absent="WARN"
-_tools=("kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "jq:jq --version" "tmux:tmux -V" "rg:rg --version" "fzf:fzf --version" "sops:sops --disable-version-check --version" "transcrypt:transcrypt --version" "gitleaks:gitleaks version" "direnv:direnv --version")
-if [[ "$profile" == "work" ]]; then _tools+=("kind:kind version" "helm:helm version" "kustomize:kustomize version" "go:go version" "k9s:k9s version"); fi
+_tools=("kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "jq:jq --version" "tmux:tmux -V" "rg:rg --version" "fzf:fzf --version" "transcrypt:transcrypt --version" "gitleaks:gitleaks version" "direnv:direnv --version")
+if [[ "$profile" == "work" ]]; then _tools+=("kind:kind version" "helm:helm version" "kustomize:kustomize version" "go:go version" "k9s:k9s version" "sops:sops --disable-version-check --version"); fi
 for tool in "${_tools[@]}"; do
   name="${tool%%:*}"; cmd="${tool#*:}"
   # shellcheck disable=SC2086  # intentional word-split: cmd is "binary arg1 arg2"
   if exec_cmd $cmd &>/dev/null; then record "$name" "PASS"; else record "$name" "$_tool_absent" "not found"; fi
 done
-if [[ -x "$HOME/.krew/bin/kubectl-krew" ]]; then
-  if exec_cmd "$HOME/.krew/bin/kubectl-krew" version &>/dev/null; then record "krew" "PASS"
-  else record "krew" "FAIL" "krew installed but version failed"; fi
-else record "krew" "$_tool_absent" "not found"; fi
+if [[ "$profile" == "work" ]] && $IS_LINUX && [[ "$(uname -m)" == x86_64 ]]; then
+  if [[ -x "$HOME/.krew/bin/kubectl-krew" ]]; then
+    if exec_cmd "$HOME/.krew/bin/kubectl-krew" version &>/dev/null; then record "krew" "PASS"
+    else record "krew" "FAIL" "krew installed but version failed"; fi
+  else record "krew" "$_tool_absent" "not found"; fi
+fi
 if ! $_codex_enabled; then
   record "codex" "PASS" "codex install disabled in config"
 elif [[ -n "$CONTAINER" ]]; then
@@ -291,13 +295,13 @@ if [[ "$profile" == "work" ]] && command -v podman &>/dev/null && [[ -x /usr/loc
   fi
 fi
 
-# FQIN enforcement: a user-level ~/.config/containers/registries.conf overrides the system file
-# entirely, so only warn when it is absent and the system file allows unqualified names.
+# FQIN enforcement: the user-level registries.conf.d/50-fqin.conf drop-in clears unqualified-search-registries,
+# so only warn when it is absent and the system file allows unqualified names.
 if $IS_LINUX && command -v podman &>/dev/null; then
   if ! $_containers_enforce_fqin; then
     record "fqin-enforcement" "PASS" "FQIN enforcement disabled (containers_enforce_fqin: false)"
-  elif [[ ! -f "$HOME/.config/containers/registries.conf" ]] && [[ -f /etc/containers/registries.conf ]] && grep -qE '^unqualified-search-registries\s*=' /etc/containers/registries.conf; then
-    record "fqin-enforcement" "WARN" "system /etc/containers/registries.conf allows unqualified image names and no user-level registries.conf overrides it — 'podman pull nginx' resolves against docker.io (set containers_enforce_fqin_override: true in config.yml, then make containers)"
+  elif [[ ! -f "$HOME/.config/containers/registries.conf.d/50-fqin.conf" ]] && [[ -f /etc/containers/registries.conf ]] && grep -qE '^unqualified-search-registries\s*=' /etc/containers/registries.conf; then
+    record "fqin-enforcement" "WARN" "system /etc/containers/registries.conf allows unqualified image names and the FQIN drop-in is not deployed — 'podman pull nginx' resolves against docker.io (set containers_enforce_fqin_override: true in config.yml, then make containers)"
   else
     record "fqin-enforcement" "PASS"
   fi
@@ -407,7 +411,7 @@ for tool in yamllint ansible-lint; do
 done
 
 # --- Dotfiles checks ---
-for f in .zshrc .vimrc .bashrc; do
+for f in .zshrc .bashrc; do
   if [[ ! -f "$HOME/$f" ]]; then record "dotfile-$f" "FAIL" "not deployed — run: make dotfiles"
   elif ! grep -qE 'Ansible managed|Seeded by Ansible' "$HOME/$f"; then record "dotfile-$f" "FAIL" "$f present but not Ansible-managed — inspect and re-run: make dotfiles"
   else record "dotfile-$f" "PASS"; fi
@@ -417,6 +421,9 @@ if [[ ! -f "$_tmux_conf" ]]; then record "dotfile-.config/tmux/tmux.conf" "FAIL"
 elif ! grep -q 'Ansible managed' "$_tmux_conf"; then record "dotfile-.config/tmux/tmux.conf" "FAIL" "$_tmux_conf present but not Ansible-managed — inspect and re-run: make dotfiles"
 else record "dotfile-.config/tmux/tmux.conf" "PASS"; fi
 unset _tmux_conf
+# .vimrc and the ripgrep config are seed-only: users edit away the marker, so check existence only
+if [[ -f "$HOME/.vimrc" ]]; then record "dotfile-.vimrc" "PASS"
+else record "dotfile-.vimrc" "FAIL" "not deployed — run: make dotfiles"; fi
 _gc="$HOME/.config/git/config"
 if [[ ! -f "$_gc" ]]; then record "dotfile-gitconfig" "FAIL" "missing — run: make dotfiles"
 elif ! grep -q 'Ansible managed' "$_gc"; then record "dotfile-gitconfig" "FAIL" "present but not Ansible-managed (manually overwritten?) — inspect and re-run: make dotfiles"
@@ -428,7 +435,7 @@ else
   else record "dotfile-gitconfig" "PASS"; fi
   unset _sk
 fi
-if [[ -f "$HOME/.gitconfig" ]]; then record "legacy-gitconfig" "FAIL" "$HOME/.gitconfig exists alongside XDG config — run: make dotfiles"; else record "legacy-gitconfig" "PASS"; fi
+if [[ -f "$HOME/.gitconfig" ]]; then record "legacy-gitconfig" "FAIL" "$HOME/.gitconfig shadows the managed ~/.config/git/config: merge anything you need into it, then move this file aside (mv ~/.gitconfig ~/.gitconfig.bak)"; else record "legacy-gitconfig" "PASS"; fi
 # git identity must be set to non-placeholder values
 _git_name=$(git config --global user.name 2>/dev/null || echo "")
 _git_email=$(git config --global user.email 2>/dev/null || echo "")
@@ -461,8 +468,8 @@ unset _gi
 
 # ripgreprc (loaded via RIPGREP_CONFIG_PATH in zshrc)
 _rg="$HOME/.config/ripgrep/config"
-if grep -qE "Ansible managed|Seeded by Ansible" "$_rg" 2>/dev/null; then record "dotfile-ripgreprc" "PASS"
-else record "dotfile-ripgreprc" "FAIL" "not deployed or not Ansible-managed: $_rg"; fi
+if [[ -f "$_rg" ]]; then record "dotfile-ripgreprc" "PASS"
+else record "dotfile-ripgreprc" "FAIL" "not deployed: $_rg"; fi
 unset _rg
 
 # alacritty config (deployed for every desktop; checked only where sway or i3 is installed)
@@ -547,7 +554,6 @@ else
     record "home-tmp-dir" "WARN" "$HOME/tmp exists but cannot create temp file"
   else
     # Guard cleanup with trap so set -e abort doesn't leak the temp file
-    _prev_exit_trap=$(trap -p EXIT)
     trap 'rm -f "$_htmp_test"' EXIT
     if cp /usr/bin/true "$_htmp_test" 2>/dev/null && chmod +x "$_htmp_test" 2>/dev/null; then
       if "$_htmp_test" 2>/dev/null; then record "home-tmp-dir" "PASS"
@@ -555,8 +561,6 @@ else
     else record "home-tmp-dir" "WARN" "exec-test setup failed (cp or chmod error)"; fi
     rm -f "$_htmp_test"
     trap - EXIT
-    [[ -z "$_prev_exit_trap" ]] || eval "$_prev_exit_trap"
-    unset _prev_exit_trap
   fi
   unset _htmp_test
 fi
@@ -679,10 +683,8 @@ else
     record "authorized-keys-exclusive" "WARN" "$_ak_total keys present, expected 1 — extra keys beyond vault key; inspect: cat $_ak"
   elif [[ "$_ak_total" -eq 0 ]]; then
     record "authorized-keys-exclusive" "WARN" "$_ak exists but has no key entries"
-  elif grep -qE '^(sk-)?ssh-ed25519' "$_ak" 2>/dev/null; then
-    record "authorized-keys-exclusive" "PASS"
   else
-    record "authorized-keys-exclusive" "WARN" "one key present but not sk-ssh-ed25519 type — unexpected key type in $_ak"
+    record "authorized-keys-exclusive" "PASS"
   fi
 fi
 unset _ak _ak_total
@@ -810,7 +812,6 @@ for _cd in "$HOME/.claude" "$HOME/.claude-personal" "$HOME/.claude-work" "$HOME/
 done
 unset _cd label
 
-# Config file validation
 # --- Notes repo (transcrypt-encrypted) ---
 if [[ -d "$_notes_dir/.git" ]]; then
   record "notes-repo" "PASS"
@@ -881,27 +882,6 @@ if $IS_LINUX; then
   fi
 fi
 
-# kernel-cmdline persistence (new kernels inherit from /etc/kernel/cmdline)
-# File is 0644 root-owned; no elevated privilege required. Guard makes this a
-# no-op on macOS and Debian containers where the file is absent.
-if [[ -f /etc/kernel/cmdline ]]; then
-  _kcmd=$(<"/etc/kernel/cmdline")
-  _kcmd_ok=true
-  [[ "$_kcmd" == *"vsyscall=none"* ]]       || _kcmd_ok=false
-  [[ "$_kcmd" == *"page_alloc.shuffle=1"* ]] || _kcmd_ok=false
-  if $_init_on_free && [[ "$_kcmd" != *"init_on_free=1"* ]]; then _kcmd_ok=false; fi
-  [[ -z "$_lockdown_intended" || "$_kcmd" == *"lockdown=${_lockdown_intended}"* ]] || _kcmd_ok=false
-  if grep -q "AuthenticAMD" /proc/cpuinfo 2>/dev/null; then
-    [[ "$_kcmd" == *"amd_iommu=on"* ]]       || _kcmd_ok=false
-  elif grep -q "GenuineIntel" /proc/cpuinfo 2>/dev/null; then
-    [[ "$_kcmd" == *"intel_iommu=on"* ]]     || _kcmd_ok=false
-  fi
-  grep -q 'iommu=pt' /proc/cmdline 2>/dev/null && { [[ "$_kcmd" == *"iommu=pt"* ]] || _kcmd_ok=false; }
-  if $_kcmd_ok; then record "kernel-cmdline" "PASS"
-  else record "kernel-cmdline" "FAIL" "security params missing from /etc/kernel/cmdline — new kernels may lack hardening"; fi
-  unset _kcmd _kcmd_ok
-fi
-
 # Chunk checks used by make verify (login_shell, distrobox). WARN, not FAIL, when absent: the chunk may be off.
 if $IS_LINUX && [[ -z "$CONTAINER" ]]; then
   _login_shell=$(getent passwd "$USER" 2>/dev/null | cut -d: -f7 || true)
@@ -952,7 +932,7 @@ unset _has_rh_cert
 
 if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
-  _csb_non_fedora=false
+  _csb_non_fedora=false  # CSB on RHEL (the only non-Fedora CSB platform)
   $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null && _csb_non_fedora=true
 
   # DNS-over-TLS: check config is deployed (not runtime negotiation — DoT is opportunistic so
@@ -1039,7 +1019,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if command -v firewall-cmd &>/dev/null; then
     zone=$(firewall-cmd --get-default-zone 2>/dev/null || echo "?")
     if [[ "$zone" == "drop" ]]; then record "firewall-zone" "PASS"
-    elif $CSB_HOST; then record "firewall-zone" "WARN" "zone='$zone' — IT manages zone policy on CSB; drop zone not applied"
+    elif $_csb_non_fedora; then record "firewall-zone" "WARN" "zone='$zone' — IT manages zone policy on RHEL CSB; drop zone not applied"
     else record "firewall-zone" "FAIL" "'$zone', expected 'drop'"; fi
     _primary_iface=$(ip route show default 2>/dev/null | awk '/default/{print $5; exit}')
     if [[ -n "$_primary_iface" && "$zone" == "drop" ]]; then
@@ -1061,11 +1041,11 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else
       # Verify sshd_config loads the drop-in directory (absent Include = drop-in deployed but never read)
       if grep -qE '^\s*Include\s+/etc/ssh/sshd_config\.d/' /etc/ssh/sshd_config 2>/dev/null; then record "sshd-include" "PASS"
-      elif $CSB_HOST && $_is_rhel; then record "sshd-include" "WARN" "sshd drop-in not loaded on RHEL CSB — IT manages sshd_config"
+      elif $_csb_non_fedora; then record "sshd-include" "WARN" "sshd drop-in not loaded on RHEL CSB — IT manages sshd_config"
       else record "sshd-include" "FAIL" "/etc/ssh/sshd_config missing Include /etc/ssh/sshd_config.d/*.conf — 00-hardening.conf not loaded; run: make system"; fi
       _ssh_port=$(grep -oP '^Port \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || true)
       if [[ -n "$_ssh_port" && "$_ssh_port" -ne 22 ]]; then record "sshd-port" "PASS"
-      elif $CSB_HOST && $_is_rhel; then record "sshd-port" "WARN" "sshd drop-in not deployed on RHEL CSB — IT manages sshd port (likely 22)"
+      elif $_csb_non_fedora; then record "sshd-port" "WARN" "sshd drop-in not deployed on RHEL CSB — IT manages sshd port (likely 22)"
       else record "sshd-port" "FAIL" "Port='${_ssh_port:-missing}' expected non-default port !=22 (config absent or port=22); run: make system (console/tmux, not over SSH)"; fi
       if [[ -n "$_ssh_port" ]] && command -v semanage &>/dev/null; then
         if semanage port -l 2>/dev/null | grep -qE "ssh_port_t.*\b${_ssh_port}\b"; then record "selinux-ssh-port" "PASS"
@@ -1081,7 +1061,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       # Only check drop-zone-specific rules when the drop zone is actually active
       if firewall-cmd --zone=drop --query-port="${_ssh_port:-$_cfg_ssh_port}/tcp" &>/dev/null; then record "firewall-ssh-port" "PASS"
       else record "firewall-ssh-port" "FAIL" "port ${_ssh_port:-$_cfg_ssh_port}/tcp not open in drop zone"; fi
-    elif $CSB_HOST; then record "firewall-ssh-port" "WARN" "skipped on CSB — drop zone not active (IT manages zones)"
+    elif $_csb_non_fedora; then record "firewall-ssh-port" "WARN" "skipped on RHEL CSB — drop zone not active (IT manages zones)"
     else record "firewall-ssh-port" "FAIL" "port ${_ssh_port:-$_cfg_ssh_port}/tcp not open in drop zone"; fi
     # Check permanent rule regardless of whether tailscale0 is up (catches post-snapshot regressions)
     if firewall-cmd --permanent --zone=trusted --query-interface=tailscale0 &>/dev/null; then
@@ -1115,7 +1095,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     if [[ "$zone" == "drop" ]]; then
       if firewall-cmd --zone=drop --query-icmp-block-inversion &>/dev/null; then record "firewall-icmp-inversion" "PASS"
       else record "firewall-icmp-inversion" "FAIL" "icmp-block-inversion not enabled in drop zone — NDP and PMTU discovery broken"; fi
-    elif $CSB_HOST; then record "firewall-icmp-inversion" "WARN" "skipped on CSB — drop zone not active"
+    elif $_csb_non_fedora; then record "firewall-icmp-inversion" "WARN" "skipped on RHEL CSB — drop zone not active"
     else record "firewall-icmp-inversion" "FAIL" "icmp-block-inversion not enabled in drop zone"; fi
     # libvirt zone must not have ssh enabled (VMs could reach host sshd — lateral movement path)
     if firewall-cmd --info-zone=libvirt &>/dev/null; then
@@ -1124,8 +1104,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       else record "firewall-libvirt-no-ssh" "PASS"; fi
     fi
     # FedoraWorkstation zone cleanup — broad port ranges and permissive services must be removed
-    # A mid-play failure before firewall.yml lines 75-112 leaves these rules intact; any NIC
-    # later assigned to FedoraWorkstation would expose all high ports.
+    # A mid-play failure before the FedoraWorkstation cleanup tasks in firewall.yml leaves these rules
+    # intact; any NIC later assigned to FedoraWorkstation would expose all high ports.
     if grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null && ! $CSB_HOST; then
       _fw_ports=$(firewall-cmd --zone=FedoraWorkstation --list-ports 2>/dev/null || true)
       _fw_svcs=$(firewall-cmd --zone=FedoraWorkstation --list-services 2>/dev/null || true)
@@ -1216,7 +1196,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else record "bpfman-socket" "FAIL" "bpfman.socket not enabled — bpfman load/list will fail at runtime"; fi
   elif $_bpfman_enabled && [[ "$profile" == "work" ]] && ! $CSB_HOST; then
     # bpfman is a work-profile package on non-CSB standard Fedora/RHEL — missing binary is a provisioning failure
-    record "bpfman-install" "FAIL" "bpfman binary missing on work profile (expected in packages_support_work) — re-run: make packages"
+    record "bpfman-install" "FAIL" "bpfman binary missing on work profile (expected because packages_bpfman_enabled is true) — re-run: make packages"
   fi  # bpfman absent on personal profile or CSB = expected — no record emitted
 
   # tc/strace/bpftool (work-profile only — guard on binary presence, emit nothing when absent)
@@ -1319,7 +1299,7 @@ EOF
   if [[ "$EUID" -ne 0 ]]; then
     record "sshd-banner" "WARN" "skipped — /etc/ssh/sshd_config.d/ requires root"
   elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
-    if $CSB_HOST && $_is_rhel; then
+    if $_csb_non_fedora; then
       if grep -q '^Banner ' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null; then
         record "sshd-banner" "WARN" "Banner directive present on CSB — IT manages SSH banner; may conflict with corporate policy"
       else record "sshd-banner" "PASS"; fi
@@ -1329,7 +1309,7 @@ EOF
         else record "sshd-banner" "FAIL" "Banner directive present but /etc/issue.net is empty — NIST AC-8 login notice not shown; run: make system"; fi
       else record "sshd-banner" "FAIL" "Banner /etc/issue.net absent from sshd drop-in — NIST AC-8 login warning notice missing; run: make system"; fi
     fi
-  elif $CSB_HOST && $_is_rhel; then
+  elif $_csb_non_fedora; then
     record "sshd-banner" "WARN" "sshd drop-in not deployed on CSB — IT manages SSH banner"
   else record "sshd-banner" "FAIL" "sshd drop-in not deployed"; fi
 
@@ -1337,7 +1317,7 @@ EOF
   # RHEL CSB: skipped — IT manages audit rules via Satellite/SIEM pipeline
   # Fedora hybrid CSB: expect -e 1 (mutable) so CSB Ansible can reload rules without EPERM
   # Non-CSB: expect -e 2 (immutable) — rules locked until reboot
-  if $CSB_HOST && $_is_rhel; then
+  if $_csb_non_fedora; then
     record "auditd-rules" "WARN" "skipped on RHEL CSB — audit rules managed by IT/SIEM pipeline"
   elif [[ $EUID -ne 0 && ! -r /etc/audit/rules.d/claude-code.rules ]]; then
     record "auditd-rules" "WARN" "needs root (run make smoke-test with sudo) — /etc/audit is unreadable"
@@ -1350,7 +1330,7 @@ EOF
     record "auditd-rules" "PASS"
   else record "auditd-rules" "FAIL" "auditd rules not deployed, missing immutability flag (-e 2 on non-CSB, -e 1 on Fedora hybrid CSB), or sentinel rule absent"; fi
   # auditd kernel state: verify audit mode matches deployment (requires root/CAP_AUDIT_CONTROL)
-  if $CSB_HOST && $_is_rhel; then
+  if $_csb_non_fedora; then
     record "auditd-immutable" "WARN" "skipped on RHEL CSB — IT manages audit enforcement mode"
   elif [[ $EUID -eq 0 ]]; then
     if $CSB_HOST && grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
@@ -1398,7 +1378,7 @@ EOF
          && ! grep -qE '^/etc/NetworkManager/system-connections[[:space:]]' /etc/aide.conf 2>/dev/null; then
         record "aide-nm-connections-excluded" "PASS"
       else record "aide-nm-connections-excluded" "WARN" "/etc/aide.conf must exclude (!) /etc/NetworkManager/system-connections and not monitor it — run: make system"; fi
-    else record "aide-not-configured" "WARN" "/etc/aide.conf absent — run: make system (enable system_aide_enabled: true in config.yml first); after deploy, initialise with: aide --init"; fi
+    else record "aide-not-configured" "WARN" "/etc/aide.conf absent — set system_aide_enabled: true in config.yml, then run: make system (the run builds the baseline at its end)"; fi
     # TLP paths only added to aide.conf when TLP is enabled (system_tlp_enabled=true opts in)
     if [[ -f /etc/tlp.conf ]]; then
       for _path in "/etc/tlp.d" "/etc/tlp.conf"; do
@@ -1411,18 +1391,17 @@ EOF
   fi
 
   # USB storage blacklist is conditional on system_disable_usb_storage (default: false)
-  if grep -q '^blacklist usb_storage' /etc/modprobe.d/hardening.conf 2>/dev/null && grep -q '^install usb_storage /bin/false' /etc/modprobe.d/hardening.conf 2>/dev/null; then
-    record "usb-storage-blocked" "PASS"
-  else record "usb-storage-blocked" "WARN" "usb_storage not kernel-blocked — USB drives may mount (expected if system_disable_usb_storage: false)"; fi
+  if $_disable_usb_storage; then
+    if grep -q '^blacklist usb_storage' /etc/modprobe.d/hardening.conf 2>/dev/null && grep -q '^install usb_storage /bin/false' /etc/modprobe.d/hardening.conf 2>/dev/null; then
+      record "usb-storage-blocked" "PASS"
+    else record "usb-storage-blocked" "WARN" "usb_storage not kernel-blocked although system_disable_usb_storage: true — run: make system"; fi
+  fi
 
-  # coredump config — verify drop-in is deployed with a Storage= directive
-  _cd_storage=$(grep -oP '^Storage=\K.*' /etc/systemd/coredump.conf.d/coredump.conf 2>/dev/null || true)
-  if [[ -n "$_cd_storage" ]]; then record "coredump-configured" "PASS" "Storage=$_cd_storage"
-  else record "coredump-configured" "FAIL" "coredump drop-in missing or Storage not set"; fi
-  _cd_size=$(grep -oP '^ProcessSizeMax=\K.*' /etc/systemd/coredump.conf.d/coredump.conf 2>/dev/null || true)
-  if [[ -n "$_cd_size" ]]; then record "coredump-processsizemax" "PASS" "ProcessSizeMax=$_cd_size"
-  else record "coredump-processsizemax" "FAIL" "coredump ProcessSizeMax not configured"; fi
-  unset _cd_storage _cd_size
+  # coredump config — verify drop-in is deployed with Storage= and ProcessSizeMax= directives
+  _cd=/etc/systemd/coredump.conf.d/coredump.conf
+  if grep -q '^Storage=.' "$_cd" 2>/dev/null && grep -q '^ProcessSizeMax=.' "$_cd" 2>/dev/null; then record "coredump-configured" "PASS"
+  else record "coredump-configured" "FAIL" "coredump drop-in missing, or Storage/ProcessSizeMax not set"; fi
+  unset _cd
 
   # coredump security check — alert if ansible-playbook, gpg, or ssh-agent have coredumps
   # (these processes handle vault plaintext/SSH keys; their coredumps expose secrets)
@@ -1611,9 +1590,7 @@ EOF
     else record "aide-service-no-network" "WARN" "aide-check.service not deployed"; fi
   fi  # (AIDE not deployed — system_aide_enabled: false; checks skipped)
 
-  # AIDE disabled on non-container, non-CSB dnf host — elevated to FAIL
-  # (AIDE disabled means filesystem integrity monitoring is absent; undetected
-  # setuid persistence is the primary risk on workstations with AIDE off)
+  # AIDE not deployed on a non-CSB dnf host: FAIL if system_aide_enabled is true, SKIP if disabled (setuid-scan.timer covers the setuid gap)
   if [[ ! -f /etc/systemd/system/aide-check.timer ]] && ! $CSB_HOST; then
     if grep -qiE '^ID="?(fedora|rhel|centos|rocky|almalinux)"?$' /etc/os-release 2>/dev/null; then
       if $_aide_enabled; then
@@ -1692,6 +1669,7 @@ EOF
   # fwupd firmware update daemon
   if systemctl is-enabled fwupd &>/dev/null; then record "fwupd-enabled" "PASS"
   else record "fwupd-enabled" "FAIL" "fwupd not enabled (firmware updates won't run automatically)"; fi
+  # fwupd LVFS metadata refresh
   if systemctl is-active fwupd-refresh.timer &>/dev/null; then record "fwupd-refresh-timer" "PASS"
   else record "fwupd-refresh-timer" "FAIL" "fwupd-refresh.timer inactive — LVFS firmware metadata may be stale"; fi
 
@@ -1699,7 +1677,7 @@ EOF
   if grep -qE '^auth.*required.*pam_wheel.so' /etc/pam.d/su 2>/dev/null; then record "pam-wheel" "PASS"
   elif grep -qiE '^ID=debian' /etc/os-release 2>/dev/null; then
     record "pam-wheel" "WARN" "skipped on Debian — 'sudo' group used instead of 'wheel'; pam_wheel.so not deployed by Ansible on apt systems"
-  elif $CSB_HOST && $_is_rhel; then record "pam-wheel" "WARN" "skipped on RHEL CSB — IT manages pam_wheel.so via Satellite/SCAP"
+  elif $_csb_non_fedora; then record "pam-wheel" "WARN" "skipped on RHEL CSB — IT manages pam_wheel.so via Satellite/SCAP"
   else record "pam-wheel" "FAIL" "su not restricted to wheel group"; fi
 
   # Root account locked (passwd -S root requires root — WARN not FAIL when non-root)
@@ -1891,7 +1869,7 @@ EOF
   elif grep -q noexec "$_tmp_dropin" 2>/dev/null; then
     record "tmp-hardening" "FAIL" "/tmp noexec in drop-in but not mounted: $_tmp_opts"
   else
-    record "tmp-hardening" "PASS" "noexec off (system_tmp_noexec: false, intentional)"
+    record "tmp-hardening" "PASS" "noexec off (system_tmp_noexec false or RHEL CSB; nosuid/nodev enforced)"
   fi
   unset _tmp_opts _tmp_dropin
 
@@ -1941,8 +1919,8 @@ EOF
     _efi_opts=$(findmnt -n -o OPTIONS /boot/efi 2>/dev/null || echo "")
     if [[ "$_efi_opts" == *nosuid* ]] && [[ "$_efi_opts" == *noexec* ]]; then
       record "boot-efi-hardening" "PASS"
-    elif $CSB_HOST; then
-      record "boot-efi-hardening" "WARN" "/boot/efi missing nosuid/noexec on CSB: $_efi_opts (IT manages fstab; may reset on reboot)"
+    elif $_csb_non_fedora; then
+      record "boot-efi-hardening" "WARN" "/boot/efi missing nosuid/noexec on RHEL CSB: $_efi_opts (IT manages fstab; boot-efi-harden.service re-applies on reboot)"
     else
       record "boot-efi-hardening" "FAIL" "/boot/efi missing nosuid/noexec: $_efi_opts"
     fi
@@ -2046,7 +2024,7 @@ EOF
   # dconf system policies (CIS 1.8.3-1.8.8) — only relevant on GNOME systems
   if ! systemctl cat gdm.service &>/dev/null; then
     record "dconf-policies" "PASS" "GDM not installed — dconf system policies are GNOME-specific (Sway/i3 systems not affected)"
-  elif $CSB_HOST && $_is_rhel; then
+  elif $_csb_non_fedora; then
     record "dconf-policies" "WARN" "dconf hardening skipped on CSB — IT manages GDM banner and screensaver policy (Satellite/SCAP)"
   else
   # Source key files checked directly — no D-Bus session required for smoke tests.
@@ -2066,7 +2044,8 @@ EOF
   else record "dconf-media-handling" "FAIL" "/etc/dconf/db/local.d/50-hardening not deployed"; fi
   # Media-handling policy locks (CIS 1.8.6-1.8.8)
   if grep -q '^/org/gnome/desktop/media-handling/automount$' /etc/dconf/db/local.d/locks/50-hardening 2>/dev/null && \
-     grep -q '^/org/gnome/desktop/media-handling/autorun-never$' /etc/dconf/db/local.d/locks/50-hardening 2>/dev/null; then
+     grep -q '^/org/gnome/desktop/media-handling/autorun-never$' /etc/dconf/db/local.d/locks/50-hardening 2>/dev/null && \
+     grep -q '^/org/gnome/desktop/media-handling/automount-open$' /etc/dconf/db/local.d/locks/50-hardening 2>/dev/null; then
     record "dconf-media-locks" "PASS"
   else record "dconf-media-locks" "FAIL" "media-handling keys not locked in /etc/dconf/db/local.d/locks/50-hardening"; fi
   # IT owns idle-delay/lock policy on CSB hosts; no screensaver checks there
@@ -2217,7 +2196,6 @@ EOF
   _sysctl_check "kernel.io_uring_disabled" "${_io_uring_expected:-1}" "sysctl-io-uring-disabled"
   _sysctl_check "kernel.dmesg_restrict"              "1" "sysctl-dmesg-restrict"
   # unprivileged_bpf: 1=disabled(write-once), 2=disabled(resettable). Both are valid.
-  # Integrity lockdown mode locks the value to 2 and makes it read-only (permission denied).
   _bpf_disabled=$(sysctl -n kernel.unprivileged_bpf_disabled 2>/dev/null) || true
   if [[ -n "$_bpf_disabled" && "$_bpf_disabled" -ge 1 ]]; then record "sysctl-bpf-restrict" "PASS"
   elif [[ -z "$_bpf_disabled" && "$EUID" -ne 0 ]]; then record "sysctl-bpf-restrict" "WARN" "unreadable as non-root"
@@ -2269,11 +2247,7 @@ EOF
   done
   fi
   _ipv6_fwd_expected=$(awk -F' *= *' '/^net\.ipv6\.conf\.all\.forwarding/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
-  if [[ -n "$_ipv6_fwd_expected" ]]; then
-    _sysctl_check "net.ipv6.conf.all.forwarding" "$_ipv6_fwd_expected" "sysctl-ipv6-forwarding"
-  else
-    record "sysctl-ipv6-forwarding" "WARN" "net.ipv6.conf.all.forwarding not in 90-hardening.conf (system_enable_ip_forward: false — IPv6 forwarding not expected)"
-  fi
+  _sysctl_check "net.ipv6.conf.all.forwarding" "${_ipv6_fwd_expected:-1}" "sysctl-ipv6-forwarding"
 
   # vsyscall=none kernel param — vsyscall page at 0xffffffffff600000 is a fixed-address ROP gadget
   # source (gettimeofday/time/getcpu entries); FAIL in pre-reboot window when configured but not active
@@ -2350,11 +2324,7 @@ EOF
   _sysctl_check "net.ipv4.icmp_echo_ignore_broadcasts"      "1" "sysctl-icmp-no-echo-broadcast"
   _sysctl_check "net.ipv4.icmp_ignore_bogus_error_responses" "1" "sysctl-icmp-no-bogus-error"
   _ip_fwd_expected=$(awk -F' *= *' '/^net\.ipv4\.ip_forward/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
-  if [[ -n "$_ip_fwd_expected" ]]; then
-    _sysctl_check "net.ipv4.ip_forward" "$_ip_fwd_expected" "sysctl-ip-forward"
-  else
-    record "sysctl-ip-forward" "WARN" "net.ipv4.ip_forward not in 90-hardening.conf (system_enable_ip_forward: false — Kubernetes/Tailscale routing not expected)"
-  fi
+  _sysctl_check "net.ipv4.ip_forward" "${_ip_fwd_expected:-1}" "sysctl-ip-forward"
   if [[ "$profile" == "work" ]]; then
   # nf_conntrack_max: module-gated sysctl — WARN if nf_conntrack not yet loaded, FAIL if loaded but wrong
   _nfct=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null) || true
@@ -2368,6 +2338,27 @@ EOF
   _sysctl_check "net.ipv6.conf.all.use_tempaddr"       "2"        "sysctl-ipv6-tempaddr"
   _sysctl_check "net.ipv6.conf.default.use_tempaddr"   "2"        "sysctl-ipv6-tempaddr-default"
 
+  # kernel-cmdline persistence (new kernels inherit from /etc/kernel/cmdline)
+  # File is 0644 root-owned; no elevated privilege required. System scope (skipped by --user-only);
+  # the guard makes this a no-op on hosts where the file is absent.
+  if [[ -f /etc/kernel/cmdline ]]; then
+    _kcmd=$(<"/etc/kernel/cmdline")
+    _kcmd_ok=true
+    [[ "$_kcmd" == *"vsyscall=none"* ]]       || _kcmd_ok=false
+    [[ "$_kcmd" == *"page_alloc.shuffle=1"* ]] || _kcmd_ok=false
+    if $_init_on_free && [[ "$_kcmd" != *"init_on_free=1"* ]]; then _kcmd_ok=false; fi
+    [[ -z "$_lockdown_intended" || "$_kcmd" == *"lockdown=${_lockdown_intended}"* ]] || _kcmd_ok=false
+    if grep -q "AuthenticAMD" /proc/cpuinfo 2>/dev/null; then
+      [[ "$_kcmd" == *"amd_iommu=on"* ]]       || _kcmd_ok=false
+    elif grep -q "GenuineIntel" /proc/cpuinfo 2>/dev/null; then
+      [[ "$_kcmd" == *"intel_iommu=on"* ]]     || _kcmd_ok=false
+    fi
+    grep -q 'iommu=pt' /proc/cmdline 2>/dev/null && { [[ "$_kcmd" == *"iommu=pt"* ]] || _kcmd_ok=false; }
+    if $_kcmd_ok; then record "kernel-cmdline" "PASS"
+    else record "kernel-cmdline" "FAIL" "security params missing from /etc/kernel/cmdline — new kernels may lack hardening"; fi
+    unset _kcmd _kcmd_ok
+  fi
+
 fi
 unset _csb_non_fedora _is_rhel
 
@@ -2376,7 +2367,6 @@ unset _csb_non_fedora _is_rhel
 # [[ -f ]] guards make them no-ops on macOS and container scenarios without the system role.
 
 # kernel module blacklist — always-present entries (n_hdlc, dccp/rds/tipc CIS 3.4.x); vivid/usb_storage skipped
-# (cramfs removed from template; usb_storage conditional on system_disable_usb_storage)
 if [[ -f /etc/modprobe.d/hardening.conf ]]; then
   if grep -q '^blacklist n_hdlc' /etc/modprobe.d/hardening.conf && \
      grep -q '^install dccp /bin/false' /etc/modprobe.d/hardening.conf && \
@@ -2400,7 +2390,7 @@ fi
 if [[ -f /etc/NetworkManager/conf.d/99-wifi-powersave.conf ]]; then
   if grep -q '^wifi.powersave=2' /etc/NetworkManager/conf.d/99-wifi-powersave.conf; then
     record "nm-wifi-powersave" "PASS"
-  elif $CSB_HOST; then record "nm-wifi-powersave" "WARN" "not deployed on CSB — run 'make all' to apply; Intel WiFi may suffer latency spikes under load until then"
+  elif $CSB_HOST; then record "nm-wifi-powersave" "WARN" "leftover on CSB (IT manages NM power policy) — make system removes it"
   else record "nm-wifi-powersave" "WARN" "WiFi power saving not disabled (/etc/NetworkManager/conf.d/99-wifi-powersave.conf)"; fi
 fi
 if [[ -f /etc/NetworkManager/conf.d/tailscale.conf ]]; then

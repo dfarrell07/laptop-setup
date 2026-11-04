@@ -25,12 +25,10 @@ reboot = never
 emit_via = stdio
 emit_no_updates = no
 
-# NOTE: dnf5 has no config-level repo exclusion. Third-party repos
-# (docker-ce, chrome, slack, etc.) are excluded from auto-updates by
-# setting enabled=0 in their .repo files. The repos_dnf role creates
-# them with enabled=true; disable individually if auto-update is risky.
+# NOTE: dnf5 has no config-level repo exclusion. To keep a third-party repo
+# out of auto-updates, set enabled=0 in its .repo file.
 
-{% if network_proxied %}
+{% if proxy_url %}
 [main]
 proxy = {{ proxy_url | regex_replace('[\r\n].*', '') }}
 {% endif %}

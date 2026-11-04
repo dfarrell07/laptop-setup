@@ -161,6 +161,14 @@
     - lookup('env', 'SSH_CONNECTION') | length > 0  # console runs: pre-flight prints a notice instead
   tags: [always, ssh_authorized_keys]
 
+- name: Read existing authorized_keys
+  ansible.builtin.slurp:
+    src: "{{ ansible_facts['user_dir'] }}/.ssh/authorized_keys"
+  register: _authkeys_slurp
+  no_log: true
+  tags: [ssh_authorized_keys]
+  when: _ssh_authkeys_stat.stat.exists
+
 - name: Validate existing authorized_keys key types when vault is empty
   tags: [ssh_authorized_keys]
   when:
@@ -168,15 +176,10 @@
     - ssh_auth_key_pub | trim | length == 0  # vault empty
     - _ssh_authkeys_stat.stat.exists
   block:
-    - name: Read existing authorized_keys
-      ansible.builtin.slurp:
-        src: "{{ ansible_facts['user_dir'] }}/.ssh/authorized_keys"
-      register: _existing_authkeys
-
     - name: Select active authorized_keys entries
       ansible.builtin.set_fact:
         _existing_key_lines: >-
-          {{ (_existing_authkeys.content | b64decode).splitlines()
+          {{ (_authkeys_slurp.content | b64decode).splitlines()
              | map('trim') | reject('equalto', '') | reject('match', '^#') | list }}
         # OpenSSH options occupy one token, but quoted option values may contain spaces.
         _ssh_authorized_key_pattern: >-
@@ -219,16 +222,6 @@
         - _existing_key_types | length > 0
         - lookup('env', 'SSH_CONNECTION') | length > 0  # console runs: pre-flight prints a notice instead
 
-- name: Slurp authorized_keys to detect backup keys that exclusive write will remove
-  ansible.builtin.slurp:
-    src: "{{ ansible_facts['user_dir'] }}/.ssh/authorized_keys"
-  register: _pre_excl_authkeys_slurp
-  no_log: true
-  tags: [ssh_authorized_keys]
-  when:
-    - ssh_auth_key_pub | trim | length > 0
-    - _ssh_authkeys_stat.stat.exists
-
 - name: Warn when exclusive authorized_keys write will remove existing backup keys
   ansible.builtin.debug:
     msg: >-
@@ -241,7 +234,7 @@
     - ssh_auth_key_pub | trim | length > 0
     - _ssh_authkeys_stat.stat.exists
     - >-
-      (_pre_excl_authkeys_slurp.content | b64decode).splitlines()
+      (_authkeys_slurp.content | b64decode).splitlines()
       | map('trim') | reject('eq', '') | reject('match', '^#')
       | reject('eq', ssh_auth_key_pub | trim)
       | list | length > 0

@@ -148,8 +148,8 @@
     GOPATH: "{{ ansible_env.HOME }}/go"
     GOBIN: "{{ ansible_env.HOME }}/go/bin"
     GOTOOLCHAIN: auto  # packages_gotoolchain is a packages-role-only default; distrobox role uses auto directly
-    HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-    HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
+    HTTPS_PROXY: "{{ proxy_url if proxy_url else omit }}"
+    HTTP_PROXY: "{{ proxy_url if proxy_url else omit }}"
     GOSUMDB: "sum.golang.org"
     GONOSUMDB: "{{ dotfiles_gonosumdb | default('') }}"
     GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
@@ -216,8 +216,8 @@
         GOPATH: "{{ ansible_env.HOME }}/go"
         GOBIN: "{{ _container_subctl_tmpdir.path }}"
         GOTOOLCHAIN: auto  # packages_gotoolchain is a packages-role-only default; distrobox role uses auto directly
-        HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
+        HTTPS_PROXY: "{{ proxy_url if proxy_url else omit }}"
+        HTTP_PROXY: "{{ proxy_url if proxy_url else omit }}"
         GOSUMDB: "sum.golang.org"
         GONOSUMDB: "{{ dotfiles_gonosumdb | default('') }}"
         GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
@@ -274,6 +274,8 @@
     path: /usr/bin/distrobox-host-exec
   register: container_host_exec
 
+# ACCEPTED RISK: each entry makes /usr/local/bin/<cmd> -> /usr/bin/distrobox-host-exec (delegates to host Podman;
+# intentional for kind and OVN-K make targets). The allowlist is enforced in roles/distrobox/tasks/main.yml.
 - name: Create distrobox-host-exec symlinks
   ansible.builtin.file:
     src: /usr/bin/distrobox-host-exec
@@ -389,7 +391,7 @@
       === Container Provisioning Summary ===
       packages     : {{ 'skipped (no packages)' if container_dnf_result.skipped | default(false) else ('OK' if container_dnf_result.rc | default(-1) == 0 else 'FAILED (rc=' + (container_dnf_result.rc | default(-1) | string) + ')') }}
       oc client    : {{ container_oc_version.stdout | default('not installed') | trim }}
-      oc host wrap : {{ '~/.local/bin/oc present' if container_oc_export_stat.stat.exists | default(false) else ('N/A (oc download failed)' if not (container_oc_installed | default(true)) else ('N/A (Toolbx)' if not container_host_exec.stat.exists else 'MISSING')) }}
+      oc host wrap : {{ '~/.local/bin/oc present' if container_oc_export_stat.stat.exists | default(false) else ('N/A (oc download failed)' if not (container_oc_installed | default(true)) else ('N/A (Toolbx)' if not container_host_exec.stat.exists else 'N/A (host provides oc)')) }}
       golangci-lint: {{ 'OK' if container_golangci_lint_result.rc | default(-1) == 0 else ('already installed' if container_golangci_lint_result.skipped | default(false) else 'FAILED (rc=' + (container_golangci_lint_result.rc | default(-1) | string) + ')') }}
       subctl       : {{ 'OK' if container_subctl_result.rc | default(-1) == 0 else ('already installed' if container_subctl_result.skipped | default(false) else 'FAILED (rc=' + (container_subctl_result.rc | default(-1) | string) + ')') }}
       Host podman  : {{ container_host_podman.stdout | default('not available') | trim }}
