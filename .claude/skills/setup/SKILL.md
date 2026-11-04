@@ -46,8 +46,8 @@ ansible -m setup -a 'filter=ansible_os_family,ansible_distribution*' localhost
 sudo -n -l 2>/dev/null || echo "no-sudo"
 ```
 
-CSB detection is `common/tasks/csb_detect.yml` (`csb_detected`, `csb_restricted`). Without sudo, skip chunks that need it (`make status`
-shows which) and say so; on CSB, `make minimal` is the no-sudo path.
+CSB detection is `common/tasks/csb_detect.yml` (`csb_detected`, `needs_container_tier`). Without sudo, skip chunks that need it
+(`make status` shows which) and say so; on CSB, `make minimal` is the no-sudo path.
 
 ## Phase 3: Chunks, one at a time
 
@@ -81,13 +81,14 @@ Never retry automatically. Finish with a list of passed, failed and skipped chun
 
 Check each tool and skip what is already logged in. If an auth step fails with connection errors, ask whether the VPN is up.
 
-| Tool | Check | If missing |
-| --- | --- | --- |
-| GitHub CLI | `gh auth status` | owner runs `gh auth login` (HTTPS), then `make packages repos notes` |
-| Notes (transcrypt) | `make notes` warned about the password | `make vault-edit` to add `vault_notes_transcrypt_password`, then `make notes` |
-| OpenShift (work) | `oc whoami` | `oc login --web`; cluster name is in `CLAUDE.local.md` |
-| Registries (work) | `podman login --get-login registry.redhat.io` (and `quay.io`) | `umask 077 && podman login --authfile ~/.config/containers/auth.json <registry>` |
-| Google Cloud (work) | `gcloud auth list --filter='status:ACTIVE'` | `gcloud auth login` and `gcloud auth application-default login` |
+- **GitHub CLI**: check `gh auth status`; if missing, owner runs `gh auth login` (HTTPS), then `make packages repos notes`
+- **Notes (transcrypt)**: `make notes` warned about the password; if missing, `make vault-edit` to add
+  `vault_notes_transcrypt_password`, then `make notes`
+- **OpenShift (work)**: check `oc whoami`; if missing, `oc login --web`; cluster name is in `CLAUDE.local.md`
+- **Registries (work)**: check `podman login --get-login registry.redhat.io` (and `quay.io`); if missing,
+  `umask 077 && podman login --authfile ~/.config/containers/auth.json <registry>`
+- **Google Cloud (work)**: check `gcloud auth list --filter='status:ACTIVE'`; if missing, `gcloud auth login` and
+  `gcloud auth application-default login`
 
 ## Phase 5: Smoke test
 

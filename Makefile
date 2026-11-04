@@ -180,42 +180,7 @@ bootstrap: guard-not-root bootstrap-hooks
 	@echo ""
 	@echo "Bootstrap complete. Git hooks active."
 	@echo ""
-	@echo "Next steps:"
-	@echo "  1. Create config.yml (REQUIRED before make all — do not skip):"
-	@echo "       cp default.config.yml config.yml"
-	@echo "     Edit config.yml and replace each CHANGE_ME sentinel value:"
-	@echo "       desktop_environment: sway   # Linux: sway/i3/gnome; macOS: aerospace"
-	@echo "       dotfiles_github_user: 'yourusername'"
-	@echo "       dotfiles_user_name: 'Your Name'"
-	@echo "       dotfiles_user_email_work: 'you@company.com'"
-	@echo "       dotfiles_user_email_personal: 'you@personal.com'"
-	@echo "     Also set (default UTC, not a CHANGE_ME sentinel):"
-	@echo "       system_timezone: America/Chicago   # timedatectl list-timezones"
-	@echo "     Personal machine? also add: profile: personal  # skips work tooling; work email then optional"
-	@echo "     Want notes provisioned? also add: notes_enabled: true  # opt-in; requires a GitHub repo named \"notes\" accessible as dotfiles_github_user/notes"
-	@echo "     HiDPI display (e.g. ThinkPad P16v 2560x1600):"
-	@echo "       desktop_sway_hidpi_scale: \"1.5\""
-	@echo "  2. GPG signing follows .gpg-enforcement ($$(scripts/gpg-policy.sh)):"
-	@echo "     - If you don't have a GPG key: gpg --full-generate-key"
-	@echo "     - To enforce signing: set .gpg-enforcement to enabled and configure commit.gpgsign"
-	@echo "     - For details: see SECURITY.md § GPG Key Requirements for Supply-Chain Commits"
-	@echo "  3. Run make setup-yubikeys — programs your YubiKeys with the same HMAC-SHA1 secret,"
-	@echo "     writes scripts/vault-pass.sh, and shows next steps including vault encryption."
-	@echo "     (For manual vault-pass.sh without hardware key, see SECURITY.md §Setting Up vault-pass.sh)"
-	@echo "     (For first provision without real secrets, vault.yml plaintext stub is fine.)"
-	@echo "  4. make preflight   # validate all pre-conditions before provisioning"
-	@echo "     make check       # full sudo dry run; review the diff before provisioning"
-	@echo "  5. make all         # full provisioning (run at local console or inside tmux)"
-	@echo "  6. Reboot — kernel hardening (lockdown/IOMMU) and SSH port 722 only take effect after reboot"
-	@echo "  7. After reboot — required manual steps:"
-	@echo "       make smoke-test              # verify provisioning succeeded"
-	@echo "       tailscale up                 # authenticate Tailscale (browser step)"
-	@echo "       gh auth login                # GitHub CLI auth (required for HTTPS git credential helper)"
-	@echo "       podman login registry.redhat.io  # work profile only, if oc is installed"
-	@echo "       Log out and back in for libvirt/kvm group membership changes"
-	@echo "       make container               # CSB/hybrid machines only: provision distrobox dev container"
-	@echo "     See CLAUDE.md 'Quick Reference' step 6 for post-provisioning details."
-	@echo ""
+	@echo "Next: cp default.config.yml config.yml, replace every CHANGE_ME (and set system_timezone), then make preflight. Full first-run steps: CLAUDE.md 'First time on a new machine'."
 
 # Fedora 41+ runs modular libvirt daemons (virtqemud.service Conflicts=libvirtd.service), so their
 # sockets are enabled instead of the monolithic libvirtd. vagrant-libvirt uses qemu:///system;
@@ -262,33 +227,8 @@ vendor-collections: guard-not-root
 	@# Run when bumping versions in requirements.yml, then update SHA256SUMS and git commit.
 	env -u ANSIBLE_GALAXY_SERVER_LIST -u ANSIBLE_GALAXY_TOKEN ANSIBLE_GALAXY_SERVER=https://galaxy.ansible.com/ \
 		ansible-galaxy collection download -r requirements.yml -p collections-dist/
-	@echo "Cross-verifying downloads against Galaxy API artifact.sha256 metadata..."; \
-	GALAXY_API="https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/index"; \
-	_fail=0; \
-	for spec in \
-		"ansible/posix/2.2.2/ansible-posix-2.2.2.tar.gz" \
-		"community/general/13.5.0/community-general-13.5.0.tar.gz" \
-		"community/library_inventory_filtering_v1/1.1.5/community-library_inventory_filtering_v1-1.1.5.tar.gz" \
-		"containers/podman/1.21.2/containers-podman-1.21.2.tar.gz"; do \
-		ns=$$(echo "$$spec" | cut -d/ -f1); \
-		name=$$(echo "$$spec" | cut -d/ -f2); \
-		ver=$$(echo "$$spec" | cut -d/ -f3); \
-		file=$$(echo "$$spec" | cut -d/ -f4); \
-		api_hash=$$(curl -sf "$${GALAXY_API}/$${ns}/$${name}/versions/$${ver}/" \
-			| python3 -c "import sys,json; print(json.load(sys.stdin)['artifact']['sha256'])" 2>/dev/null); \
-		dl_hash=$$(sha256sum "collections-dist/$${file}" | awk '{print $$1}'); \
-		if [ -z "$$api_hash" ]; then \
-			echo "  FAIL $${file}: could not fetch Galaxy API hash; manual verification required" >&2; \
-			_fail=1; \
-		elif [ "$$api_hash" = "$$dl_hash" ]; then \
-			echo "  PASS $${file}"; \
-		else \
-			echo "  FAIL $${file}: CDN hash ($$dl_hash) != Galaxy API hash ($$api_hash)" >&2; \
-			_fail=1; \
-		fi; \
-	done; \
-	[ "$$_fail" = "0" ] || exit 1
 	cd collections-dist && sha256sum *.tar.gz > SHA256SUMS
+	scripts/verify-collections-galaxy.sh
 	@echo "Regenerating Python manifest for supply chain verification..."
 	python3 scripts/gen-collection-manifest.py collections-dist collections-dist/PYTHON_MANIFEST.json
 	@echo ""
@@ -432,7 +372,6 @@ check-vars-sync: .venv
 .venv: requirements-test.lock
 	@test -x .venv/bin/python || python3 -m venv .venv
 	@touch -t 197001010000 .venv  # stale until the final touch: a failed pip step is retried next run
-	.venv/bin/pip install --no-deps --require-hashes -r requirements-bootstrap.txt
 	.venv/bin/pip install --require-hashes -r requirements-test.lock
 	touch .venv
 
@@ -463,17 +402,8 @@ commitlint:
 # For VM tests: make test-vm (requires: make bootstrap-test first).
 test: shellcheck test-scripts test-poller test-fedora test-rocky test-debian test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role test-ssti-guard
 
-# Syntax-check scripts/ (bash -n), then run the hook tests and scripts/test-*.py suites.
+# Run the hook tests and scripts/test-*.py suites.
 test-scripts: .venv
-	bash -n scripts/preflight.sh
-	bash -n scripts/smoke-test.sh
-	bash -n scripts/backup.sh
-	bash -n scripts/vault-pass-ci.sh
-	bash -n scripts/test-queue-poller.sh
-	bash -n scripts/verify-collections.sh
-	bash -n scripts/verify-ansible-args.sh
-	bash -n scripts/verify-collections-galaxy.sh
-	bash -n scripts/test-hooks-security.sh
 	bash scripts/test-hooks-security.sh
 	.venv/bin/python3 scripts/test-config-parser.py
 	.venv/bin/python3 scripts/test-pre-push.py

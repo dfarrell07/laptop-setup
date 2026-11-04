@@ -227,9 +227,6 @@
         state: present
       ignore_errors: "{{ ansible_check_mode }}"  # the repo file is not written in check mode, so the package may not resolve
     - name: Warn when acli first-install SHA256 check is not configured
-      # repos_dnf_acli_binary_sha256 is not set — no integrity check on the downloaded binary.
-      # Obtain the expected SHA256 out-of-band from IT and set it in config.yml for a post-install check
-      # (variable name: repos_dnf_acli_binary_sha256).
       ansible.builtin.debug:
         msg: >-
           SECURITY ADVISORY: repos_dnf_acli_binary_sha256 is not set in config.yml.
@@ -239,9 +236,6 @@
           the package scriptlets have run; it does not prevent them).
       when: repos_dnf_acli_binary_sha256 is not defined
     - name: Stat acli binary for SHA256 first-install integrity check
-      # Only runs when repos_dnf_acli_binary_sha256 is set in config.yml.
-      # Post-install check: detects a mismatch after the scriptlets ran, does not prevent them;
-      # versionlock below only prevents unauthenticated updates after this point.
       ansible.builtin.stat:
         path: /usr/bin/acli
         checksum_algorithm: sha256
@@ -263,8 +257,6 @@
         # check mode may skip or fail the install above, so the binary may legitimately not exist yet
         - not ansible_check_mode or _acli_stat.stat.exists
     - name: Pin acli version to limit unauthenticated update exposure
-      # NOTE: this pin only protects against post-provision tampering (future dnf updates).
-      # First-install integrity depends on repos_dnf_acli_binary_sha256 being set above.
       community.general.dnf_versionlock:
         name: acli
         state: present
@@ -321,40 +313,12 @@
           hosts (repo.redhat.com, keys.redhat.com, or repos_dnf_internal_hosts);
           this prevents subdomain hijacking attacks. Do not use arbitrary redhat.com subdomains.
           repos_dnf_redhat_gpg_fingerprint must also be set (the key's full fingerprint).
-    - name: Create secure temporary directory for Red Hat GPG key
-      ansible.builtin.tempfile:
-        state: directory
-        suffix: _redhat_gpg
-      register: _redhat_gpg_tmp_dir
-      changed_when: false  # scratch storage is removed within this key-verification transaction
-    - name: Fetch and verify Red Hat internal GPG key atomically
-      ansible.builtin.shell:
-        cmd: |
-          set -euo pipefail
-          KEYFILE="{{ _redhat_gpg_tmp_dir.path }}/key.gpg"
-          # already imported: skip the network fetch so an offline rerun does not fail
-          KEYID=$(printf %s '{{ repos_dnf_redhat_gpg_fingerprint | upper }}' | tail -c 8)
-          if rpm -q gpg-pubkey --qf '%{VERSION}\n' | grep -qixF "$KEYID"; then exit 0; fi
-          curl --proto '=https' --tlsv1.2 -fsSL "{{ repos_dnf_redhat_gpgkey }}" -o "$KEYFILE"
-          FP=$(gpg --show-keys --with-colons "$KEYFILE" 2>/dev/null |
-            awk -F: '$1 == "pub" {primary=1} $1 == "sub" {primary=0}
-              $1 == "fpr" && primary {print $10; primary=0}')
-          if [ -z "$FP" ]; then exit 1; fi
-          if [ "$FP" = "{{ repos_dnf_redhat_gpg_fingerprint | upper }}" ]; then
-            rpm --import "$KEYFILE"
-          else
-            exit 1
-          fi
-      changed_when: false
-      when: _redhat_gpg_tmp_dir.path is defined  # tempfile creates nothing in check mode
-    - name: Clean up Red Hat GPG temporary directory
-      ansible.builtin.file:
-        path: "{{ _redhat_gpg_tmp_dir.path }}"
-        state: absent
-      changed_when: false  # scratch storage is removed within this key-verification transaction
-      when:
-        - _redhat_gpg_tmp_dir is defined
-        - _redhat_gpg_tmp_dir.path is defined  # tempfile creates nothing in check mode
+    - name: Import Red Hat internal GPG key
+      ansible.builtin.include_tasks: import_gpg_key.yml
+      vars:
+        _gpg_name: redhat
+        _gpg_url: "{{ repos_dnf_redhat_gpgkey }}"
+        _gpg_fingerprint: "{{ repos_dnf_redhat_gpg_fingerprint }}"
     - name: Add Red Hat internal repo
       ansible.builtin.yum_repository:
         name: redhat-internal
@@ -369,15 +333,6 @@
       ansible.builtin.fail:
         msg: "{{ ansible_failed_result.msg | default('invalid Red Hat internal repo configuration') }}"
       when: ansible_failed_task.name is match('Assert Red Hat internal repo URLs')
-    - name: Remove Red Hat GPG temp directory on failure
-      ansible.builtin.file:
-        path: "{{ _redhat_gpg_tmp_dir.path }}"
-        state: absent
-      changed_when: false  # scratch storage is removed within this key-verification transaction
-      failed_when: false
-      when:
-        - _redhat_gpg_tmp_dir is defined
-        - _redhat_gpg_tmp_dir.path is defined
     - name: Record Red Hat repo failure
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
       vars:
@@ -424,41 +379,12 @@
       changed_when: false
       failed_when: false
       check_mode: false
-    - name: Create secure temporary directory for RPM Fusion free GPG key
-      ansible.builtin.tempfile:
-        state: directory
-        suffix: _rpmfusion_free_gpg
-      register: _rpmfusion_free_gpg_tmp_dir
-      changed_when: false  # scratch storage is removed within this key-verification transaction
-    - name: Fetch and verify RPM Fusion free GPG key atomically
-      ansible.builtin.shell:
-        cmd: |
-          set -euo pipefail
-          KEYFILE="{{ _rpmfusion_free_gpg_tmp_dir.path }}/key.gpg"
-          URL="https://download1.rpmfusion.org/free/fedora/RPM-GPG-KEY-rpmfusion-free-fedora-2020"
-          # already imported: skip the network fetch so an offline rerun does not fail
-          KEYID=$(printf %s '{{ repos_dnf_rpmfusion_gpg_fingerprint | upper }}' | tail -c 8)
-          if rpm -q gpg-pubkey --qf '%{VERSION}\n' | grep -qixF "$KEYID"; then exit 0; fi
-          curl --proto '=https' --tlsv1.2 -fsSL "$URL" -o "$KEYFILE"
-          FP=$(gpg --show-keys --with-colons "$KEYFILE" 2>/dev/null |
-            awk -F: '$1 == "pub" {primary=1} $1 == "sub" {primary=0}
-              $1 == "fpr" && primary {print $10; primary=0}')
-          if [ -z "$FP" ]; then exit 1; fi
-          if [ "$FP" = "{{ repos_dnf_rpmfusion_gpg_fingerprint | upper }}" ]; then
-            rpm --import "$KEYFILE"
-          else
-            exit 1
-          fi
-      changed_when: false
-      when: _rpmfusion_free_gpg_tmp_dir.path is defined  # tempfile creates nothing in check mode
-    - name: Clean up RPM Fusion free GPG temporary directory
-      ansible.builtin.file:
-        path: "{{ _rpmfusion_free_gpg_tmp_dir.path }}"
-        state: absent
-      changed_when: false  # scratch storage is removed within this key-verification transaction
-      when:
-        - _rpmfusion_free_gpg_tmp_dir is defined
-        - _rpmfusion_free_gpg_tmp_dir.path is defined  # tempfile creates nothing in check mode
+    - name: Import RPM Fusion free GPG key
+      ansible.builtin.include_tasks: import_gpg_key.yml
+      vars:
+        _gpg_name: rpmfusion_free
+        _gpg_url: "https://download1.rpmfusion.org/free/fedora/RPM-GPG-KEY-rpmfusion-free-fedora-2020"
+        _gpg_fingerprint: "{{ repos_dnf_rpmfusion_gpg_fingerprint }}"
     - name: Install RPM Fusion free release
       when:
         - _rpmfusion_free_installed.rc != 0  # the URL install re-downloads the RPM on every run
@@ -472,15 +398,6 @@
       ansible.builtin.fail:
         msg: "{{ ansible_failed_result.msg | default('invalid GPG fingerprint configuration') }}"
       when: ansible_failed_task.name is match('Assert .* GPG fingerprint')
-    - name: Remove RPM Fusion free GPG temp directory on failure
-      ansible.builtin.file:
-        path: "{{ _rpmfusion_free_gpg_tmp_dir.path }}"
-        state: absent
-      changed_when: false  # scratch storage is removed within this key-verification transaction
-      failed_when: false
-      when:
-        - _rpmfusion_free_gpg_tmp_dir is defined
-        - _rpmfusion_free_gpg_tmp_dir.path is defined
     - name: Warn RPM Fusion free failed (network error)
       ansible.builtin.debug:
         msg: >-
@@ -512,41 +429,12 @@
       changed_when: false
       failed_when: false
       check_mode: false
-    - name: Create secure temporary directory for RPM Fusion nonfree GPG key
-      ansible.builtin.tempfile:
-        state: directory
-        suffix: _rpmfusion_nonfree_gpg
-      register: _rpmfusion_nonfree_gpg_tmp_dir
-      changed_when: false  # scratch storage is removed within this key-verification transaction
-    - name: Fetch and verify RPM Fusion nonfree GPG key atomically
-      ansible.builtin.shell:
-        cmd: |
-          set -euo pipefail
-          KEYFILE="{{ _rpmfusion_nonfree_gpg_tmp_dir.path }}/key.gpg"
-          URL="https://download1.rpmfusion.org/nonfree/fedora/RPM-GPG-KEY-rpmfusion-nonfree-fedora-2020"
-          # already imported: skip the network fetch so an offline rerun does not fail
-          KEYID=$(printf %s '{{ repos_dnf_rpmfusion_nonfree_gpg_fingerprint | upper }}' | tail -c 8)
-          if rpm -q gpg-pubkey --qf '%{VERSION}\n' | grep -qixF "$KEYID"; then exit 0; fi
-          curl --proto '=https' --tlsv1.2 -fsSL "$URL" -o "$KEYFILE"
-          FP=$(gpg --show-keys --with-colons "$KEYFILE" 2>/dev/null |
-            awk -F: '$1 == "pub" {primary=1} $1 == "sub" {primary=0}
-              $1 == "fpr" && primary {print $10; primary=0}')
-          if [ -z "$FP" ]; then exit 1; fi
-          if [ "$FP" = "{{ repos_dnf_rpmfusion_nonfree_gpg_fingerprint | upper }}" ]; then
-            rpm --import "$KEYFILE"
-          else
-            exit 1
-          fi
-      changed_when: false
-      when: _rpmfusion_nonfree_gpg_tmp_dir.path is defined  # tempfile creates nothing in check mode
-    - name: Clean up RPM Fusion nonfree GPG temporary directory
-      ansible.builtin.file:
-        path: "{{ _rpmfusion_nonfree_gpg_tmp_dir.path }}"
-        state: absent
-      changed_when: false  # scratch storage is removed within this key-verification transaction
-      when:
-        - _rpmfusion_nonfree_gpg_tmp_dir is defined
-        - _rpmfusion_nonfree_gpg_tmp_dir.path is defined  # tempfile creates nothing in check mode
+    - name: Import RPM Fusion nonfree GPG key
+      ansible.builtin.include_tasks: import_gpg_key.yml
+      vars:
+        _gpg_name: rpmfusion_nonfree
+        _gpg_url: "https://download1.rpmfusion.org/nonfree/fedora/RPM-GPG-KEY-rpmfusion-nonfree-fedora-2020"
+        _gpg_fingerprint: "{{ repos_dnf_rpmfusion_nonfree_gpg_fingerprint }}"
     - name: Install RPM Fusion nonfree release
       when:
         - _rpmfusion_nonfree_installed.rc != 0  # the URL install re-downloads the RPM on every run
@@ -561,15 +449,6 @@
       ansible.builtin.fail:
         msg: "{{ ansible_failed_result.msg | default('invalid GPG fingerprint configuration') }}"
       when: ansible_failed_task.name is match('Assert .* GPG fingerprint')
-    - name: Remove RPM Fusion nonfree GPG temp directory on failure
-      ansible.builtin.file:
-        path: "{{ _rpmfusion_nonfree_gpg_tmp_dir.path }}"
-        state: absent
-      changed_when: false  # scratch storage is removed within this key-verification transaction
-      failed_when: false
-      when:
-        - _rpmfusion_nonfree_gpg_tmp_dir is defined
-        - _rpmfusion_nonfree_gpg_tmp_dir.path is defined
     - name: Warn RPM Fusion nonfree failed (network error)
       ansible.builtin.debug:
         msg: >-
@@ -584,49 +463,19 @@
   when:
     - repo_tailscale
     - not csb_detected  # IT repo allowlist; tailscale installs from the base Fedora repos
+  vars:
+    _ts_path: "{{ 'rhel/' ~ ansible_facts['distribution_major_version'] if not is_fedora else 'fedora' }}"
   block:
     - name: Assert Tailscale GPG fingerprint is 40 hex digits (interpolated into a shell script)
       ansible.builtin.assert:
         that: repos_dnf_tailscale_gpg_fingerprint is match('^[0-9A-Fa-f]{40}\Z')
-    - name: Create secure temporary directory for Tailscale GPG key
-      ansible.builtin.tempfile:
-        state: directory
-        suffix: _tailscale_gpg
-      register: _tailscale_gpg_tmp_dir
-      changed_when: false  # scratch storage is removed within this key-verification transaction
-    - name: Fetch and verify Tailscale GPG key atomically
-      ansible.builtin.shell:
-        cmd: |
-          set -euo pipefail
-          TS_PATH="{{ 'rhel/' ~ ansible_facts['distribution_major_version'] if not is_fedora else 'fedora' }}"
-          KEYFILE="{{ _tailscale_gpg_tmp_dir.path }}/key.gpg"
-          # already imported: skip the network fetch so an offline rerun does not fail
-          KEYID=$(printf %s '{{ repos_dnf_tailscale_gpg_fingerprint | upper }}' | tail -c 8)
-          if rpm -q gpg-pubkey --qf '%{VERSION}\n' | grep -qixF "$KEYID"; then exit 0; fi
-          curl --proto '=https' --tlsv1.2 -fsSL "https://pkgs.tailscale.com/stable/${TS_PATH}/repo.gpg" -o "$KEYFILE"
-          FP=$(gpg --show-keys --with-colons "$KEYFILE" 2>/dev/null |
-            awk -F: '$1 == "pub" {primary=1} $1 == "sub" {primary=0}
-              $1 == "fpr" && primary {print $10; primary=0}')
-          if [ -z "$FP" ]; then exit 1; fi
-          if [ "$FP" = "{{ repos_dnf_tailscale_gpg_fingerprint | upper }}" ]; then
-            rpm --import "$KEYFILE"
-          else
-            exit 1
-          fi
-      changed_when: false
-      when: _tailscale_gpg_tmp_dir.path is defined  # tempfile creates nothing in check mode
-    - name: Clean up Tailscale GPG temporary directory
-      ansible.builtin.file:
-        path: "{{ _tailscale_gpg_tmp_dir.path }}"
-        state: absent
-      changed_when: false  # scratch storage is removed within this key-verification transaction
-      when:
-        - _tailscale_gpg_tmp_dir is defined
-        - _tailscale_gpg_tmp_dir.path is defined  # tempfile creates nothing in check mode
-    - name: Add Tailscale stable repo
+    - name: Import Tailscale GPG key
+      ansible.builtin.include_tasks: import_gpg_key.yml
       vars:
-        _ts_path: >-
-          {{ 'rhel/' ~ ansible_facts['distribution_major_version'] if not is_fedora else 'fedora' }}
+        _gpg_name: tailscale
+        _gpg_url: "https://pkgs.tailscale.com/stable/{{ _ts_path }}/repo.gpg"
+        _gpg_fingerprint: "{{ repos_dnf_tailscale_gpg_fingerprint }}"
+    - name: Add Tailscale stable repo
       ansible.builtin.yum_repository:
         name: tailscale-stable
         description: Tailscale stable
@@ -641,15 +490,6 @@
       ansible.builtin.fail:
         msg: "{{ ansible_failed_result.msg | default('invalid GPG fingerprint configuration') }}"
       when: ansible_failed_task.name is match('Assert .* GPG fingerprint')
-    - name: Remove Tailscale GPG temp directory on failure
-      ansible.builtin.file:
-        path: "{{ _tailscale_gpg_tmp_dir.path }}"
-        state: absent
-      changed_when: false  # scratch storage is removed within this key-verification transaction
-      failed_when: false
-      when:
-        - _tailscale_gpg_tmp_dir is defined
-        - _tailscale_gpg_tmp_dir.path is defined
     - name: Warn Tailscale repo failed (non-CSB network error)
       ansible.builtin.debug:
         msg: >-
@@ -679,8 +519,7 @@
       - {repo: tailscale-stable, pkg: tailscale, toggle: repo_tailscale, enabled: "{{ repo_tailscale }}"}
   block:
     - name: Keep disabled third-party repos whose packages are installed
-      # tailscale-stable is excluded from the notice: tailscale may come from the base repos. The removal task
-      # below still keeps an existing tailscale-stable.repo while the package is installed.
+      # tailscale is not noticed: it may come from the base repos. The removal task below still keeps its repo file.
       ansible.builtin.debug:
         msg: >-
           Keeping the {{ item.repo }} repo although {{ item.toggle }} is false: {{ item.pkg }} is

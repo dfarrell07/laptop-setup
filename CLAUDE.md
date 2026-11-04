@@ -43,7 +43,8 @@ afterwards: plug in, `make usb-add`, `make system`. Details: `references/trouble
 ### Internal SSH git hosts
 
 For internal hosts set `ssh_work_keyscan_hosts` in `config.yml` (`{host: ..., fingerprint: "SHA256:..."}`); get fingerprints out of band.
-Without `fingerprint` it is trust-on-first-use. See SECURITY.md § "Internal SSH Git Host Setup".
+Without `fingerprint` it is trust-on-first-use. Pin the real fingerprints only after the VPN works, then run `make chunk-ssh_client`
+and `make chunk-repos`; until then those hosts and their repos are skipped. See SECURITY.md § "Internal SSH Git Host Setup".
 
 ### First time on a new machine
 
@@ -52,12 +53,16 @@ Without `fingerprint` it is trust-on-first-use. See SECURITY.md § "Internal SSH
 1. `make bootstrap` (fresh Fedora/RHEL: `sudo dnf install -y make` first; macOS: `xcode-select --install` and Homebrew first).
 2. `cp default.config.yml config.yml`, then replace every `CHANGE_ME` in it (preflight fails while any remain).
    Also set `system_timezone` (default `UTC`; not a `CHANGE_ME` sentinel; preflight fails if the key is absent from `config.yml`).
-3. `make setup-yubikeys` programs the keys and writes `vault-pass.sh`; then fill `group_vars/all/vault.yml` (SSH keys) and run
+3. First thing after config, before any chunk: `make setup-yubikeys` programs the keys and writes `vault-pass.sh`; then fill
+   `group_vars/all/vault.yml` (SSH keys) and run
    `ansible-vault encrypt` on it. A first provision without secrets works at the console from the plaintext stub: container provisioning is
-   deferred (`make container`) and internal git hosts with placeholder fingerprints are skipped (`make ssh repos`). Provisioning over SSH
-   with no ed25519/FIDO2 key is blocked. **WARNING**: with an empty vault no `authorized_keys` is written; after reboot sshd is on port 722
-   and hardening rejects RSA/ECDSA keys (only ed25519 and `sk-ssh-ed25519`, plain or certificate variants), so an RSA-only
-   `authorized_keys` locks you out. Put an ed25519 key in the vault or in `authorized_keys` before rebooting.
+   deferred (`make container`) and internal git hosts with placeholder fingerprints are skipped (`make chunk-ssh_client`, then
+   `make chunk-repos`). Provisioning over SSH with no ed25519/FIDO2 key is blocked. **WARNING**: with an empty vault no `authorized_keys`
+   is written; after reboot sshd is on port 722 and hardening rejects RSA/ECDSA keys (only ed25519 and `sk-ssh-ed25519`, plain or
+   certificate variants), so an RSA-only `authorized_keys` locks you out. Put an ed25519 key in the vault or in `authorized_keys` before
+   rebooting.
+3a. USB devices, early, with the YubiKeys still plugged in: connect every device you use (dock, Moonlander, drives), run `lsusb`, then
+   `make usb-add`. It saves their rules to `config.yml` even while USBGuard is not running, so the first `sys_usbguard` run keeps them.
 3b. `make preflight` (re-run after any `config.yml` change).
 3c. `make check`: sudo `--check --diff` of every play. `make check` and `make all` log to `~/.cache/laptop-setup/logs/`
     (`check-latest.log`, `all-latest.log`; newest 20 kept).
@@ -73,7 +78,8 @@ Without `fingerprint` it is trust-on-first-use. See SECURITY.md § "Internal SSH
    - **Reboot**: lockdown, IOMMU, vsyscall and init_on_free take effect only then; until lockdown=integrity is active, kexec is guarded
      only by the `kexec_load_disabled` sysctl. SSH is then on port 722.
    - `make smoke-test`, then `tailscale up` (browser step).
-   - `gh auth login`, then `make packages repos notes` (the first run skips private repos and the notes clone while gh is logged out).
+   - `gh auth login`, then `make packages repos notes` (while gh is logged out, the first run reports failed private clones and a
+     notes clone warning, then continues).
    - Work profile with `oc`: `podman login registry.redhat.io` unless vault `registry_tokens` automates it.
    - Log out and back in for libvirt/kvm group changes; on CSB/hybrid machines run `make container`; re-run `make smoke-test`.
 
@@ -83,7 +89,7 @@ make plan CHUNK=x           # preview one chunk (--check --diff); whole enabled 
 make chunk-x                # apply one enabled chunk (high-risk ones need a typed name and a terminal)
 make verify CHUNK=x         # smoke checks for that chunk (all enabled if no CHUNK); fails on WARN/SKIP; sys_* need sudo
 make all | offline | minimal  # full / no binary downloads / dotfiles+ssh+repos only, no sudo
-make update                 # collections update + full run with git_repos_pull=true
+make update                 # reinstall vendored collections + full run with git_repos_pull=true
 make check                  # full sudo dry run; runs preflight first
 make preflight              # prerequisites and CSB detection; run after bootstrap
 make backup | backup-dry-run  # back up dotfiles before re-provisioning
@@ -97,7 +103,7 @@ make vault-edit | vault-view | vault-diff
 make migration-inventory | workstation-audit  # private reports for a laptop move
 make lint                   # ansible-lint, yamllint, shellcheck, markdownlint, check-vars-sync, script integrity
 make syntax-check | shellcheck | markdownlint | commitlint | check-vars-sync
-make test-scripts           # bash -n of scripts + hook tests + scripts/test-*.py suites
+make test-scripts           # hook tests + scripts/test-*.py suites
 make test-poller            # claude-queue-poller.sh helper tests
 make test                   # shellcheck + test-scripts + test-poller + Podman molecule scenarios
 make ci                     # lint + syntax-check + all non-VM tests (adds macOS); make test-vm needs bootstrap-test

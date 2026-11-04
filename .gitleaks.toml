@@ -24,7 +24,7 @@
     description = "Systemd sandbox directive is a configuration key, not a credential"
     condition = "AND"
     regexes = ['''^NoNewPrivileges(=true)?$''']
-    paths = ['''(^|/)roles/system/(files/aide-check\.service|templates/aide-check\.service\.j2)$''']
+    paths = ['''(^|/)roles/system/(files/aide-check\.service|templates/aide-check\.service\.j2)$''']  # the .j2 path survives only in history scans
 
   [[rules.allowlists]]
     description = "Public signing key fingerprint in the documented placeholder"
@@ -33,49 +33,10 @@
     regexes = ['''Key fingerprint: [A-Fa-f0-9]{40}''']
     paths = ['''(^|/)collections-dist/signing-key\.asc$''']
 
-  [[rules.allowlists]]
-    description = "Generated public runtime SHA256 digest row"
-    condition = "AND"
-    regexTarget = "line"
-    regexes = ['''(?m)^[ \t]*"(plugins|module_utils|roles)/[^"\r\n]+[.](py|so)": "[0-9a-f]{64}",?[ \t\r]*$''']
-    paths = ['''(^|/)collections-dist/PYTHON_MANIFEST[.]json$''']
-
-[[rules]]
-  id = "bitbucket-client-secret"
-
-  [[rules.allowlists]]
-    description = "Generated public runtime SHA256 digest row"
-    condition = "AND"
-    regexTarget = "line"
-    regexes = ['''(?m)^[ \t]*"(plugins|module_utils|roles)/[^"\r\n]+[.](py|so)": "[0-9a-f]{64}",?[ \t\r]*$''']
-    paths = ['''(^|/)collections-dist/PYTHON_MANIFEST[.]json$''']
-
-[[rules]]
-  id = "discord-api-token"
-
-  [[rules.allowlists]]
-    description = "Generated public runtime SHA256 digest row"
-    condition = "AND"
-    regexTarget = "line"
-    regexes = ['''(?m)^[ \t]*"(plugins|module_utils|roles)/[^"\r\n]+[.](py|so)": "[0-9a-f]{64}",?[ \t\r]*$''']
-    paths = ['''(^|/)collections-dist/PYTHON_MANIFEST[.]json$''']
-
-[[rules]]
-  id = "new-relic-user-api-id"
-
-  [[rules.allowlists]]
-    description = "Generated public runtime SHA256 digest row"
-    condition = "AND"
-    regexTarget = "line"
-    regexes = ['''(?m)^[ \t]*"(plugins|module_utils|roles)/[^"\r\n]+[.](py|so)": "[0-9a-f]{64}",?[ \t\r]*$''']
-    paths = ['''(^|/)collections-dist/PYTHON_MANIFEST[.]json$''']
-
-[[rules]]
-  id = "sumologic-access-token"
-
-  [[rules.allowlists]]
-    description = "Generated public runtime SHA256 digest row"
-    condition = "AND"
-    regexTarget = "line"
-    regexes = ['''(?m)^[ \t]*"(plugins|module_utils|roles)/[^"\r\n]+[.](py|so)": "[0-9a-f]{64}",?[ \t\r]*$''']
-    paths = ['''(^|/)collections-dist/PYTHON_MANIFEST[.]json$''']
+[[allowlists]]
+  description = "Generated public runtime SHA256 digest row"
+  condition = "AND"
+  targetRules = ["generic-api-key", "bitbucket-client-secret", "discord-api-token", "new-relic-user-api-id", "sumologic-access-token"]
+  regexTarget = "line"
+  regexes = ['''(?m)^[ \t]*"(plugins|module_utils|roles)/[^"\r\n]+[.](py|so)": "[0-9a-f]{64}",?[ \t\r]*$''']
+  paths = ['''(^|/)collections-dist/PYTHON_MANIFEST[.]json$''']

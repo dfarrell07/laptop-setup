@@ -65,6 +65,7 @@
     - {path: "{{ ansible_facts['user_dir'] }}/.config/tmux", mode: "0755"}
     - {path: "{{ ansible_facts['user_dir'] }}/.config/direnv", mode: "0755"}
     - {path: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d", mode: "0755"}
+    - {path: "{{ ansible_facts['user_dir'] }}/.config/zsh", mode: "0700"}
 
 - name: Stat legacy ~/.zsh_history (pre-XDG location)
   ansible.builtin.stat:
@@ -126,7 +127,7 @@
   delay: 5
   timeout: 120
   # ignore_errors (not failed_when: false): .failed must remain True on clone failure —
-  # it guards the warning below and the legacy ~/.oh-my-zsh removal.
+  # it guards the warning below, the forgit install and the legacy ~/.oh-my-zsh removal.
   # failed_when: false would always set .failed=False, silently breaking that guard.
   ignore_errors: true
 
@@ -203,6 +204,8 @@
     mode: "0644"
     backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
 
+# git reads ~/.gitconfig after ~/.config/git/config, so its keys override the managed ones, and
+# tmux reads ~/.tmux.conf before the XDG file: a legacy file would override or mix with the managed one.
 - name: Migrate legacy dotfiles to XDG paths
   ansible.builtin.include_tasks: xdg_migrate.yml
   vars:
@@ -220,15 +223,15 @@
     backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
 
 - name: Validate and deploy git allowed signers
-  when: ssh_git_signing_pubkey | trim | length > 0
+  when: ssh_signing_key_pub | trim | length > 0
   block:
-    - name: Assert ssh_git_signing_pubkey contains no newlines or control characters
+    - name: Assert ssh_signing_key_pub contains no newlines or control characters
       ansible.builtin.assert:
         that:
-          - ssh_git_signing_pubkey | regex_search('[\x00-\x1f\x7f]') is none
-          - ssh_git_signing_pubkey is regex('^(ssh-|ecdsa-|sk-)[a-zA-Z0-9@._+-]+ [A-Za-z0-9+/]+={0,2}( [^\x00-\x1f\x7f]*)?$')
+          - ssh_signing_key_pub | regex_search('[\x00-\x1f\x7f]') is none
+          - ssh_signing_key_pub is regex('^(ssh-|ecdsa-|sk-)[a-zA-Z0-9@._+-]+ [A-Za-z0-9+/]+={0,2}( [^\x00-\x1f\x7f]*)?$')
         fail_msg: >-
-          ssh_git_signing_pubkey='{{ ssh_git_signing_pubkey }}' contains newlines,
+          ssh_signing_key_pub='{{ ssh_signing_key_pub }}' contains newlines,
           control characters, or disallowed characters. SSH public keys must be single-line
           and contain a key algorithm, base64 key, and optional comment. A newline would inject arbitrary entries into
           ~/.config/git/allowed_signers,
@@ -314,7 +317,6 @@
 - name: Assert dotfiles_tmux_prefix contains no newlines or shell metacharacters
   ansible.builtin.assert:
     that:
-      - dotfiles_tmux_prefix | length > 0
       - dotfiles_tmux_prefix is regex('^[CM]-[a-zA-Z][a-zA-Z0-9]*$')
     fail_msg: >-
       dotfiles_tmux_prefix='{{ dotfiles_tmux_prefix }}' must be a Ctrl or Meta key chord.
@@ -578,12 +580,6 @@
     mode: "0644"
     # seed-only — user edits not overwritten
     force: false
-
-- name: Create user-owned local zsh configuration directory
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/zsh"
-    state: directory
-    mode: "0700"
 
 - name: Seed local zsh extension without replacing user edits
   ansible.builtin.copy:

@@ -4,16 +4,12 @@ profile: work  # fallback for standalone invocation
 
 # Sysctl hardening values
 system_sysctl_hardening:
-  # kernel.yama.ptrace_scope: merged via system_ptrace_scope combine() in sysctl.yml
   # STIG RHEL-09-213075 — hide kernel pointers from all processes including root/CAP_SYSLOG (prevents KASLR bypass)
   kernel.kptr_restrict: 2
-  # kernel.io_uring_disabled: merged via system_io_uring_disabled combine() in sysctl.yml
-  # kernel.unprivileged_bpf_disabled: merged via system_unprivileged_bpf_disabled combine() in sysctl.yml
   # MAINTENANCE: pinned defaults override third-party sysctl.d (90-hardening.conf sorts last).
   # On each Fedora upgrade review /usr/lib/sysctl.d/*.conf AND kernel compile-time defaults.
   # source: kernel compile-time default (CONFIG_SECURITY_DMESG_RESTRICT=y), not a sysctl.d file
   kernel.dmesg_restrict: 1         # CIS — restrict dmesg/kmsg to CAP_SYSLOG; prevents boot info leakage
-  # kernel.perf_event_paranoid: merged via system_perf_event_paranoid combine() in sysctl.yml
   kernel.randomize_va_space: 2  # CIS 1.5.2 — full ASLR (stack, heap, mmap); explicit to survive conflicting sysctl.d drop-ins
   # CIS 3.3.6/3.3.7 — disable ICMP redirects; router should not inform hosts
   # of alternate routes (manual set; not auto-disabled by ip_forward=1)
@@ -33,8 +29,6 @@ system_sysctl_hardening:
   net.ipv6.conf.default.accept_source_route: 0
   # Fedora 50-default.conf sets *.rp_filter=2 then excludes all.rp_filter (-net.ipv4.conf.all.rp_filter),
   # leaving the kernel default 0 for all; pinning 2 floors all interfaces at loose mode.
-  # NOTE: all=2 is also a ceiling — max(all=2,per-iface=1)=2,
-  # so strict-per-interface needs system_sysctl_extra_additional to lower all.rp_filter to 0 or 1.
   net.ipv4.conf.all.rp_filter: 2  # kernel uses max(all, per-iface)
   # loose (2) — OVN-K/Kubernetes asymmetric routing; strict (1) drops pod traffic
   # (CIS recommends 1 on non-Kubernetes hosts); pinned in 90-hardening.conf to
@@ -51,13 +45,12 @@ system_sysctl_hardening:
   # When active: value 0 rejects redirects from non-gateway hosts; CIS mandates 0 regardless.
   net.ipv4.conf.all.secure_redirects: 0
   net.ipv4.conf.default.secure_redirects: 0
-  # net.ipv6.conf.all/default.accept_ra: merged via system_ipv6_accept_ra combine() in sysctl.yml
   # CIS — prevent SUID processes from writing core dumps (avoids privileged memory leaks).
   # NOTE: this overrides 50-coredump.conf fs.suid_dumpable=2 and silently suppresses SUID crash
   # capture even when system_coredump_storage: external. fs.suid_dumpable is hardening-critical:
   # the sysctl.yml assert rejects it in system_sysctl_extra and system_sysctl_extra_additional.
   fs.suid_dumpable: 0
-  # kernel.core_pattern: merged via system_core_pattern combine() in sysctl.yml
+  # kernel.core_pattern: merged via system_core_pattern in sysctl.yml
   # kernel.core_pipe_limit omitted: no known third-party override risk; 50-coredump.conf already sets it correctly.
   # Fedora 44 kernel runtime defaults; pinned here to prevent /etc/sysctl.d override
   net.ipv4.icmp_echo_ignore_broadcasts: 1  # CIS — kernel default; pinned to prevent third-party sysctl.d override
@@ -66,18 +59,10 @@ system_sysctl_hardening:
   fs.protected_hardlinks: 1  # Fedora 44 default via 50-default.conf; pinned to block sysctl.d override
   fs.protected_symlinks: 1  # same
   fs.protected_fifos: 2    # CIS — value 2 covers world+group-writable sticky dirs (same rationale as fs.protected_regular)
-  # kernel.panic: merged via system_kernel_panic combine() in sysctl.yml
-  # kernel.panic_on_oops: merged via system_kernel_panic_on_oops combine() in sysctl.yml
   # Fedora 44 kernel runtime default; pinned here to prevent /etc/sysctl.d override
   net.ipv4.tcp_syncookies: 1       # CIS 3.3.8 — pinned to kernel default (1); guards against third-party sysctl.d override
   # net.ipv4.tcp_timestamps: kept at kernel default (1); CIS 3.3.9 recommends 0, but 0 harms RTTM/PAWS on OVN-K/Submariner high-BDP links
   net.ipv4.tcp_rfc1337: 1         # CIS — prevent TIME-WAIT assassination (RST injection into expiring connections)
-  # kernel.kexec_load_disabled: merged via system_kexec_load_disabled combine() in sysctl.yml
-  # kernel.modules_disabled: applied by the ordered kernel-modules-lockdown.service
-  # kernel.sysrq: merged via system_sysrq combine() in sysctl.yml
-  # net.core.bpf_jit_harden: merged via system_bpf_jit_harden combine() in sysctl.yml
-  # net.ipv4.ip_forward: merged via system_enable_ip_forward combine() in sysctl.yml
-  # net.ipv6.conf.all.forwarding: merged via system_enable_ip_forward combine() in sysctl.yml
   # NOTE: No IPv6 privacy protection is active in the default config (system_ipv6_accept_ra=0 disables SLAAC).
   # Set system_ipv6_accept_ra: 2 to enable SLAAC with EUI-64 leakage prevention.
   # IPv6 privacy extensions: use_tempaddr=2 enables temporary (privacy) addresses for outbound connections.
@@ -90,13 +75,13 @@ system_sysctl_hardening:
   net.ipv6.conf.default.use_tempaddr: 2
   # Swap minimization: minimize swap use to reduce the window during which decrypted
   # vault material, Python heap pages, and other sensitive provisioning memory can be
-  # paged out to a persistent swap device (HDD/SSD/zram). Value 1 keeps swap as
+  # paged out to a persistent swap device (HDD/SSD). Value 1 keeps swap as
   # emergency OOM relief while strongly preferring RAM; value 0 disables swap entirely
   # (risks OOM-killer on memory-constrained hosts during long provisioning runs).
   # Swap pages written during provisioning persist across process exit and survive a
   # reboot unless the swap device is cryptographically wiped (dm-crypt/LUKS). On
-  # default Fedora (zram) and RHEL (swap partition) hosts, any process with block
-  # device read access can recover these pages offline. Override to 0 in config.yml
+  # hosts with a swap partition, any process with block device read access can
+  # recover these pages offline. Override to 0 in config.yml
   # via system_sysctl_extra_additional if the host has full-disk encryption.
   # Hosts whose only swap is zram get system_zram_swappiness instead (sysctl.yml).
   vm.swappiness: 1
@@ -322,8 +307,7 @@ system_ipv6_accept_ra: 0
 # Value 1 is a no-op when system_unprivileged_bpf_disabled=2; set 2 in config.yml for CIS strict.
 system_bpf_jit_harden: 1  # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
 
-# Write-once locked to 2 on stock Fedora 44 (CONFIG_BPF_UNPRIV_DEFAULT_OFF=y); EPERM on write is tolerated.
-# Override in config.yml only for custom kernels built without CONFIG_BPF_UNPRIV_DEFAULT_OFF.
+# Default 2 matches the stock Fedora kernel default (resettable by root); 1 would lock until reboot.
 system_unprivileged_bpf_disabled: 2  # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
 system_enable_ip_forward: true  # set false on terminal-only hosts without Kubernetes/kind or Tailscale subnet routing
 # OVN-K/Submariner performance tuning (profile: work only); not security hardening.
@@ -332,22 +316,8 @@ system_enable_ip_forward: true  # set false on terminal-only hosts without Kuber
 # explicitly when adding machine-specific sysctls on a work-profile host that needs OVN-K tuning.
 # Run 'make all' to deploy; values take effect immediately via sysctl --system without a reboot.
 # Example: system_sysctl_extra_additional: { "vm.swappiness": 0 }  # 0 eliminates swap on LUKS-encrypted hosts
-# WARNING: system_sysctl_extra is applied second-to-last; system_sysctl_extra_additional (below) has
-# higher precedence and silently overrides any matching key in system_sysctl_hardening. Do not set
-# these security-critical keys here without intent:
-# kernel.kptr_restrict, net.ipv4.conf.all.send_redirects, fs.suid_dumpable,
-# net.ipv4.conf.all.rp_filter (ceiling effect: per-iface strict=1 is silently promoted to
-# loose=2 by all.rp_filter=2; lower all.rp_filter to 0 or 1 here to achieve strict mode).
-# Also avoid these dynamically-merged keys (assembled via set_fact in sysctl.yml before the combine
-# chain applies system_sysctl_extra then system_sysctl_extra_additional); setting any of them in
-# system_sysctl_extra_additional silently overrides the corresponding toggle variable and creates an
-# inconsistency (e.g. net.ipv4.ip_forward: 0 in system_sysctl_extra_additional overrides
-# system_enable_ip_forward: true in 90-hardening.conf while system_enable_ip_forward still reads true
-# everywhere else). Use the toggle variable instead:
-# net.ipv4.ip_forward, net.ipv6.conf.all.forwarding, kernel.yama.ptrace_scope,
-# kernel.kexec_load_disabled, kernel.io_uring_disabled, kernel.sysrq, kernel.core_pattern,
-# kernel.panic, kernel.panic_on_oops, kernel.unprivileged_bpf_disabled, net.core.bpf_jit_harden,
-# net.ipv6.conf.all.accept_ra, net.ipv6.conf.default.accept_ra, kernel.perf_event_paranoid.
+# Keys managed by hardening or toggle variables (see _managed_keys in tasks/sysctl.yml, incl. rp_filter, kptr_restrict,
+# suid_dumpable, ip_forward, sysrq) are rejected by the sysctl.yml assert (not in containers or RHEL CSB); use the toggle.
 _system_sysctl_work_defaults:
   net.netfilter.nf_conntrack_max: 524288
   net.core.rmem_max: 16777216
@@ -366,7 +336,7 @@ _system_sysctl_performance_defaults:
   # Pinned here so 90-hardening.conf wins lexicographically and continuity is preserved if 10-map-count.conf changes.
   vm.max_map_count: 1048576
 system_sysctl_extra: "{{ (_system_sysctl_work_defaults if profile == 'work' else {}) | combine(_system_sysctl_performance_defaults) }}"
-# WARNING: highest combine() precedence — silently overrides any matching key in system_sysctl_hardening or system_sysctl_extra
+# applied last, after system_sysctl_extra; managed keys are rejected (see sysctl.yml)
 system_sysctl_extra_additional: {}
 system_disable_usb_storage: false  # kernel-blocks usb_storage/uas when true; authoritative in group_vars/all/vars.yml
 system_disable_udf: true          # kernel-blocks udf module; set false if UDF media needed; authoritative in group_vars/all/vars.yml
@@ -481,7 +451,7 @@ system_devshm_noexec: true
 # NOTE: on Fedora hybrid (csb_detected=true, Fedora distribution), nosuid is applied
 # regardless of this flag — /home is a local btrfs partition and nosuid is always safe.
 system_home_nosuid_force: false
-system_selinux_policy: targeted  # SELinux policy type (targeted/minimum/strict)
+system_selinux_policy: targeted  # SELinux policy type (targeted/strict; pre-flight rejects minimum)
 # Polkit rules directory scan: any file in /etc/polkit-1/rules.d not listed here
 # causes a hard failure. Fedora's packaged PKLA compatibility rule is accepted
 # only after RPM ownership and package integrity verification. Add managed
@@ -527,7 +497,6 @@ system_chrony_authselectmode: require  # NTS-KE failure surfaces as a chrony sta
   # silent fallback to unauthenticated NTP (prevents on-path clock manipulation when TCP 4460 is blocked).
   # Set 'prefer' in config.yml if this host must sync on networks where TCP 4460 (NTS-KE) is blocked;
   # also set system_chrony_authselectmode_prefer_confirmed: true to acknowledge the security trade-off.
-system_chrony_authselectmode_prefer_confirmed: false  # set true in config.yml alongside authselectmode: prefer
 system_chrony_makestep: "1.0 3"  # step on first 3 updates only, then slew; use '1.0 -1' only when clock may be wildly wrong at boot
   # Security: '1.0 -1' means chrony steps on every sync cycle where offset >1.0 s — an attacker controlling
   # any chrony source can cause an arbitrarily large clock step on any update, bypassing Kerberos
@@ -607,7 +576,6 @@ system_profiled_whitelist:         # filenames (not paths) permitted in /etc/pro
   - vim.sh                         # vim editor env
   - bash_completion.sh             # bash-completion package
   - tmout.sh                       # managed by this role (session timeout)
-  - TMout.sh                       # legacy capitalisation variant
 system_pass_max_days: 365          # maximum password age in days (login.defs PASS_MAX_DAYS)
 system_pass_min_days: 1            # minimum days between password changes (login.defs PASS_MIN_DAYS)
 system_pass_warn_age: 7            # days of warning before password expires (login.defs PASS_WARN_AGE)

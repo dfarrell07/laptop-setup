@@ -60,7 +60,7 @@ def load_yaml(text):
 
 def safe_name(name):
     """Return a usbguard name value safe for rules and config.yml, or ''."""
-    if not name or not SAFE_NAME_RE.match(name) or any(c in name for c in '"\\{}%#'):
+    if not name or not SAFE_NAME_RE.match(name) or any(c in name for c in '"\\{}%#*'):
         return ''
     return name.strip()
 

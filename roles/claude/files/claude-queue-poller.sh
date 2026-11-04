@@ -212,8 +212,8 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
     continue
   fi
 
-  if [[ -z "${REPO_PATH[$REPO_SHORT]+x}" ]]; then
-    mark_issue_failed "$ISSUE_NUM" "Unknown repo: \`$REPO_SHORT\`. Known: ${!REPO_PATH[*]}"
+  if [[ -z "${REPO_PATH[$REPO_SHORT]+x}" || -z "${REPO_REMOTE[$REPO_SHORT]:-}" ]]; then
+    mark_issue_failed "$ISSUE_NUM" "Unknown or incomplete repo: \`$REPO_SHORT\` (needs REPO_PATH and REPO_REMOTE). Known: ${!REPO_PATH[*]}"
     continue
   fi
 

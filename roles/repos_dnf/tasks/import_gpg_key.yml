@@ -1,0 +1,41 @@
+---
+# Fetch an RPM GPG key over HTTPS and import it only when its primary fingerprint matches the pin.
+# Inputs: _gpg_name (temp dir suffix), _gpg_url, _gpg_fingerprint (40 hex digits, asserted by the caller).
+- name: Fetch and import GPG key, then remove its scratch directory
+  block:
+    - name: Create secure temporary directory for GPG key
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: "_{{ _gpg_name }}_gpg"
+      register: _repo_gpg_tmp_dir
+      changed_when: false  # scratch storage is removed within this key-verification transaction
+    - name: Fetch and verify GPG key atomically
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          KEYFILE="{{ _repo_gpg_tmp_dir.path }}/key.gpg"
+          # already imported: skip the network fetch so an offline rerun does not fail
+          KEYID=$(printf %s '{{ _gpg_fingerprint | upper }}' | tail -c 8)
+          if rpm -q gpg-pubkey --qf '%{VERSION}\n' | grep -qixF "$KEYID"; then exit 0; fi
+          curl --proto '=https' --tlsv1.2 -fsSL "{{ _gpg_url }}" -o "$KEYFILE"
+          FP=$(gpg --show-keys --with-colons "$KEYFILE" 2>/dev/null |
+            awk -F: '$1 == "pub" {primary=1} $1 == "sub" {primary=0}
+              $1 == "fpr" && primary {print $10; primary=0}')
+          if [ -z "$FP" ]; then exit 1; fi
+          if [ "$FP" = "{{ _gpg_fingerprint | upper }}" ]; then
+            rpm --import "$KEYFILE"
+          else
+            exit 1
+          fi
+      changed_when: false
+      when: _repo_gpg_tmp_dir.path is defined  # tempfile creates nothing in check mode
+  always:
+    - name: Clean up GPG temporary directory
+      ansible.builtin.file:
+        path: "{{ _repo_gpg_tmp_dir.path }}"
+        state: absent
+      changed_when: false  # scratch storage is removed within this key-verification transaction
+      failed_when: false
+      when:
+        - _repo_gpg_tmp_dir is defined
+        - _repo_gpg_tmp_dir.path is defined  # tempfile creates nothing in check mode

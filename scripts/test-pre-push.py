@@ -86,12 +86,11 @@ class PrePushTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("valid signature", result.stderr)
 
-    def test_signature_covers_bootstrap_requirements_and_ci_configuration(self):
+    def test_signature_covers_requirements_and_ci_configuration(self):
         self.env["TEST_VERIFY_RESULT"] = "1"
         for filename in (
             ".github/actions/ci-setup/action.yml",
             "roles/repos_dnf/defaults/main.yml",
-            "requirements-bootstrap.txt",
             ".gitleaks.toml",
             "Makefile.sha256",
             "package-lock.json",

@@ -266,7 +266,7 @@ class MigrationTests(unittest.TestCase):
             run_play(directory, variables=variables, roles=['codex'])
             executable = directory / '.local/bin/codex'
             self.assertEqual(subprocess.check_output([str(executable), '--version'], text=True).strip(),
-                             'codex-cli 0.162.1')
+                             'codex-cli ' + json.loads((ROOT / 'roles/codex/files/package.json').read_text())['dependencies']['@openai/codex'])
             checks = yaml.safe_load((ROOT / 'molecule/shared/verify-codex.yml').read_text())
             run_play(directory, tasks=checks, variables={'ansible_user_dir': name, 'system_is_container': False})
             self.assertIn('changed=0', run_play(directory, variables=variables, roles=['codex']))
@@ -315,7 +315,7 @@ class MigrationTests(unittest.TestCase):
             defaults = yaml.safe_load((ROOT / 'roles/dotfiles/defaults/main.yml').read_text())
             defaults.update({'ansible_managed': 'test', 'ansible_facts': {'user_dir': name, 'system': 'Linux'},
                              'profile': 'work', 'packages_gotoolchain': 'local',
-                             'claude_queue_runtime_config_dir': name + "/runtime path's config",
+                             'claude_runtime_config_dir': name + "/runtime path's config",
                              'claude_work_config_dir': name + "/work account's config",
                              'notes_repo_path': name + '/notes', 'claude_personal_config_dir': name + '/.claude-personal'})
             config = directory / 'zshrc'
@@ -342,7 +342,7 @@ class MigrationTests(unittest.TestCase):
                 path = binary_dir / tool
                 path.write_text(recorder)
                 path.chmod(0o700)
-            work_env = Path(defaults['claude_queue_runtime_config_dir']) / 'work-env'
+            work_env = Path(defaults['claude_runtime_config_dir']) / 'work-env'
             work_env.parent.mkdir(parents=True)
             production = yaml.safe_load((ROOT / 'roles/claude/tasks/main.yml').read_text())
             run_play(directory, tasks=[next(t for t in production if t.get('name') == 'Deploy Claude work-env file')],

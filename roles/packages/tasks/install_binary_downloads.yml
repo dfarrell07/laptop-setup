@@ -55,10 +55,6 @@
     version_string: "{{ packages_kind_version }}"
     csb_action: >-
       Install kind manually from https://kind.sigs.k8s.io/dl/
-    csb_ticket_summary: "Cannot download kind binary on CSB"
-    csb_ticket_body: >-
-      kind binary could not be downloaded from kind.sigs.k8s.io.
-      Install manually from https://kind.sigs.k8s.io/dl/
 
 # Binary download (not dnf): Fedora 44 ships helm 4.2.2; packages_helm_version pins 4.2.3 (newer patch release not yet in repos).
 - name: Install helm
@@ -84,10 +80,6 @@
       linux-{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}/helm
     csb_action: >-
       Install helm manually from https://helm.sh/docs/intro/install/
-    csb_ticket_summary: "Cannot download helm binary on CSB"
-    csb_ticket_body: >-
-      helm binary could not be downloaded from get.helm.sh.
-      Install manually from https://helm.sh/docs/intro/install/
 
 # Binary download (not dnf): pinned for OVN-K compatibility; Fedora 44 ships 5.8.1
 # (matches; re-evaluate switching to dnf when bumping version).
@@ -110,21 +102,12 @@
       else packages_kustomize_sha256 }}
     version_check_cmd: /usr/local/bin/kustomize version
     version_string: "{{ packages_kustomize_version }}"
-    binary_in_archive: kustomize
     csb_action: >-
       Install kustomize manually from
       https://kubectl.docs.kubernetes.io/installation/kustomize/
-    csb_ticket_summary: "Cannot download kustomize binary on CSB"
-    csb_ticket_body: >-
-      kustomize binary could not be downloaded from github.com/kubernetes-sigs/kustomize.
-      Install manually from https://kubectl.docs.kubernetes.io/installation/kustomize/
 
 - name: Install k9s (Kubernetes TUI)
-  when:
-    - profile == 'work'
-    - packages_install_binaries | bool
-    - is_linux
-    - ansible_facts['architecture'] == 'x86_64'
+  when: _packages_linux_x86_work
   ansible.builtin.include_tasks: install_tarball.yml
   vars:
     binary_name: k9s
@@ -135,11 +118,6 @@
     checksum: "sha256:{{ packages_k9s_sha256 }}"
     version_check_cmd: /usr/local/bin/k9s version
     version_string: "{{ packages_k9s_version }}"
-    binary_in_archive: k9s
     download_timeout: 300  # k9s ~60 MB; default 120 s risks timeout on slow links
     csb_action: >-
       Install k9s manually from https://github.com/derailed/k9s/releases
-    csb_ticket_summary: "Cannot download k9s binary on CSB"
-    csb_ticket_body: >-
-      k9s binary could not be downloaded from github.com/derailed/k9s.
-      Install manually from https://github.com/derailed/k9s/releases

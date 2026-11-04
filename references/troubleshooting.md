@@ -6,31 +6,36 @@ named make target.
 
 ## Chunk selection
 
-| Symptom | Fix |
-| --- | --- |
-| a role target (`make dotfiles`...) does nothing | its chunk is not in `rollout_enable`; `make status` shows ON/off, add it to `config.yml` |
-| `chunk 'x' is not enabled; add it to rollout_enable` (`make chunk-x`, `plan`, `verify`) | same: add the chunk to `rollout_enable` |
-| `unknown chunk 'x' (did you mean ...)` or `rollout_enable ... unknown chunk` | typo; names are in `make status` / `group_vars/all/rollout.yml` |
-| `rollout_enable is missing prerequisites` | add the listed chunks too; prerequisites are never enabled implicitly |
-| `rollout_enable lists a chunk twice`, `use 'all' or a list of chunk names`, `config.yml is not valid YAML` | fix `rollout_enable` in `config.yml` |
-| `-e rollout_enable=...` rejected | set it in `config.yml` only |
-| Play 0: `every chunk that is not enabled must be passed as --skip-tags` or `rollout_enable must be 'all' or a list of known chunks` | you ran `ansible-playbook` directly; use `make` (or `scripts/verify-ansible-args.sh`), which adds the skip tags |
-| `usage: make plan CHUNK=<name>` | `plan` needs a chunk; `make check` dry-runs the whole enabled list |
-| `'x' is a high-risk chunk ... run it from a terminal` or `not confirmed` | run `make chunk-x` from a terminal and type the chunk name when asked |
-| `make verify CHUNK=x` says state is unknown | no smoke check is mapped to that chunk (prints `state is unknown`). A mapped check that did not run prints `SKIP  <check> — check did not run on this box (not applicable, or needs root)` and the run exits 1 (see the next row) |
-| `make verify CHUNK=x` exits 1 though nothing FAILed | it also fails on WARN and SKIP; root-only checks are WARN or SKIP without sudo: run the `sudo scripts/smoke-test.sh --system-only --only ...` command it prints |
+- a role target (`make dotfiles`...) does nothing: its chunk is not in `rollout_enable`; `make status` shows ON/off, add it to `config.yml`
+- `chunk 'x' is not enabled; add it to rollout_enable` (`make chunk-x`, `plan`, `verify`): add the chunk to `rollout_enable`
+- `unknown chunk 'x' (did you mean ...)` or `rollout_enable ... unknown chunk`: typo; names are in `make status` /
+  `group_vars/all/rollout.yml`
+- `rollout_enable is missing prerequisites`: add the listed chunks too; prerequisites are never enabled implicitly
+- `rollout_enable lists a chunk twice`, `use 'all' or a list of chunk names`, `config.yml is not valid YAML`: fix `rollout_enable` in
+  `config.yml`
+- `-e rollout_enable=...` rejected: set it in `config.yml` only
+- Play 0: `every chunk that is not enabled must be passed as --skip-tags` or `rollout_enable must be 'all' or a list of known chunks`: you
+  ran `ansible-playbook` directly; use `make` (or `scripts/verify-ansible-args.sh`), which adds the skip tags
+- `usage: make plan CHUNK=<name>`: `plan` needs a chunk; `make check` dry-runs the whole enabled list
+- `'x' is a high-risk chunk ... run it from a terminal` or `not confirmed`: run `make chunk-x` from a terminal and type the chunk name when
+  asked
+- `make verify CHUNK=x` says state is unknown: no smoke check is mapped to that chunk (prints `state is unknown`). A mapped check that did
+  not run prints `SKIP  <check> — check did not run on this box (not applicable, or needs root)` and the run exits 1 (see the next row)
+- `make verify CHUNK=x` exits 1 though nothing FAILed: it also fails on WARN and SKIP; root-only checks are WARN or SKIP without sudo: run
+  the `sudo scripts/smoke-test.sh --system-only --only ...` command it prints
 
 ## Hardening toggles that surprise people
 
-| Symptom | Setting in `config.yml` (default) | Re-run |
-| --- | --- | --- |
-| No Bluetooth adapter, `rfkill` blocked | `system_disable_bluetooth: false` (true) | `make system` |
-| USB drive does not mount | `make usb-add` (USBGuard blocks unlisted drives); `system_disable_usb_storage` (false; true also blocks `usb_storage`/`uas` in the kernel) | `make usb-add`, `make system` |
-| `.local` names do not resolve | `system_disable_avahi: false` (true) | `make system` |
-| ABRT units `masked` | `system_mask_abrt: false` (true) | `make system` |
-| Shell exits when idle | `system_tmout: 0` (0 = off; 1-900 enforces) | `make system` |
-| `ssh -L` / VS Code port panel fails | `system_ssh_allow_tcp_forwarding: local` (local; `no` blocks all, `yes` adds `-R`) | `make system` |
-| Account locked for 15 minutes | `system_faillock_unlock_time` (900); immediate fix in [recovery](../docs/rollout-recovery.md#rescue-boot) | `make system` |
+- No Bluetooth adapter, `rfkill` blocked: `system_disable_bluetooth: false` (true); re-run `make system`
+- USB drive does not mount: `make usb-add` (USBGuard blocks unlisted drives); `system_disable_usb_storage` (false; true also blocks
+  `usb_storage`/`uas` in the kernel); re-run `make usb-add`, `make system`
+- `.local` names do not resolve: `system_disable_avahi: false` (true); re-run `make system`
+- ABRT units `masked`: `system_mask_abrt: false` (true); re-run `make system`
+- Shell exits when idle: `system_tmout: 0` (0 = off; 1-900 enforces); re-run `make system`
+- `ssh -L` / VS Code port panel fails: `system_ssh_allow_tcp_forwarding: local` (local; `no` blocks all, `yes` adds `-R`); re-run
+  `make system`
+- Account locked for 15 minutes: `system_faillock_unlock_time` (900); immediate fix in [recovery](../docs/rollout-recovery.md#rescue-boot);
+  re-run `make system`
 
 Overrides persist across runs; delete one to restore the default.
 
@@ -48,13 +53,17 @@ RHEL CSB and Debian skip it). If the machine does not boot, follow [Rescue boot]
 
 ## SSH
 
-| Symptom | Cause / fix |
-| --- | --- |
-| Connection refused after provisioning | sshd moved to port 722 (`ssh_port`): `ssh -p 722 user@host` or `Port 722` in `~/.ssh/config`. To change it, set `ssh_port` (not 22) in `config.yml` and re-run `make system` from the console or tmux |
-| sshd fails or rejects you | from the console inspect `/etc/ssh/sshd_config.d/00-hardening.conf` (`AllowUsers`, `Port`) and `sudo sshd -T \| grep -i port`. Only ed25519 and FIDO2 (`sk-ssh-ed25519`) keys are accepted; an empty vault writes no `authorized_keys` |
-| FIDO2 signing: "agent refused operation" | `SSH_AUTH_SOCK` points at a GNOME agent. The dotfiles role masks `gcr-ssh-agent` and deploys `ssh-agent.service` plus `environment.d`; log out and in, then `echo $SSH_AUTH_SOCK` must be `/run/user/<uid>/ssh-agent.socket` |
-| `no matching key exchange method` to an old server | crypto policy is `system_crypto_policy_target` (`DEFAULT:NO-SHA1`; a CSB host keeps IT's policy). Scope an exception to one host: `ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=+ssh-rsa user@host`, or the same options in a `Host` stanza |
-| Smoke test cannot see the YubiKey | `systemctl status pcscd.socket` (`sudo systemctl enable --now pcscd.socket`), `lsusb \| grep -i yubico`, and USBGuard must allow `1050:*`. FIDO2 SSH keys do not need pcscd |
+- Connection refused after provisioning: sshd moved to port 722 (`ssh_port`); use `ssh -p 722 user@host` or `Port 722` in `~/.ssh/config`.
+  To change it, set `ssh_port` (not 22) in `config.yml` and re-run `make system` from the console or tmux
+- sshd fails or rejects you: from the console inspect `/etc/ssh/sshd_config.d/00-hardening.conf` (`AllowUsers`, `Port`) and
+  `sudo sshd -T | grep -i port`. Only ed25519 and FIDO2 (`sk-ssh-ed25519`) keys are accepted; an empty vault writes no `authorized_keys`
+- FIDO2 signing: "agent refused operation": `SSH_AUTH_SOCK` points at a GNOME agent. The dotfiles role masks `gcr-ssh-agent` and deploys
+  `ssh-agent.service` plus `environment.d`; log out and in, then `echo $SSH_AUTH_SOCK` must be `/run/user/<uid>/ssh-agent.socket`
+- `no matching key exchange method` to an old server: crypto policy is `system_crypto_policy_target` (`DEFAULT:NO-SHA1`; a CSB host keeps
+  IT's policy). Scope an exception to one host: `ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=+ssh-rsa user@host`,
+  or the same options in a `Host` stanza
+- Smoke test cannot see the YubiKey: `systemctl status pcscd.socket` (`sudo systemctl enable --now pcscd.socket`), `lsusb | grep -i yubico`,
+  and USBGuard must allow `1050:*`. FIDO2 SSH keys do not need pcscd
 
 ## Vault password file missing
 
@@ -135,12 +144,11 @@ skipped on CSB hosts. Diagnose with `resolvectl status` and `resolvectl query ex
   `sysctl net.netfilter.nf_conntrack_max`; if lower, `sudo modprobe nf_conntrack && sudo sysctl --system`
   (modprobe fails until reboot while `system_modules_disabled: 1`).
 
-## kernel.unprivileged_bpf_disabled=2 Is Write-Once
+## kernel.unprivileged_bpf_disabled=2 (default)
 
-`sysctl -w kernel.unprivileged_bpf_disabled=0` fails with EPERM even as root. The default (`system_unprivileged_bpf_disabled: 2`) locks
-the sysctl until reboot; there is no supported override at 2. Root-level bpfman and ovnkube-node are unaffected. Do not lower it
-casually: the distrobox container holds CAP_BPF and CAP_PERFMON, which become active for every process in it (including package-manager
-dependencies) once unprivileged `bpf()` is allowed. Value 1 needs a custom kernel.
+At 2 unprivileged `bpf()` is blocked and root can still write 0 or 1; 1 locks the sysctl until reboot (even root cannot clear it).
+Root-level bpfman and ovnkube-node are unaffected. Do not lower it casually: the distrobox container is privileged (rootless), so its
+processes can use `bpf()` (including package-manager dependencies) once unprivileged `bpf()` is allowed.
 
 ## CSB (Corporate Standard Build)
 
@@ -149,9 +157,10 @@ dependencies) once unprivileged `bpf()` is allowed. Value 1 needs a custom kerne
 - **fapolicyd blocks `distrobox enter`:** it watches tmpfs and overlay mounts. Ask IT to drop `tmpfs` from `watch_fs` in
   `/etc/fapolicyd/fapolicyd.conf`; use the RPM-installed distrobox (or Toolbx, the role's fallback).
 - **Ansible `AnsiballZ_*.py: Operation not permitted`:** `ansible.cfg` sets `pipelining = true`; run from the repo root so it loads.
-- **Third-party repos (Chrome, Docker CE, Tailscale...) on CSB:** Chrome and Tailscale are skipped on any CSB
-  (Tailscale installs from the base Fedora repos); Docker CE is skipped on RHEL CSB only. A repo failure prints only a `REPO SETUP FAILED` warning, and no IT-ticket text is recorded for these repos (only acli
-  and the Red Hat internal repo record it, on RHEL CSB). Use the container for those tools.
+- **Chrome and Tailscale repos on CSB:** both are skipped on any CSB (Tailscale installs from the base Fedora repos; IT owns the
+  Chrome repo file, which the disabled-repo cleanup leaves alone). The opt-in Docker CE repo (`repo_docker_ce`) is skipped on RHEL
+  CSB only. Other repo failures print only a
+  `REPO SETUP FAILED` warning; only the acli and Red Hat internal repos record IT-ticket text (RHEL CSB). Use the container for those tools.
 - **Login shell stays `/bin/bash` on an SSSD account:** the role writes `override_shell` to `/etc/sssd/conf.d/90-laptop-setup-shell.conf`
   only if `sssd.conf` or `conf.d` has a `[domain/...]` section. Otherwise add `override_shell = /bin/zsh` to the `[domain/...]`
   stanza in a root-owned `/etc/sssd/conf.d/*.conf` (same group and mode as `sssd.conf`), then `sudo systemctl restart sssd`, or ask IT to

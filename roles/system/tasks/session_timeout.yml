@@ -50,7 +50,7 @@
   vars:
     _unexpected: >-
       {{ (_profiled_unowned.stdout_lines | default([]) | map('basename') | list)
-         | difference(system_profiled_whitelist + (system_csb_profiled_whitelist if csb_detected | default(false) else [])) }}
+         | difference(system_profiled_whitelist + system_csb_profiled_whitelist) }}
   when:
     - is_dnf
     - not system_is_container
@@ -70,7 +70,7 @@
   vars:
     _unexpected: >-
       {{ (_profiled_unowned.stdout_lines | default([]) | map('basename') | list)
-         | difference(system_profiled_whitelist + (system_csb_profiled_whitelist if csb_detected | default(false) else [])) }}
+         | difference(system_profiled_whitelist) }}
   when:
     - is_dnf
     - not system_is_container
@@ -101,7 +101,7 @@
     - csb_rhel
     - system_tmout | int > 0
 
-- name: Deploy TMOUT to /etc/profile.d/tmout.sh (bash, Fedora/RHEL/macOS)
+- name: Deploy TMOUT to /etc/profile.d/tmout.sh (bash, Fedora/RHEL)
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
@@ -145,27 +145,15 @@
     - not csb_rhel
     - system_tmout | int > 0
 
-- name: Deploy session timeout to /etc/zshrc (Fedora/RHEL/macOS zsh)
+- name: Deploy session timeout to the global zshrc
   ansible.builtin.lineinfile:
-    path: /etc/zshrc
+    path: "{{ '/etc/zsh/zshrc' if is_apt else '/etc/zshrc' }}"
     line: "typeset -xr TMOUT={{ system_tmout | int }}  # CIS 5.5.5"
     regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
     create: true  # dnf task above installs zsh first; create only matters in check mode
     mode: "0644"
   when:
-    - not is_apt
     - not csb_rhel
-    - system_tmout | int > 0
-
-- name: Deploy session timeout to /etc/zsh/zshrc (Debian zsh — GLOBAL_ZSHRC)
-  ansible.builtin.lineinfile:
-    path: /etc/zsh/zshrc
-    line: "typeset -xr TMOUT={{ system_tmout | int }}  # CIS 5.5.5"
-    regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
-    create: true
-    mode: "0644"
-  when:
-    - is_apt
     - system_tmout | int > 0
 
 # Cleanup: remove TMOUT artifacts when system_tmout<=0 (operator disables timeout).
@@ -188,21 +176,11 @@
     - is_apt
     - system_tmout | int <= 0
 
-- name: Remove TMOUT from /etc/zshrc when disabled (Fedora/RHEL/macOS)
+- name: Remove TMOUT from the global zshrc when disabled
   ansible.builtin.lineinfile:
-    path: /etc/zshrc
+    path: "{{ '/etc/zsh/zshrc' if is_apt else '/etc/zshrc' }}"
     regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
     state: absent
   when:
-    - not is_apt
     - not csb_rhel
-    - system_tmout | int <= 0
-
-- name: Remove session timeout from /etc/zsh/zshrc when disabled (Debian)
-  ansible.builtin.lineinfile:
-    path: /etc/zsh/zshrc
-    regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
-    state: absent
-  when:
-    - is_apt
     - system_tmout | int <= 0

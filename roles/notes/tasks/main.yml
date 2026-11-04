@@ -71,21 +71,15 @@
             - {path: "{{ notes_repo_path }}", mode: '0700', state: directory}
             - {path: "{{ notes_repo_path }}/.git/config", mode: '0600', state: file}
 
-        - name: Detect transcrypt binary
-          block:
-            - name: Gather transcrypt binary stat
-              ansible.builtin.stat:
-                path: "{{ notes_transcrypt_bin_path }}"
-              register: notes_transcrypt_bin
-              check_mode: false
-
-            - name: Set transcrypt availability fact
-              ansible.builtin.set_fact:
-                notes_transcrypt_available: "{{ notes_transcrypt_bin.stat.exists }}"
+        - name: Gather transcrypt binary stat
+          ansible.builtin.stat:
+            path: "{{ notes_transcrypt_bin_path }}"
+          register: notes_transcrypt_bin
+          check_mode: false
 
         - name: Check transcrypt initialization status
           when:
-            - notes_transcrypt_available
+            - notes_transcrypt_bin.stat.exists
 
           block:
             - name: Verify transcrypt initialized
@@ -118,7 +112,7 @@
           changed_when: notes_transcrypt_init_result.rc == 0
           failed_when: false  # reported by the warning below (e.g. a dirty checkout or wrong password)
           when:
-            - notes_transcrypt_available
+            - notes_transcrypt_bin.stat.exists
             - not notes_transcrypt_inited
             - notes_transcrypt_password | length > 0
 
@@ -128,7 +122,7 @@
               transcrypt initialization exited {{ notes_transcrypt_init_result.rc | default('unknown') }} —
               notes may not be decrypted. Check the password in vault.yml.
           when:
-            - notes_transcrypt_available
+            - notes_transcrypt_bin.stat.exists
             # default(0) required: skipped tasks have no .rc; prevents UndefinedError
             - notes_transcrypt_init_result.rc | default(0) != 0
 
@@ -136,7 +130,7 @@
         # transcrypt missing, init failed) this allowlist would let secrets be committed unscanned.
         - name: Deploy gitleaks repo protection
           when: >-
-            notes_transcrypt_available and (notes_transcrypt_inited
+            notes_transcrypt_bin.stat.exists and (notes_transcrypt_inited
             or (notes_transcrypt_init_result.rc | default(1)) == 0)
           block:
             - name: Deploy gitleaks allowlist for notes repo
@@ -169,9 +163,8 @@
               cd {{ notes_repo_path }} && transcrypt --flush-credentials &&
               transcrypt -c {{ notes_transcrypt_cipher }} -p <new_password> -y
           when:
-            - notes_transcrypt_available
+            - notes_transcrypt_bin.stat.exists
             - notes_transcrypt_inited
-
 
         - name: Warn if transcrypt not available
           ansible.builtin.debug:
@@ -179,7 +172,7 @@
               transcrypt not found at {{ notes_transcrypt_bin_path }} — 'make packages' installs it
               on Linux; on other platforms install it manually.
           when:
-            - not notes_transcrypt_available
+            - not notes_transcrypt_bin.stat.exists
 
         - name: Warn if transcrypt password not set
           ansible.builtin.debug:
@@ -187,7 +180,7 @@
               notes_transcrypt_password is empty — transcrypt not initialized.
               Set vault_notes_transcrypt_password in vault.yml to enable.
           when:
-            - notes_transcrypt_available
+            - notes_transcrypt_bin.stat.exists
             - not notes_transcrypt_inited
             - notes_transcrypt_password | length == 0
 

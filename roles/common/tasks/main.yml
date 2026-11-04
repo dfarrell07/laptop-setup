@@ -1,12 +1,6 @@
 ---
 # roles/common/tasks/main.yml
-# Project-root fact and prerequisite directories (OS and CSB detection live in common/tasks).
-
-- name: Set project root for include paths
-  ansible.builtin.set_fact:
-    common_project_root: >-
-      {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
-         | default(playbook_dir, true) }}
+# Prerequisite directories (OS and CSB detection live in common/tasks).
 
 - name: Ensure prerequisite directories exist (group/world traversable)
   ansible.builtin.file:

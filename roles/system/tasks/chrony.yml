@@ -1,20 +1,18 @@
 ---
 # roles/system/tasks/chrony.yml
 # --- Chrony NTS (authenticated time sync) ---
-# Imported only when not csb_detected (main.yml); no per-task CSB guards.
-# Mask timesyncd before the apt install so chrony's postinst does not race
-# for UDP 123 with a still-running timesyncd.
-- name: Install chrony with timesyncd rollback (Debian)
+# Imported only outside containers and not on CSB (main.yml); each install task is also guarded by is_apt/is_dnf.
+# Mask timesyncd before the package install on both Debian and Fedora
+# (on apt, chrony's postinst would otherwise race a running timesyncd for UDP 123).
+- name: Install chrony with timesyncd rollback
   block:
-    - name: Stop and mask systemd-timesyncd before chrony install (Debian)
+    - name: Stop and mask systemd-timesyncd before chrony install
       ansible.builtin.systemd:
         name: systemd-timesyncd
         masked: true
         state: stopped
       when:
-        - is_apt
         - system_chrony_service_enabled | bool
-        - not system_is_container
       failed_when: false
 
     - name: Install chrony (Debian/Ubuntu — must happen in system role Play 1; packages role runs after)
@@ -23,43 +21,7 @@
         state: present
       when:
         - is_apt
-        # Debian postinst starts chrony automatically; skip in containers (system_chrony_service_enabled:
-        # false) to prevent the daemon start from crashing the Podman container.
         - system_chrony_service_enabled | bool
-        - not system_is_container
-  rescue:
-    - name: Restore timesyncd if chrony install failed (Debian)
-      ansible.builtin.systemd:
-        name: systemd-timesyncd
-        masked: false
-        state: started
-        enabled: true
-      ignore_errors: true
-      register: _chrony_restore_result
-      when:
-        - is_apt
-        - not system_is_container
-
-    - name: Re-raise chrony install failure
-      ansible.builtin.fail:
-        msg: >-
-          chrony install failed; {{
-          'systemd-timesyncd has been unmasked and started to restore a time source'
-          if _chrony_restore_result is not failed
-          else 'timesyncd restore also failed — no active time source' }}
-
-- name: Install chrony with timesyncd rollback (Fedora)
-  block:
-    - name: Stop and mask systemd-timesyncd before chrony install (Fedora)
-      ansible.builtin.systemd:
-        name: systemd-timesyncd
-        masked: true
-        state: stopped
-      failed_when: false
-      when:
-        - is_dnf
-        - system_chrony_service_enabled | bool
-        - not system_is_container
 
     - name: Install chrony (Fedora/RHEL)
       ansible.builtin.dnf:
@@ -68,9 +30,8 @@
       when:
         - is_dnf
         - system_chrony_service_enabled | bool
-        - not system_is_container
   rescue:
-    - name: Restore timesyncd if chrony install failed (Fedora)
+    - name: Restore timesyncd if chrony install failed
       ansible.builtin.systemd:
         name: systemd-timesyncd
         masked: false
@@ -78,9 +39,6 @@
         enabled: true
       ignore_errors: true
       register: _chrony_restore_result
-      when:
-        - is_dnf
-        - not system_is_container
 
     - name: Re-raise chrony install failure
       ansible.builtin.fail:
@@ -101,7 +59,6 @@
   when:
     - system_chrony_authselectmode == 'require'
     - system_chrony_service_enabled | bool
-    - is_dnf or is_apt
 
 - name: Assert minsources does not exceed NTS server count with authselectmode=require
   ansible.builtin.assert:
@@ -113,7 +70,6 @@
   when:
     - system_chrony_authselectmode == 'require'
     - system_chrony_service_enabled | bool
-    - is_dnf or is_apt
 
 - name: "Warn: no NTS servers configured — chrony uses unauthenticated pool only"
   ansible.builtin.debug:
@@ -125,7 +81,6 @@
   when:
     - system_chrony_nts_servers | length == 0
     - system_chrony_service_enabled | bool
-    - is_dnf or is_apt
 
 - name: Probe optional chrony leap-second file support
   ansible.builtin.command:
@@ -143,10 +98,7 @@
     - "'Invalid directive' not in _chrony_leapseclist_probe.stderr"
     # chronyd not installed yet (fresh host under --check): treat as unsupported
     - "'Error executing command' not in (_chrony_leapseclist_probe.msg | default(''))"
-  when:
-    - system_chrony_service_enabled | bool
-    - is_dnf or is_apt
-    - not system_is_container
+  when: system_chrony_service_enabled | bool
 
 - name: Install native chrony configuration validator
   ansible.builtin.copy:
@@ -155,10 +107,7 @@
     owner: root
     group: root
     mode: "0755"
-  when:
-    - system_chrony_service_enabled | bool
-    - is_dnf or is_apt
-    - not system_is_container
+  when: system_chrony_service_enabled | bool
 
 - name: Deploy NTS-authenticated chrony config
   ansible.builtin.template:
@@ -167,13 +116,8 @@
     mode: "0644"
     validate: /usr/local/bin/laptop-setup-validate-chrony %s
   notify: Restart chronyd
-  when:
-    # Skip if chrony is not installed (system_chrony_service_enabled: false skips the install above).
-    - system_chrony_service_enabled | bool
-    # Only deploy when chrony was actually installed (mirrors the platform guards on the install tasks).
-    - is_dnf or is_apt
-    # Chrony is not installed in containers (install tasks above are guarded by not system_is_container).
-    - not system_is_container
+  # Skip if chrony is not installed (system_chrony_service_enabled: false skips the install above).
+  when: system_chrony_service_enabled | bool
 
 - name: Stop and disable chrony when chrony is disabled
   ansible.builtin.systemd:
@@ -183,7 +127,6 @@
   when:
     - not (system_chrony_service_enabled | bool)
     - is_dnf or is_apt
-    - not system_is_container
   failed_when: false
 
 - name: Unmask systemd-timesyncd when chrony is disabled
@@ -195,7 +138,6 @@
   when:
     - is_apt
     - not (system_chrony_service_enabled | bool)
-    - not system_is_container
   failed_when: false
 
 - name: Enable systemd-timesyncd when chrony is disabled (Fedora fallback)
@@ -207,7 +149,6 @@
   when:
     - is_dnf
     - not (system_chrony_service_enabled | bool)
-    - not system_is_container
   register: _chrony_timesyncd_fallback
   ignore_errors: true
 
@@ -219,7 +160,6 @@
   when:
     - is_dnf
     - not (system_chrony_service_enabled | bool)
-    - not system_is_container
     - _chrony_timesyncd_fallback is not failed
 
 - name: "Warn: no time sync active (timesyncd not available on this host)"
@@ -231,7 +171,6 @@
       system_chrony_service_enabled: true in config.yml.
   when:
     - is_dnf
-    - not system_is_container
     - not (system_chrony_service_enabled | bool)
     - _chrony_timesyncd_fallback is failed
 
@@ -245,7 +184,4 @@
   failed_when:
     - _chrony_enable is failed
     - not (ansible_check_mode and 'Could not find the requested service' in (_chrony_enable.msg | default('')))
-  when:
-    - system_chrony_service_enabled | bool
-    - is_dnf or is_apt
-    - not system_is_container
+  when: system_chrony_service_enabled | bool

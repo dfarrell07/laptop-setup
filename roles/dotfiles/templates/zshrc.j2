@@ -107,7 +107,7 @@ _claude_check_base_url() {
 # Instance guard + tmux launchers:
 claude() {
   if [[ -z "${CLAUDE_CONFIG_DIR:-}" ]]; then
-    echo "ERROR: CLAUDE_CONFIG_DIR not set. Use 'cw' (work) or 'ccp' (personal)." >&2
+    echo "ERROR: CLAUDE_CONFIG_DIR not set. Use {% if profile == 'work' %}'cw' (work) or {% endif %}'ccp' (personal)." >&2
     return 1
   fi
   _claude_check_base_url || return 1
@@ -118,7 +118,7 @@ claude() {
 cw() {
   command -v tmux &>/dev/null || { echo "ERROR: tmux not found"; return 1; }
   _claude_check_base_url || return 1
-  local work_env={{ (claude_queue_runtime_config_dir ~ '/work-env') | quote }}
+  local work_env={{ (claude_runtime_config_dir ~ '/work-env') | quote }}
   [[ -f "$work_env" ]] || { echo "ERROR: $work_env missing — run: make claude" >&2; return 1; }
   local dir="${PWD##*/}"; dir="${dir//[^a-zA-Z0-9_-]/_}"; [[ -z "$dir" ]] && dir="root"
   local s="work-${dir}"
@@ -153,7 +153,7 @@ cwt() {
     return 1
   fi
   _claude_check_base_url || return 1
-  local work_env={{ (claude_queue_runtime_config_dir ~ '/work-env') | quote }}
+  local work_env={{ (claude_runtime_config_dir ~ '/work-env') | quote }}
   [[ -f "$work_env" ]] || { echo "ERROR: $work_env missing — run: make claude" >&2; return 1; }
   tmux new-session -As "work-$n" "source ${(q)work_env} && claude --worktree $n; zsh"
 }
@@ -181,7 +181,7 @@ cper2() { _claude_personal {{ claude_personal2_config_dir | quote }} "$@"; }
 {% endif %}
 {% if profile == 'work' %}
 cwork() (
-  local work_env={{ (claude_queue_runtime_config_dir ~ '/work-env') | quote }}
+  local work_env={{ (claude_runtime_config_dir ~ '/work-env') | quote }}
   [[ -f "$work_env" ]] || { echo "cwork: run make claude first" >&2; return 1; }
   source "$work_env" || return 1
   export CLAUDE_CODE_USE_VERTEX=1
@@ -271,7 +271,7 @@ if command -v bpfman &>/dev/null; then
   fi
   [[ -s "$_bpf_cache" ]] && source "$_bpf_cache"
 fi
-_zsh_cached_completion stern completion zsh
+_zsh_cached_completion stern --completion=zsh
 {% endif %}
 
 # --- Dev shortcuts ---

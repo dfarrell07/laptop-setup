@@ -329,16 +329,13 @@ packages_krew_bootstrap_version: "0.5.0"  # Single version pin; SHA256-verified 
 packages_krew_sha256: "5d5a221fffdf331d1c5c68d9917530ecd102e0def5b5a6d62eeed1c404efb28a"
 # Executable digest extracted from the verified archive; update all three Krew pins together.
 packages_krew_binary_sha256: "7e3170836d1ab3b339dc79ceb06a2a978923375cc2bdc64734081571b3e402be"
-packages_krew_plugin_ctx_version: "v0.11.0"  # kubectx krew plugin pinned version; bump deliberately
-packages_krew_plugin_ns_version: "v0.11.0"   # kubens krew plugin pinned version; bump deliberately
+packages_kubectx_version: "v0.11.0"  # kubectx/kubens krew plugins (one release ships both); bump deliberately
 # Post-install checksums for krew plugins (compensating control: krew index has no cryptographic
 # signing; these pin the known-good script SHA256 independent of the live index).
-# SHA256 of kubectx/kubens scripts at packages_krew_plugin_ctx/ns_version, extracted from the
-# kubectx tarball (sha256: 1c8eb6b30c0067f89e5b2f9480865b0e3229a221fadddb644ce192d663c63907).
-# Update both version and sha256 vars together when bumping plugin versions.
+# SHA256 of kubectx/kubens scripts at packages_kubectx_version, extracted from the kubectx tarball.
+# Update the version and all three sha256 vars together when bumping.
 # Archive checksums pin the manifests used for explicit plugin installs (Krew has no name@version syntax).
-packages_krew_ctx_archive_sha256: "1c8eb6b30c0067f89e5b2f9480865b0e3229a221fadddb644ce192d663c63907"
-packages_krew_ns_archive_sha256: "1c8eb6b30c0067f89e5b2f9480865b0e3229a221fadddb644ce192d663c63907"
+packages_kubectx_archive_sha256: "1c8eb6b30c0067f89e5b2f9480865b0e3229a221fadddb644ce192d663c63907"
 packages_krew_plugin_ctx_sha256: "1905c04422efe305d5b27f7526c3573a8c00b9e291e825dba6dd8a5350d59037"
 packages_krew_plugin_ns_sha256: "bf81b4a515e96bfb1878e3b85950bd5742d96a5d6b398e737495ab1b3972ef70"
 

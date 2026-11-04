@@ -106,7 +106,6 @@ else
 fi
 
 # --- Required tools ---
-# When adding a tool to the loop, add a matching elif branch with install guidance.
 _curl_ok=false
 for tool in ansible-playbook git python3 curl make ssh; do
   if command -v "$tool" &>/dev/null; then
@@ -125,25 +124,17 @@ for tool in ansible-playbook git python3 curl make ssh; do
     fi
     [[ "$tool" == "curl" ]] && _curl_ok=true
   else
-    # Keep this elif chain in sync with the for-loop tools list above; else at the bottom catches any tool added without an explicit branch
-    if [[ "$tool" == "make" ]]; then
-      record "required_${tool}" "fail" "not installed — install first: sudo dnf install make (Fedora/RHEL) | sudo apt install make (Debian) | brew install make (macOS), then: make bootstrap"
-    elif [[ "$tool" == "ssh" ]]; then
-      record "required_${tool}" "fail" "not installed — run: sudo dnf install openssh-clients (Fedora/RHEL) | sudo apt install openssh-client (Debian) | brew install openssh (macOS)"
-    elif [[ "$tool" == "curl" ]]; then
-      record "required_${tool}" "fail" "not installed — run: sudo dnf install curl (Fedora/RHEL) | sudo apt install curl (Debian) | brew install curl (macOS)"
-    elif [[ "$tool" == "python3" ]]; then
-      record "required_${tool}" "fail" "not installed — run: sudo dnf install python3 (Fedora/RHEL) | sudo apt install python3 (Debian) | brew install python3 (macOS)"
-    elif [[ "$tool" == "git" ]]; then
-      record "required_${tool}" "fail" "not installed — run: sudo dnf install git (Fedora/RHEL) | sudo apt install git (Debian) | brew install git (macOS)"
-    elif [[ "$tool" == "ansible-playbook" ]]; then
+    case "$tool" in ssh) _pd=openssh-clients _pa=openssh-client _pb=openssh ;; *) _pd=$tool _pa=$tool _pb=$tool ;; esac
+    if [[ "$tool" == ansible-playbook ]]; then
       if command -v make &>/dev/null; then
         record "required_${tool}" "fail" "not installed — run: make bootstrap"
       else
         record "required_${tool}" "fail" "not installed — install make first (dnf/brew), then: make bootstrap"
       fi
+    elif [[ "$tool" == make ]]; then
+      record "required_${tool}" "fail" "not installed — install first: sudo dnf install make (Fedora/RHEL) | sudo apt install make (Debian) | brew install make (macOS), then: make bootstrap"
     else
-      record "required_${tool}" "fail" "not installed — BUG: missing elif branch; run make bootstrap and file a bug"
+      record "required_${tool}" "fail" "not installed — run: sudo dnf install ${_pd} (Fedora/RHEL) | sudo apt install ${_pa} (Debian) | brew install ${_pb} (macOS)"
     fi
   fi
 done
@@ -231,10 +222,8 @@ if [[ -x "$vscript" ]]; then
   fi
 elif [[ -f "$vscript" ]]; then
   record "vault" "fail" "script exists but is not executable"
-elif [[ -f "${HOME}/.vault_pass" ]]; then
-  record "vault" "warn" "no script, using ~/.vault_pass file (password on disk)"
 else
-  record "vault" "fail" "no script and no ~/.vault_pass"
+  record "vault" "fail" "no scripts/vault-pass.sh — run: make bootstrap, then make setup-yubikeys"
 fi
 
 # vault_encrypted is a file-only check — no YubiKey interaction needed — runs in --json mode unlike the vault script test above
@@ -304,7 +293,7 @@ if [[ -f "$CONFIG_FILE" ]]; then
   fi
 fi
 
-# --- keyscan fingerprint guard (mirrors pre_flight_checks.yml; warns before the sudo prompt) ---
+# --- keyscan fingerprint guard (mirrors roles/ssh/tasks/keyscan_host.yml; warns before the sudo prompt) ---
 if [[ -f "$CONFIG_FILE" ]]; then
   _bad_fp=$(python3 -I -c '
 import re, sys, yaml
@@ -336,7 +325,7 @@ for netlabel_url in "${net_urls[@]}"; do
     if [[ "$_http_code" =~ ^[23] || ( "$nlabel" == registry && "$_http_code" == 401 ) ]]; then
       record "net_${nlabel}" "pass" "$nurl reachable (HTTP $_http_code)"
     # Only GitHub is required (binary downloads); collections are vendored and the registry is
-    # used for image pulls (oc image extract needs a login), so those are warnings
+    # used for image pulls (which need a login), so those are warnings
     elif [[ "$nlabel" == github ]]; then record "net_${nlabel}" "fail" "$nurl unreachable (HTTP ${_http_code:-000})"
     else record "net_${nlabel}" "warn" "$nurl unreachable (HTTP ${_http_code:-000})"; fi
   else

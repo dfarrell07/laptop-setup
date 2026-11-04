@@ -25,15 +25,15 @@
       --start-at-task bypassing play-level pre_tasks.
       container_image={{ container_image | default('') }} distrobox_container_image={{ distrobox_container_image }} --
         must be from a trusted registry with a pinned @sha256: digest; mutable tags let the
-        registry serve arbitrary content (CAP_BPF+CAP_PERFMON, $HOME bind-mounted —
+        registry serve arbitrary content ($HOME bind-mounted, container is privileged —
         vault-pass.sh/.ssh/.gnupg accessible); use registry/image:tag@sha256:<64-hex>;
       container_name={{ container_name | default('') }} --
-        must be alphanumeric/underscore/hyphen (space injects extra argument to toolbox create/rm);
+        must be alphanumeric/underscore/hyphen (space injects extra argument to the create command);
       distrobox_container_name={{ distrobox_container_name | default('') }} --
         must be alphanumeric/underscore/hyphen; validated here; it is normally derived from container_name;
       distrobox_packages={{ distrobox_packages | default([]) }} --
         entries must be alphanumeric/dot/underscore/plus/hyphen; a newline in any entry injects
-        an arbitrary INI key into distrobox.ini (init_hooks RCE via flatpak-spawn --host).
+        an arbitrary INI key into distrobox.ini (arbitrary container create options or init_hooks commands).
       distrobox_oc_version={{ distrobox_oc_version }} distrobox_oc_mirror_url={{ distrobox_oc_mirror_url }} --
         version must be dotted numeric; mirror must be a plain https URL (no query, no '..' path
         segments, no userinfo) because both build the download URLs for the oc tarball and checksum.
@@ -53,6 +53,22 @@
       Unlisted: {{ _unlisted_exec }}.
       A shell name (bash, sh, zsh) creates a trivial host-shell escape from the container.
       Fix: remove unlisted entries from distrobox_host_exec_commands in config.yml.
+
+# Runs here (role context) rather than in container-provision.yml: Play 3 includes that file by
+# path, so this role's filter_plugins are not loaded there. Placed before any container work so a
+# bad value stops the role before the container is destroyed, created or started.
+- name: Validate Go checksum exceptions do not bypass public modules
+  ansible.builtin.assert:
+    that:
+      - >-
+        ((dotfiles_gonosumdb | default('')) or (dotfiles_goprivate | default('')))
+        | go_checksum_exceptions_safe(['github.com/golangci/golangci-lint/v2/cmd/golangci-lint',
+                                       'github.com/submariner-io/subctl/cmd'])
+    fail_msg: >-
+      The effective checksum exception (GONOSUMDB or its GOPRIVATE fallback) contains a public pattern that bypasses Go checksum-database
+      verification, or uses unsupported pattern syntax. Use private domain prefixes
+      (e.g. '*.redhat.com') or literal private owners; only literals and '*' globs are supported.
+    quiet: true
 
 # Deferred (not failed) while the vault is the empty stub; 'make container' completes it once the
 # vault is populated. Play 3 asserts non-empty vault_ssh_auth_key(_pub) (site.yml vault healthcheck)
@@ -145,8 +161,8 @@
   ansible.builtin.debug:
     msg: >-
       subuid/subgid missing for {{ ansible_facts['user_id'] }}.
-      Rootless podman will fail. The system role provisions these entries;
-      run 'make system' as root to fix, or manually:
+      Rootless podman will fail. Enable the sys_signin chunk (make plan CHUNK=sys_signin,
+      then make chunk-sys_signin). On RHEL CSB, ask IT. Otherwise run:
       echo "{{ ansible_facts['user_id'] }}:165536:165536" | sudo tee -a /etc/subuid /etc/subgid
   when:
     - distrobox_tool != 'none'
@@ -175,7 +191,7 @@
     distrobox_use_distrobox: false
     distrobox_use_toolbox: false
   when:
-    - distrobox_tool != "none"
+    - distrobox_tool != 'none'
     - (not (packages_install_binaries | bool)) or fapolicyd_enforcing
     - distrobox_container_exists.rc != 0
 
@@ -188,16 +204,17 @@
     - distrobox_tool == 'none'
     - distrobox_check.rc == 0 or distrobox_toolbox_check.rc == 0
 
-- name: Warn container_replace ignored in offline mode
+- name: Warn container_replace ignored (offline or fapolicyd)
   ansible.builtin.debug:
     msg: >-
-      container_replace=true was requested but binary installs are disabled (packages_install_binaries=false) —
-      container '{{ distrobox_container_name }}' will NOT be replaced. Remove container_replace from
-      config.yml or re-run without the offline flag to allow image pulls.
+      container_replace=true was requested but
+      {{ 'fapolicyd enforcement is active' if fapolicyd_enforcing else 'binary installs are disabled (packages_install_binaries=false)' }}
+      — container '{{ distrobox_container_name }}' will NOT be replaced. Remove container_replace from
+      config.yml or lift the restriction before re-running.
   when:
     - distrobox_tool != 'none'
-    - not (packages_install_binaries | bool)
     - distrobox_container_replace | bool
+    - fapolicyd_enforcing or not (packages_install_binaries | bool)
 
 # --- Distrobox path ---
 - name: Ensure distrobox config directory
@@ -252,17 +269,6 @@
   when:
     - distrobox_check.rc != 0
     - is_linux
-
-- name: Warn container_replace ignored under fapolicyd enforcement
-  ansible.builtin.debug:
-    msg: >-
-      container_replace=true was requested but fapolicyd enforcement is active — container
-      '{{ distrobox_container_name }}' will NOT be replaced. Remove container_replace from
-      config.yml or disable fapolicyd enforcement before re-running.
-  when:
-    - distrobox_tool != 'none'
-    - fapolicyd_enforcing
-    - distrobox_container_replace | bool
 
 - name: Ensure the private Distrobox compatibility helper directory
   ansible.builtin.file:
@@ -484,21 +490,6 @@
     - distrobox_tool != 'none'
     - distrobox_start_result.rc | default(0) == 0
 
-# Runs here (role context) rather than in container-provision.yml: Play 3 includes that file by
-# path, so this role's filter_plugins are not loaded there.
-- name: Validate Go checksum exceptions do not bypass public modules
-  ansible.builtin.assert:
-    that:
-      - >-
-        ((dotfiles_gonosumdb | default('')) or (dotfiles_goprivate | default('')))
-        | go_checksum_exceptions_safe(['github.com/golangci/golangci-lint/v2/cmd/golangci-lint',
-                                       'github.com/submariner-io/subctl/cmd'])
-    fail_msg: >-
-      The effective checksum exception (GONOSUMDB or its GOPRIVATE fallback) contains a public pattern that bypasses Go checksum-database
-      verification, or uses unsupported pattern syntax. Use private domain prefixes
-      (e.g. '*.redhat.com') or literal private owners; only literals and '*' globs are supported.
-    quiet: true
-
 - name: Register container as Ansible host for Play 3
   ansible.builtin.add_host:
     name: "{{ distrobox_container_name }}"
@@ -519,7 +510,6 @@
     # (proxy branches); these are set on localhost only and must travel with the new host.
     real_user_home: "{{ real_user_home | default(ansible_facts['user_dir']) }}"
     real_user_id: "{{ real_user_id | default(ansible_facts['user_id']) }}"
-    network_proxied: "{{ network_proxied | default(false) }}"
     proxy_url: "{{ proxy_url | default('') }}"
   changed_when: false  # only updates the controller inventory for this playbook invocation
   when:

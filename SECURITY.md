@@ -16,12 +16,12 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
 - **System hardening** — the defaults are in `roles/system/defaults/main.yml`; highlights: firewalld drop zone, sysctl hardening set,
   auditd (immutable rules, user persistence monitoring), kernel lockdown, SELinux enforcing, USBGuard, crypto policy `DEFAULT:NO-SHA1`,
   DNS-over-TLS/DNSSEC, core dump disable, io_uring restricted, kernel module blacklist, mount options
-  (`/tmp`, `/dev/shm`, `/home`, `/boot`),
-  0700 home directories, `pam_wheel` for `su`, root account locked, inactive account lockout, cups-browsed/avahi/NFS masking, optional AIDE
-  and weekly setuid scan, chrony NTS, dnf-automatic. Corporate-managed (CSB-detected) hosts skip chrony time sync and dnf-automatic
-  updates; RHEL CSB also skips boot config and firewall zones (Fedora hybrid CSB keeps them). Opportunistic DoT with `allow-downgrade`
-  DNSSEC lets an on-path attacker force plain DNS; set `system_dot_mode: yes` and `system_dnssec_mode: yes` for strict enforcement (breaks
-  captive portals)
+  (`/tmp`, `/dev/shm`, `/home`, `/boot`), 0700 home directories, `pam_wheel` for `su`, root account locked, inactive account lockout,
+  cups-browsed/avahi/NFS masking, optional AIDE and weekly setuid scan, chrony NTS, dnf-automatic. Corporate-managed (CSB-detected)
+  hosts skip chrony time sync, the DNS-over-TLS drop-in and dnf-automatic updates; RHEL CSB also skips boot config and firewall zones
+  (Fedora hybrid CSB keeps them).
+  Opportunistic DoT with `allow-downgrade` DNSSEC lets an on-path attacker force plain DNS; set `system_dot_mode: yes` and
+  `system_dnssec_mode: yes` for strict enforcement (breaks captive portals)
 - **Git security** — `core.fsmonitor=false`, `safe.bareRepository=explicit`, `transfer.fsckObjects=true`, `protocol.file.allow=user`,
   SSH commit signing, gitleaks pre-commit, `core.hooksPath` guard (CI and hooks)
 - **Claude Code isolation** — instance separation, sandbox config, deny lists for credential paths and other instances' data,
@@ -108,7 +108,7 @@ collections jobs.
 
 `-s` alone is only text. When `.gpg-enforcement` is `enabled`, commits touching supply-chain paths (`scripts/`, `.githooks/`,
 `collections-dist/`, `.github/`, `Makefile`, `Makefile.sha256`, `roles/packages/defaults/main.yml`,
-`roles/repos_dnf/defaults/main.yml`, root-level `requirements-test.lock`, `requirements-bootstrap.txt`, `package.json`,
+`roles/repos_dnf/defaults/main.yml`, root-level `requirements-test.lock`, `package.json`,
 `package-lock.json`, `.gitleaks.toml`, `.gpg-enforcement`) need both:
 
 ```bash
@@ -198,13 +198,9 @@ The wrapper (`VERIFY_AND_RUN` in the Makefile):
 Each role also re-validates its critical inputs at the start of `main.yml` (for example, `roles/claude/tasks/main.yml` constrains
 `claude_install_url` to `claude.ai` or `anthropic.com`), so a skipped `pre_tasks` does not reach the installer.
 
-**Chunk selection** (`rollout_enable` in `config.yml`, registry `group_vars/all/rollout.yml`): a chunk's name is its Ansible tag. The
-wrapper
-turns every chunk that is not enabled into `--skip-tags` for `site.yml` runs and rejects an invalid `rollout_enable` before any sudo prompt.
-Play 0 (`pre-flight.yml`) has an `always`-tagged assert that every disabled chunk is in `ansible_skip_tags`, so a direct `ansible-playbook`
-run cannot apply a disabled chunk. The enabled list can only come from `config.yml`. Skipping a chunk's tag also skips `always` guards
-inside
-that chunk's tasks (they only protect that chunk); top-level guards stay.
+**Chunk selection** (`rollout_enable` in `config.yml`): the wrapper turns disabled chunks into `--skip-tags` and a Play 0 `always` assert
+rejects a direct run that would apply one. Skipping a chunk also skips `always` guards inside it; top-level guards stay. Details:
+[docs/rollout-plan.md](docs/rollout-plan.md).
 
 ## Ansible Collections Supply Chain
 
@@ -230,8 +226,10 @@ suspected compromise to the [Galaxy security team](https://galaxy.ansible.com/se
 ### Upgrade procedure
 
 ```bash
-# 1. Bump the version in requirements.yml AND in the spec list inside the vendor-collections recipe in the Makefile, regenerate the
-#    Makefile baseline with `sha256sum Makefile > Makefile.sha256` (the pre-commit hook rejects a changed Makefile without it), then:
+# 1. Bump the version in requirements.yml, in INSTALL_COLLECTIONS in the Makefile, in COLLECTIONS in
+#    scripts/verify-vendor-tarball.sh and in the tarball list in .github/actions/ci-setup/action.yml, regenerate the
+#    Makefile baseline with `sha256sum Makefile > Makefile.sha256` (the pre-commit hook rejects a changed Makefile
+#    without it), then:
 make vendor-collections
 
 # 2. Review the upstream changelog for new tasks, plugins, network calls and privilege escalation
@@ -248,7 +246,8 @@ tar -xzf collections-dist/community-general-<new>.tar.gz -C "$d/new"
 diff -r "$d/old/plugins" "$d/new/plugins" | head -50
 
 # 5. Commit with signoff on a branch and open a PR; review the diff before merging
-git add requirements.yml Makefile Makefile.sha256 collections-dist
+git add requirements.yml Makefile Makefile.sha256 scripts/verify-vendor-tarball.sh .github/actions/ci-setup/action.yml \
+  collections-dist
 git commit -s -m "Collections: bump community.general to <new>"
 ```
 
@@ -403,7 +402,8 @@ ssh_work_keyscan_hosts:
    `SHA256:` value defers the host: nothing is seeded and its SSH repos are skipped until you set the real value
 
 `roles/ssh/tasks/keyscan_host.yml` seeds `~/.ssh/known_hosts` (work profile only). The `git_repos` role does not seed hosts: it clones SSH
-repos only from hosts already in `known_hosts` and defers the rest to `make ssh repos`. GitHub keys are seeded from a pinned key.
+repos only from hosts already in `known_hosts` and defers the rest to `make chunk-ssh_client` then
+`make chunk-repos`. GitHub keys are seeded from a pinned key.
 
 ## SSH Key Rotation
 
@@ -436,17 +436,17 @@ backdoored
 dependency that already has a valid checksum. It covers the whole build list, not only direct modules. Built binaries are not hash-pinned:
 their bytes depend on the local toolchain and flags, so no upstream binary hash exists.
 
-**Mitigations** (`roles/packages/tasks/install_go_tools.yml`):
+**Mitigations** (`roles/packages/tasks/main.yml` and `roles/packages/tasks/install_go_tools.yml`):
 
 1. **Version pinning** in `roles/packages/defaults/main.yml` (`packages_*_version`); bumps need deliberate review
-2. **GONOSUMDB validation** — the effective `GONOSUMDB`/`GOPRIVATE` value may contain only private patterns; public hosts, wildcard
-   owners, patterns covering the installed public tools and unsupported glob syntax are rejected
-3. **GOSUMDB enforcement** — set to `sum.golang.org` (default; override with `packages_gosumdb`), must not be `off` or empty, and the
-   server must be reachable for Go tool installs to run (if unreachable, they are skipped with a warning and the play does not fail); CI
-   also rejects a disabled GOSUMDB
+2. **GONOSUMDB validation** (`main.yml`) — the effective `GONOSUMDB`/`GOPRIVATE` value may contain only private patterns; public hosts,
+   wildcard owners, patterns covering the installed public tools and unsupported glob syntax are rejected
+3. **GOSUMDB enforcement** (`install_go_tools.yml`) — set to `sum.golang.org` (default; override with `packages_gosumdb`), must not be
+   `off` or empty, and the server must be reachable for Go tool installs to run (if unreachable, they are skipped with a warning and the
+   play does not fail); CI also rejects a disabled GOSUMDB
 4. **No retry on integrity failures** — only transient `permission denied` is retried; checksum mismatches fail fast
-5. **Sanity checks** — `scripts/smoke-test.sh` runs each Go tool's version command (`--version`; `gopls` and `subctl` use `version`,
-   `govulncheck` uses `-version`); this does not catch stealthy payloads
+5. **Sanity checks** — `scripts/smoke-test.sh` runs each installed Go tool's version command (gofumpt, gopls, stern, govulncheck, gci,
+   golangci-lint, subctl; controller-gen and the code generators are not checked); this does not catch stealthy payloads
 6. **Isolation** — `make container` provisions the dev tier in a distrobox, which bind-mounts `$HOME` (same UID) and is not a credential
    boundary: host `~/.ssh`, `~/.gnupg`, and `scripts/vault-pass.sh` (when the checkout is under `$HOME`) are readable inside it. Mount-level
    isolation is not configured by this repo.

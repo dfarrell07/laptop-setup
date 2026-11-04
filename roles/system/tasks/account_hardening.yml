@@ -99,7 +99,7 @@
 # RHEL CSB: login.defs governs local account policy (IPA/SSSD + IT group policy); skipped there.
 # Hybrid Fedora CSB: csb-fedora automation does not manage login.defs, so apply (local accounts only;
 # IPA/SSSD domain users have no shadow entry and are skipped by the getent/chage guards below).
-- name: Set login.defs password aging and home mode fields
+- name: Set login.defs password aging, home mode and umask fields
   ansible.builtin.lineinfile:
     path: /etc/login.defs
     regexp: "^{{ item.name }}\\s+"
@@ -118,53 +118,37 @@
     # HOME_MODE: Fedora 44 default is 0700 (matches system_home_mode default); no-op on Fedora 44 but enforces on RHEL/Rocky/Debian
     - name: HOME_MODE
       value: "{{ system_home_mode }}"  # CIS: explicit home dir permissions (Fedora 38+ shadow-utils)
+    # UMASK (CIS): applies to PAM sessions that do not source rc files (cron, systemd user services);
+    # dotfiles set 077 for interactive shells.
+    - name: UMASK
+      value: "{{ system_umask }}"
   loop_control:
     label: "{{ item.name }}"
   when:
     - not csb_rhel
     - not system_is_container  # logind inotify on login.defs crashes PID 1 in privileged Podman containers (Debian 13 and Rocky 10)
 
-# UMASK 027: applies to PAM sessions that do not source rc files (cron, systemd user services).
-# Overridden by dotfiles for interactive shells (umask 077 in ~/.bashrc and ~/.zshrc).
-- name: Set default login umask in login.defs (CIS)
-  ansible.builtin.lineinfile:
-    path: /etc/login.defs
-    regexp: "^UMASK\\s+"
-    line: "UMASK\t{{ system_umask }}"
-    insertafter: EOF
-    create: false
-    mode: "0644"
-  when:
-    - not csb_rhel
-    - not system_is_container  # logind inotify on login.defs crashes PID 1 in privileged Podman containers (Debian 13 and Rocky 10)
-
 # NOTE: ENCRYPT_METHOD is a true no-op on Fedora 44 (already uncommented as YESCRYPT);
-# enforces on RHEL/Rocky; skipped on Debian (SHA512 default preserved)
-- name: Enforce yescrypt password hashing in login.defs (CIS 5.3.6)
+# enforces on RHEL/Rocky; skipped on Debian (SHA512 default preserved).
+# Fedora 44 ships '#YESCRYPT_COST_FACTOR 5' commented; first run uncomments it. The regexps match both
+# commented and uncommented forms for true idempotency: a narrow '^#YESCRYPT_COST_FACTOR' would miss the
+# already-uncommented line on re-runs and lineinfile would append a duplicate.
+- name: Enforce yescrypt hashing and cost factor in login.defs (CIS 5.3.6, 5.4.1)
   ansible.builtin.lineinfile:
     path: /etc/login.defs
-    regexp: '^#?ENCRYPT_METHOD'
-    line: 'ENCRYPT_METHOD YESCRYPT'
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+  loop:
+    - regexp: '^#?ENCRYPT_METHOD'
+      line: 'ENCRYPT_METHOD YESCRYPT'
+    - regexp: '^#?YESCRYPT_COST_FACTOR'
+      line: 'YESCRYPT_COST_FACTOR 5'
+  loop_control:
+    label: "{{ item.line }}"
   when:
     - not csb_rhel
-    - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
+    - not system_is_container  # same inotify/logind crash guard as the password aging task above
     - not is_apt  # Debian 13 defaults to SHA512; YESCRYPT_COST_FACTOR is not in Debian's login.defs template
-
-# NOTE: Fedora 44 ships '#YESCRYPT_COST_FACTOR 5' commented; first run uncomments it.
-# regexp matches both commented and uncommented forms for true idempotency — narrow
-# '^#YESCRYPT_COST_FACTOR' would fail to match the already-uncommented line on re-runs
-# and lineinfile would append a duplicate rather than no-op.
-# YESCRYPT_COST_FACTOR is a Fedora/RHEL shadow-utils extension; Debian's login.defs does not
-# include this key — shadow-utils ignores it but lineinfile would append a stray line.
-- name: Enforce yescrypt cost factor in login.defs (CIS 5.4.1)
-  ansible.builtin.lineinfile:
-    path: /etc/login.defs
-    regexp: '^#?YESCRYPT_COST_FACTOR'
-    line: 'YESCRYPT_COST_FACTOR 5'
-  when:
-    - not csb_rhel
-    - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
-    - not is_apt  # YESCRYPT_COST_FACTOR not in Debian's login.defs; would append an unrecognized stray key
 
 - name: Restrict existing user home directory permissions to system_home_mode (CIS 6.2.x)
   when:
@@ -218,136 +202,68 @@
           Manual fix required before provisioning can continue.
 
 # --- Inactive account lockout (CIS 5.5.1.5: lock accounts inactive >30 days) ---
-- name: Configure inactive account lockout
+- name: Set default inactive days for new accounts
+  ansible.builtin.lineinfile:
+    path: /etc/default/useradd
+    regexp: '^#?INACTIVE='
+    line: "INACTIVE={{ system_inactive_days }}"
+    create: true
+    mode: "0644"
   when:
-    # CSB: IT-managed local service accounts may not rotate passwords; useradd -D -f 30 would lock them after 30 inactive days
+    # CSB: IT-managed local service accounts may not rotate passwords; INACTIVE in /etc/default/useradd
+    # would lock them after system_inactive_days inactive days
     - not csb_rhel
     - not system_is_container  # useradd/chage shadow ops trigger PAM events that crash Debian 13 container PID 1
-  block:
-    - name: Check useradd default INACTIVE setting
-      ansible.builtin.command:
-        cmd: useradd -D
-      register: system_useradd_defaults
-      changed_when: false
-      failed_when: false
-      check_mode: false  # read-only probe — must run in check mode
 
-    - name: Set default inactive days for new accounts to 30
-      ansible.builtin.command:
-        argv: [useradd, -D, -f, "{{ system_inactive_days }}"]
-      register: _useradd_inactive_result
-      when:
-        - >-
-          system_useradd_defaults.stdout_lines | default([]) | select('match', '^INACTIVE=' ~ system_inactive_days ~ '$') | list | length
-          == 0
-      changed_when: _useradd_inactive_result.rc == 0
-      failed_when: false
-
-    - name: Warn if Set default inactive days failed
-      ansible.builtin.debug:
-        msg: >-
-          WARNING: useradd -D -f {{ system_inactive_days }} exited
-          {{ _useradd_inactive_result.rc | default('skipped') }} —
-          CIS 5.5.1.5 default inactive days for new accounts may not be enforced
-      when:
-        - _useradd_inactive_result.rc | default(0) != 0
-
-# useradd -D -f 30 only governs future accounts. Apply the same 30-day
-# inactive lockout to the pre-existing real user account (CIS 5.5.1.5).
-- name: Check current inactive lockout setting for existing user account
+# INACTIVE in /etc/default/useradd only governs future accounts. Apply the same aging and system_inactive_days lockout to the
+# pre-existing real user account (CIS 5.5.1.1/5.5.1.2/5.5.1.3/5.5.1.5).
+- name: Read current password aging fields for existing user account
   ansible.builtin.getent:
     database: shadow
     key: "{{ real_user_id }}"
     fail_key: false
-  register: system_chage_inactive_days
+  register: _shadow_entry_result
   check_mode: false
   when:
     - not csb_rhel
     - not system_is_container
     - real_user_id | length > 0
 
-- name: Set inactive lock for existing user account (CIS 5.5.1.5)
+- name: Set password aging and inactive lock for existing user account
   ansible.builtin.command:
-    argv: [chage, -I, "{{ system_inactive_days }}", "{{ real_user_id }}"]
-  register: _chage_inactive_result
+    argv:
+      - chage
+      - -m
+      - "{{ system_pass_min_days }}"
+      - -M
+      - "{{ system_pass_max_days }}"
+      - -W
+      - "{{ system_pass_warn_age }}"
+      - -I
+      - "{{ system_inactive_days }}"
+      - "{{ real_user_id }}"
+  vars:
+    _entry: "{{ (_shadow_entry_result.ansible_facts.getent_shadow | default({})).get(real_user_id) }}"
+  register: _chage_result
   when:
-    # IPA/SSSD domain users have no /etc/shadow entry (skipped by the shadow check below); RHEL CSB skips entirely.
+    # IPA/SSSD domain users have no /etc/shadow entry (_entry is none); RHEL CSB skips entirely.
     - not csb_rhel
     - not system_is_container
-    - (system_chage_inactive_days.ansible_facts.getent_shadow | default({}))[real_user_id] is not none
+    - real_user_id | length > 0
+    - _entry is not none
     - >-
-      (system_chage_inactive_days.ansible_facts.getent_shadow | default({}))[real_user_id][5] | default('') | string !=
-      system_inactive_days | string
-  changed_when: _chage_inactive_result.rc == 0
+      _entry[2:6] | map("string") | list !=
+      [system_pass_min_days, system_pass_max_days, system_pass_warn_age, system_inactive_days] | map("string") | list
+  changed_when: _chage_result.rc == 0
   failed_when: false
 
-- name: Warn if Set inactive lock for existing user account failed
-  ansible.builtin.debug:
-    msg: >
-      WARNING: chage -I {{ system_inactive_days }} {{ real_user_id }} exited
-      {{ _chage_inactive_result.rc | default('skipped') }} —
-      CIS 5.5.1.5 inactive lockout may not be set on the existing account
-  when:
-    - _chage_inactive_result.rc | default(0) != 0
-    - not csb_rhel
-    - not system_is_container
-
-- name: Check current password aging fields for existing user account
-  ansible.builtin.command:
-    argv: [awk, "-F:", "-v", "u={{ real_user_id }}", "$1==u{found=1; print ${{ item.field }}} END{if (!found) exit 1}", /etc/shadow]
-  register: system_chage_fields
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  when:
-    - not csb_rhel
-    - not system_is_container
-    - real_user_id | length > 0
-  loop:
-    - {field: 4, flag: '-m', var: 'system_pass_min_days', cis: 'CIS 5.5.1.2'}
-    - {field: 5, flag: '-M', var: 'system_pass_max_days', cis: 'CIS 5.5.1.1'}
-    - {field: 6, flag: '-W', var: 'system_pass_warn_age', cis: 'CIS 5.5.1.3'}
-  loop_control:
-    label: "{{ item.cis }}"
-
-- name: Set password aging fields for existing user account
-  ansible.builtin.command:
-    argv: [chage, '{{ item.item.flag }}', '{{ vars[item.item.var] }}', '{{ real_user_id }}']
-  register: _chage_set_result
-  when:
-    - not csb_rhel
-    - not system_is_container
-    - real_user_id | length > 0
-    - item.rc | default(1) == 0
-    - item.stdout | default('') | trim != vars[item.item.var] | string
-  changed_when: _chage_set_result.rc == 0
-  failed_when: false
-  loop: "{{ system_chage_fields.results | default([]) }}"
-  loop_control:
-    label: "{{ item.item.cis }}"
-
-- name: Warn if any password aging chage command failed
+- name: Warn if password aging chage command failed
   ansible.builtin.debug:
     msg: >-
-      WARNING: chage {{ item.item.item.flag }} {{ vars[item.item.item.var] }} {{ real_user_id }} exited {{ item.rc }}
-      — {{ item.item.item.cis }} password aging may not be enforced
-  loop: "{{ _chage_set_result.results | default([]) }}"
+      WARNING: chage for {{ real_user_id }} exited {{ _chage_result.rc }} —
+      CIS 5.5.1.1/5.5.1.2/5.5.1.3/5.5.1.5 password aging and inactive lockout may not be enforced
   when:
-    - item.rc | default(0) != 0
-    - not (item.skipped | default(false))
-    - not csb_rhel
-    - not system_is_container
-
-- name: Check if real user account exists in system passwd database
-  ansible.builtin.getent:
-    database: passwd
-    key: "{{ real_user_id }}"
-    fail_key: false
-  register: system_real_user_exists
-  check_mode: false
-  when:
-    - real_user_id | length > 0
-    - not system_is_container  # getent uses NSS/systemd-userdb D-Bus; crashes Debian 13 container PID 1
+    - _chage_result.rc | default(0) != 0
 
 # --- Rootless container prerequisites (subuid/subgid for podman) ---
 - name: Ensure rootless podman prerequisites for user
@@ -380,8 +296,6 @@
         creates: /var/lib/systemd/linger/{{ real_user_id }}
       register: _linger_result
       failed_when: false
-      when:
-        - (system_real_user_exists.ansible_facts.getent_passwd | default({}))[real_user_id] is not none
       # Without linger, systemd kills the user session (and podman.socket) when the
       # provisioning SSH session ends. DOCKER_HOST in dotfiles points to the socket.
 

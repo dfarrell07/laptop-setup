@@ -1,14 +1,13 @@
 ---
 # roles/system/tasks/kernel_modules_kind.yml
 # --- Kernel modules for kind ---
+# Included only from main.yml, which guards on not system_is_container and not csb_rhel (loading
+# iptables modules in a Podman container disrupts host networking; RHEL CSB runs kind in the dev container).
 - name: Check if modules_disabled ratchet is active
   ansible.builtin.slurp:
     src: /proc/sys/kernel/modules_disabled
   register: _modules_disabled_state
   failed_when: false
-  when:
-    - not csb_rhel
-    - not system_is_container
 
 - name: Check if required kernel modules are already loaded
   ansible.builtin.shell:
@@ -22,8 +21,6 @@
   check_mode: false
   failed_when: false
   when:
-    - not csb_rhel
-    - not system_is_container
     - _modules_disabled_state.content is defined
     - (_modules_disabled_state.content | b64decode | trim) == '1'
 
@@ -47,8 +44,6 @@
       The service runs after networking and firewalld during boot and at the end
       of system provisioning.
   when:
-    - not csb_rhel
-    - not system_is_container
     - _modules_disabled_state.content is defined
     - (_modules_disabled_state.content | b64decode | trim) == '1'
     - _required_modules_loaded.rc != 0
@@ -73,10 +68,6 @@
     - vhost_net  # vhost kernel acceleration for VMs
     - vhost_vsock  # VM sockets for host-guest communication
   when:
-    - not csb_rhel  # RHEL CSB: kind runs inside the dev container; host modules unneeded
-    - not system_is_container
-    # Loading iptables modules in a Podman container disrupts host iptables/networking
-    # and kills the container connection; modules are managed by the host on container hosts.
     # Skip cross-vendor KVM modules: attempting kvm_intel on AMD (or kvm_amd on Intel) returns
     # rc=1 and would trigger the spurious "networking may be broken" warning below.
     - not (item == 'kvm_intel' and ansible_processor | join(' ') | lower is search('amd'))
@@ -94,14 +85,13 @@
   changed_when: false
   register: sysctl_kind_result
   # Keys absent if module not yet loaded (ENOENT) or kernel too old (EINVAL) — tolerate both;
-  # write-once keys (EPERM, e.g. kernel.unprivileged_bpf_disabled on Fedora 44) also tolerated
+  # EPERM when the value is already locked at 1 also tolerated
   failed_when: >
     sysctl_kind_result.rc != 0 and
     (sysctl_kind_result.stderr_lines | length == 0 or
     sysctl_kind_result.stderr_lines |
     reject('search', 'No such file or directory|invalid argument|permission denied|operation not permitted', ignorecase=True) |
     list | length > 0)
-  when: not system_is_container
 
 - name: Warn if any kernel module failed to load
   ansible.builtin.debug:

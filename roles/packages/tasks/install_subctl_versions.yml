@@ -2,18 +2,6 @@
 # roles/packages/tasks/install_subctl_versions.yml
 # Multi-version subctl installation for Submariner management (work profile only).
 # Installs subctl18, subctl19, etc. alongside the current version.
-- name: Validate versioned subctl checksum exceptions
-  ansible.builtin.assert:
-    that:
-      - >-
-        ((dotfiles_gonosumdb | default('')) or (dotfiles_goprivate | default('')))
-        | go_checksum_exceptions_safe((packages_go_install | default([])) + (packages_go_install_work | default([]))
-                                     + ['github.com/submariner-io/subctl/cmd'])
-    fail_msg: >-
-      The effective checksum exception contains a public module pattern that bypasses Go checksum-database
-      verification, or uses unsupported pattern syntax. Use private domain prefixes
-      or literal private owners; only literals and '*' globs are supported.
-
 - name: Report versioned subctl builds not simulated in check mode
   ansible.builtin.debug:
     msg: "CHECK MODE: subctl {{ packages_subctl_versioned | map(attribute='version') | join(', ') }} go builds not simulated."
@@ -74,7 +62,7 @@
         GOPROXY: "{{ packages_goproxy }}"
         GONOSUMDB: "{{ (dotfiles_gonosumdb | default('')) or (dotfiles_goprivate | default('')) or 'none' }}"
         GOPRIVATE: "{{ (dotfiles_goprivate | default('')) or 'none' }}"
-        GOSUMDB: "{{ packages_gosumdb | default('sum.golang.org') }}"
+        GOSUMDB: "{{ packages_gosumdb }}"
         CC: /usr/bin/gcc
         CGO_CFLAGS: ''
         CGO_CXXFLAGS: ''

@@ -241,53 +241,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes zsh dconf-cli dbus-x11 python3-gi python3-psutil
 
-      - name: Run script and template regression tests
-        run: |
-          python3 scripts/test-config-parser.py
-          python3 scripts/test-ssh-known-hosts.py
-          python3 scripts/test-sshd-template.py
-          python3 scripts/test-smoke-test.py
-          python3 scripts/test-claude-privacy.py
-          python3 scripts/test-laptop-migration.py
-          python3 scripts/test-workstation-audit.py
-          python3 scripts/test-go-checksum.py
-          python3 scripts/test-sysctl-template.py
-          python3 scripts/test-rendered-configs.py
-          python3 scripts/test-module-args.py
-          python3 scripts/test-pam-faillock-debian.py
-          python3 scripts/test-critical-assertions.py
-          python3 scripts/test-claude-settings-merge.py
-          python3 scripts/test-usb-add.py
-          bash scripts/test-hooks-security.sh
-
-      - name: Run pre-push enforcement regression tests
-        run: |
-          python3 scripts/test-pre-push.py
-          python3 scripts/test-vault-stub.py
-          python3 scripts/test-workflow-guards.py
-          python3 scripts/test-pinned-git.py
-          python3 scripts/test-hook-baselines.py
-          python3 scripts/test-bootstrap-hooks.py
-          python3 scripts/test-aerospace-terminal.py
-          python3 scripts/test-audit-policy.py
-          python3 scripts/test-brew-update.py
-          python3 scripts/test-chrony-template.py
-          python3 scripts/test-kernel-cmdline.py
-          python3 scripts/test-podman-distrobox.py
-
-      - name: Check production Ansible assertions and collection source comparisons
-        run: |
-          python3 scripts/test-ansible-input-guards.py
-          python3 scripts/test-collection-source-verifier.py
-          python3 scripts/test-rollout.py
-
-      - name: Check environment and argument guards
+      - name: Run script regression tests
         env:
           SKIP_GPG_VERIFY: "1"
-        run: bash test-var-override.sh
-
-      - name: Run queue poller unit tests
-        run: bash scripts/test-queue-poller.sh
+        run: make test-scripts test-poller
 
   collections-manifest:
     name: Collection Manifest Verification
@@ -628,7 +585,7 @@ jobs:
             # - .github/workflows/* for CI/CD pipeline definitions
             critical_pattern='^(scripts/|\.githooks/|collections-dist/|\.github/'
             critical_pattern+='|Makefile(\.sha256)?$|roles/(packages|repos_dnf)/defaults/main\.yml$'
-            critical_pattern+='|requirements-(test\.lock|bootstrap\.txt)$|package(-lock)?\.json$|\.gitleaks\.toml$|\.gpg-enforcement$)'
+            critical_pattern+='|requirements-test\.lock$|package(-lock)?\.json$|\.gitleaks\.toml$|\.gpg-enforcement$)'
             changed_paths=$(git diff-tree --root --no-commit-id --name-only -r -m "$commit")
             if grep -Eq "$critical_pattern" <<< "$changed_paths"; then
               if [ "$gpg_policy" = enabled ]; then
@@ -786,28 +743,10 @@ jobs:
           exit "$failed"
 
       - name: Verify npm package signatures
-        id: npm_signatures
-        continue-on-error: true
         run: npm audit signatures
 
       - name: Check for known vulnerabilities
-        id: npm_audit
-        continue-on-error: true
         run: npm audit --audit-level=moderate
-
-      - name: Check npm audit results
-        if: always()
-        run: |
-          failed=0
-          if [ "${{ steps.npm_signatures.outcome }}" = "failure" ]; then
-            echo "npm audit signatures failed"
-            failed=1
-          fi
-          if [ "${{ steps.npm_audit.outcome }}" = "failure" ]; then
-            echo "npm audit --audit-level=moderate failed"
-            failed=1
-          fi
-          exit "$failed"
 
   gitleaks:
     name: Secret Detection
@@ -853,8 +792,6 @@ jobs:
           persist-credentials: false
 
       - name: Download actionlint  # Last bumped: 2026-08-05; check https://github.com/rhysd/actionlint/releases
-        id: actionlint_download
-        continue-on-error: true
         env:
           ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
         run: |
@@ -864,13 +801,9 @@ jobs:
           chmod +x actionlint
 
       - name: Run actionlint
-        id: actionlint
-        if: steps.actionlint_download.outcome == 'success'
         run: ./actionlint -color
 
       - name: Download zizmor  # Last bumped: 2026-08-05; check https://github.com/zizmorcore/zizmor/releases
-        id: zizmor_download
-        continue-on-error: true
         env:
           ZIZMOR_SHA256: dd96df044a6e8538d5f423790f453bdd03d49e5b2bcc38214acc41a2f1297839
         run: |
@@ -880,24 +813,7 @@ jobs:
           chmod +x zizmor
 
       - name: Run zizmor
-        id: zizmor
-        if: steps.zizmor_download.outcome == 'success'
         run: ./zizmor .github/
-
-      # scan steps fail the job directly; only download failures need aggregation
-      - name: Check security scanner results
-        if: always()
-        run: |
-          failed=0
-          if [ "${{ steps.actionlint_download.outcome }}" = "failure" ]; then
-            echo "actionlint download failed"
-            failed=1
-          fi
-          if [ "${{ steps.zizmor_download.outcome }}" = "failure" ]; then
-            echo "zizmor download failed"
-            failed=1
-          fi
-          exit "$failed"
 
   galaxy-recheck:
     name: Galaxy Collections Runtime Verification
@@ -909,71 +825,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
-        with:
-          python-version: '3.14'
-
       - name: Re-verify collections against Galaxy API at CI time
         run: |
-          # SECURITY: Detect supply chain drift by re-verifying SHA256SUMS against Galaxy API.
-          # This job runs at CI time (pull_request + main push) and guards against:
-          #   1. SHA256SUMS files modified to match malicious artifacts
-          #   2. Galaxy API changes (collection yanked, version replaced, hash updated)
-          #   3. Network-level tampering (DNS hijacking, MITM, CDN replacement)
-          # Note: This does NOT protect against simultaneous galaxy.ansible.com compromise
-          # (both CDN and API compromised in sync), but catches most supply chain attacks.
-          set -euo pipefail
-
-          GALAXY_API="https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/index"
-          FAIL=0
-
-          # Specs: namespace/name/version/filename
-          for spec in \
-            "ansible/posix/2.2.2/ansible-posix-2.2.2.tar.gz" \
-            "community/general/13.5.0/community-general-13.5.0.tar.gz" \
-            "community/library_inventory_filtering_v1/1.1.5/community-library_inventory_filtering_v1-1.1.5.tar.gz" \
-            "containers/podman/1.21.2/containers-podman-1.21.2.tar.gz"; do
-
-            ns=$(echo "$spec" | cut -d/ -f1)
-            name=$(echo "$spec" | cut -d/ -f2)
-            ver=$(echo "$spec" | cut -d/ -f3)
-            file=$(echo "$spec" | cut -d/ -f4)
-
-            # Fetch Galaxy API hash
-            api_hash=$(curl -sf "${GALAXY_API}/${ns}/${name}/versions/${ver}/" \
-              | python3 -c "import sys,json; print(json.load(sys.stdin)['artifact']['sha256'])" 2>/dev/null || echo "")
-
-            # Compute local file hash
-            local_hash=$(sha256sum "collections-dist/${file}" 2>/dev/null | awk '{print $1}' || echo "")
-
-            if [ -z "$api_hash" ]; then
-              echo "WARN: ${file} — could not fetch Galaxy API hash (network issue or collection removed)"
-              continue
-            elif [ -z "$local_hash" ]; then
-              echo "ERROR: ${file} — local file missing or unreadable"
-              FAIL=1
-            elif [ "$api_hash" = "$local_hash" ]; then
-              echo "PASS: ${file} matches Galaxy API (${api_hash:0:16}...)"
-            else
-              echo "ERROR: ${file} — MISMATCH"
-              echo "  Galaxy API hash: ${api_hash}"
-              echo "  Local file hash: ${local_hash}"
-              echo "  ACTION: If expected (manual collection update), run: make vendor-collections"
-              FAIL=1
-            fi
-          done
-
-          if [ "$FAIL" -eq 1 ]; then
-            echo ""
-            echo "Collection verification failed. This may indicate:"
-            echo "  - Collections were updated but SHA256SUMS not re-generated (run: make vendor-collections)"
-            echo "  - Galaxy removed/replaced a collection version (uncommon, contact maintainer)"
-            echo "  - Supply chain tampering detected (audit git log, review CI logs, contact maintainers)"
-            exit 1
-          fi
-          echo ""
-          echo "All collections verified against Galaxy API."
+          # SECURITY: detect drift between vendored tarballs and the Galaxy API at CI time.
+          scripts/verify-collections-galaxy.sh
 
   upstream-collections-check:
     name: Collections Upstream Source Verification

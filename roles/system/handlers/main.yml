@@ -13,11 +13,9 @@
   become: true
   register: sysctl_system_result
   changed_when: false
-  # Keys absent if module not yet loaded (ENOENT) or kernel too old (EINVAL) — tolerate both;
-  # write-once keys (EPERM, e.g. kernel.unprivileged_bpf_disabled on Fedora 44) also tolerated
+  # Keys absent if module not yet loaded (ENOENT) or kernel too old (EINVAL) — tolerate both.
   # Any EPERM line is tolerated; the only expected source is kernel.unprivileged_bpf_disabled
   # (checked and warned about by the handlers below)
-  # (Fedora 44 CONFIG_BPF_UNPRIV_DEFAULT_OFF=y locks this to 2 before sysctl.d runs)
   failed_when: >
     sysctl_system_result.rc != 0 and
     (sysctl_system_result.stderr_lines | length == 0 or
@@ -26,8 +24,8 @@
     list | length > 0)
   when: not system_is_container
 
-# kernel.unprivileged_bpf_disabled can be write-locked by the kernel (CONFIG_BPF_UNPRIV_DEFAULT_OFF
-# or a prior value of 1), so sysctl --system may leave it different from the intended value.
+# kernel.unprivileged_bpf_disabled gives EPERM when already locked at 1, so sysctl --system may leave
+# it different from the intended value.
 - name: Read kernel.unprivileged_bpf_disabled after applying sysctl
   ansible.builtin.slurp:
     src: /proc/sys/kernel/unprivileged_bpf_disabled

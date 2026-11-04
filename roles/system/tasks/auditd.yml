@@ -33,25 +33,12 @@
   when:
     - is_apt
     - not system_is_container
-  register: _apt_audit_pkg_install
-  failed_when: false
-
-- name: Fail if auditd package install failed (Debian/Ubuntu)
-  ansible.builtin.fail:
-    msg: >-
-      auditd package install failed (rc={{ _apt_audit_pkg_install.rc | default('n/a') }}).
-      The host will run permanently unaudited. Fix the package install failure
-      (network error, dpkg conflict, or repo unavailability) then re-run provisioning.
-  when:
-    - _apt_audit_pkg_install is failed
-    - not system_is_container
-    - not csb_rhel
 
 - name: Apply auditd rules and configuration
   when:
     - not csb_rhel  # RHEL CSB: IT owns auditing; audit package not installed in container CI (see comment above)
     - not system_is_container
-    - (is_dnf and _audit_pkg_install.rc | default(0) == 0) or (is_apt and _apt_audit_pkg_install is not failed)
+    - is_dnf or is_apt
   block:
     - name: Find task-wide audit suppression rules
       ansible.builtin.find:

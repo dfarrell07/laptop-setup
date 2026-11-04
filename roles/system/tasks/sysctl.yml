@@ -1,9 +1,6 @@
 ---
 # roles/system/tasks/sysctl.yml
 # --- Sysctl hardening ---
-# Merge system_sysrq into the dict so config.yml can override without replacing
-# the entire system_sysctl_hardening dict. Default is 0 (CIS); set 176 in
-# config.yml for sync(16)+remount-ro(32)+reboot(128) on a kernel dev workstation.
 - name: Assert accept_ra=1 is not used with ip_forward=1
   when: not system_is_container
   ansible.builtin.assert:
@@ -28,73 +25,6 @@
         group: root
         mode: "0755"
 
-    - name: Assert no toggle-managed or hardening-critical keys in extra dicts
-      ansible.builtin.assert:
-        that:
-          - "(_item.dict.keys() | intersect(_managed_keys)) | length == 0"
-        fail_msg: >-
-          Hardening-critical keys
-          {{ _item.dict.keys() | intersect(_managed_keys) | join(', ') }}
-          found in {{ _item.name }}. These keys enforce
-          CIS/STIG security requirements and cannot be overridden via
-          system_sysctl_extra or system_sysctl_extra_additional. Document security exception with
-          your security team before attempting to modify these keys.
-      vars:
-        _managed_keys:
-          - net.ipv4.ip_forward
-          - net.ipv6.conf.all.forwarding
-          - kernel.kexec_load_disabled
-          - kernel.modules_disabled
-          - kernel.io_uring_disabled
-          - kernel.sysrq
-          - kernel.panic
-          - kernel.panic_on_oops
-          - kernel.unprivileged_bpf_disabled
-          - net.core.bpf_jit_harden
-          - net.ipv6.conf.all.accept_ra
-          - net.ipv6.conf.default.accept_ra
-          - kernel.perf_event_paranoid
-          - kernel.core_pattern
-          - kernel.kptr_restrict
-          - kernel.dmesg_restrict
-          - fs.suid_dumpable
-          - kernel.randomize_va_space
-          - net.ipv4.conf.all.send_redirects
-          - net.ipv4.conf.default.send_redirects
-          - net.ipv4.conf.all.accept_redirects
-          - net.ipv4.conf.default.accept_redirects
-          - net.ipv6.conf.all.accept_redirects
-          - net.ipv6.conf.default.accept_redirects
-          - net.ipv4.conf.all.accept_source_route
-          - net.ipv4.conf.default.accept_source_route
-          - net.ipv6.conf.all.accept_source_route
-          - net.ipv6.conf.default.accept_source_route
-          - net.ipv4.conf.all.rp_filter
-          - net.ipv4.conf.default.rp_filter
-          - net.ipv4.conf.all.log_martians
-          - net.ipv4.conf.default.log_martians
-          - net.ipv4.conf.all.secure_redirects
-          - net.ipv4.conf.default.secure_redirects
-          - net.ipv4.icmp_echo_ignore_broadcasts
-          - net.ipv4.icmp_ignore_bogus_error_responses
-          - fs.protected_regular
-          - fs.protected_hardlinks
-          - fs.protected_symlinks
-          - fs.protected_fifos
-          - net.ipv4.tcp_syncookies
-          - net.ipv4.tcp_rfc1337
-          - net.ipv6.conf.all.use_tempaddr
-          - net.ipv6.conf.default.use_tempaddr
-          - kernel.yama.ptrace_scope
-      loop:
-        - name: system_sysctl_extra
-          dict: "{{ system_sysctl_extra }}"
-        - name: system_sysctl_extra_additional
-          dict: "{{ system_sysctl_extra_additional }}"
-      loop_control:
-        loop_var: _item
-        label: "{{ _item.name }}"
-
     - name: Validate system_sysctl_hardening is a non-empty dict (defense-in-depth)
       # extra-vars (precedence 22) beats set_fact (18); -esystem_sysctl_hardening={}
       # replaces the role-default dict before this task runs.  A mapping check alone
@@ -114,6 +44,49 @@
           static CIS/STIG hardening entries from /etc/sysctl.d/90-hardening.conf.
           Do not override system_sysctl_hardening on the command line.
 
+    # kernel.modules_disabled is not rendered here; kernel-modules-lockdown.service applies it in order.
+    - name: Resolve toggle-managed sysctl values
+      ansible.builtin.set_fact:
+        _sysctl_toggle_values:
+          kernel.sysrq: "{{ system_sysrq | int }}"
+          net.ipv6.conf.all.accept_ra: "{{ system_ipv6_accept_ra | int }}"
+          net.ipv6.conf.default.accept_ra: "{{ system_ipv6_accept_ra | int }}"
+          net.core.bpf_jit_harden: "{{ system_bpf_jit_harden | int }}"
+          kernel.unprivileged_bpf_disabled: "{{ system_unprivileged_bpf_disabled | int }}"
+          kernel.panic: "{{ system_kernel_panic | int }}"
+          kernel.panic_on_oops: "{{ system_kernel_panic_on_oops | int }}"
+          kernel.core_pattern: "{{ system_core_pattern }}"
+          kernel.yama.ptrace_scope: "{{ system_ptrace_scope | int }}"
+          kernel.perf_event_paranoid: "{{ system_perf_event_paranoid | int }}"
+          kernel.kexec_load_disabled: "{{ system_kexec_load_disabled | int }}"
+          kernel.io_uring_disabled: "{{ system_io_uring_disabled | int }}"
+          net.ipv4.ip_forward: "{{ system_enable_ip_forward | bool | int }}"
+          net.ipv6.conf.all.forwarding: "{{ system_enable_ip_forward | bool | int }}"
+
+    - name: Assert no toggle-managed or hardening-critical keys in extra dicts
+      ansible.builtin.assert:
+        that:
+          - "(_item.dict.keys() | intersect(_managed_keys)) | length == 0"
+        fail_msg: >-
+          Managed sysctl keys
+          {{ _item.dict.keys() | intersect(_managed_keys) | join(', ') }}
+          found in {{ _item.name }}. Toggle-managed keys (sysrq, panic, ptrace_scope, io_uring,
+          ip_forward, accept_ra, ...) are set through their system_* toggle variable in config.yml
+          (see default.config.yml), not through system_sysctl_extra or system_sysctl_extra_additional.
+          Static CIS/STIG keys (rp_filter, kptr_restrict, suid_dumpable, ...) cannot be overridden at all.
+      vars:
+        _managed_keys: >-
+          {{ (system_sysctl_hardening.keys() | reject('eq', 'vm.swappiness') | list)
+          + (_sysctl_toggle_values.keys() | list) + ['kernel.modules_disabled'] }}
+      loop:
+        - name: system_sysctl_extra
+          dict: "{{ system_sysctl_extra }}"
+        - name: system_sysctl_extra_additional
+          dict: "{{ system_sysctl_extra_additional }}"
+      loop_control:
+        loop_var: _item
+        label: "{{ _item.name }}"
+
     # zram swap lives in RAM, so the swap-persistence rationale for vm.swappiness=1 does not
     # apply; on zram-only hosts it only stops the kernel compressing idle pages.
     - name: Read active swap devices
@@ -132,23 +105,9 @@
 
     - name: Merge configurable sysctl values into hardening dict
       ansible.builtin.set_fact:
-        system_sysctl_hardening: "{{ system_sysctl_hardening | combine({
-            'kernel.sysrq': system_sysrq | int,
-            'net.ipv6.conf.all.accept_ra': system_ipv6_accept_ra | int,
-            'net.ipv6.conf.default.accept_ra': system_ipv6_accept_ra | int,
-            'net.core.bpf_jit_harden': system_bpf_jit_harden | int,
-            'kernel.unprivileged_bpf_disabled': system_unprivileged_bpf_disabled | int,
-            'kernel.panic': system_kernel_panic | int,
-            'kernel.panic_on_oops': system_kernel_panic_on_oops | int,
-            'kernel.core_pattern': system_core_pattern,
-            'kernel.yama.ptrace_scope': system_ptrace_scope | int,
-            'kernel.perf_event_paranoid': system_perf_event_paranoid | int,
-            'kernel.kexec_load_disabled': system_kexec_load_disabled | int,
-            'kernel.modules_disabled': system_modules_disabled | int,
-            'kernel.io_uring_disabled': system_io_uring_disabled | int,
-            'net.ipv4.ip_forward': system_enable_ip_forward | bool | int,
-            'net.ipv6.conf.all.forwarding': system_enable_ip_forward | bool | int
-          }) | combine(system_sysctl_extra) | combine(system_sysctl_extra_additional) }}" # noqa: jinja[spacing]
+        system_sysctl_hardening: >-
+          {{ system_sysctl_hardening | combine(_sysctl_toggle_values)
+          | combine(system_sysctl_extra) | combine(system_sysctl_extra_additional) }}
 
     - name: Deploy sysctl hardening config
       ansible.builtin.template:
@@ -156,7 +115,7 @@
         dest: /etc/sysctl.d/90-hardening.conf
         mode: "0644"
       notify: Sysctl config changed
-      # EPERM for kernel.unprivileged_bpf_disabled (write-locked on Fedora 44) is
+      # EPERM for kernel.unprivileged_bpf_disabled (already locked at 1) is
       # tolerated in the handler's failed_when (handlers/main.yml).
 
 - name: Set ip_forward on RHEL CSB (Tailscale/kind; SCAP skip)

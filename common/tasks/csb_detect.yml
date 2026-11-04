@@ -110,9 +110,8 @@
 
 # ---------------------------------------------------------------------------
 # 4. CSB heuristic: RHEL + fapolicyd + internal CA
-#    Fedora path: (.csb hostname or fapolicyd installed) + internal CA; enforcing fapolicyd not required —
-#    hybrid Fedora CSB may lack enforcing fapolicyd; csb_restricted handles
-#    the container vs. hybrid split downstream.
+#    Fedora path: (.csb hostname or fapolicyd installed) + internal CA; enforcing fapolicyd is not required for
+#    csb_detected; it only selects the container tier below.
 # ---------------------------------------------------------------------------
 - name: Set CSB detected fact
   ansible.builtin.set_fact:
@@ -120,16 +119,6 @@
       {{
         ((is_rhel | bool) and (fapolicyd_installed | bool) and (internal_ca_present | bool))
         or ((is_fedora | bool) and ((_is_csb_hostname | bool) or (fapolicyd_installed | bool)) and (internal_ca_present | bool))
-      }}
-  become: false
-  when: not (_csb_molecule_force | default(false)) and (is_linux | bool) and (is_rhel | bool or is_fedora | bool)
-
-- name: Set CSB restricted fact
-  ansible.builtin.set_fact:
-    csb_restricted: >-
-      {{
-        (csb_detected | bool)
-        and (fapolicyd_enforcing | bool)
       }}
   become: false
   when: not (_csb_molecule_force | default(false)) and (is_linux | bool) and (is_rhel | bool or is_fedora | bool)
@@ -170,7 +159,7 @@
   ansible.builtin.set_fact:
     needs_container_tier: >-
       {{
-        'container' if (csb_restricted | bool)
+        'container' if ((csb_detected | bool) and (fapolicyd_enforcing | bool))
         else ('hybrid' if ((is_rhel | bool) or (csb_detected | bool))
         else 'host-only')
       }}

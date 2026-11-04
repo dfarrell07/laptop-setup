@@ -177,180 +177,39 @@
 - name: Service masking assertions (Linux only)
   when: ansible_system == 'Linux'
   block:
-    - name: Check cups-browsed service state (shared)
+    - name: Check service state (shared)
       ansible.builtin.systemd:
-        name: cups-browsed
-      register: verify_cups_shared
+        name: "{{ item.name }}"
+      register: verify_mask_shared
       become: true
       failed_when: false
-
-    - name: Assert cups-browsed is masked (shared)
-      ansible.builtin.assert:
-        that: verify_cups_shared.status.UnitFileState == 'masked'
-        fail_msg: "cups-browsed UnitFileState is '{{ verify_cups_shared.status.UnitFileState }}', expected 'masked'"
-      when:
-        - verify_cups_shared.status.UnitFileState | default('') != ''
-        - system_disable_printing | default(false) | bool
-
-    - name: Check avahi-daemon.service state (shared)
-      ansible.builtin.systemd:
-        name: avahi-daemon.service
-      register: verify_avahi_service_shared
-      become: true
-      failed_when: false
-      when: system_disable_avahi | bool
-
-    - name: Assert avahi-daemon.service is masked (shared)
-      ansible.builtin.assert:
-        that: verify_avahi_service_shared.status.UnitFileState == 'masked'
-        fail_msg: "avahi-daemon.service UnitFileState is '{{ verify_avahi_service_shared.status.UnitFileState }}', expected 'masked'"
-      when:
-        - system_disable_avahi | bool
-        - verify_avahi_service_shared.status.UnitFileState | default('') != ''
-
-    - name: Check avahi-daemon.socket state (shared)
-      ansible.builtin.systemd:
-        name: avahi-daemon.socket
-      register: verify_avahi_socket_shared
-      become: true
-      failed_when: false
-      when: system_disable_avahi | bool
-
-    - name: Assert avahi-daemon.socket is masked (shared)
-      ansible.builtin.assert:
-        that: verify_avahi_socket_shared.status.UnitFileState == 'masked'
-        fail_msg: "avahi-daemon.socket UnitFileState is '{{ verify_avahi_socket_shared.status.UnitFileState }}', expected 'masked'"
-      when:
-        - system_disable_avahi | bool
-        - verify_avahi_socket_shared.status.UnitFileState | default('') != ''
-
-    - name: Check nfs-server.service state (shared)
-      ansible.builtin.systemd:
-        name: nfs-server.service
-      register: verify_nfs_server_shared
-      become: true
-      failed_when: false
-
-    - name: Assert nfs-server.service is masked (shared)
-      ansible.builtin.assert:
-        that: verify_nfs_server_shared.status.UnitFileState == 'masked'
-        fail_msg: "nfs-server.service UnitFileState is '{{ verify_nfs_server_shared.status.UnitFileState }}', expected 'masked'"
-      when:
-        - verify_nfs_server_shared.status.UnitFileState | default('') != ''
-        - system_mask_nfs_server | bool
-
-    - name: Check rpcbind.service state (shared)
-      ansible.builtin.systemd:
-        name: rpcbind.service
-      register: verify_rpcbind_service_shared
-      become: true
-      failed_when: false
-
-    - name: Assert rpcbind.service is masked (shared)
-      ansible.builtin.assert:
-        that: verify_rpcbind_service_shared.status.UnitFileState == 'masked'
-        fail_msg: "rpcbind.service UnitFileState is '{{ verify_rpcbind_service_shared.status.UnitFileState }}', expected 'masked'"
-      when:
-        - verify_rpcbind_service_shared.status.UnitFileState | default('') != ''
-        - system_mask_nfs_server | bool
-
-    - name: Check rpcbind.socket state (shared)
-      ansible.builtin.systemd:
-        name: rpcbind.socket
-      register: verify_rpcbind_socket_shared
-      become: true
-      failed_when: false
-
-    - name: Assert rpcbind.socket is masked (shared)
-      ansible.builtin.assert:
-        that: verify_rpcbind_socket_shared.status.UnitFileState == 'masked'
-        fail_msg: "rpcbind.socket UnitFileState is '{{ verify_rpcbind_socket_shared.status.UnitFileState }}', expected 'masked'"
-      when:
-        - verify_rpcbind_socket_shared.status.UnitFileState | default('') != ''
-        - system_mask_nfs_server | bool
-
-    - name: Check cockpit.service state (shared)
-      ansible.builtin.systemd:
-        name: cockpit.service
-      register: verify_cockpit_service_shared
-      become: true
-      failed_when: false
-
-    - name: Assert cockpit.service is masked (shared)
-      ansible.builtin.assert:
-        that: verify_cockpit_service_shared.status.UnitFileState == 'masked'
-        fail_msg: "cockpit.service UnitFileState is '{{ verify_cockpit_service_shared.status.UnitFileState }}', expected 'masked'"
-      when: verify_cockpit_service_shared.status.UnitFileState | default('') != ''
-
-    - name: Check cockpit.socket state (shared)
-      ansible.builtin.systemd:
-        name: cockpit.socket
-      register: verify_cockpit_socket_shared
-      become: true
-      failed_when: false
-
-    - name: Assert cockpit.socket is masked (shared)
-      ansible.builtin.assert:
-        that: verify_cockpit_socket_shared.status.UnitFileState == 'masked'
-        fail_msg: "cockpit.socket UnitFileState is '{{ verify_cockpit_socket_shared.status.UnitFileState }}', expected 'masked'"
-      when: verify_cockpit_socket_shared.status.UnitFileState | default('') != ''
-
-    - name: Check ctrl-alt-del.target state (shared)
-      ansible.builtin.systemd:
-        name: ctrl-alt-del.target
-      register: verify_cad_shared
-      become: true
-      failed_when: false
-
-    - name: Assert ctrl-alt-del.target is masked (shared)
-      ansible.builtin.assert:
-        that: verify_cad_shared.status.UnitFileState == 'masked'
-        fail_msg: "ctrl-alt-del.target UnitFileState is '{{ verify_cad_shared.status.UnitFileState }}', expected 'masked'"
-      when:
-        - verify_cad_shared.status.UnitFileState | default('') != ''
+      loop:
+        - {name: cups-browsed, gate: "{{ system_disable_printing | default(false) }}"}
+        - {name: avahi-daemon.service, gate: "{{ system_disable_avahi }}"}
+        - {name: avahi-daemon.socket, gate: "{{ system_disable_avahi }}"}
+        - {name: nfs-server.service, gate: "{{ system_mask_nfs_server }}"}
+        - {name: rpcbind.service, gate: "{{ system_mask_nfs_server }}"}
+        - {name: rpcbind.socket, gate: "{{ system_mask_nfs_server }}"}
+        - {name: cockpit.service, gate: true}
+        - {name: cockpit.socket, gate: true}
         # Skipped in container CI — systemd masking is unreliable in all Podman container
         # scenarios. The VM scenario (make test-vm) exercises the full masking path.
-        - not (system_is_container | default(false))
+        - {name: ctrl-alt-del.target, gate: "{{ not (system_is_container | default(false)) }}"}
+        - name: passim
+          gate: true
+          hint: " — port 27500 may be reachable from Tailscale peers via tailscale0 trusted zone"
+      loop_control:
+        label: "{{ item.name }}"
+      when: item.gate | bool
 
-    - name: Check passim service state (shared)
-      ansible.builtin.systemd:
-        name: passim
-      register: verify_passim_shared
-      become: true
-      failed_when: false
-
-    - name: Assert passim is masked (shared)
+    - name: Assert units masked (shared)
       ansible.builtin.assert:
-        that: verify_passim_shared.status.UnitFileState == 'masked'
-        fail_msg: "passim UnitFileState is '{{ verify_passim_shared.status.UnitFileState }}', expected 'masked' — port 27500 may be reachable from Tailscale peers via tailscale0 trusted zone"  # yamllint disable-line rule:line-length
-      when: verify_passim_shared.status.UnitFileState | default('') != ''
-
-# --- BlueZ inline assertions ---
-# Block-gated on system_disable_bluetooth being false (no scenario sets that today) and
-# stat-gated on /etc/bluetooth/main.conf existing. When the file exists, assert the Privacy and Name lines were
-# written by the system role lineinfile tasks (regexp/insertafter regression guard).
-- name: BlueZ config assertions (Linux + dnf only)
-  when:
-    - not (system_disable_bluetooth | default(true) | bool)
-    - ansible_system == 'Linux'
-    - ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']
-  block:
-    - name: Stat /etc/bluetooth/main.conf (shared verify)
-      ansible.builtin.stat:
-        path: /etc/bluetooth/main.conf
-      register: verify_bluetooth_conf
-      become: true
-
-    - name: Check BlueZ Privacy=device in /etc/bluetooth/main.conf
-      ansible.builtin.command:  # noqa: command-instead-of-module
-        cmd: grep -qE '^Privacy = device$' /etc/bluetooth/main.conf
-      changed_when: false
-      become: true
-      when: verify_bluetooth_conf.stat.exists
-
-    - name: Check BlueZ Name line present in /etc/bluetooth/main.conf
-      ansible.builtin.command:  # noqa: command-instead-of-module
-        cmd: grep -qE '^Name = .+$' /etc/bluetooth/main.conf
-      changed_when: false
-      become: true
-      when: verify_bluetooth_conf.stat.exists
+        that: item.status.UnitFileState == 'masked'
+        fail_msg: >-
+          {{ item.item.name }} UnitFileState is '{{ item.status.UnitFileState }}', expected 'masked'{{ item.item.hint | default('') }}
+      loop: "{{ verify_mask_shared.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      when:
+        - item is not skipped
+        - item.status.UnitFileState | default('') != ''

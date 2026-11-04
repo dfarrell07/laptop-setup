@@ -2,11 +2,9 @@
 packages_install_binaries: true  # fallback; authoritative definition in group_vars/all/vars.yml; consumed by packages, claude, distrobox
 fapolicyd_enforcing: false  # fallback; authoritative value in group_vars/all/vars.yml
 csb_detected: false  # fallback; authoritative in group_vars/all/vars.yml
-csb_rhel: false  # fallback; authoritative in group_vars/all/vars.yml
 is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml
-system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml
 distrobox_enabled: true  # set false in config.yml to skip Play 3; site.yml role when-guard
-distrobox_use_host_network: false  # set true only for OVN-K/bpfman; enables --network=host + CAP_NET_ADMIN
+distrobox_use_host_network: false  # set true only for OVN-K/bpfman; enables --network=host
 
 distrobox_fedora_release: '44'
 distrobox_container_digest: "sha256:27dc67339a01d10400322b1a008387cc24a85d1b092e6f56867732a0cd96da00"  # yamllint disable-line rule:line-length
@@ -100,7 +98,7 @@ distrobox_packages:
   - strace
   - bpftool  # eBPF program/map introspection (essential for bpfman development)
   - bpftrace  # eBPF dynamic tracing (container-side; shares host kernel with distrobox)
-  - perf      # kernel performance profiling; CAP_PERFMON granted by distrobox additional_flags
+  - perf      # kernel performance profiling
   - gdb       # C/eBPF program debugger; required by rust-gdb; Go debugging fallback
   - rust-gdb  # Rust GDB pretty-printers (separate Fedora package from rust)
   - delve     # Go-native debugger (dlv) — goroutine-aware; GDB insufficient for OVN-K/bpfman Go runtime inspection

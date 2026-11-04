@@ -24,7 +24,7 @@ class KernelCmdlineTests(unittest.TestCase):
                                                  ('', 'intel', False, False)]:
             with self.subTest(mode=mode, processor=processor):
                 settings = self.settings(mode, processor, free, passthrough)
-                original = 'root=UUID=fixture ro rd.luks.uuid=preserve vsyscall=emulate init_on_free=0 lockdown=none'
+                original = 'root=UUID=fixture ro rd.luks.uuid=preserve vsyscall=emulate init_on_free=0 lockdown=none iommu=pt'
                 merged = compiler.merge_arguments(original, settings)
                 arguments = shlex.split(merged)
                 self.assertIn('root=UUID=fixture', arguments)

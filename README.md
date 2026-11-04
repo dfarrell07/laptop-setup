@@ -50,19 +50,6 @@ Disabled chunks are skipped by every make run, and a bare `ansible-playbook` run
 them. A chunk's prerequisites must be enabled too (the check names what is missing). The chunk list, in
 recommended order, is `group_vars/all/rollout.yml`; the design is in [docs/rollout-plan.md](docs/rollout-plan.md).
 
-## Everyday commands
-
-| Command | What it does |
-| --- | --- |
-| `make status` | Chunks on/off, risk, sudo needs, next suggestion |
-| `make plan CHUNK=x` / `make chunk-x` / `make verify CHUNK=x` | Preview, apply, check one chunk (high-risk ones ask you to type the name) |
-| `make check` | Full dry run of the enabled list (sudo) |
-| `make all` / `make update` | Apply everything enabled / also update collections and pull repos |
-| `make dotfiles`, `make packages`, ... | One role, skipping the high-risk prompt; prefer `make chunk-x` for high-risk chunks |
-| `make backup` | Back up dotfiles before re-provisioning |
-| `make smoke-test` | Verify a provisioned machine |
-| `make lint`, `make syntax-check`, `make test-scripts`, `make test` | Checks before committing |
-
 [CLAUDE.md](CLAUDE.md) has the full command reference and the first-time setup notes (reboot, `gh auth login`,
 Tailscale); `make help` lists the main targets.
 

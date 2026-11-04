@@ -4,7 +4,7 @@
     {{ key | to_json }}: {{ value | to_json }}{{ "," if not loop.last else "" }}
 {% endfor %}
   },
-  "sandbox": {{ dict(claude_sandbox_config, enableWeakerNestedSandbox=(claude_nested_sandbox | bool)) | to_json }},
+  "sandbox": {"enabled": true, "allowUnsandboxedCommands": false, "failIfUnavailable": true, "enableWeakerNestedSandbox": {{ claude_nested_sandbox | bool | lower }}},
   "enableAllProjectMcpServers": {{ claude_enable_all_project_mcp_servers | to_json }},
   "permissions": {
     "deny": [
