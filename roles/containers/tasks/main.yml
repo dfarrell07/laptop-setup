@@ -324,17 +324,17 @@
 
 - name: Warn when system-level registries.conf skips FQIN enforcement
   ansible.builtin.debug:
-    # A user-level drop-in overrides IT's unqualified-search-registries, which would break
-    # short-name pulls from corporate registries. If IT's system file does not define
-    # unqualified-search-registries, FQIN enforcement can safely be deployed: set
+    # A user-level drop-in overrides the system file's unqualified-search-registries, which would
+    # break short-name pulls from corporate registries on RHEL CSB (IT-managed file). On Fedora the
+    # file is the containers-common default; if every image you pull is fully qualified, set
     # containers_enforce_fqin_override: true in config.yml.
-    # Verify IT's file: grep unqualified-search-registries /etc/containers/registries.conf
+    # Check the file: grep unqualified-search-registries /etc/containers/registries.conf
     msg: >-
-      WARN: System-level /etc/containers/registries.conf exists; user-level FQIN enforcement
-      not deployed to avoid overriding IT-managed unqualified-search-registries policy.
-      IT unqualified-search-registries:
-      {{ containers_fqin_it_uqsr.stdout | default('(not set — FQIN enforced by IT)', true) }}.
-      If IT allows short-name pulls (docker.io listed above), namespace-squatting attacks are possible.
+      WARN: System-level /etc/containers/registries.conf exists (IT-managed on RHEL CSB,
+      the containers-common default on Fedora); user-level FQIN drop-in not deployed.
+      Its unqualified-search-registries:
+      {{ (containers_fqin_it_uqsr.stdout | default('', true)) | regex_replace('^[^=]*=\\s*', '') | default('(not set)', true) }}.
+      If docker.io is listed above, non-aliased short names can resolve there (namespace squatting).
       Set containers_enforce_fqin_override: true in config.yml to force user-level enforcement.
     verbosity: 0
   when:
@@ -453,6 +453,7 @@
     - not (system_is_container)  # scope:user systemd start crashes Podman container PID 1
     - containers_prune_enabled | bool
     - not (_prune_daemon_reload.failed | default(false))
+    - not (ansible_check_mode and containers_prune_timer is changed)  # unit only simulated in check mode
   ignore_errors: true  # required: sets .failed=True so Warn task below can trigger; do NOT replace with failed_when: false
 
 - name: Warn if podman-prune.timer failed to enable

@@ -68,9 +68,7 @@ elif command -v gtimeout &>/dev/null; then
 else
   die "'timeout' not found. On macOS: brew install coreutils"
 fi
-for cmd in ykman openssl; do
-  command -v "$cmd" &>/dev/null || die "'$cmd' not found. Install it (ykman: 'make bootstrap' or sudo dnf install -y yubikey-manager; openssl: sudo dnf install -y openssl)"
-done
+command -v ykman &>/dev/null || die "'ykman' not found. Install it: 'make bootstrap' or sudo dnf install -y yubikey-manager"
 [[ -t 0 ]] || die "stdin is not a terminal — this script must be run interactively"
 
 printf "\n%s\n" "═══════════════════════════════════════════════"
@@ -102,8 +100,8 @@ if [[ -f "$VAULT_PASS_SH" ]] && ! grep -qE "^pass=['\"]CHANGE_ME['\"]|ci-dummy-v
 fi
 
 # ── Generate and validate HMAC secret ────────────────────────────────────────
-HMAC_SECRET=$(openssl rand -hex 20) || die "openssl rand failed"
-[[ "$HMAC_SECRET" =~ ^[0-9a-f]{40}$ ]] || die "openssl produced a malformed secret (want 40 hex chars) — entropy source may be broken"
+HMAC_SECRET=$(od -An -N20 -tx1 /dev/urandom | tr -d ' \n') || die "reading /dev/urandom failed"
+[[ "$HMAC_SECRET" =~ ^[0-9a-f]{40}$ ]] || die "malformed secret (want 40 hex chars) — entropy source may be broken"
 
 EXPECTED_OUTPUT=""
 KEY_COUNT=0
@@ -348,8 +346,8 @@ unset BASH_ENV
 set -euo pipefail
 _CHALRESP_HEX=$(printf '%s' 'ansible-vault-laptop-setup' | od -An -tx1 | tr -d ' \n')
 _to=timeout; command -v timeout >/dev/null 2>&1 || _to=gtimeout
-"$_to" 20 ykman otp calculate 2 "$_CHALRESP_HEX" 2>/dev/null || {
-  echo "ERROR: YubiKey not available or touch timed out — insert YubiKey and retry" >&2
+"$_to" 20 ykman otp calculate 2 "$_CHALRESP_HEX" || {
+  echo "ERROR: vault password unavailable: insert exactly one programmed YubiKey and touch it when it blinks (ykman message above)" >&2
   exit 1
 }
 VAULTPASS
@@ -387,18 +385,19 @@ printf "  1. Set a strong FIDO2 PIN and enforce a minimum length (run in this or
 printf "       ykman fido access set-min-length 12  # set 12-char floor first\n"
 printf "                                            # ratchet: cannot shorten without full FIDO reset\n"
 printf "                                            # (full reset wipes all resident keys)\n"
-printf "       ykman fido access force-change        # invalidate any existing PIN shorter than floor\n"
-printf "       ykman fido access change-pin          # set new PIN (must be >=12 chars)\n\n"
+printf "       ykman fido access force-change        # only if a PIN is already set: invalidates one shorter than the floor\n"
+printf "       ykman fido access change-pin          # set (or change) the PIN (must be >=12 chars)\n\n"
 printf "  2. Generate your hardware SSH key (YubiKey must be inserted):\n"
 printf "       # Without -O resident (portable; key stored as file referencing YubiKey):\n"
 printf "       ssh-keygen -t ed25519-sk -O verify-required -f ~/.ssh/id_ed25519_sk\n"
 printf "       # With -O resident (discoverable credential stored on YubiKey itself):\n"
 printf "       ssh-keygen -t ed25519-sk -O resident -O verify-required -f ~/.ssh/id_ed25519_sk\n"
-printf "     Add the public key to GitHub (needs: gh auth login):\n"
+printf "     Add the public key to GitHub (token needs the admin:public_key scope: gh auth refresh -h github.com -s admin:public_key):\n"
 printf "       gh ssh-key add ~/.ssh/id_ed25519_sk.pub --title 'YubiKey'\n\n"
-printf "  3. Populate group_vars/all/vault.yml with your keys:\n"
-printf "       ansible-vault encrypt group_vars/all/vault.yml  # encrypt first\n"
-printf "       ansible-vault edit group_vars/all/vault.yml     # then paste keys\n\n"
+printf "  3. Populate group_vars/all/vault.yml with your keys (from now on every Ansible make target needs the key inserted and a touch):\n"
+printf "       git update-index --skip-worktree group_vars/all/vault.yml  # first: keep the real vault out of commits (the committed one is a stub)\n"
+printf "       ansible-vault encrypt group_vars/all/vault.yml  # then encrypt\n"
+printf "       make vault-edit                                 # then paste keys (multi-line format: see the file header)\n\n"
 printf "  4. Deploy the keys:\n"
 printf "       make chunk-ssh_client\n\n"
 printf "  5. Last, at the console with a second session open: make chunk-ssh_authorized_keys (see docs/rollout-plan.md).\n"

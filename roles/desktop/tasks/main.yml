@@ -29,12 +29,12 @@
       tags: [become]
       register: _desktop_dnf_install
   rescue:
-    - name: Warn if desktop packages install failed
-      ansible.builtin.debug:
+    - name: Fail if desktop packages install failed
+      ansible.builtin.fail:
         msg: >-
-          WARNING: desktop package installation failed: {{ ansible_failed_result.msg | default('unknown error') }}.
+          DESKTOP PACKAGE INSTALL FAILED: {{ ansible_failed_result.msg | default('unknown error') | truncate(300) }}.
           The install is one transaction, so none of the desktop packages were installed; fix the
-          cause (network, repos) and re-run make desktop. Continuing provisioning...
+          cause (network, repos) and re-run make chunk-desktop.
 
 - name: Install desktop packages (apt)
   when: is_apt
@@ -54,12 +54,12 @@
       tags: [become]
       register: _desktop_apt_install
   rescue:
-    - name: Warn if desktop packages install failed (apt)
-      ansible.builtin.debug:
+    - name: Fail if desktop packages install failed (apt)
+      ansible.builtin.fail:
         msg: >-
-          WARNING: desktop package installation failed: {{ ansible_failed_result.msg | default('unknown error') }}.
+          DESKTOP PACKAGE INSTALL FAILED: {{ ansible_failed_result.msg | default('unknown error') | truncate(300) }}.
           The install is one transaction, so none of the desktop packages were installed; fix the
-          cause (network, repos) and re-run make desktop. Continuing provisioning...
+          cause (network, repos) and re-run make chunk-desktop.
 
 # --- Alacritty config ---
 - name: Deploy Alacritty configuration

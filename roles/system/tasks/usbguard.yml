@@ -73,8 +73,8 @@
       notify: Restart usbguard
       when: not _system_usbguard_pending | bool
       # No failed_when: false — a missing or corrupt rules.conf means USBGuard starts
-      # with ImplicitPolicyTarget=block and an empty ruleset, blocking all USB devices
-      # including the keyboard. Template failure must be a hard stop.
+      # with ImplicitPolicyTarget=block and an empty ruleset, blocking every USB device
+      # plugged in later, including a re-plugged keyboard. Template failure must be a hard stop.
 
     - name: Verify USBGuard rules.conf is non-empty before enabling service
       ansible.builtin.stat:
@@ -89,7 +89,7 @@
           - system_usbguard_rules_stat.stat.size | default(0) > 0
         fail_msg: >-
           /etc/usbguard/rules.conf is missing or empty. Starting USBGuard now would block
-          ALL USB devices including the keyboard. Fix the template and re-run before enabling.
+          every USB device plugged in later, including a re-plugged keyboard. Fix the template and re-run before enabling.
       when: not ansible_check_mode
 
     - name: Enforce usbguard-daemon.conf setting {{ item.key }}

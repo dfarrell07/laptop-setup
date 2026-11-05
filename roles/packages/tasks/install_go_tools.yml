@@ -246,12 +246,14 @@
         CGO_ENABLED: '1'  # explicit; some tools (subctl, golangci-lint) require CGO
       loop: "{{ packages_go_install + (packages_go_install_work | default([]) if profile == 'work' else []) }}"
       loop_control:
-        label: "{{ item | regex_replace('@.*', '') | basename }}"
+        label: "{{ item | regex_replace('(/cmd)?@.*', '') | basename }}"
       register: packages_go_results
       # PERMISSION-DENIED IS TRANSIENT: retried via until. Failures are not raised here; the
       # tasks below fail the play on checksum mismatches and otherwise only warn (CSB RHEL
-      # records a ticket).
+      # records a ticket). A task timeout bypasses failed_when, so ignore_errors keeps a
+      # timed-out item (no rc) from ending the play; it is classified below.
       failed_when: false
+      ignore_errors: true
       retries: 3
       delay: 5
       until: |-
@@ -335,7 +337,7 @@
 
 - name: Classify Go tool failures (network vs other)
   ansible.builtin.set_fact:
-    # a task timeout carries no rc/stderr; it is treated as a network failure
+    # a task timeout carries no rc/stderr; it shares the network-failure warning
     _packages_go_network_failed: >-
       {{
         (packages_go_results.results | default([])
@@ -362,11 +364,11 @@
       - TLS handshake timeout
       - temporary failure in name resolution
 
-- name: Warn about Go tools skipped due to network errors
+- name: Warn about Go tools skipped due to network errors or timeouts
   ansible.builtin.debug:
     msg: >-
-      WARNING: Go tool install failed due to network errors (optional tooling; continuing):
-      {{ _packages_go_network_failed | join(', ') }}. Re-run `make packages` when online.
+      WARNING: Go tool install failed due to network errors or the per-tool timeout (optional tooling; continuing):
+      {{ _packages_go_network_failed | join(', ') }}. Re-run `make packages`; the Go build cache keeps progress.
   when:
     - not csb_rhel | bool
     - _packages_go_network_failed | length > 0

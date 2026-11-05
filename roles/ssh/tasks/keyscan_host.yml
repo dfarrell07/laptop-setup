@@ -94,7 +94,7 @@
       ansible.builtin.debug:
         msg: >
           WARNING: ssh-keyscan output contained no lines starting with '{{ _ks_host }}'.
-          known_hosts was not pre-seeded — git clone will prompt on first connection.
+          known_hosts was not pre-seeded — SSH repos on this host are skipped by git_repos until a matching key is seeded.
       when:
         - ssh_keyscan_result is succeeded  # an unreachable host is reported at the end of the block
         - (ssh_keyscan_result.stdout_lines | select('match', '^' + (_ks_host | regex_escape)) | list | length) == 0

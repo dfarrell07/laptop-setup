@@ -37,7 +37,7 @@ rollout_catalog:
     requires: [packages]
     verify: [claude-privacy-tmpfiles, codex]
   repos:
-    desc: Git repository clones and the notes repo
+    desc: Git repository clones and the notes repo (when notes_enabled)
     risk: low
     sudo: false
     requires: [packages]
@@ -59,7 +59,7 @@ rollout_catalog:
     requires: [packages, desktop, dotfiles]
     verify: [login-shell-zsh]
   redhat:
-    desc: Red Hat IT tooling (VPN client, certificates)
+    desc: Red Hat IT tooling (VPN client; RHEL CSB also certificates, splunk shell)
     risk: medium
   repos_dnf:
     desc: Third-party dnf repositories
@@ -75,7 +75,7 @@ rollout_catalog:
   sys_time_dns:
     desc: chrony NTS, DNS-over-TLS, dnf-automatic
     risk: medium
-    verify: [chronyd-service, dnf-automatic]
+    verify: [llmnr-disabled, chronyd-service, dnf-automatic]
   sys_optional:
     desc: Session timeout, AIDE, setuid scan, GRUB password, module-load lock
     risk: medium

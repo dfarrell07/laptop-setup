@@ -99,7 +99,7 @@
       Input: ssh_auth_key_pub (vault) has key type '{{ ssh_auth_key_pub.split()[0] }}'.
       Mechanism: sshd-hardening.conf.j2 PubkeyAcceptedAlgorithms restricts accepted types;
       non-matching types silently rejected at auth time with no fallback.
-      Example: RSA key deployed when only ed25519/ecdsa accepted causes permanent lockout.
+      Example: RSA key deployed when only ed25519/FIDO2 keys are accepted causes permanent lockout.
       Impact: SSH login failure, potential lockout from provisioned machine.
       Fix: Use only {{ ssh_pubkey_accepted_algorithms | join(', ') }}.
   when:

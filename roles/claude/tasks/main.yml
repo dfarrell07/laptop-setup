@@ -76,7 +76,8 @@
       (64 lowercase hex) in config.yml. The sha256 verifies the installer script; the pin sets
       the installed binary version. Hash fetch:
       curl -fsSL {{ claude_install_url }} -o /tmp/claude-install.sh && sha256sum /tmp/claude-install.sh
-      Refresh the hash after each pin bump.
+      Update the hash only when the installer script changes (checksum mismatch);
+      a release or pin bump alone does not change it.
   when:
     - claude_install_method == 'native'
     - packages_install_binaries | bool
@@ -149,18 +150,24 @@
         _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
         _csb_action: >-
           Install Claude Code manually after provisioning:
-          curl -fsSL {{ claude_install_url }} -o /tmp/claude-install.sh && bash /tmp/claude-install.sh
+          curl -fsSL {{ claude_install_url }} -o /tmp/claude-install.sh
+          && echo '{{ claude_install_sha256 }}  /tmp/claude-install.sh' | sha256sum -c -
+          && bash /tmp/claude-install.sh {{ claude_pinned_version }}
         _csb_ticket_summary: "Cannot install Claude Code on CSB (fapolicyd blocks installer)"
         _csb_ticket_body: >-
           The Claude Code installer could not run ({{ claude_install_url }} may be blocked
           by fapolicyd). Install manually after provisioning:
-          curl -fsSL {{ claude_install_url }} -o /tmp/claude-install.sh && bash /tmp/claude-install.sh
+          curl -fsSL {{ claude_install_url }} -o /tmp/claude-install.sh
+          && echo '{{ claude_install_sha256 }}  /tmp/claude-install.sh' | sha256sum -c -
+          && bash /tmp/claude-install.sh {{ claude_pinned_version }}
       when: csb_rhel
     - name: Fail — Claude Code install failed on non-CSB machine
       ansible.builtin.fail:
         msg: >-
           Claude Code install failed ({{ claude_install_url }} may be blocked).
-          Install manually: curl -fsSL {{ claude_install_url }} -o /tmp/claude-install.sh && bash /tmp/claude-install.sh
+          Install manually: curl -fsSL {{ claude_install_url }} -o /tmp/claude-install.sh
+          && echo '{{ claude_install_sha256 }}  /tmp/claude-install.sh' | sha256sum -c -
+          && bash /tmp/claude-install.sh {{ claude_pinned_version }}
       when: not csb_rhel
 
   always:
@@ -257,7 +264,7 @@
   loop_control:
     label: "{{ item | basename }}"
 
-- name: Deploy instance CLAUDE.md (managed by Ansible, use CLAUDE.local.md for local edits)
+- name: Deploy instance CLAUDE.md (managed by Ansible; edits are overwritten each run)
   ansible.builtin.template:
     src: CLAUDE.md.j2
     dest: "{{ item }}/CLAUDE.md"

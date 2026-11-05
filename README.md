@@ -15,8 +15,9 @@ git clone https://github.com/dfarrell07/laptop-setup ~/laptop-setup && cd ~/lapt
 sudo dnf install -y make        # Fedora/RHEL; Debian: apt install make python3-venv; macOS: xcode-select --install + Homebrew
 make bootstrap                  # installs ansible and tools (sudo on Linux), verifies vendored collections, installs git hooks
 cp default.config.yml config.yml   # then edit: replace every CHANGE_ME (desktop_environment, identity), set system_timezone
-make setup-yubikeys             # optional: programs YubiKey slot 2 (overwrites it) and sets up the vault
+make setup-yubikeys             # optional: programs YubiKey slot 2 (overwrites it), writes vault-pass.sh
 make preflight                  # prerequisite checks; fix each [FAIL] line, then re-run (re-run after editing config.yml too)
+make backup-dry-run && make backup   # copy dotfiles, SSH and agent config to ~/laptop-setup-backup-<timestamp> (0700) first
 make status                     # which chunks are on, their risk, whether they need sudo, and the next suggestion
 ```
 
@@ -32,7 +33,7 @@ make verify CHUNK=ssh_client    # run only the smoke checks for that chunk
 ```
 
 Undo steps for every chunk are in [docs/rollout-recovery.md](docs/rollout-recovery.md). When you trust it,
-`make check` (a full dry run, asks for sudo) and `make all` apply everything enabled.
+run `make check` (a full dry run, asks for sudo), then `make all` to apply everything enabled.
 
 The first `make status` creates `.venv` (needs network). Do not run make as root; it asks for sudo when a chunk
 needs it. Run `make all` and any `sys_*` chunk at the local console or inside tmux, not over SSH: the system

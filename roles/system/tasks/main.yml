@@ -385,7 +385,7 @@
     mode: "0644"
   loop: [/etc/issue, /etc/issue.net]
   when:
-    - not csb_rhel  # RHEL CSB: IT maintains compliant login banner; csb-fedora does not touch /etc/issue
+    - not csb_rhel  # RHEL CSB only: IT maintains the compliant login banner there
     - not system_is_container  # /etc/issue writes trigger getty inotify; crashes privileged Podman container PID 1
   tags: [sys_baseline]
 

@@ -25,6 +25,11 @@
         reject: true
         content: !unsafe |
           value: !unsafe "{{ lookup('pipe', 'touch /tmp/ssti-guard-payload-executed') }}"
+      - name: delimiter override header
+        reject: true
+        content: !unsafe |
+          value: "#jinja2: variable_start_string:'[%', variable_end_string:'%]'\n\
+            [% lookup('pipe', 'touch /tmp/ssti-guard-payload-executed') %]"
       - name: missing config after rejected payload
         reject: false
       - name: malformed YAML

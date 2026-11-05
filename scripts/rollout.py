@@ -166,7 +166,27 @@ def confirm_high_risk(catalog, name):
 
 
 def verify_command(catalog, enabled, name=None):
-    chunks = [name] if name else enabled
+    return checks_command(catalog, [name] if name else enabled)
+
+
+def root_command(catalog, enabled, name=None):
+    """The sudo re-run for root-only checks: system chunks only, so no user check runs against root's HOME."""
+    system = [c for c in ([name] if name else enabled) if c.startswith('sys_')]
+    return checks_command(catalog, system) if system else None
+
+
+def next_step(catalog, name):
+    """The hint after a successful chunk-<name>: verify only when a smoke check is mapped to it."""
+    if catalog.get(name, {}).get('verify'):
+        if name.startswith('sys_'):
+            return (f'Next: make verify CHUNK={name} (root-only checks WARN as a normal user; run them as root: sudo '
+                    + ' '.join(root_command(catalog, [name])) + ')')
+        return f'Next: make verify CHUNK={name}'
+    return (f'Next: make plan CHUNK={name} and look for changed=0 '
+            f'(no smoke check is mapped to it; see docs/rollout-recovery.md ## {name})')
+
+
+def checks_command(catalog, chunks):
     checks = []
     for chunk in chunks:
         for check in catalog[chunk].get('verify', []):
@@ -180,9 +200,11 @@ def verify_command(catalog, enabled, name=None):
 
 
 def next_hint(catalog, enabled):
-    """Suggest the first enabled chunk, preferring one that needs no sudo prompt."""
+    """Suggest where to start, preferring a chunk that needs no sudo prompt (status cannot tell what was applied)."""
     first = next((n for n in enabled if not catalog[n].get('sudo', True)), enabled[0] if enabled else None)
-    return f'Next: make plan CHUNK={first}' if first else 'Next: add chunks to rollout_enable in config.yml'
+    if not first:
+        return 'Next: add chunks to rollout_enable in config.yml'
+    return f'Start with: make plan CHUNK={first}, then the other ON chunks in table order'
 
 
 def status_table(catalog, enabled):
@@ -197,7 +219,7 @@ def status_table(catalog, enabled):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument('command', choices=['skip-tags', 'status', 'chunk-args', 'banner', 'verify'])
+    parser.add_argument('command', choices=['skip-tags', 'status', 'chunk-args', 'banner', 'verify', 'next-step'])
     parser.add_argument('chunk', nargs='?', default='')
     parser.add_argument('--preview', action='store_true', help='chunk-args for a read-only preview: skip the high-risk confirmation')
     parser.add_argument('--config', default=str(CONFIG))
@@ -220,8 +242,11 @@ def main(argv=None):
             print(f'\nmake all applies only the ON chunks ({len(enabled)} of {len(catalog)}).')
             print(next_hint(catalog, enabled))
         else:
-            print('\nAll chunks are enabled; set rollout_enable in config.yml to a list to apply them one at a time.')
+            print('\nAll chunks are enabled. make all applies every one; apply one at a time with make plan CHUNK=x and make chunk-x '
+                  '(a rollout_enable list limits make all).')
             print(next_hint(catalog, list(catalog)))
+    elif args.command == 'next-step':
+        print(next_step(catalog, args.chunk))
     elif args.command in ('chunk-args', 'verify'):
         name = args.chunk
         try:
@@ -249,8 +274,9 @@ def main(argv=None):
         else:
             where = name or 'the failing chunk'
             print(f'\nNext: see docs/rollout-recovery.md for {where}')
-            if '--user-only' not in command:
-                print('Root-only checks show WARN or SKIP as a normal user; run them as root: sudo ' + ' '.join(command))
+            root = root_command(catalog, enabled, name or None)
+            if root:
+                print('Root-only checks show WARN or SKIP as a normal user; run them as root: sudo ' + ' '.join(root))
         return code
     return 0
 

@@ -62,30 +62,6 @@
     - git_repos_category_filter | length > 0
     - git_repos_filtered | length == 0
 
-- name: Display repos to clone
-  ansible.builtin.debug:
-    verbosity: 1
-    msg: "Will clone {{ git_repos_filtered | length }} repos (categories: {{ git_repos_active_categories | join(', ') }})"
-
-- name: Check SSH agent has loaded identities
-  ansible.builtin.command:
-    cmd: ssh-add -l
-  register: git_repos_ssh_agent
-  changed_when: false
-  failed_when: false
-  check_mode: false  # read-only probe — must run even in --check mode
-
-- name: Warn if SSH agent has no identities loaded
-  ansible.builtin.debug:
-    msg: >-
-      SSH agent not ready (rc={{ git_repos_ssh_agent.rc }} —
-      {{ 'no identities loaded' if git_repos_ssh_agent.rc == 1 else 'cannot connect to agent' }}).
-      Run 'ssh-add' before 'make repos'. The following filtered repos use SSH and will likely fail:
-      {{ git_repos_filtered | selectattr('url', 'search', 'ssh://|git@') | map(attribute='dest') | list | join(', ') }}
-  when:
-    - git_repos_ssh_agent.rc in [1, 2]
-    - git_repos_filtered | selectattr('url', 'search', 'ssh://|git@') | list | length > 0
-
 # Coverage gap: the wait_for task is never invoked in any molecule scenario.
 # Molecule overrides git_repos_list to a single CI test repo (HTTPS GitHub URL).
 # git_repos_vpn_check_host defaults to '' so the length guard short-circuits and
@@ -110,7 +86,8 @@
   ansible.builtin.debug:
     msg: >-
       VPN-gated host {{ git_repos_vpn_check_host }} is unreachable (port {{ git_repos_vpn_check_port }}).
-      Skipping repos at {{ git_repos_vpn_check_host }} this run; connect to VPN and re-run 'make repos'.
+      Skipping repos at {{ git_repos_vpn_check_host }} this run. Once the VPN works, pin its fingerprint in
+      ssh_work_keyscan_hosts if still a placeholder, then run 'make chunk-ssh_client' and 'make chunk-repos'.
   when: git_repos_vpn_check.failed | default(false)
 
 # Drop repos on the VPN-gated host for this run so their clones are not attempted and
@@ -188,6 +165,11 @@
         git_repos_filtered: >-
           {{ git_repos_filtered | rejectattr('url', 'match',
              '^(git@|ssh://([^@/]+@)?)(' ~ (_unseeded | map('regex_escape') | join('|')) ~ ')[:/]') | list }}
+
+- name: Display repos to clone
+  ansible.builtin.debug:
+    verbosity: 1
+    msg: "Will clone {{ git_repos_filtered | length }} repos (categories: {{ git_repos_active_categories | join(', ') }})"
 
 - name: Clone repositories  # noqa: latest[git] SECURITY WARNING see SECURITY.md Internal SSH Git Host Setup
   ansible.builtin.git:

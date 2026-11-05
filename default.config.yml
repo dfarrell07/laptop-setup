@@ -50,6 +50,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   repo_rpmfusion_free: true          (group_vars/all/vars.yml) — Fedora-only; multimedia codecs (H.264/AAC), ffmpeg, VLC
 #   repo_rpmfusion_nonfree: false      (group_vars/all/vars.yml) — Fedora-only; NVIDIA drivers, non-free firmware; opt in explicitly
 #   repo_tailscale: true               (group_vars/all/vars.yml) — VPN mesh; skip on air-gapped machines or when using a different VPN
+#     (false also drops the tailscale package; list tailscale in packages_extra_dnf to keep it)
 #   repo_docker_ce: false              (group_vars/all/vars.yml) — prefer Podman; adds the docker-ce repo only
 #     (no task installs docker-ce; not added on RHEL CSB)
 #   repo_mullvad: true                 (group_vars/all/vars.yml) — personal profile, non-CSB Fedora only (skipped on work, RHEL/Rocky, CSB)
@@ -343,10 +344,10 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   desktop_sway_libva_driver: ""       (roles/desktop/defaults) — VA-API driver; "" = auto-detect; radeonsi (AMD) or iHD (Intel)
 #   desktop_sway_xwayland: ''           (roles/desktop/defaults) — '' = on (default); "disable" = pure-Wayland (breaks XWayland apps)
 #   desktop_wm_idle_lock_timeout: 300  (roles/desktop/defaults) — idle seconds before lock; avoid 0 (Sway: at once; i3: 1 min)
-#     (i3: applied only when ~/.config/i3/config is first seeded; delete it and re-run make desktop to re-seed)
+#     (i3: applied only when ~/.config/i3/config is first seeded; delete it and re-run make chunk-desktop to re-seed)
 #   desktop_wm_idle_display_timeout: 600  (roles/desktop/defaults) — seconds idle before display off
 #   desktop_wm_lock_color: "000000"  (roles/desktop/defaults) — screen lock background hex color (no #) — swaylock (Sway) and i3lock (i3)
-#     (i3: applied only when ~/.config/i3/config is first seeded; delete it and re-run make desktop to re-seed)
+#     (i3: applied only when ~/.config/i3/config is first seeded; delete it and re-run make chunk-desktop to re-seed)
 #   desktop_sway_keyboard_layout: ''   (roles/desktop/defaults) — XKB layout; empty = sway/XKB default (e.g. us, de, fr)
 #   desktop_sway_keyboard_variant: ''   (roles/desktop/defaults) — XKB variant (e.g. 'intl', 'altgr-intl'); empty = none
 #   desktop_sway_keyboard_options: ''   (roles/desktop/defaults) — XKB options (e.g. 'caps:escape', 'ctrl:nocaps'); empty = none
@@ -384,7 +385,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #                                        desktop_wm_border_width
 #   desktop_wm_hide_edge_borders: ''       (roles/desktop/defaults) — hide edge borders; empty = omit
 #                                        (sway/i3 default: none); both/vertical/horizontal/smart/smart_no_gaps
-#     (i3: applied only when ~/.config/i3/config is first seeded; delete it and re-run make desktop to re-seed)
+#     (i3: applied only when ~/.config/i3/config is first seeded; delete it and re-run make chunk-desktop to re-seed)
 #   desktop_sway_focus_follows_mouse: ''  (roles/desktop/defaults) — empty omits directive, set yes/no/always to override
 #   desktop_terminal: per-OS             (roles/desktop/defaults) — default: ghostty on macOS, alacritty on Linux
 #   desktop_gtk_theme: Adwaita-dark    (roles/desktop/defaults) — GTK theme for Sway (written to gtk-3.0/4.0 settings.ini)
@@ -419,7 +420,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   claude_install_sha256: ""           (roles/claude/defaults) — REQUIRED for fresh installs; SHA256 of the installer script.
 #     Provisioning hard-fails when unset (native method, binary downloads on), even if Claude is already installed. Fetch with:
 #       curl -fsSL https://claude.ai/install.sh -o /tmp/claude-install.sh && sha256sum /tmp/claude-install.sh
-#     Update this hash after each upstream Claude Code release.
+#     Update it only when the installer script changes (get_url fails with a checksum mismatch);
+#     a Claude release or pin bump alone does not change it.
 #   claude_queue_enabled: false        (roles/claude/defaults) — enable Claude queue poller
 #     (claude-queue-poller.sh via a systemd user timer; launchd on macOS)
 #   claude_queue_repo: ""              (roles/claude/defaults) — REQUIRED when claude_queue_enabled: true;

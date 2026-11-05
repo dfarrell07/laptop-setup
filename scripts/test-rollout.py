@@ -332,6 +332,30 @@ class VerifyAndDocsTests(unittest.TestCase):
         bare = next(n for n, e in CATALOG.items() if not e.get('verify'))
         self.assertIsNone(rollout.verify_command(CATALOG, list(CATALOG), bare))
 
+    def test_root_hint_reruns_only_system_checks(self):
+        # user checks read $HOME, which is root's under sudo: the sudo hint must never include them
+        mixed = rollout.root_command(CATALOG, ['dotfiles', 'sys_mounts'])
+        self.assertIn('--system-only', mixed)
+        self.assertNotIn('dotfile-gitconfig', mixed[-1])
+        self.assertIsNone(rollout.root_command(CATALOG, list(CATALOG), 'dotfiles'))
+        self.assertEqual(rollout.root_command(CATALOG, list(CATALOG), 'sys_mounts'),
+                         rollout.verify_command(CATALOG, list(CATALOG), 'sys_mounts'))
+
+    def test_next_step_sends_unmapped_chunks_to_plan_not_verify(self):
+        bare = next(n for n, e in CATALOG.items() if not e.get('verify'))
+        self.assertIn(f'make plan CHUNK={bare}', rollout.next_step(CATALOG, bare))
+        self.assertEqual(rollout.next_step(CATALOG, 'dotfiles'), 'Next: make verify CHUNK=dotfiles')
+        sys_hint = rollout.next_step(CATALOG, 'sys_auditd')
+        self.assertTrue(sys_hint.startswith('Next: make verify CHUNK=sys_auditd'))
+        self.assertIn('sudo ' + ' '.join(rollout.root_command(CATALOG, ['sys_auditd'])), sys_hint)
+
+    def test_status_hint_is_a_start_not_progress(self):
+        # status cannot tell which chunks were applied, so it must not present one chunk as the next step forever
+        first = next(n for n, e in CATALOG.items() if not e.get('sudo', True))
+        hint = rollout.next_hint(CATALOG, list(CATALOG))
+        self.assertTrue(hint.startswith(f'Start with: make plan CHUNK={first},'), hint)
+        self.assertIn('table order', hint)
+
     def test_every_chunk_has_a_recovery_section(self):
         text = (ROOT / 'docs/rollout-recovery.md').read_text()
         for name in CATALOG:

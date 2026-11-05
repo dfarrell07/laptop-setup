@@ -54,21 +54,24 @@
   when: _config_raw is defined
   vars:
     # Serialize entire config dict to JSON for unified template marker scanning
-    # This detects {{ or {% in ANY value (string, list element, dict value)
+    # This detects {{ or {% in ANY value (string, list element, dict value), and a #jinja2: override
+    # header, which redefines the delimiters (variable_start_string) so a value needs neither marker
     _config_json: "{{ _config_raw | to_nice_json }}"
   ansible.builtin.assert:
     that:
-      # Reject {{ and {% in the entire serialized config
-      # The combination of both checks prevents SSTI in all config variables
+      # Reject {{, {% and the delimiter-override header in the entire serialized config
+      # The combination of the three checks prevents SSTI in all config variables
       - ('{' ~ '{') not in _config_json
       - ('{' ~ '%') not in _config_json
+      - ('#' ~ 'jinja2') not in _config_json
     fail_msg: >-
       {% raw -%}
-      SECURITY: config.yml contains {{ or {% — Ansible evaluates these as live Jinja2
+      SECURITY: config.yml contains {{, {% or a #jinja2 delimiter-override header — Ansible evaluates these as live Jinja2
       templates (trusted_as_template=True), allowing arbitrary code execution as the
       provisioning user (become: true in Play 1).
       Input: the entire config.yml including all strings, list elements, dict values.
-      Mechanism: include_vars with trusted_as_template evaluates any {{ }} or {% %} block.
+      Mechanism: include_vars with trusted_as_template evaluates any {{ }} or {% %} block, and a value
+      starting with a #jinja2: header can switch to other delimiters that this scan could not list.
       Example: dotfiles_goprivate="{{lookup('pipe','id')}}" runs id() at provision time.
       Impact: SSTI — arbitrary Ansible code execution with become: true.
       Fix: remove template markers from configuration values. !unsafe tags are supported,

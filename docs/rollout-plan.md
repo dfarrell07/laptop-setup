@@ -28,8 +28,8 @@ constraints: [design-principles.md](design-principles.md). Undo steps: [rollout-
 
 ## Rolling out on a CSB laptop
 
-1. Prerequisites: `make setup-yubikeys` first (vault and an ed25519 key), then `make usb-add` with every USB device connected,
-   hooks and scanner (`make hooks && make bootstrap-hooks`), IT's compliance job green,
+1. Prerequisites: `make setup-yubikeys` first, then encrypt the vault and put an ed25519 key in it,
+   then `make usb-add` with every USB device connected, hooks and scanner (`make hooks && make bootstrap-hooks`), IT's compliance job green,
    `make backup` plus `dconf dump / > ~/dconf-before.ini`, a rehearsed break-glass (recovery sheet), and the
    `config.yml` defaults below.
 2. Per chunk: `make plan CHUNK=x`, read it, `make chunk-x`, `make verify CHUNK=x`, soak, next.

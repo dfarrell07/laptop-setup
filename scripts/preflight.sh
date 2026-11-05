@@ -77,7 +77,7 @@ if [[ "$IS_CSB" == true ]]; then
   if [[ "$fapolicyd_installed" == true ]]; then
     record "csb_detected" "warn" "CSB detected (fapolicyd installed) — see fapolicyd and container_tier checks below for enforcement status"
   else
-    record "csb_detected" "warn" "CSB detected (no fapolicyd) — hybrid mode; may need --ask-become-pass"
+    record "csb_detected" "warn" "CSB detected (no fapolicyd) — hybrid mode"
   fi
 else
   record "csb_detected" "pass" "not CSB"
@@ -174,7 +174,7 @@ if [[ "$yk_found" == true ]]; then
         if timeout "$_yk_timeout" ykman otp calculate 2 "$(printf '%s' 'preflight-test' | od -An -tx1 | tr -d ' \n')" &>/dev/null; then
           record "yubikey_chalresp" "pass" "Slot 2 HMAC-SHA1 responding"
         else
-          record "yubikey_chalresp" "warn" "Slot 2 no response within ${_yk_timeout}s — touch YubiKey when prompted, or verify HMAC-SHA1 slot 2 is configured"
+          record "yubikey_chalresp" "warn" "no HMAC-SHA1 response from slot 2 (touch timed out after ${_yk_timeout}s, slot 2 empty, or more than one YubiKey inserted); see the vault line"
         fi
       fi
     else
@@ -200,10 +200,11 @@ if [[ -x "$vscript" ]]; then
     [[ $- != *x* ]] || _xtrace=true
     set +x
     _vrc=0
+    echo "Testing vault-pass.sh (touch your YubiKey again if it blinks)..." >&2
     output=$("$vscript" 2>/dev/null) || _vrc=$?
     len=${#output}
     if [[ $_vrc -ne 0 ]]; then
-      record "vault" "fail" "vault-pass.sh exited with status ${_vrc}"
+      record "vault" "fail" "vault-pass.sh exited with status ${_vrc} (YubiKey touch timed out, key not inserted, or more than one key inserted)"
     elif [[ $len -ge 8 ]]; then
       if [[ "$output" == *ci-dummy-vault-password* || "$output" == CHANGE_ME ]]; then
         record "vault" "warn" "vault-pass.sh is still a placeholder stub — run: make setup-yubikeys (or see SECURITY.md 'Setting Up vault-pass.sh')"
@@ -234,10 +235,10 @@ if [[ -f "$VAULT_FILE" ]]; then
   if head -1 "$VAULT_FILE" | grep -q '^\$ANSIBLE_VAULT'; then
     record "vault_encrypted" "pass" "vault.yml is encrypted"
   else
-    if grep -q 'vault_placeholder' "$VAULT_FILE"; then
-      record "vault_encrypted" "warn" "vault.yml is plaintext stub — vault_ssh_auth_key will be empty; 'make container' skips dev container provisioning. Run: make setup-yubikeys (see CLAUDE.md step 3)"
+    if python3 "$SCRIPT_DIR/verify-vault-stub.py" < "$VAULT_FILE"; then
+      record "vault_encrypted" "warn" "vault.yml is plaintext stub — vault_ssh_auth_key will be empty; 'make container' skips dev container provisioning. Run make setup-yubikeys if not done yet, then encrypt and fill the vault (CLAUDE.md step 3)"
     else
-      record "vault_encrypted" "warn" "vault.yml is plaintext without vault_placeholder sentinel — encrypt or add vault_placeholder stub"
+      record "vault_encrypted" "warn" "vault.yml is plaintext and not the empty stub (values set or template changed) — encrypt it: ansible-vault encrypt group_vars/all/vault.yml"
     fi
   fi
 else
@@ -246,7 +247,7 @@ fi
 
 # --- config.yml ---
 if [[ ! -f "$CONFIG_FILE" ]]; then
-  record "config_yml" "fail" "config.yml missing — create it before running make all (Play 1 runs fully before Play 2 checks identity; SSH port moves to 722 and kernel hardening applies before the CHANGE_ME assert fires)"
+  record "config_yml" "fail" "config.yml missing — cp default.config.yml config.yml and replace every CHANGE_ME (Play 0 refuses to run until identity values are set)"
 elif ! grep -q '^desktop_environment:' "$CONFIG_FILE"; then
   record "config_yml" "fail" "config.yml exists but does not set desktop_environment; set 'desktop_environment: sway' (or i3/gnome)"
 elif ! grep -qE '^desktop_environment:[[:space:]]*["'"'"']?('"$([[ "$OS_FAMILY" == darwin ]] && echo aerospace || echo 'sway|i3|gnome')"')["'"'"']?([[:space:]]|$)' "$CONFIG_FILE"; then
@@ -267,6 +268,18 @@ else
 fi
 
 # --- Identity vars CHANGE_ME check ---
+# True when a scalar is empty in YAML terms: nothing, "", '', ~ or null (optional !unsafe tag and trailing comment).
+_identity_empty() {
+  local v="$1" dq='^"([^"]*)"' sq="^'([^']*)'"
+  v=$(sed -E 's/^[[:space:]]*(!unsafe([[:space:]]+|$))?//' <<<"$v")
+  if [[ "$v" =~ $dq || "$v" =~ $sq ]]; then
+    v="${BASH_REMATCH[1]}"
+  else
+    v=$(sed -E 's/(^|[[:space:]])#.*$//; s/[[:space:]]+$//' <<<"$v")
+    [[ "$v" =~ ^(~|null|Null|NULL)$ ]] && v=""
+  fi
+  [[ -z "$v" ]]
+}
 if [[ -f "$CONFIG_FILE" ]]; then
   for _ivar in dotfiles_user_name dotfiles_github_user dotfiles_user_email_work dotfiles_user_email_personal system_timezone; do
     if [[ "$_ivar" == "dotfiles_user_email_work" && "$PROFILE" == "personal" ]]; then continue; fi
@@ -278,6 +291,8 @@ if [[ -f "$CONFIG_FILE" ]]; then
       fi
     elif grep -qE "^${_ivar}:[[:space:]]*(!unsafe[[:space:]]+)?['\"]?CHANGE_ME" "$CONFIG_FILE"; then
       record "identity_${_ivar}" "fail" "${_ivar} is still 'CHANGE_ME' in config.yml — set a real value before running make all"
+    elif _identity_empty "$(grep -m1 "^${_ivar}:" "$CONFIG_FILE" | cut -d: -f2-)"; then
+      record "identity_${_ivar}" "fail" "${_ivar} is empty in config.yml — set a real value (Play 0 rejects empty identity values)"
     else
       record "identity_${_ivar}" "pass" "${_ivar}=$(grep "^${_ivar}:" "$CONFIG_FILE" | cut -d: -f2- | sed 's/^[[:space:]]*//')"
     fi
@@ -370,9 +385,9 @@ fi
 
 # --- Container tier derivation ---
 if [[ "$IS_CSB" == true && "$FAPOLICYD_BLOCKING" == true ]]; then
-  record "container_tier" "warn" "container — fapolicyd enforcing: run 'make container' for dev tools; 'make all' will be restricted"
+  record "container_tier" "warn" "container — fapolicyd enforcing: run 'make container' for dev tools; host provisioning will be restricted"
 elif [[ "$IS_CSB" == true || "$IS_RHEL" == true ]]; then
-  record "container_tier" "warn" "hybrid — run 'make all' for host setup, then 'make container' for dev tools"
+  record "container_tier" "warn" "hybrid — provision the host by chunk (make status), then 'make container' for dev tools"
 else
   record "container_tier" "pass" "host-only — run 'make all' for full provisioning"
 fi
@@ -386,25 +401,29 @@ if sudo_out=$(sudo -n -l 2>/dev/null); then
     record "sudo" "warn" "scoped sudo — some system tasks may fail"
   fi
 else
-  record "sudo" "warn" "no passwordless sudo — will need --ask-become-pass"
+  record "sudo" "warn" "no passwordless sudo — sudo chunks and targets prompt for your password (BECOME password)"
 fi
 
-# --- Desktop X11 trackpoint configuration (XDG template injection guard) ---
+# --- Desktop TrackPoint id (template injection guard) ---
+# sway.config.j2 keeps [a-zA-Z0-9 ./:_-]; the i3 xorg template only strips newlines, so i3 ids must match its stricter set.
 if [[ -f "$CONFIG_FILE" ]]; then
-  if grep -qE '^desktop_i3_trackpoint_id:' "$CONFIG_FILE" 2>/dev/null; then
-    trackpoint_value=$(grep '^desktop_i3_trackpoint_id:' "$CONFIG_FILE" | cut -d: -f2- | sed "s/^[[:space:]]*//;s/[[:space:]][[:space:]]*#.*$//;s/[[:space:]]*$//" | tr -d "'" | tr -d '"')
-    if [[ -n "$trackpoint_value" ]]; then
-      if [[ "$trackpoint_value" =~ [^a-zA-Z0-9_./\ -] ]]; then
-        record "config_trackpoint_id" "fail" "desktop_i3_trackpoint_id contains unsafe characters — alphanumeric, spaces, hyphens, underscores, dots, slashes only"
-      else
-        record "config_trackpoint_id" "pass" "desktop_i3_trackpoint_id is safe"
-      fi
+  _tp_found=false
+  for _tpkey in desktop_sway_trackpoint_id desktop_i3_trackpoint_id; do
+    grep -qE "^${_tpkey}:" "$CONFIG_FILE" 2>/dev/null || continue
+    _tp_found=true
+    trackpoint_value=$(grep -m1 "^${_tpkey}:" "$CONFIG_FILE" | cut -d: -f2- | sed "s/^[[:space:]]*//;s/[[:space:]][[:space:]]*#.*$//;s/[[:space:]]*$//" | tr -d "'" | tr -d '"')
+    if [[ "$_tpkey" == desktop_sway_trackpoint_id ]]; then _tp_bad='[^a-zA-Z0-9_./: -]'; _tp_set='alphanumeric, spaces, colons, hyphens, underscores, dots, slashes only'
+    else _tp_bad='[^a-zA-Z0-9_./ -]'; _tp_set='alphanumeric, spaces, hyphens, underscores, dots, slashes only'; fi
+    if [[ -z "$trackpoint_value" ]]; then
+      record "config_trackpoint_id" "pass" "${_tpkey} is empty (safe)"
+    elif [[ "$trackpoint_value" =~ $_tp_bad ]]; then
+      record "config_trackpoint_id" "fail" "${_tpkey} contains unsafe characters — ${_tp_set}"
     else
-      record "config_trackpoint_id" "pass" "desktop_i3_trackpoint_id is empty (safe)"
+      record "config_trackpoint_id" "pass" "${_tpkey} is safe"
     fi
-  else
-    record "config_trackpoint_id" "skip" "desktop_i3_trackpoint_id not set in config.yml"
-  fi
+  done
+  [[ "$_tp_found" == true ]] || record "config_trackpoint_id" "skip" "neither desktop_sway_trackpoint_id nor desktop_i3_trackpoint_id is set in config.yml"
+  unset _tp_found _tpkey _tp_bad _tp_set
 else
   record "config_trackpoint_id" "skip" "config.yml absent"
 fi
@@ -463,13 +482,35 @@ if [[ -f /proc/sys/kernel/yama/ptrace_scope ]]; then
         "live kernel ptrace_scope=0 and system_ptrace_scope: 0 in config.yml — YAMA ptrace restrictions intentionally disabled; any same-UID process can ptrace ansible-playbook and read vault secrets from memory. Set system_ptrace_scope: 1 after dev work."
     else
       record "ptrace_scope" "warn" \
-        "live kernel ptrace_scope=0 — YAMA ptrace unrestricted; any same-UID process can ptrace ansible-playbook and extract vault secrets from memory during this run. The playbook will harden this to system_ptrace_scope=1 via sysctl.yml, but secrets are unprotected until that task executes."
+        "live kernel ptrace_scope=0 — YAMA ptrace unrestricted; any same-UID process can ptrace ansible-playbook and extract vault secrets from memory during this run. Only the sys_sysctl chunk (or make all) sets system_ptrace_scope=1; until it runs, secrets are unprotected during any run."
     fi
   else
     record "ptrace_scope" "pass" "live kernel ptrace_scope=${_live_ptrace}"
   fi
 else
   record "ptrace_scope" "skip" "YAMA not available (macOS or kernel without CONFIG_SECURITY_YAMA)"
+fi
+
+# --- Secure Boot (Linux EFI only) ---
+# Firmware setting, not managed by Ansible: warn early so it is enabled before sys_lockdown (smoke-test FAILs secure-boot until then).
+if [[ "$OS_FAMILY" != "darwin" && -d /sys/firmware/efi ]]; then
+  if ! command -v mokutil &>/dev/null; then
+    record "secure_boot" "skip" "mokutil not installed (dnf/apt install mokutil) — cannot read Secure Boot state"
+  elif _sb_state=$(mokutil --sb-state 2>&1) && [[ "$_sb_state" == *"SecureBoot enabled"* ]]; then
+    record "secure_boot" "pass" "SecureBoot enabled"
+  elif [[ "$_sb_state" == *"SecureBoot disabled"* ]]; then
+    _sb_note=""
+    # Fedora's shim is signed by Microsoft's third-party UEFI CA: with it missing from db, Secure Boot makes the machine unbootable.
+    # Capture first: grep -q exits on the first match, so a pipe would SIGPIPE mokutil and fail under pipefail.
+    _sb_db=$(mokutil --db 2>/dev/null || true)
+    grep -qE 'CN=Microsoft (Corporation )?UEFI CA' <<<"$_sb_db" \
+      || _sb_note=" — the firmware db has no Microsoft third-party UEFI CA: enable 'Allow Microsoft 3rd Party UEFI CA' FIRST or Fedora will not boot"
+    record "secure_boot" "warn" "Secure Boot is disabled in firmware — enable it before sys_lockdown (lockdown=integrity is bypassable without it)${_sb_note}; steps: SECURITY.md § Secure Boot"
+  else
+    record "secure_boot" "skip" "could not read Secure Boot state: ${_sb_state//$'\n'/ }"
+  fi
+else
+  record "secure_boot" "skip" "not an EFI boot (or macOS)"
 fi
 
 # --- Output ---
@@ -486,9 +527,9 @@ if [[ "$JSON" == true ]]; then
 else
   echo ""
   if [[ $FAILURES -eq 0 ]]; then
-    printf "${GRN}Ready to run 'make all'${NC}\n"
+    printf "${GRN}Ready${NC}: next 'make status', then 'make plan CHUNK=<name>' and 'make chunk-<name>' one chunk at a time (CLAUDE.md); 'make all' applies every enabled chunk\n"
   else
-    printf "${RED}%d check(s) failed — resolve before running 'make all'${NC}\n" "$FAILURES"
+    printf "${RED}%d check(s) failed — resolve before provisioning${NC}\n" "$FAILURES"
   fi
 fi
 exit $(( FAILURES > 0 ? 1 : 0 ))

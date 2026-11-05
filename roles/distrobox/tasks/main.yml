@@ -382,7 +382,8 @@
           - --force
           - "{{ distrobox_container_name }}"
       environment:
-        CONTAINER_HOST: ""  # defense-in-depth: clear rogue socket paths (primary clear in verify-ansible-args.sh)
+        # No CONTAINER_HOST: even an empty value puts podman in remote mode and toolbox fails
+        # ("failed to migrate containers"); verify-ansible-args.sh unsets it.
         DOCKER_HOST: ""
         REGISTRY_AUTH_FILE: ""  # prevent attacker-set auth file from redirecting podman pull credentials
         DOCKER_CONFIG: ""  # prevent attacker-set config dir from overriding registry auth
@@ -400,7 +401,8 @@
           - "{{ distrobox_container_image }}"
           - "{{ distrobox_container_name }}"
       environment:
-        CONTAINER_HOST: ""  # defense-in-depth: clear rogue socket paths (primary clear in verify-ansible-args.sh)
+        # No CONTAINER_HOST: even an empty value puts podman in remote mode and toolbox fails
+        # ("failed to migrate containers"); verify-ansible-args.sh unsets it.
         DOCKER_HOST: ""
         REGISTRY_AUTH_FILE: ""  # prevent attacker-set auth file from redirecting podman pull credentials
         DOCKER_CONFIG: ""  # prevent attacker-set config dir from overriding registry auth
@@ -526,3 +528,4 @@
     - distrobox_tool != 'none'
     - distrobox_start_result.rc | default(0) == 0
     - distrobox_python.rc != 0
+    - not (ansible_check_mode and (distrobox_running.stdout | default('') | trim | lower) != 'true')  # start only simulated

@@ -61,7 +61,8 @@
             fail_msg: >-
               SECURITY: could not read scripts/vault-pass.sh or group_vars/all/vault.yml
               (slurp failed), so the CHANGE_ME stub / plaintext vault checks cannot run.
-              Both files ship in this repo; restore them (make bootstrap) and re-run.
+              group_vars/all/vault.yml ships in this repo; scripts/vault-pass.sh is gitignored and is
+              created by make bootstrap (CI stub) or make setup-yubikeys. Restore the missing one and re-run.
               vault-pass.sh: {{ _vault_pass_sh.msg | default('ok') }};
               vault.yml: {{ _vault_yml.msg | default('ok') }}
             quiet: true
@@ -88,8 +89,10 @@
               'CHANGE_ME' placeholder produces a trivially guessable key.
               Example: echo CHANGE_ME | ansible-vault decrypt group_vars/all/vault.yml decrypts all secrets.
               Impact: all vault secrets (SSH keys, git keys, registry tokens, GRUB hash) are exposed.
-              Fix: run 'make setup-yubikeys' to replace the stub with YubiKey HMAC-SHA1 vault-pass.sh,
-              then re-encrypt: 'make vault-edit'. See SECURITY.md for manual vault-pass.sh setup.
+              Fix: decrypt it with the stub first ('ansible-vault decrypt group_vars/all/vault.yml';
+              make setup-yubikeys refuses an encrypted vault), run 'make setup-yubikeys' to replace the stub with
+              YubiKey HMAC-SHA1 vault-pass.sh, then re-encrypt: 'ansible-vault encrypt group_vars/all/vault.yml'.
+              See SECURITY.md for manual vault-pass.sh setup.
 
     - name: SECURITY — Assert vault-pass.sh and vault.yml have restrictive permissions (distrobox $HOME exposure)
       block:
@@ -424,10 +427,8 @@
               dotfiles_user_name={{ dotfiles_user_name | default('NOTSET') }},
               dotfiles_github_user={{ dotfiles_github_user | default('NOTSET') }},
               dotfiles_user_email_personal={{ dotfiles_user_email_personal | default('NOTSET') }}.
-              This is a critical security catch-all; git commits will be attributed to
-              'CHANGE_ME' and email notifications will go to wrong addresses. This assertion
-              should have been caught in site.yml Play 2 pre_tasks. If you see this error,
-              the critical assertion in site.yml may have been removed or replaced.
+              Git commits would be attributed to 'CHANGE_ME' and email notifications would
+              go to wrong addresses. This check runs before any play changes the system.
               To fix: Set all three variables in config.yml to actual values before running provisioning.
 
         - name: Assert system_timezone is not CHANGE_ME placeholder (play namespace catch)
@@ -561,12 +562,13 @@
         - lookup('env', 'SSH_CONNECTION') | length == 0
       ansible.builtin.debug:
         msg: >-
-          NOTICE: no ed25519/FIDO2 SSH key will be usable after this run (none in authorized_keys;
+          NOTICE: no ed25519/FIDO2 SSH key will be usable after this run (no ed25519/FIDO2 key in authorized_keys;
           {{ 'the vault key is populated but this run does not deploy it - apply the ssh_authorized_keys chunk
-          (make chunk-ssh_authorized_keys) or make ssh'
+          (make chunk-ssh_authorized_keys)'
           if (ssh_auth_key_pub | default('') | trim | length > 0) else 'vault empty' }}).
           After hardening, sshd accepts no logins until one is added — console login is
-          unaffected. If the vault is empty, run 'make setup-yubikeys' and populate it; then 'make ssh system'.
+          unaffected. If the vault is empty, run 'make setup-yubikeys' and populate it; then run
+          'make chunk-ssh_authorized_keys' before 'make chunk-sys_remote_access'.
 
     - name: SECURITY CRITICAL — Block provisioning over SSH when hardening would lock the session out
       when:
@@ -577,7 +579,9 @@
           - _pf_ssh_login_ok | bool
         fail_msg: >-
           SECURITY CRITICAL: SSH LOCKOUT RISK — provisioning over SSH blocked (this session would be stranded).
-          Input: vault.yml is empty (ssh_auth_key_pub='{{ ssh_auth_key_pub | default("") }}').
+          Input: ssh_auth_key_pub is {{ 'EMPTY' if (ssh_auth_key_pub | default('') | trim | length == 0)
+          else ('not an ed25519/FIDO2 key' if (ssh_auth_key_pub | trim | regex_search('^(sk-)?ssh-ed25519') is none)
+          else 'populated but this run does not deploy it (apply make chunk-ssh_authorized_keys first)') }}.
           Mechanism: SSHD hardening applies PasswordAuthentication no + SSH port {{ ssh_port | default(722) }}
           + PubkeyAcceptedAlgorithms restricts to ed25519 variants only.
           Impact: After reboot, SSH login impossible — no password auth, existing RSA keys rejected,
@@ -587,9 +591,10 @@
 
           1. Populate vault.yml BEFORE provisioning (RECOMMENDED):
              a. Run: make setup-yubikeys
-             b. Populate group_vars/all/vault.yml with vault_ssh_auth_key_pub
+             b. Encrypt the stub: git update-index --skip-worktree group_vars/all/vault.yml,
+                then ansible-vault encrypt group_vars/all/vault.yml
+             c. Run make vault-edit and set vault_ssh_auth_key_pub
                 (MUST be ed25519 type: ssh-ed25519, sk-ssh-ed25519@openssh.com, or cert variants)
-             c. Encrypt: ansible-vault encrypt group_vars/all/vault.yml
              d. Run: make all
 
           2. Bootstrap at local console (temporary workaround):

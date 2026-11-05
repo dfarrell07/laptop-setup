@@ -397,7 +397,7 @@
           krew plugin index update or ctx/ns plugin installation failed, likely due to
           github.com CDN access being filtered by corporate network policy.
           Install manually: kubectl krew update && kubectl krew install ctx ns
-      when: csb_detected
+      when: csb_rhel
     - name: Warn after non-CSB krew post-install failure
       ansible.builtin.debug:
         msg: >-
@@ -405,7 +405,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown error') }}.
           Re-run `make packages` when online, or install manually:
           kubectl krew update && kubectl krew install ctx ns
-      when: not csb_detected
+      when: not csb_rhel
 
   always:
     - name: Remove private krew plugin manifests and archives

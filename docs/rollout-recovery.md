@@ -69,9 +69,10 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Breaks if wrong:** a pinned-binary download can fail (the run warns and goes on). System-level effects: starts and enables `tailscaled`;
   adds you to the `libvirt` and `kvm` groups (`libvirt` membership is root-equivalent; active after the next login); enables
   `virtqemud.socket` and `virtnetworkd.socket`; overwrites same-named files in `/usr/local/bin` with no backup.
-- **Verify:** no check mapped. `make plan CHUNK=packages` shows changed=0 for the dnf, pipx and pinned-download parts only: check mode
-  skips the standalone binaries, Go tools, krew plugins and the group add. Check those with
-  `scripts/smoke-test.sh --user-only --only sops,transcrypt,gitleaks,krew`.
+- **Verify:** no check mapped. `make plan CHUNK=packages` shows changed=0 for the dnf, pipx and single-file downloads (kind) only:
+  check mode silently skips the helm, kustomize and k9s archives, the standalone binaries, Go tools, krew plugins and the group add.
+  Check those with `scripts/smoke-test.sh --user-only --only sops,transcrypt,krew,kind,helm,kustomize,k9s` and
+  `/usr/local/bin/gitleaks version` (a bare `gitleaks` may be the `make bootstrap-hooks` copy in `~/.local/bin`).
 - **Undo:** do not `dnf remove` the `roles/packages/defaults` lists: they include packages the machine already had (podman, gh, zsh).
   Right after the run use `sudo dnf history list`, then `sudo dnf history info <id>` for the run's transaction(s):
   `sudo dnf history undo <id>`
@@ -88,8 +89,9 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Why:** pinned GitHub `known_hosts` and vault-backed SSH and signing keys (`~/.ssh/config` and the git signing settings come from
   `dotfiles`).
 - **Breaks if wrong:** the role removes ALL `github.com` `known_hosts` entries and re-adds only the pinned ED25519 key
-  (`roles/ssh/defaults/main.yml`). Never repair with `ssh-keyscan` (it trusts whatever answers).
-- **Verify:** `make verify CHUNK=ssh_client` (`known-hosts-github`: a github.com key is in `known_hosts`).
+  (`roles/ssh/defaults/main.yml`) and leaves a `known_hosts.old` copy beside it. The plan shows no diff for the removal. Never repair with
+  `ssh-keyscan` (it trusts whatever answers).
+- **Verify:** `make verify CHUNK=ssh_client` (`known-hosts-github`: no RSA/ECDSA github.com key remains in `known_hosts`).
 - **Undo:** run `make backup` BEFORE the chunk (the role overwrites key files without a copy), then restore `~/.ssh` files from
   that directory (`~/laptop-setup-backup-<timestamp>`), or re-run `make chunk-ssh_client` to
   re-seed `known_hosts` (not `make ssh`: it also rewrites `~/.ssh/authorized_keys`). Stop commit signing (on when the vault holds a signing
@@ -103,21 +105,24 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Breaks if wrong:** a bad `~/.zshrc`/`~/.bashrc`/`~/.config/git/config` affects every new shell and commit; a bad `~/.ssh/config` affects
   every SSH connection.
 - **Verify:** `make verify CHUNK=dotfiles` (`dotfile-gitconfig`, `git-hooks-path`, `ssh-config-hash-known-hosts`,
-  `ssh-config-github-strict`).
+  `ssh-config-github-strict`). `make plan` shows only the creation of the quarantine directories; the moves of unmanaged
+  `environment.d` files (with a SECURITY WARNING) and git template hooks (task output only) happen only in the real run.
 - **Undo:** run `make backup` BEFORE the chunk (an older backup predates earlier deploys), then restore the file from that
   `~/laptop-setup-backup-<timestamp>` directory. Replaced `.zshrc`, `.bashrc`, `.ssh/config`, `.config/git/config` and
   `.config/tmux/tmux.conf` also keep a copy beside them named `<file>.<pid>.<date>@<time>~`. Unmanaged git template hooks and
   `environment.d` files the role moved aside are in `~/.local/state/laptop-setup/quarantine/` (move them back, dropping the
   timestamp suffix). One-way steps: `~/.gitconfig` and `~/.tmux.conf` are moved to `<file>.pre-xdg-migration` (move back if
   wanted) and a stock `~/.oh-my-zsh` is deleted (re-clone it). The chunk also adds the `cwork`/`cper`/`cper2` launchers to `~/.zshrc`
-  and switches the SSH agent: `systemctl --user unmask gcr-ssh-agent.socket gcr-ssh-agent.service`,
-  `systemctl --user disable --now ssh-agent`, delete `~/.config/autostart/gnome-keyring-ssh.desktop`,
-  `~/.config/environment.d/ssh-agent.conf` and `~/.config/systemd/user/ssh-agent.service`, then log in again so `SSH_AUTH_SOCK` changes
-  back.
+  (the managed `~/.bashrc` does not source `~/.config/zsh/local.zsh`, so until `login_shell` makes zsh the shell, run
+  `source ~/.config/zsh/local.zsh` in bash for functions defined there) and switches the SSH agent:
+  `systemctl --user unmask gcr-ssh-agent.socket gcr-ssh-agent.service`, `systemctl --user disable --now ssh-agent`,
+  delete `~/.config/autostart/gnome-keyring-ssh.desktop`, `~/.config/environment.d/ssh-agent.conf` and
+  `~/.config/systemd/user/ssh-agent.service`, then log in again so `SSH_AUTH_SOCK` changes back.
 
 ## desktop
 
-- **Why:** GNOME, sway, i3 or AeroSpace configuration.
+- **Why:** GNOME, sway, i3 or AeroSpace configuration. Apply it with `make chunk-desktop`: the role target `make desktop` also applies
+  `login_shell` (zsh and, for an SSSD account, the sssd override) whenever that chunk is enabled.
 - **Breaks if wrong:** a bad compositor config can leave the session unusable; keys that IT or `sys_baseline` lock are ignored.
 - **Verify:** no check is mapped, so `make verify CHUNK=desktop` exits 1 (state unknown) by design. Pass criterion: `make plan
   CHUNK=desktop` shows changed=0 and no dconf warning, then log in again from a TTY or second session.
@@ -161,7 +166,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   hold clones that predate the chunk, and any clone can hold unpushed commits, stashes or untracked files.
 - **Verify:** no check mapped, so `make verify CHUNK=repos` exits 1 ("state is unknown") by design; run `make plan CHUNK=repos` and
   confirm changed=0. Repos on an unreachable VPN host or an unseeded SSH host are filtered out before cloning, so changed=0 does not
-  cover them.
+  cover them. Plan also skips "Configure fork remotes" (check mode clones nothing), so a later real run can still report `extra_remotes`
+  as added.
 - **Undo:** delete only the clones this run created (the "Clone repositories" items that `make plan CHUNK=repos` showed as changed before
   the run), and only after `git -C <dir> status --porcelain`, `git -C <dir> stash list` and
   `git -C <dir> log --branches --not --remotes` are all empty. Never delete `~/src` or `~/notes` (`notes_repo_path` in
@@ -199,7 +205,9 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   settings. Apply `packages`, then rebuild with `make container-rebuild`.
 - **Verify:** `make verify CHUNK=distrobox` (`distrobox-container`). With the vault still the empty stub the role defers container
   creation, the check is WARN and the command exits 1; that is expected, not a failed chunk. Populate the vault
-  (`make setup-yubikeys`), then `make container` and re-verify.
+  (after `make setup-yubikeys`: `git update-index --skip-worktree group_vars/all/vault.yml`,
+  `ansible-vault encrypt group_vars/all/vault.yml`, then `make vault-edit`), then `make container` and
+  re-verify.
 - **Undo:** `podman rm -f fedora-dev` (or the configured `container_name`; works for Distrobox and Toolbx containers). Then remove the
   exported wrappers that would shadow host tools:
   `for f in oc kubectl golangci-lint; do grep -q '^# distrobox_binary' ~/.local/bin/$f 2>/dev/null && rm ~/.local/bin/$f; done`.
@@ -223,7 +231,7 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 
 ## redhat
 
-- **Why:** Red Hat IT tooling (VPN client, certificates).
+- **Why:** Red Hat IT tooling: VPN client (RHEL CSB also: certificates, splunk shell).
 - **Breaks if wrong:** a bad VPN or certificate package fails the dnf transaction; failures are recorded in the CSB report, not
   fatal. On RHEL CSB the role sets the IT-owned `splunk` account shell to nologin (`roles/redhat/tasks/main.yml`).
 - **Verify:** no check mapped.
@@ -281,10 +289,10 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Why:** chrony NTS, DNS-over-TLS, dnf-automatic.
 - **Breaks if wrong:** DoT fails on restricted networks (see `references/troubleshooting.md` § DNS). On a CSB host (`csb_detected`)
   chrony NTS, dnf-automatic and the DoT drop-in are not applied (an existing `99-dot.conf` is removed), so the chunk does not add chrony
-  or dnf-automatic there. On hybrid CSB it still enables systemd-resolved and writes `98-llmnr.conf`. `make verify` passes
-  `dnf-automatic` by design and FAILs `chronyd-service` unless IT already runs chronyd. IT-owned time, update and DNS config is never
-  replaced.
-- **Verify:** `make verify CHUNK=sys_time_dns` (`chronyd-service`, `dnf-automatic`).
+  or dnf-automatic there. On hybrid CSB it still enables systemd-resolved and writes `98-llmnr.conf`, which `llmnr-disabled` checks.
+  `make verify` passes `dnf-automatic` by design and FAILs `chronyd-service` unless IT already runs chronyd. IT-owned time, update and
+  DNS config is never replaced.
+- **Verify:** `make verify CHUNK=sys_time_dns` (`llmnr-disabled`, `chronyd-service`, `dnf-automatic`).
 - **Undo:** on a CSB host (`csb_detected`) delete only `/etc/systemd/resolved.conf.d/98-llmnr.conf` and run
   `sudo systemctl restart systemd-resolved`; the rest applies elsewhere: restore `/etc/chrony.conf` and `/etc/dnf/automatic.conf` from the
   snapshot (the role keeps no backup); delete
@@ -355,8 +363,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 ## sys_usbguard
 
 - **Why:** block unknown USB devices.
-- **Breaks if wrong:** a keyboard, dock or security key not allowed before USBGuard starts is blocked. Run `make usb-add` with every
-  device you use attached first.
+- **Breaks if wrong:** devices connected when USBGuard starts are kept (`PresentDevicePolicy=keep`), but a keyboard, dock or security
+  key plugged in later (or re-plugged) is blocked unless a rule allows it. Run `make usb-add` with every device you use attached first.
 - **Verify:** `make verify CHUNK=sys_usbguard` (`usbguard`, `usbguard-implicit-policy`, `usbguard-yubikey-rule`; the last two read 0600
   files, so run as root).
 - **Undo:** `sudo systemctl disable --now usbguard`, or `system_install_usbguard: false` and re-run (the role stops and disables it).
@@ -389,9 +397,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Breaks if wrong:** the exclusive write removes every other key, including any backup key; with sshd hardened an RSA key is rejected.
 - **Verify:** `make verify CHUNK=ssh_authorized_keys`; log in from a second device with the new key before closing any session.
 - **Undo:** restore `~/.ssh/authorized_keys` from `~/authorized_keys.before` (the `cp -a ~/.ssh/authorized_keys` line of the snapshot block:
-  run it
-  just before this chunk if no system chunk has been run yet, the role takes no copy; `make backup` also copies this file, but the copy
-  taken just before the write is the reliable restore point), keeping a console or second session open until then.
+  run it just before this chunk if no system chunk has been run yet; the role takes no copy. `make backup` also copies this file, but
+  the copy taken just before the write is the reliable restore point), keeping a console or second session open until then.
 
 ## sys_remote_access
 
