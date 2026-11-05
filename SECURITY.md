@@ -293,7 +293,17 @@ gpg --verify collections-dist/SHA256SUMS.asc collections-dist/SHA256SUMS
 `lockdown=integrity` without Secure Boot is weakened by an unprotected GRUB: a physical attacker can edit the kernel command line before
 lockdown activates. Both protections are needed.
 
-- Secure Boot is a firmware setting (out of scope for Ansible); `make smoke-test` reports its state.
+- Secure Boot is a firmware setting (out of scope for Ansible: a wrong value can leave a machine unbootable, it needs a reboot and
+  vendor-specific tooling). `make preflight` warns while it is off and `make smoke-test` FAILs `secure-boot`. Enable it before the first
+  `sys_lockdown` run:
+  1. Check state: `mokutil --sb-state`. Fedora's shim is signed by Microsoft's third-party UEFI CA; if `mokutil --db | grep Subject` shows
+     no `Microsoft Corporation UEFI CA`/`Microsoft UEFI CA` entry, the firmware must allow it first or Fedora will not boot.
+  2. Firmware setup (reboot, F1 on ThinkPads) > Security > Secure Boot: enable `Allow Microsoft 3rd Party UEFI CA` (if listed), then
+     `Secure Boot`. Save and exit. Undo: disable Secure Boot in the same menu.
+  3. ThinkPads also expose these settings to root through the `thinklmi` driver
+     (`/sys/class/firmware-attributes/thinklmi/attributes/{Allow3rdPartyUEFICA,SecureBoot}`, see the kernel firmware-attributes ABI).
+     That path is unverified for writes on this model, so use the firmware menu.
+  4. After the reboot confirm `mokutil --sb-state` says `SecureBoot enabled` and the system booted normally, then continue.
 - The GRUB superuser password is opt-in: set `system_grub_password_enabled: true` in `config.yml` and `vault_grub_password_hash` in the
   vault (generate with `grub2-mkpasswd-pbkdf2`; never put the hash in `config.yml`). Leaving the hash empty while
   `system_grub_password_enabled` is true fails provisioning at the hash assert (it does not disable the GRUB password). The default,
@@ -304,11 +314,12 @@ lockdown activates. Both protections are needed.
 
 ## Vault Security
 
-- Vault ships as a plaintext stub (`vault_placeholder`); encrypt after adding real secrets
+- Vault ships as a plaintext stub (`vault_placeholder`); encrypt it before adding real secrets (`make vault-edit` adds them)
 - The production vault password is derived from YubiKey HMAC-SHA1 challenge-response
 - `vault-pass.sh` is gitignored; `make bootstrap` creates a stub from `vault-pass-ci.sh` (integrity-checked)
 - The pre-commit hook blocks committing unencrypted vault files that contain real variables
-- Rotate the password with `ansible-vault rekey group_vars/all/vault.yml`
+- Rotate the password: `ansible-vault decrypt group_vars/all/vault.yml`, `make setup-yubikeys` (it refuses an encrypted vault), then
+  `ansible-vault encrypt group_vars/all/vault.yml` (a bare `ansible-vault rekey` asks for a typed password, not the YubiKey's)
 
 ### Setting Up vault-pass.sh
 
@@ -333,8 +344,8 @@ unset BASH_ENV
 set -euo pipefail
 _CHALRESP_HEX=$(printf '%s' 'ansible-vault-laptop-setup' | od -An -tx1 | tr -d ' \n')
 _to=timeout; command -v timeout >/dev/null 2>&1 || _to=gtimeout
-"$_to" 20 ykman otp calculate 2 "$_CHALRESP_HEX" 2>/dev/null || {
-  echo "ERROR: YubiKey not available or touch timed out — insert YubiKey and retry" >&2; exit 1
+"$_to" 20 ykman otp calculate 2 "$_CHALRESP_HEX" || {
+  echo "ERROR: vault password unavailable: insert exactly one programmed YubiKey and touch it (ykman message above)" >&2; exit 1
 }
 ```
 
@@ -343,6 +354,7 @@ Then:
 ```bash
 chmod 700 scripts/vault-pass.sh
 (cd scripts && sha256sum vault-pass.sh > vault-pass.sh.sha256)  # make checks this; relative path required
+git update-index --skip-worktree group_vars/all/vault.yml  # keep the real vault out of commits
 ansible-vault encrypt group_vars/all/vault.yml
 ```
 
@@ -357,8 +369,7 @@ ansible-vault encrypt group_vars/all/vault.yml
 
 The HMAC secret cannot be read back from a YubiKey and the script never displays it, so a replacement key cannot be cloned afterwards.
 To rotate to new keys, decrypt with a surviving key (or the saved password), re-run `make setup-yubikeys` (which generates a new secret and
-so
-changes the vault password), then re-encrypt the decrypted vault with `ansible-vault encrypt group_vars/all/vault.yml`. (`rekey` needs an
+so changes the vault password), then re-encrypt the decrypted vault with `ansible-vault encrypt group_vars/all/vault.yml`. (`rekey` needs an
 encrypted file and fails on plaintext.)
 
 **Recovering with the saved password:**
@@ -377,8 +388,10 @@ encrypted file and fails on plaintext.)
 
    ```bash
    ansible-vault view --vault-password-file "$tmp/vault-pass-temp.sh" group_vars/all/vault.yml
-   ansible-vault rekey --vault-password-file "$tmp/vault-pass-temp.sh" group_vars/all/vault.yml
+   ansible-vault decrypt --vault-password-file "$tmp/vault-pass-temp.sh" group_vars/all/vault.yml
    ```
+
+   After `decrypt`, program the replacement key with `make setup-yubikeys`, then run `ansible-vault encrypt group_vars/all/vault.yml`.
 
 4. Shred the temporary script and unset the variable: `shred -u "$tmp/vault-pass-temp.sh"; rmdir "$tmp"; unset VAULT_PASS`
 
@@ -419,7 +432,10 @@ ssh-keygen -t ed25519-sk -O verify-required -f ~/.ssh/id_ed25519_sk_signing
 Then:
 
 1. Run `make vault-edit` and update `vault_ssh_auth_key`, `vault_ssh_auth_key_pub`, `vault_ssh_signing_key`, `vault_ssh_signing_key_pub`
-2. Run `make ssh` to deploy the keys; `authorized_keys` is written with `exclusive: true`, so the old key is removed from this machine
+   (multi-line key files go in as YAML block scalars, `vault_ssh_auth_key: |` with every line indented; see the `vault.yml` header)
+2. Run `make chunk-ssh_client`, then `make chunk-ssh_authorized_keys` (at the console, second session open);
+   `authorized_keys` is written with `exclusive: true`, so the old key is removed from this machine. Then `make chunk-dotfiles`
+   rewrites `~/.config/git/allowed_signers` with the new signing key.
 3. Remove the old public key from `authorized_keys` on every other machine that trusted it
 
 `ykman fido info` shows PIN state. sshd hardening accepts only ed25519 and FIDO2 (`sk-ssh-ed25519`) keys.

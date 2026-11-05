@@ -76,7 +76,8 @@ is_dnf: false  # fallback; authoritative value in group_vars/all/vars.yml
 containers_enforce_fqin: true
 # SECURITY: Deploy the FQIN drop-in even when /etc/containers/registries.conf (system-level)
 # exists. User-level drop-ins override the system file's unqualified-search-registries, so this
-# breaks short-name pulls from corporate registries listed in IT's file (e.g.
-# registry.access.redhat.com, registry.fedoraproject.org). Only set true if every image you pull
-# is fully qualified; by default the drop-in is skipped and the role prints IT's setting.
+# breaks short-name pulls from the registries listed there (IT-managed on RHEL CSB; the
+# containers-common default on Fedora, e.g. registry.fedoraproject.org, docker.io). Only set true if
+# every image you pull is fully qualified; by default the drop-in is skipped and the role prints the
+# system file's setting.
 containers_enforce_fqin_override: false

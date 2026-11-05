@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Unit tests for scripts/usb-add.py (make usb-add)."""
+import io
 import importlib.util
 from pathlib import Path
 import tempfile
@@ -56,17 +57,31 @@ class UsbAddTests(unittest.TestCase):
             (dev / 'idVendor').write_text('3297\n')
             (dev / 'idProduct').write_text('1969\n')
             (dev / 'product').write_text('Moonlander Mark I\n')
-            for n, sub in ((0, '01'), (1, '00')):
-                iface = root / ('3-1:1.%d' % n)
-                iface.mkdir()
-                (iface / 'bInterfaceClass').write_text('03\n')
-                (iface / 'bInterfaceSubClass').write_text(sub + '\n')
-                (iface / 'bInterfaceProtocol').write_text('01\n')
-            (dev / ('3-1:1.0')).symlink_to(root / '3-1:1.0')
-            (dev / ('3-1:1.1')).symlink_to(root / '3-1:1.1')
-            devices = usb.read_sysfs(root)
+            device_desc = bytes([18, 1]) + bytes(16)
+            config_desc = bytes([9, 2]) + bytes(7)
+            # interface 0, interface 1, and an alternate setting of interface 1 (USBGuard lists all three)
+            ifaces = b''.join(bytes([9, 4, n, alt, 1, 3, sub, 1, 0]) for n, alt, sub in ((0, 0, 1), (1, 0, 0), (1, 1, 0)))
+            endpoint = bytes([7, 5]) + bytes(5)
+            (dev / 'descriptors').write_bytes(device_desc + config_desc + ifaces + endpoint)
+            bad = root / '3-2'
+            bad.mkdir()
+            (bad / 'idVendor').write_text('1234\n')
+            (bad / 'idProduct').write_text('5678\n')
+            (bad / 'descriptors').write_bytes(device_desc + bytes([9, 4, 0]))  # truncated
+            nodesc = root / '3-3'
+            nodesc.mkdir()
+            (nodesc / 'idVendor').write_text('1234\n')
+            (nodesc / 'idProduct').write_text('9abc\n')
+            bare = root / '3-4'
+            bare.mkdir()
+            (bare / 'idVendor').write_text('1234\n')
+            (bare / 'idProduct').write_text('def0\n')
+            (bare / 'descriptors').write_bytes(device_desc)  # no configuration: no interfaces
+            with mock.patch('sys.stderr', new_callable=io.StringIO) as err:
+                devices = usb.read_sysfs(root)
+        self.assertIn('skipping 1234:def0: unreadable or malformed USB descriptors', err.getvalue())
         self.assertEqual([usb.build_rule(d) for d in devices],
-                         ['allow id 3297:1969 name "Moonlander Mark I" with-interface { 03:00:01 03:01:01 }'])
+                         ['allow id 3297:1969 name "Moonlander Mark I" with-interface { 03:00:01 03:00:01 03:01:01 }'])
 
     def test_config_edits_keep_comments_and_order(self):
         entries = [('allow id 1234:5678 name "It\'s"', 'It, added')]

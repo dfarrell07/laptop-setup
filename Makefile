@@ -1,7 +1,7 @@
 .PHONY: status plan verify rollout-banner bootstrap-hooks help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check test smoke-test \
        dotfiles packages repos notes \
        ssh desktop system repos_dnf redhat containers claude codex container \
-       container-rebuild csb-audit vault-edit vault-view vault-diff update hooks \
+       container-rebuild csb-audit vault-edit vault-view update hooks \
        smoke-test-container smoke-test-user \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
        test-scripts test-poller test-gitleaks test-% \
@@ -95,15 +95,15 @@ help:
 	@echo "Linting:    shellcheck markdownlint commitlint check-vars-sync syntax-check"
 	@echo "Setup:      bootstrap bootstrap-hooks bootstrap-test hooks npm setup-yubikeys vendor-collections"
 	@echo "Output:     QUIET=1 hides ok results, including debug warnings (e.g. make all QUIET=1)"
-	@echo "USB:        usb-add  (allow blocked/connected USB devices now; save rules to config.yml)"
+	@echo "USB:        usb-add  (allow blocked USB devices now while USBGuard runs; otherwise save rules for connected devices to config.yml)"
 	@echo "AIDE:       aide-rebaseline  (accept current files as the baseline after expected changes, e.g. dnf upgrade)"
-	@echo "Other:      backup backup-dry-run migration-inventory workstation-audit csb-audit vault-edit vault-view vault-diff pip-lock pip-sync preflight"
+	@echo "Other:      backup backup-dry-run migration-inventory workstation-audit csb-audit vault-edit vault-view pip-lock pip-sync preflight"
 
 # --- Primary targets ---
 # Safety guard: user-space role targets must not run as root (dotfiles would install to /root/)
 guard-not-root:
 	@[ "$$(id -u)" != "0" ] || \
-		{ echo "ERROR: Do not run as root. Use -K for privilege escalation (make all)." >&2; exit 1; }
+		{ echo "ERROR: Do not run as root. Run make as your own user; targets that need root ask for your sudo password." >&2; exit 1; }
 
 all: guard-not-root rollout-banner preflight
 	$(VERIFY_AND_RUN) --run-log=all ansible-playbook site.yml --ask-become-pass
@@ -152,11 +152,12 @@ bootstrap: guard-not-root bootstrap-hooks
 		cd scripts && cat vault-pass-ci.sh > vault-pass.sh && chmod 700 vault-pass.sh && sha256sum vault-pass.sh > vault-pass.sh.sha256 && cd .. && \
 		echo "SECURITY: Created stub vault-pass.sh — you MUST replace with YubiKey/keyring/encrypted-file before encrypting vault.yml"; \
 	elif [ ! -f scripts/vault-pass.sh.sha256 ]; then \
-		(cd scripts && sha256sum vault-pass.sh > vault-pass.sh.sha256); \
+		(cd scripts && sha256sum vault-pass.sh > vault-pass.sh.sha256) && \
+		echo "NOTE: no vault-pass.sh.sha256; recorded the hash of the existing vault-pass.sh as-is (contents not verified). Inspect it, or run make setup-yubikeys"; \
 	fi
 	@chmod 700 scripts/vault-pass.sh scripts/vault-pass-ci.sh
 	@# Verify vault-pass.sh integrity after creation/update (FATAL if check fails)
-	@cd scripts && sha256sum -c vault-pass.sh.sha256 > /dev/null 2>&1 && echo "✓ vault-pass.sh integrity verified" || { echo "ERROR: vault-pass.sh failed integrity check — possible tampering or stale .sha256 file. If expected (after make setup-yubikeys), the hash file should have been automatically updated. Run: (cd scripts && sha256sum vault-pass.sh > vault-pass.sh.sha256)" >&2; exit 1; }
+	@cd scripts && sha256sum -c vault-pass.sh.sha256 > /dev/null 2>&1 && echo "✓ vault-pass.sh matches vault-pass.sh.sha256 (hash check only; contents are not vetted)" || { echo "ERROR: vault-pass.sh failed integrity check — possible tampering or stale .sha256 file. If expected (after make setup-yubikeys), the hash file should have been automatically updated. Run: (cd scripts && sha256sum vault-pass.sh > vault-pass.sh.sha256)" >&2; exit 1; }
 	@# Verify verify-collections.sh integrity (FATAL if check fails) — guards against supply chain tampering
 	@cd scripts && sha256sum -c verify-collections.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-collections.sh integrity verified" || { echo "ERROR: verify-collections.sh failed integrity check — possible tampering. Run: (cd scripts && sha256sum verify-collections.sh > verify-collections.sh.sha256)" >&2; exit 1; }
 	@# Verify verify-ansible-args.sh integrity (FATAL if check fails) — guards against pre-flight check bypass
@@ -180,7 +181,11 @@ bootstrap: guard-not-root bootstrap-hooks
 	@echo ""
 	@echo "Bootstrap complete. Git hooks active."
 	@echo ""
-	@echo "Next: cp default.config.yml config.yml, replace every CHANGE_ME (and set system_timezone), then make preflight. Full first-run steps: CLAUDE.md 'First time on a new machine'."
+	@if [ -f config.yml ]; then \
+		echo "Next: make setup-yubikeys (CLAUDE.md step 3; skip only for a run without secrets), then make preflight (config.yml exists; keep it). Full first-run steps: CLAUDE.md 'First time on a new machine'."; \
+	else \
+		echo "Next: cp default.config.yml config.yml, replace every CHANGE_ME (and set system_timezone), make setup-yubikeys, then make preflight. Full first-run steps: CLAUDE.md 'First time on a new machine'."; \
+	fi
 
 # Fedora 41+ runs modular libvirt daemons (virtqemud.service Conflicts=libvirtd.service), so their
 # sockets are enabled instead of the monolithic libvirtd. vagrant-libvirt uses qemu:///system;
@@ -213,7 +218,7 @@ npm:
 	@if command -v npm >/dev/null 2>&1; then \
 		npm ci --ignore-scripts; \
 	else \
-		echo "NOTE: npm not found — install nodejs for commitlint hooks"; \
+		echo "NOTE: npm not found — commitlint stays off until nodejs and npm are installed (make packages), then run: make npm"; \
 	fi
 
 vendor-collections: guard-not-root
@@ -244,7 +249,7 @@ setup-yubikeys: guard-not-root
 	scripts/setup-yubikeys.sh
 
 # With USBGuard running: allow blocked USB devices now and save their rules. Otherwise: only save
-# rules for connected devices no rule covers yet. Rules go to config.yml for the next make system.
+# rules for connected devices no rule covers yet. Rules go to config.yml for the next `make chunk-sys_usbguard`.
 usb-add: guard-not-root
 	python3 scripts/usb-add.py
 
@@ -349,7 +354,7 @@ plan: guard-not-root .venv rollout-banner
 chunk-%: export ROLLOUT_CHUNK = $*
 chunk-%: guard-not-root .venv
 	@args=$$(.venv/bin/python3 -I scripts/rollout.py chunk-args "$$ROLLOUT_CHUNK") || exit 2; \
-	  $(VERIFY_AND_RUN) ansible-playbook site.yml $$args && echo "Next: make verify CHUNK=$$ROLLOUT_CHUNK"
+	  $(VERIFY_AND_RUN) ansible-playbook site.yml $$args && .venv/bin/python3 -I scripts/rollout.py next-step "$$ROLLOUT_CHUNK"
 
 verify: .venv
 	@.venv/bin/python3 -I scripts/rollout.py verify "$$CHUNK"
@@ -474,11 +479,3 @@ vault-edit:
 
 vault-view:
 	PAGER= ANSIBLE_PAGER= MANPAGER= SYSTEMD_PAGER= EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) ansible-vault view group_vars/all/vault.yml
-
-vault-diff:
-	PAGER= MANPAGER= SYSTEMD_PAGER= EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) bash -c \
-		'old=$$(ansible-vault decrypt --output=- <(git show HEAD:group_vars/all/vault.yml)) \
-			|| { echo "Cannot decrypt the committed vault.yml" >&2; exit 1; }; \
-		new=$$(ansible-vault decrypt --output=- group_vars/all/vault.yml) \
-			|| { echo "Cannot decrypt group_vars/all/vault.yml" >&2; exit 1; }; \
-		diff <(printf "%s\\n" "$$old") <(printf "%s\\n" "$$new"); [ $$? -le 1 ]'

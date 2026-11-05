@@ -1,19 +1,26 @@
 ---
 # Ansible Vault file, shipped as a PLAINTEXT stub (no secrets) — encrypt before adding real secrets.
 #
+#   git update-index --skip-worktree group_vars/all/vault.yml  # first: the committed file stays this stub
 #   ansible-vault encrypt group_vars/all/vault.yml
 #   make vault-edit
 #
-# Required variables (populate then encrypt):
-#   vault_ssh_auth_key, vault_ssh_auth_key_pub
-#   vault_ssh_signing_key, vault_ssh_signing_key_pub
-#   vault_rh_git_key
-#   vault_notes_transcrypt_password
+# Expected variables (add them with make vault-edit after encrypting):
+#   vault_ssh_auth_key      contents of ~/.ssh/id_ed25519_sk (the key file without .pub)
+#   vault_ssh_auth_key_pub  contents of ~/.ssh/id_ed25519_sk.pub (one line; written to authorized_keys)
 #
-# Optional variables (when feature is enabled):
+# Optional variables (leave '' to skip):
+#   vault_ssh_signing_key, vault_ssh_signing_key_pub  (~/.ssh/id_ed25519_sk_signing and its .pub)
+#   vault_rh_git_key  (work profile only)
+#   vault_notes_transcrypt_password
 #   vault_grub_password_hash  (when system_grub_password_enabled: true)
 #
-# SSH keys — empty on first provision; populate with real keys before encryption
+# Key files span several lines: replace '' with | and indent every line of the file by two spaces:
+#   vault_ssh_auth_key: |
+#     <first line of the key file>
+#     <...every further line...>
+#
+# SSH keys — empty on first provision; add real keys only after encryption
 vault_ssh_auth_key: ''
 vault_ssh_auth_key_pub: ''
 vault_ssh_signing_key: ''

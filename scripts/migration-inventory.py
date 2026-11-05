@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Inventory Git migration metadata without reading file contents or fetching."""
+"""Inventory Git migration metadata without fetching; clean filters may run on stat-dirty tracked files."""
 import argparse
 from datetime import datetime, timezone
 import json
@@ -45,6 +45,15 @@ def git(path, *args):
         capture_output=True, timeout=45, check=True,
     )
     return result.stdout.decode('utf-8', errors='replace')
+
+
+def count_paths(path, errors, *args):
+    """Count NUL-separated paths; None (and an error) when the probe fails, e.g. a required clean filter."""
+    try:
+        return len([s for s in git(path, *args).split('\0') if s])
+    except (subprocess.SubprocessError, OSError):
+        errors.append({'path': str(path), 'error': 'Git ' + ' '.join(args[:2]) + ' probe failed'})
+        return None
 
 
 def inventory(roots):
@@ -95,9 +104,10 @@ def inventory(roots):
                     'head': head,
                     'remotes': remotes,
                     'branches': refs,
-                    'modified': len([s for s in git(path, 'diff', '--name-only', '-z').split('\0') if s]),
-                    'staged': len([s for s in git(path, 'diff', '--cached', '--name-only', '-z').split('\0') if s]),
-                    'untracked': len([s for s in git(path, 'ls-files', '--others', '--exclude-standard', '-z').split('\0') if s]),
+                    # A failed count (None) keeps the row: its remotes and branches still matter.
+                    'modified': count_paths(path, errors, 'diff', '--name-only', '-z'),
+                    'staged': count_paths(path, errors, 'diff', '--cached', '--name-only', '-z'),
+                    'untracked': count_paths(path, errors, 'ls-files', '--others', '--exclude-standard', '-z'),
                 })
             except (subprocess.SubprocessError, ValueError, OSError):
                 errors.append({'path': str(path), 'error': 'Git metadata probe failed'})

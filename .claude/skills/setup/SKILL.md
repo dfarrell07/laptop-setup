@@ -38,6 +38,7 @@ needs no YubiKey; `make ssh` does). `warn` and `skip` can be passed. `--json` sk
 `make preflight` before a first provision and `make check` for a full dry run.
 
 Confirm the owner connected their USB devices and ran `make usb-add` before any USBGuard chunk (CLAUDE.md § USBGuard).
+A `secure_boot` warning means firmware Secure Boot is off: the owner must enable it before `sys_lockdown` (SECURITY.md § Secure Boot).
 
 ## Phase 2: Environment
 
@@ -81,8 +82,9 @@ Never retry automatically. Finish with a list of passed, failed and skipped chun
 
 Check each tool and skip what is already logged in. If an auth step fails with connection errors, ask whether the VPN is up.
 
-- **GitHub CLI**: check `gh auth status`; if missing, owner runs `gh auth login` (HTTPS), then `make packages repos notes`
-- **Notes (transcrypt)**: `make notes` warned about the password; if missing, `make vault-edit` to add
+- **GitHub CLI**: check `gh auth status`; if missing, owner runs `gh auth login` (HTTPS), then `make packages repos`
+  (`make notes` too only when `notes_enabled: true` is set in `config.yml`; the notes repo is opt-in)
+- **Notes (transcrypt, only when `notes_enabled`)**: `make notes` warned about the password; if missing, `make vault-edit` to add
   `vault_notes_transcrypt_password`, then `make notes`
 - **OpenShift (work)**: check `oc whoami`; if missing, `oc login --web`; cluster name is in `CLAUDE.local.md`
 - **Registries (work)**: check `podman login --get-login registry.redhat.io` (and `quay.io`); if missing,

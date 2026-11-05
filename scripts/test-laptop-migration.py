@@ -223,7 +223,7 @@ class MigrationTests(unittest.TestCase):
         production = yaml.safe_load((ROOT / 'roles/claude/tasks/main.yml').read_text())
         selected = [task for task in production if task.get('name') in [
             'Seed Claude user preferences without replacing CLI edits',
-            'Deploy instance CLAUDE.md (managed by Ansible, use CLAUDE.local.md for local edits)']]
+            'Deploy instance CLAUDE.md (managed by Ansible; edits are overwritten each run)']]
         for task in selected:
             if 'ansible.builtin.template' in task:
                 task['ansible.builtin.template']['src'] = str(ROOT / 'roles/claude/templates/CLAUDE.md.j2')
@@ -576,6 +576,37 @@ print -r -- "PARENT:$CLAUDE_CODE_USE_VERTEX:$CODEX_HOME:$ANTHROPIC_API_KEY"
             self.assertNotEqual(repeated.returncode, 0)
             self.assertIn('FileExistsError', repeated.stderr)
             self.assertEqual(output.read_bytes(), before)
+
+    def test_failed_change_count_keeps_repository_row(self):
+        with tempfile.TemporaryDirectory() as name:
+            repo = Path(name) / 'repo'
+            repo.mkdir()
+            env = dict(os.environ, GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull)
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(repo), *args], env=env, text=True)
+            git('init', '-q')
+            git('config', 'user.name', 'Fixture')
+            git('config', 'user.email', 'fixture@example.invalid')
+            git('config', 'filter.fixture.clean', 'cat')
+            git('config', 'filter.fixture.required', 'true')
+            (repo / '.gitattributes').write_text('big.bin filter=fixture\n')
+            (repo / 'big.bin').write_text('data\n')
+            git('add', '.gitattributes', 'big.bin')
+            git('commit', '-qm', 'fixture')
+            git('remote', 'add', 'origin', 'https://example.invalid/repo.git')
+            # A required clean filter that fails (a missing git-lfs binary) makes git diff exit 128.
+            git('config', 'filter.fixture.clean', 'false')
+            os.utime(repo / 'big.bin', (0, 0))
+            output = Path(name) / 'report.json'
+            result = subprocess.run([sys.executable, str(ROOT / 'scripts/migration-inventory.py'), str(repo),
+                                     '--output', str(output)], env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            report = json.loads(output.read_text())
+            self.assertEqual(len(report['repositories']), 1)
+            row = report['repositories'][0]
+            self.assertIsNone(row['modified'])
+            self.assertEqual(row['remotes']['origin'], 'https://example.invalid/repo.git')
+            self.assertTrue(any('probe failed' in e['error'] for e in report['errors']))
 
 
 if __name__ == '__main__':

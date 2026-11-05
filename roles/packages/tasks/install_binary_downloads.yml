@@ -24,7 +24,7 @@
           kubectl source change detected: {{ _packages_kubectl_source_marker_check.stdout | trim }} → {{ packages_kubectl_source }}.
           This will replace the existing kubectl binary ({{ _packages_kubectl_source_marker_check.stdout | trim }}: potentially
           older/newer version).
-          To proceed, manually remove /var/lib/ansible-packages/kubectl-source and re-run.
+          To proceed, run: sudo rm /var/lib/ansible-packages/kubectl-source and re-run make packages.
 
 - name: Install oc, kubectl, and opm
   when: _packages_linux_x86_work

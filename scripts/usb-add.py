@@ -4,7 +4,7 @@
 With USBGuard running, every blocked device is allowed for this session
 (usbguard allow-device) and a matching rule is appended to
 system_usbguard_extra_rules in config.yml (unless that exact rule, or an id-only rule, is
-already saved), so the next `make system` writes it to /etc/usbguard/rules.conf. rules.conf itself is Ansible-managed, so it is
+already saved), so the next `make chunk-sys_usbguard` writes it to /etc/usbguard/rules.conf. rules.conf itself is Ansible-managed, so it is
 never edited here.
 
 While USBGuard is not running, connected devices whose VID:PID no 'allow id' rule covers
@@ -86,7 +86,9 @@ def parse_device_line(line):
 
 
 def format_interfaces(interfaces):
-    interfaces = sorted(set(interfaces))
+    # Keep duplicates: USBGuard lists one entry per interface descriptor (alternate settings
+    # included), and a plain { ... } set only matches a device with the same number of entries.
+    interfaces = sorted(interfaces)
     if len(interfaces) == 1:
         return interfaces[0]
     return '{ ' + ' '.join(interfaces) + ' }' if interfaces else ''
@@ -118,6 +120,22 @@ def build_rule(device):
     return ' '.join(parts)
 
 
+def descriptor_interfaces(data):
+    """Interface types from a raw sysfs `descriptors` blob, one per interface descriptor
+    (the list USBGuard builds), or None when the blob is malformed."""
+    interfaces, i = [], 0
+    while i < len(data):
+        length = data[i]
+        if length < 2 or i + length > len(data):
+            return None
+        if data[i + 1] == 4:  # interface descriptor
+            if length < 9:
+                return None
+            interfaces.append('%02x:%02x:%02x' % (data[i + 5], data[i + 6], data[i + 7]))
+        i += length
+    return interfaces
+
+
 def read_sysfs(root=SYSFS):
     """Connected devices from sysfs, in the same shape as parse_device_line."""
     devices = []
@@ -129,20 +147,17 @@ def read_sysfs(root=SYSFS):
                 return (p / name).read_text().strip()
             except (OSError, UnicodeDecodeError):
                 return ''
-        interfaces = []
-        unreadable_interface = False
-        for iface in path.glob(path.name + ':*'):
-            fields = [attr(iface, n) for n in ('bInterfaceClass', 'bInterfaceSubClass', 'bInterfaceProtocol')]
-            if all(fields):
-                interfaces.append(':'.join(f.lower() for f in fields))
-            else:
-                unreadable_interface = True
+        try:
+            interfaces = descriptor_interfaces((path / 'descriptors').read_bytes())
+        except OSError:
+            interfaces = None
+        unreadable_interface = not interfaces  # None (malformed) or [] (no interface descriptors)
         device_id = '%s:%s' % (attr(path, 'idVendor').lower(), attr(path, 'idProduct').lower())
         if not re.fullmatch(r'[0-9a-f]{4}:[0-9a-f]{4}', device_id):
             print('[warn] skipping %s: unreadable or malformed USB id' % path.name, file=sys.stderr)
             continue  # never save a broken rule
         if unreadable_interface:
-            print('[warn] skipping %s: unreadable interface attributes (a rule would be too broad)' % device_id,
+            print('[warn] skipping %s: unreadable or malformed USB descriptors (a rule would be too broad)' % device_id,
                   file=sys.stderr)
             continue
         devices.append({
@@ -290,10 +305,11 @@ def main(argv=None):
                     new.append((rule, device['name'] or device['id'], device))
             if not new:
                 break
-            print('\nDevices to allow:')
+            print('\nDevices to allow:' if live else '\nDevices to save:')
             for rule, _, device in new:
                 print('  %-10s %s' % (device['id'], rule or '(rule already saved)'))
-            if not confirm('Allow these and save any new rules to config.yml?', args.yes):
+            question = 'Allow these and save any new rules to config.yml?' if live else 'Save these rules to config.yml?'
+            if not confirm(question, args.yes):
                 declined = True
                 break
             for rule, label, device in new:
@@ -333,7 +349,7 @@ def main(argv=None):
                     print("  - '%s'" % rule.replace("'", "''"), file=sys.stderr)
         raise
     print('\nSaved %d rule(s) to %s (%s).' % (len(added), args.config.name, KEY))
-    print('Review them, then run: make system   (writes /etc/usbguard/rules.conf)')
+    print('Review them, then run: make chunk-sys_usbguard   (writes /etc/usbguard/rules.conf)')
     return 1 if capped else 0
 
 

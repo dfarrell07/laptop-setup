@@ -38,7 +38,7 @@ logs and transcripts. The wrapper and the vault scripts disable xtrace, but do n
 unless a rule allows it. Before the first `sys_usbguard` run, connect every device you use (drives, docks, keyboards), run `lsusb`, then
 `make usb-add` (or add `"allow id VVVV:PPPP"` entries to `system_usbguard_extra_rules`). ThinkPad P16v Gen 1 AMD: ACPI reports internal USB
 devices as `not used`, not `hardwired`, so the base rule fails and internal devices need explicit VID:PID rules. Blocked
-afterwards: plug in, `make usb-add`, `make system`. Details: `references/troubleshooting.md`.
+afterwards: plug in, `make usb-add`, `make chunk-sys_usbguard`. Details: `references/troubleshooting.md`.
 
 ### Internal SSH git hosts
 
@@ -49,21 +49,25 @@ and `make chunk-repos`; until then those hosts and their repos are skipped. See 
 ### First time on a new machine
 
 0. Enable Secure Boot in firmware: `lockdown=integrity` is bypassable by a physical attacker booting a custom kernel without it
-   (`make smoke-test` FAILs `secure-boot` until enabled).
+   (`make preflight` warns and `make smoke-test` FAILs `secure-boot` until enabled). Firmware-only, not automated; enable `Allow Microsoft
+   3rd Party UEFI CA` first or Fedora will not boot. Steps: SECURITY.md § "Secure Boot + GRUB bootloader password".
 1. `make bootstrap` (fresh Fedora/RHEL: `sudo dnf install -y make` first; macOS: `xcode-select --install` and Homebrew first).
 2. `cp default.config.yml config.yml`, then replace every `CHANGE_ME` in it (preflight fails while any remain).
    Also set `system_timezone` (default `UTC`; not a `CHANGE_ME` sentinel; preflight fails if the key is absent from `config.yml`).
-3. First thing after config, before any chunk: `make setup-yubikeys` programs the keys and writes `vault-pass.sh`; then fill
-   `group_vars/all/vault.yml` (SSH keys) and run
-   `ansible-vault encrypt` on it. A first provision without secrets works at the console from the plaintext stub: container provisioning is
-   deferred (`make container`) and internal git hosts with placeholder fingerprints are skipped (`make chunk-ssh_client`, then
-   `make chunk-repos`). Provisioning over SSH with no ed25519/FIDO2 key is blocked. **WARNING**: with an empty vault no `authorized_keys`
-   is written; after reboot sshd is on port 722 and hardening rejects RSA/ECDSA keys (only ed25519 and `sk-ssh-ed25519`, plain or
-   certificate variants), so an RSA-only `authorized_keys` locks you out. Put an ed25519 key in the vault or in `authorized_keys` before
-   rebooting.
+3. First thing after config, before any chunk: `make setup-yubikeys` programs the keys and writes `vault-pass.sh` (it
+   does not touch the vault); then run `git update-index --skip-worktree group_vars/all/vault.yml` (the committed vault must stay the
+   plaintext stub; CI rejects a real one), `ansible-vault encrypt group_vars/all/vault.yml`, and `make vault-edit` to add the SSH keys.
+   From then on every make target that starts Ansible needs the key inserted and a touch. A first provision without secrets works at the
+   console from the plaintext stub: container provisioning is deferred (`make container`) and internal git hosts with placeholder
+   fingerprints are skipped (`make chunk-ssh_client`, then `make chunk-repos`). Provisioning over SSH with no ed25519/FIDO2 key is
+   blocked. **WARNING**: with an empty vault no `authorized_keys` is written; after reboot sshd is on port 722 and hardening rejects
+   RSA/ECDSA keys (only ed25519 and `sk-ssh-ed25519`, plain or certificate variants), so an RSA-only `authorized_keys` locks you out.
+   Put an ed25519 key in the vault or in `authorized_keys` before rebooting.
 3a. USB devices, early, with the YubiKeys still plugged in: connect every device you use (dock, Moonlander, drives), run `lsusb`, then
    `make usb-add`. It saves their rules to `config.yml` even while USBGuard is not running, so the first `sys_usbguard` run keeps them.
-3b. `make preflight` (re-run after any `config.yml` change).
+3b. `make preflight` (re-run after any `config.yml` change). Then, before the first chunk, `make backup-dry-run` and `make backup`
+    (copies dotfiles, SSH and agent config to `~/laptop-setup-backup-<timestamp>`, mode 0700): ssh_client, dotfiles and agents
+    overwrite or remove files.
 3c. `make check`: sudo `--check --diff` of every play. `make check` and `make all` log to `~/.cache/laptop-setup/logs/`
     (`check-latest.log`, `all-latest.log`; newest 20 kept).
 3d. Recommended over `make all`: roll out in chunks. Optionally set `rollout_enable: [list]` in `config.yml`, then per chunk
@@ -78,8 +82,8 @@ and `make chunk-repos`; until then those hosts and their repos are skipped. See 
    - **Reboot**: lockdown, IOMMU, vsyscall and init_on_free take effect only then; until lockdown=integrity is active, kexec is guarded
      only by the `kexec_load_disabled` sysctl. SSH is then on port 722.
    - `make smoke-test`, then `tailscale up` (browser step).
-   - `gh auth login`, then `make packages repos notes` (while gh is logged out, the first run reports failed private clones and a
-     notes clone warning, then continues).
+   - `gh auth login`, then `make packages repos` (while gh is logged out, the first run reports failed private clones, then
+     continues). The notes repo is opt-in: set `notes_enabled: true` in `config.yml` first, then `make notes`.
    - Work profile with `oc`: `podman login registry.redhat.io` unless vault `registry_tokens` automates it.
    - Log out and back in for libvirt/kvm group changes; on CSB/hybrid machines run `make container`; re-run `make smoke-test`.
 
@@ -96,10 +100,10 @@ make backup | backup-dry-run  # back up dotfiles before re-provisioning
 make bootstrap | hooks | bootstrap-hooks  # deps and collections | git hooks | checksum-pinned gitleaks
 make vendor-collections     # re-vendor into collections-dist/ (SECURITY.md Collections Supply Chain)
 make container | container-rebuild  # distrobox/toolbox dev container
-make usb-add                # allow blocked USB devices, save rules to config.yml (then make system)
+make usb-add                # allow blocked USB devices, save rules to config.yml (then make chunk-sys_usbguard)
 make aide-rebaseline        # accept current files as the AIDE baseline
 make smoke-test | smoke-test-user | smoke-test-container   # host | no sudo | distrobox
-make vault-edit | vault-view | vault-diff
+make vault-edit | vault-view
 make migration-inventory | workstation-audit  # private reports for a laptop move
 make lint                   # ansible-lint, yamllint, shellcheck, markdownlint, check-vars-sync, script integrity
 make syntax-check | shellcheck | markdownlint | commitlint | check-vars-sync
@@ -163,7 +167,7 @@ runs `git_repos` for one `repo_category`. `make help` lists everything; scenario
 
 ## Vault
 
-- One vault file, `group_vars/all/vault.yml`; password from a YubiKey via `make setup-yubikeys`; `make vault-edit|vault-view|vault-diff`.
+- One vault file, `group_vars/all/vault.yml`; password from a YubiKey via `make setup-yubikeys`; `make vault-edit|vault-view`.
   `vault-pass.sh` templates: SECURITY.md § "Setting Up vault-pass.sh".
 - **Never define `vault_*` variables in `config.yml`**: `include_vars` (precedence 18) outranks `group_vars` and silently shadows the vault
   value. `common/tasks/pre_flight_checks.yml` asserts this.

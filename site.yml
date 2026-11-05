@@ -146,9 +146,9 @@
     # NOTE: an empty vault is handled inside roles/distrobox/tasks/main.yml, which defers
     # container provisioning (until 'make container') so the other roles still succeed.
 
-    # REQUIRED GUARD — DO NOT REMOVE: Play 1 applies SSH port change + kernel
-    # hardening before Play 2, so users who skip 'make preflight' get no other
-    # warning. preflight.sh alone is not sufficient.
+    # REQUIRED GUARD — DO NOT REMOVE: Play 0 (pre_flight_checks.yml) asserts these
+    # first, before Play 1 hardening; this assert is the backstop if that check is
+    # removed or bypassed. preflight.sh alone is not sufficient.
     - name: Assert identity vars are not CHANGE_ME placeholder values
       ansible.builtin.assert:
         that:

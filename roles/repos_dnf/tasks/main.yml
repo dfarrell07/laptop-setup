@@ -357,10 +357,9 @@
           Continuing playbook execution.
       when: not csb_rhel
 
-# RPM Fusion free provides multimedia codecs (H.264/AAC, ffmpeg, VLC) and is allowed
-# on hybrid Fedora CSB (csb_detected=true, csb_rhel=false) where the user manages their
-# own Fedora install. Guard is 'not csb_rhel' (not 'not csb_detected') intentionally:
-# hybrid CSB Fedora is user-managed and IT does not restrict third-party Fedora repos here.
+# RPM Fusion free provides multimedia codecs (H.264/AAC, ffmpeg, VLC). Guard is 'not csb_rhel'
+# (not 'not csb_detected') intentionally: hybrid CSB Fedora (csb_detected=true, csb_rhel=false) is
+# not blocked by this role, but IT may flag repos outside its allowlist; check IT policy before enabling.
 # If your IT policy prohibits RPM Fusion, set repo_rpmfusion_free: false in config.yml.
 - name: Enable RPM Fusion free repo
   when:
