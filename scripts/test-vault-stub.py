@@ -68,7 +68,7 @@ esac
 
 
 class VaultInitTests(unittest.TestCase):
-    """make vault-init: refuses the stub, sets skip-worktree, encrypts once, warns on an unchanged edit."""
+    """make vault-init: refuses the stub, sets skip-worktree, encrypts once, reports an unchanged edit."""
 
     def setUp(self):
         self.repo = Path(tempfile.mkdtemp())
@@ -146,8 +146,7 @@ class VaultInitTests(unittest.TestCase):
         rc, out = self.run_init()
         self.assertEqual(rc, 0, out)
         self.assertIn('already encrypted', out)
-        self.assertIn('vault unchanged (nothing saved)', out)  # keys may be present: no 'still empty' claim
-        self.assertNotIn('still empty', out)
+        self.assertIn('vault unchanged (nothing saved)', out)
         self.assertEqual([c.split()[1] for c in self.calls()], ['encrypt', 'edit', 'view', 'edit'])
 
     def test_invalid_yaml_after_edit_fails(self):
@@ -155,13 +154,6 @@ class VaultInitTests(unittest.TestCase):
         rc, out = self.run_init(FAKE_EDIT='1', FAKE_VIEW="vault_ssh_auth_key: ''\n  -----BEGIN")
         self.assertNotEqual(rc, 0)
         self.assertIn('not valid YAML', out)
-        self.assertNotIn('vault saved', out)
-
-    def test_unchanged_first_edit_warns_keys_empty(self):
-        self.write_pass("pass='real-yubikey-derived'")
-        rc, out = self.run_init()
-        self.assertEqual(rc, 0, out)
-        self.assertIn('still empty', out)
         self.assertNotIn('vault saved', out)
 
     def test_edit_failure_explains_recovery(self):

@@ -368,7 +368,7 @@ encrypted file back (in that order, so the encrypted vault is never a stageable 
 `make setup-yubikeys` enforces a recovery path:
 
 1. **Hardware redundancy (recommended)** — program 2+ YubiKeys in one session with the same secret and store them separately; any one
-   unlocks the vault.
+   unlocks the vault. For SSH login, also add each backup YubiKey's `.pub` as another line of `vault_ssh_auth_key_pub`.
 2. **Password manager backup (single YubiKey)** — with one key programmed the script offers this instead of a backup key; it shows the vault
    password and refuses to continue until you answer y that it is saved in your password manager (it cannot verify that).
 
