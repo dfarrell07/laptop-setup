@@ -36,7 +36,7 @@ _vault_yml="${SCRIPT_DIR}/../group_vars/all/vault.yml"
 # shellcheck disable=SC2016  # Intentional: literal $ANSIBLE_VAULT header
 if [[ -f "$_vault_yml" ]] && ! head -1 "$_vault_yml" | grep -q '^\$ANSIBLE_VAULT'; then
   if ! python3 "$SCRIPT_DIR/verify-vault-stub.py" < "$_vault_yml"; then
-    echo "ERROR: vault.yml contains plaintext values; run: ansible-vault encrypt group_vars/all/vault.yml" >&2
+    echo "ERROR: vault.yml contains plaintext values; run: make vault-init (after make setup-yubikeys)" >&2
     exit 1
   fi
 fi

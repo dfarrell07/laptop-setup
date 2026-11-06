@@ -6,7 +6,7 @@
 #
 # Requires: ykman (yubikey-manager — installed by 'make bootstrap')
 # Run after: make bootstrap, before make all (CLAUDE.md first-time steps)
-# Run before: ansible-vault encrypt group_vars/all/vault.yml
+# Run before: make vault-init (encrypts group_vars/all/vault.yml)
 #
 # Design:
 #   - Generates a random 20-byte HMAC secret; programs every YubiKey with it
