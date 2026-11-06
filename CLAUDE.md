@@ -103,7 +103,7 @@ make container | container-rebuild  # distrobox/toolbox dev container
 make usb-add                # allow blocked USB devices, save rules to config.yml (then make chunk-sys_usbguard)
 make aide-rebaseline        # accept current files as the AIDE baseline
 make smoke-test | smoke-test-user | smoke-test-container   # host | no sudo | distrobox
-make vault-init | vault-edit | vault-view  # first-time encrypt + edit | edit | read
+make vault-init | vault-edit | vault-view
 make migration-inventory | workstation-audit  # private reports for a laptop move
 make lint                   # ansible-lint, yamllint, shellcheck, markdownlint, check-vars-sync, script integrity
 make syntax-check | shellcheck | markdownlint | commitlint | check-vars-sync
@@ -167,8 +167,7 @@ runs `git_repos` for one `repo_category`. `make help` lists everything; scenario
 
 ## Vault
 
-- One vault file, `group_vars/all/vault.yml`; password from a YubiKey via `make setup-yubikeys`; `make vault-init` (first time), then
-  `make vault-edit|vault-view`.
+- One vault file, `group_vars/all/vault.yml`; password from a YubiKey via `make setup-yubikeys`; `make vault-edit|vault-view`.
   `vault-pass.sh` templates: SECURITY.md § "Setting Up vault-pass.sh".
 - **Never define `vault_*` variables in `config.yml`**: `include_vars` (precedence 18) outranks `group_vars` and silently shadows the vault
   value. `common/tasks/pre_flight_checks.yml` asserts this.

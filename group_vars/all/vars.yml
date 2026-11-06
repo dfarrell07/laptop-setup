@@ -9,7 +9,7 @@ ansible_managed: 'Ansible managed — do not edit'
 # SSH keys (deployed by ssh role when vault is populated)
 ssh_auth_key: "{{ vault_ssh_auth_key | default('') }}"
 # One public key per line (backup YubiKeys after the first); blank and # lines dropped.
-ssh_auth_key_pub: "{{ (vault_ssh_auth_key_pub | default('')).splitlines() | map('trim') | reject('match', '^(#|$)') | join('\n') }}"
+ssh_auth_key_pub: "{{ (vault_ssh_auth_key_pub | default('', true)).splitlines() | map('trim') | reject('match', '^(#|$)') | join('\n') }}"
 # Not overridable in config.yml (pre-flight rejects it): key files are deployed only from the vault,
 # so an override would enable git signing with no key.
 ssh_signing_key: "{{ vault_ssh_signing_key | default('') }}"

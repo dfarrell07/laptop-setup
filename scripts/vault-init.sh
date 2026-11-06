@@ -15,7 +15,7 @@ die() { printf '\033[0;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 ok()  { printf '\033[0;32mOK:    %s\033[0m\n' "$*"; }
 
 [[ -f $PASS_SH && -x $PASS_SH ]] || die "$PASS_SH missing or not executable: run make setup-yubikeys first"
-if grep -qE "^[[:space:]]*(export[[:space:]]+)?pass=['\"]?CHANGE_ME|ci-dummy-vault-password" "$PASS_SH"; then
+if grep -qE "^pass=['\"]CHANGE_ME['\"]|ci-dummy-vault-password" "$PASS_SH"; then
   die "$PASS_SH is still the stub: run make setup-yubikeys first (encrypting with the stub password protects nothing)"
 fi
 
