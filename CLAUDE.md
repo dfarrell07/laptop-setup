@@ -91,7 +91,7 @@ and `make chunk-repos`; until then those hosts and their repos are skipped. See 
 make status                 # chunks on/off (rollout_enable); list: group_vars/all/rollout.yml
 make plan CHUNK=x           # preview one chunk (--check --diff); whole enabled list: make check
 make chunk-x                # apply one enabled chunk (high-risk ones need a typed name and a terminal)
-make verify CHUNK=x         # smoke checks for that chunk (all enabled if no CHUNK); fails on WARN/SKIP; sys_* need sudo
+make verify CHUNK=x         # smoke checks for that chunk (all enabled if no CHUNK); fails on WARN/SKIP; sys_* need sudo; exits 1 for chunks with no check (packages desktop repos redhat repos_dnf): use make plan
 make all | offline | minimal  # full / no binary downloads / dotfiles+ssh+repos only, no sudo
 make update                 # reinstall vendored collections + full run with git_repos_pull=true
 make check                  # full sudo dry run; runs preflight first

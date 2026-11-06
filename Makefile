@@ -142,7 +142,7 @@ bootstrap: guard-not-root bootstrap-hooks
 	elif command -v apt-get >/dev/null 2>&1; then \
 		sudo apt-get update && sudo apt-get install -y ansible git yubikey-manager make shellcheck python3-venv python3-pip; \
 	else \
-		sudo bash -c 'dnf install -y ansible-core git make && { dnf install -y ykpers yubikey-manager ShellCheck || echo "WARN: ykpers/yubikey-manager/ShellCheck unavailable (RHEL: install EPEL first; Fedora: check repo availability) — continuing without optional tools"; }'; \
+		sudo bash -c 'dnf install -y ansible-core git make && { dnf install -y yubikey-manager ShellCheck || echo "WARN: yubikey-manager/ShellCheck unavailable (RHEL: install EPEL first; Fedora: check repo availability) — continuing without optional tools"; }'; \
 	fi
 	@# --- Integrity verification: reject tampered security-critical scripts ---
 	@test -f scripts/vault-pass-ci.sh || { printf 'ERROR: scripts/vault-pass-ci.sh missing — restore with: git checkout scripts/vault-pass-ci.sh\n' >&2; exit 1; }

@@ -168,7 +168,9 @@ if ! $SYSTEM_ONLY; then
 # SSH auth to GitHub (bypass exec_cmd() — host SSH keys and agent are not forwarded into the container; exec_cmd() would use container key material and always fail)
 _ssh_ret=0
 _timeout_bin=$(command -v timeout || command -v gtimeout || true)
-if [[ -z "$_timeout_bin" ]]; then
+if [[ -n "$ONLY" && "$ONLY" != *",github-ssh-auth,"* ]]; then
+  :  # not selected: skip the probe, it can wait for a security-key touch
+elif [[ -z "$_timeout_bin" ]]; then
   record "github-ssh-auth" "WARN" "timeout not available (install gnu-coreutils on macOS) — skipping GitHub SSH auth check"
 else
   # Read-only: never write known_hosts, never prompt
