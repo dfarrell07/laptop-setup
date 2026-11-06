@@ -391,8 +391,9 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 
 ## ssh_authorized_keys
 
-- **Why:** key-only login needs exactly the vault key in `authorized_keys`.
-- **Breaks if wrong:** the exclusive write removes every other key, including any backup key; with sshd hardened an RSA key is rejected.
+- **Why:** key-only login needs exactly the vault keys (each line of `vault_ssh_auth_key_pub`) in `authorized_keys`.
+- **Breaks if wrong:** the exclusive write removes every key not in the vault, so put a backup YubiKey's `.pub` on a second line first;
+  with sshd hardened an RSA key is rejected.
 - **Verify:** `make verify CHUNK=ssh_authorized_keys`; log in from a second device with the new key before closing any session.
 - **Undo:** restore `~/.ssh/authorized_keys` from `~/authorized_keys.before` (the `cp -a ~/.ssh/authorized_keys` line of the snapshot block:
   run it just before this chunk if no system chunk has been run yet; the role takes no copy. `make backup` also copies this file, but

@@ -277,6 +277,16 @@ class InputGuardTests(unittest.TestCase):
                                   '_ssh_authkeys_stat': {'stat': {'exists': False}}}, accepted,
                            SSH_ENV if over_ssh else None)
 
+    def test_ssh_auth_key_types_every_line(self):
+        """vault_ssh_auth_key_pub may hold backup keys, one per line: every line must pass the sshd type check."""
+        task = guard('roles/ssh/tasks/main.yml', 'Assert SSH auth public key type is accepted by sshd hardening')
+        primary, backup, rsa = 'ssh-ed25519 AAAA a', 'sk-ssh-ed25519@openssh.com AAAA b', 'ssh-rsa AAAA c'
+        for key, accepted in [(primary, True), (primary + '\n' + backup + '\n', True), (primary + '\n' + rsa, False)]:
+            with self.subTest(key=key):
+                self.check(task, {'ansible_facts': {'system': 'Linux'}, 'ssh_auth_key_pub': key,
+                                  'ssh_pubkey_accepted_algorithms': ['ssh-ed25519', 'sk-ssh-ed25519@openssh.com']},
+                           accepted)
+
     def test_vendor_polkit_rules_fail_closed(self):
         source = yaml.safe_load((ROOT / 'roles/system/tasks/hardening_core.yml').read_text())
         block = next(task['block'] for task in source if task['name'] == 'Polkit rules directory scan')

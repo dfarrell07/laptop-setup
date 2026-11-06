@@ -6,7 +6,8 @@
 #
 # Expected variables (add them in the editor make vault-init opens; later: make vault-edit):
 #   vault_ssh_auth_key      contents of ~/.ssh/id_ed25519_sk (the key file without .pub)
-#   vault_ssh_auth_key_pub  contents of ~/.ssh/id_ed25519_sk.pub (one line; written to authorized_keys)
+#   vault_ssh_auth_key_pub  contents of ~/.ssh/id_ed25519_sk.pub; every line goes to authorized_keys, so add a
+#                           backup YubiKey's .pub as a second line (use |, as for key files below)
 #
 # Optional variables (leave '' to skip):
 #   vault_ssh_signing_key, vault_ssh_signing_key_pub  (~/.ssh/id_ed25519_sk_signing and its .pub)
@@ -18,7 +19,7 @@
 #   vault_ssh_auth_key: |
 #     <first line of the key file>
 #     <...every further line...>
-# The .pub values stay one line in quotes (no |): paste the single line of the .pub file between the ''.
+# A single .pub line can also stay in quotes: paste it between the ''.
 #
 # SSH keys — empty on first provision; add real keys only after encryption
 vault_ssh_auth_key: ''

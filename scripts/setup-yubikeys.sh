@@ -409,7 +409,7 @@ printf "     Reboot only after it wrote authorized_keys; otherwise SSH login on 
 warn "Store each YubiKey in a different physical location."
 if [[ $PROGRAMMED_COUNT -ge 2 ]]; then
   warn "Multiple YubiKeys programmed — any of them opens the vault (the HMAC secret was NOT saved)."
-  warn "SSH login is NOT redundant: the vault holds one -sk key, so only the YubiKey that generated it can log in."
+  warn "For SSH login with a backup YubiKey, generate a key on it too and add its .pub as a second line of vault_ssh_auth_key_pub."
 else
   warn "Single YubiKey in use — the vault password backup is in your password manager (confirmed at the prompt)."
   warn "If the YubiKey is lost, retrieve the vault password from your password manager."
