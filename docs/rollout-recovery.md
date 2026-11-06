@@ -205,9 +205,7 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   settings. Apply `packages`, then rebuild with `make container-rebuild`.
 - **Verify:** `make verify CHUNK=distrobox` (`distrobox-container`). With the vault still the empty stub the role defers container
   creation, the check is WARN and the command exits 1; that is expected, not a failed chunk. Populate the vault
-  (after `make setup-yubikeys`: `git update-index --skip-worktree group_vars/all/vault.yml`,
-  `ansible-vault encrypt group_vars/all/vault.yml`, then `make vault-edit`), then `make container` and
-  re-verify.
+  (`make setup-yubikeys`, then `make vault-init`), then `make container` and re-verify.
 - **Undo:** `podman rm -f fedora-dev` (or the configured `container_name`; works for Distrobox and Toolbx containers). Then remove the
   exported wrappers that would shadow host tools:
   `for f in oc kubectl golangci-lint; do grep -q '^# distrobox_binary' ~/.local/bin/$f 2>/dev/null && rm ~/.local/bin/$f; done`.
