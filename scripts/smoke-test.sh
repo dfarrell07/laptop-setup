@@ -839,7 +839,7 @@ if [[ -d "$_notes_dir/.git" ]]; then
         record "notes-transcrypt" "FAIL" "transcrypt password incorrect or repo locked — no plaintext files found in working tree"
       fi
     else
-      record "notes-transcrypt" "WARN" "repo exists but transcrypt not initialized (run: make vault-edit (encrypt the stub first with ansible-vault encrypt group_vars/all/vault.yml) to populate vault_notes_transcrypt_password)"
+      record "notes-transcrypt" "WARN" "repo exists but transcrypt not initialized (set vault_notes_transcrypt_password: make vault-init the first time, make vault-edit after)"
     fi
   else
     record "notes-transcrypt" "WARN" "transcrypt not installed"
