@@ -103,7 +103,7 @@
       Impact: SSH login failure, potential lockout from provisioned machine.
       Fix: Use only {{ ssh_pubkey_accepted_algorithms | join(', ') }}.
   vars:
-    _ssh_auth_key_types: "{{ ssh_auth_key_pub.splitlines() | map('trim') | select | map('split') | map('first') | list }}"
+    _ssh_auth_key_types: "{{ ssh_auth_key_pub.splitlines() | map('split') | map('first') | list }}"
   when:
     - ansible_facts['system'] == 'Linux'  # the system role hardens sshd only on Linux
     - ssh_auth_key_pub | trim | length > 0
@@ -236,7 +236,7 @@
     - >-
       (_authkeys_slurp.content | b64decode).splitlines()
       | map('trim') | reject('eq', '') | reject('match', '^#')
-      | reject('in', ssh_auth_key_pub.splitlines() | map('trim') | list)
+      | map('split') | map('join', ' ') | reject('in', ssh_auth_key_pub.splitlines() | map('split') | map('join', ' ') | list)
       | list | length > 0
 
 - name: Add SSH auth public keys to authorized_keys
@@ -245,7 +245,6 @@
     key: "{{ ssh_auth_key_pub }}"
     state: present
     exclusive: true
-  no_log: true
   tags: [ssh_authorized_keys]
   when: ssh_auth_key_pub | trim | length > 0
 

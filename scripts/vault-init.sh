@@ -15,13 +15,10 @@ die() { printf '\033[0;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 ok()  { printf '\033[0;32mOK:    %s\033[0m\n' "$*"; }
 
 [[ -f $PASS_SH && -x $PASS_SH ]] || die "$PASS_SH missing or not executable: run make setup-yubikeys first"
-if grep -qE "^[[:space:]]*(export[[:space:]]+)?pass=['\"]?CHANGE_ME|ci-dummy-vault-password" "$PASS_SH" \
-   || cmp -s "$PASS_SH" scripts/vault-pass-ci.sh; then
+if grep -qE "^[[:space:]]*(export[[:space:]]+)?pass=['\"]?CHANGE_ME|ci-dummy-vault-password" "$PASS_SH"; then
   die "$PASS_SH is still the stub: run make setup-yubikeys first (encrypting with the stub password protects nothing)"
 fi
-[[ -t 0 && -t 1 ]] || die "needs a terminal (it opens an editor and waits for a YubiKey touch)"
 
-# A pull that changes the committed stub then aborts; SECURITY.md § "Setting Up vault-pass.sh" has the steps.
 if git ls-files -v -- "$VAULT" | grep -q '^[Ss] '; then
   ok "$VAULT already marked skip-worktree"
 else
@@ -39,14 +36,9 @@ else
 fi
 
 before=$(cksum < "$VAULT")
-printf 'Opening the vault in vi (touch the YubiKey). Format: see the comments at the top.\n'
-printf 'Private key: change the value on the vault_ssh_auth_key line from %s to |, keep the cursor on that line,\n' "''"
-printf 'then run :r !sed "s/^/  /" ~/.ssh/id_ed25519_sk  (.pub values stay one quoted line). :wq saves.\n'
-if ! "$DISPATCH" ansible-vault edit "$VAULT"; then
-  die "ansible-vault edit failed. Usually the YubiKey was not inserted or not touched in time: re-run make vault-init.
-       Only if the vault was encrypted with another password (e.g. the old stub) and holds nothing you need:
-       cp $VAULT ~/vault.yml.bak; git update-index --no-skip-worktree $VAULT; git checkout -- $VAULT; make vault-init"
-fi
+printf 'Opening the vault in vi (touch the YubiKey; format: comments at the top). For the private key, change %s to |\n' "''"
+printf 'on its line, then with the cursor there run :r !sed "s/^/  /" ~/.ssh/id_ed25519_sk  and :wq to save.\n'
+"$DISPATCH" ansible-vault edit "$VAULT" || die "ansible-vault edit failed (YubiKey not inserted or not touched in time?): re-run make vault-init"
 if [[ $(cksum < "$VAULT") == "$before" ]]; then
   ok "vault unchanged (nothing saved). Add the keys later with make vault-edit"
   exit 0
@@ -61,5 +53,4 @@ except ImportError:
 yaml.safe_load(sys.stdin)' >/dev/null 2>&1; then
   die "the saved vault is not valid YAML (or could not be decrypted): fix it with make vault-edit (format: comments at the top)"
 fi
-ok "vault saved. Next (CLAUDE.md steps 3a-3d): make usb-add with the YubiKeys still in, make preflight,"
-ok "make backup, then make chunk-ssh_client. Later changes: make vault-edit"
+ok "vault saved. Next: CLAUDE.md steps 3a-3d (usb-add, preflight, backup), then make chunk-ssh_client"

@@ -2,9 +2,6 @@
 """Verify the actual vault template and reject plaintext secrets or YAML tricks."""
 from pathlib import Path
 import os
-import pty
-import select
-import time
 import shutil
 import subprocess
 import tempfile
@@ -75,8 +72,7 @@ class VaultInitTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.repo)
         (self.repo / 'scripts').mkdir()
         (self.repo / 'group_vars/all').mkdir(parents=True)
-        for name in ('vault-init.sh', 'vault-pass-ci.sh'):
-            shutil.copy(ROOT / 'scripts' / name, self.repo / 'scripts' / name)
+        shutil.copy(ROOT / 'scripts/vault-init.sh', self.repo / 'scripts/vault-init.sh')
         shutil.copy(ROOT / 'group_vars/all/vault.yml', self.repo / 'group_vars/all/vault.yml')
         dispatch = self.repo / 'scripts/verify-ansible-args.sh'
         dispatch.write_text(FAKE_DISPATCH)
@@ -92,28 +88,9 @@ class VaultInitTests(unittest.TestCase):
         path.chmod(0o700)
 
     def run_init(self, **env):
-        """Run with a pty on stdin/stdout (the script requires a terminal); return (rc, output)."""
-        main, sub = pty.openpty()
-        proc = subprocess.Popen(['bash', str(self.repo / 'scripts/vault-init.sh')], stdin=sub, stdout=sub,
-                                stderr=sub, env={**os.environ, **env})
-        os.close(sub)
-        out, deadline = b'', time.monotonic() + 30
-        while True:
-            ready, _, _ = select.select([main], [], [], max(0, deadline - time.monotonic()))
-            if not ready:  # waiting for input or hung: fail instead of blocking CI
-                proc.kill()
-                proc.wait()
-                os.close(main)
-                self.fail('vault-init.sh did not finish within 30 s; output: ' + out.decode(errors='replace'))
-            try:
-                chunk = os.read(main, 4096)
-            except OSError:
-                break
-            if not chunk:
-                break
-            out += chunk
-        os.close(main)
-        return proc.wait(timeout=30), out.decode(errors='replace')
+        r = subprocess.run(['bash', str(self.repo / 'scripts/vault-init.sh')], stdin=subprocess.DEVNULL,
+                           capture_output=True, text=True, timeout=30, env={**os.environ, **env})
+        return r.returncode, r.stdout + r.stderr
 
     def calls(self):
         log = self.repo / 'scripts/calls.log'
@@ -156,12 +133,11 @@ class VaultInitTests(unittest.TestCase):
         self.assertIn('not valid YAML', out)
         self.assertNotIn('vault saved', out)
 
-    def test_edit_failure_explains_recovery(self):
+    def test_edit_failure_points_at_yubikey(self):
         self.write_pass("pass='real-yubikey-derived'")
         rc, out = self.run_init(FAKE_EDIT_RC='1')
         self.assertNotEqual(rc, 0)
         self.assertIn('YubiKey', out)
-        self.assertIn('vault.yml.bak', out)  # backup before any checkout of the stub
 
 
 if __name__ == '__main__':

@@ -52,7 +52,7 @@ acceptance checks pass. Skip AI transcript and session history; restore AI tooli
    are still required.
 5. Choose chunks with `rollout_enable`, run `make preflight`, then stage prerequisites chunk by chunk, in this
    order: `make chunk-repos_dnf` (DNF hosts), `make chunk-packages`, `make chunk-ssh_client`,
-   `make chunk-dotfiles`. Avoid `make ssh`: it also rewrites `~/.ssh/authorized_keys` to exactly the vault key.
+   `make chunk-dotfiles`. Avoid `make ssh`: it also rewrites `~/.ssh/authorized_keys` to exactly the vault keys.
    Run `gh auth login`, then check GitHub and internal Git access over SSH. Review old host entries instead of
    replacing the managed `.ssh/config`; put compatible extras in `.ssh/config.local` (SSH keeps the first value
    it sees per setting, so late includes cannot override managed values).

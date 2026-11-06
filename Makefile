@@ -514,7 +514,6 @@ smoke-test-user:
 
 # --- Vault ---
 
-# First-time vault setup after setup-yubikeys: skip-worktree, encrypt, then edit (idempotent).
 vault-init: guard-not-root
 	scripts/vault-init.sh
 
