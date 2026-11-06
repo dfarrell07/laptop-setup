@@ -3,6 +3,8 @@
 from pathlib import Path
 import os
 import pty
+import select
+import time
 import shutil
 import subprocess
 import tempfile
@@ -94,8 +96,14 @@ class VaultInitTests(unittest.TestCase):
         proc = subprocess.Popen(['bash', str(self.repo / 'scripts/vault-init.sh')], stdin=sub, stdout=sub,
                                 stderr=sub, env={**os.environ, **env})
         os.close(sub)
-        out = b''
+        out, deadline = b'', time.monotonic() + 30
         while True:
+            ready, _, _ = select.select([main], [], [], max(0, deadline - time.monotonic()))
+            if not ready:  # waiting for input or hung: fail instead of blocking CI
+                proc.kill()
+                proc.wait()
+                os.close(main)
+                self.fail('vault-init.sh did not finish within 30 s; output: ' + out.decode(errors='replace'))
             try:
                 chunk = os.read(main, 4096)
             except OSError:
@@ -137,14 +145,23 @@ class VaultInitTests(unittest.TestCase):
         rc, out = self.run_init()
         self.assertEqual(rc, 0, out)
         self.assertIn('already encrypted', out)
-        self.assertIn('vault unchanged', out)
+        self.assertIn('vault unchanged (nothing saved)', out)  # keys may be present: no 'still empty' claim
+        self.assertNotIn('still empty', out)
         self.assertEqual([c.split()[1] for c in self.calls()], ['encrypt', 'edit', 'edit'])
+
+    def test_unchanged_first_edit_warns_keys_empty(self):
+        self.write_pass("pass='real-yubikey-derived'")
+        rc, out = self.run_init()
+        self.assertEqual(rc, 0, out)
+        self.assertIn('still empty', out)
+        self.assertNotIn('vault saved', out)
 
     def test_edit_failure_explains_recovery(self):
         self.write_pass("pass='real-yubikey-derived'")
         rc, out = self.run_init(FAKE_EDIT_RC='1')
         self.assertNotEqual(rc, 0)
-        self.assertIn('--no-skip-worktree', out)
+        self.assertIn('YubiKey', out)
+        self.assertIn('vault.yml.bak', out)  # backup before any checkout of the stub
 
 
 if __name__ == '__main__':
