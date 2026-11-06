@@ -84,8 +84,9 @@ Check each tool and skip what is already logged in. If an auth step fails with c
 
 - **GitHub CLI**: check `gh auth status`; if missing, owner runs `gh auth login` (HTTPS), then `make packages repos`
   (`make notes` too only when `notes_enabled: true` is set in `config.yml`; the notes repo is opt-in)
-- **Notes (transcrypt, only when `notes_enabled`)**: `make notes` warned about the password; if missing, `make vault-edit` to add
-  `vault_notes_transcrypt_password`, then `make notes`
+- **Notes (transcrypt, only when `notes_enabled`)**: `make notes` warned about the password; if missing,
+  `make vault-edit` (`make vault-init` while the vault is still the plaintext stub) to add `vault_notes_transcrypt_password`, then
+  `make notes`
 - **OpenShift (work)**: check `oc whoami`; if missing, `oc login --web`; cluster name is in `CLAUDE.local.md`
 - **Registries (work)**: check `podman login --get-login registry.redhat.io` (and `quay.io`); if missing,
   `umask 077 && podman login --authfile ~/.config/containers/auth.json <registry>`

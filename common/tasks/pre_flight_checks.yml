@@ -591,9 +591,8 @@
 
           1. Populate vault.yml BEFORE provisioning (RECOMMENDED):
              a. Run: make setup-yubikeys
-             b. Encrypt the stub: git update-index --skip-worktree group_vars/all/vault.yml,
-                then ansible-vault encrypt group_vars/all/vault.yml
-             c. Run make vault-edit and set vault_ssh_auth_key_pub
+             b. Run: make vault-init (encrypts the stub, opens the editor)
+             c. In the editor set vault_ssh_auth_key_pub
                 (MUST be ed25519 type: ssh-ed25519, sk-ssh-ed25519@openssh.com, or cert variants)
              d. Run: make all
 

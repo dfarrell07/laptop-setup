@@ -8,11 +8,12 @@ ansible_managed: 'Ansible managed — do not edit'
 
 # SSH keys (deployed by ssh role when vault is populated)
 ssh_auth_key: "{{ vault_ssh_auth_key | default('') }}"
-ssh_auth_key_pub: "{{ vault_ssh_auth_key_pub | default('') }}"
+# One public key per line (backup YubiKeys after the first); blank and # lines dropped.
+ssh_auth_key_pub: "{{ (vault_ssh_auth_key_pub | default('', true)).splitlines() | map('trim') | reject('match', '^(#|$)') | join('\n') }}"
 # Not overridable in config.yml (pre-flight rejects it): key files are deployed only from the vault,
 # so an override would enable git signing with no key.
 ssh_signing_key: "{{ vault_ssh_signing_key | default('') }}"
-ssh_signing_key_pub: "{{ vault_ssh_signing_key_pub | default('') }}"
+ssh_signing_key_pub: "{{ vault_ssh_signing_key_pub | default('') | trim }}"
 
 # Red Hat internal git key
 rh_git_key: "{{ vault_rh_git_key | default('') }}"

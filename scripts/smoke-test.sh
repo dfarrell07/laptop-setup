@@ -666,7 +666,7 @@ else record "ssh-signing-key-file" "WARN" "$HOME/.ssh/id_ed25519_sk_signing(.pub
 
 check_perms "ssh-dir-perms" "$HOME/.ssh" "700"
 
-# authorized_keys: verify count and mode.
+# authorized_keys: verify key type and mode (the ssh role writes it exclusively from the vault).
 # File absent is a WARN not FAIL: the authorized_key task is guarded by
 # `when: ssh_auth_key_pub | length > 0`, so first provision with plaintext vault leaves no file.
 _ak="$HOME/.ssh/authorized_keys"
@@ -680,16 +680,8 @@ else
     record "authorized-keys-ed25519" "WARN" "no ed25519/FIDO2 key in $_ak: hardened sshd accepts only those, so remote login would stop (RSA is rejected)"
   fi
   check_perms "authorized-keys-perms" "$_ak" "600"
-  _ak_total=$(grep -cvE '^[[:space:]]*$|^#' "$_ak" 2>/dev/null || true)
-  if [[ "$_ak_total" -gt 1 ]]; then
-    record "authorized-keys-exclusive" "WARN" "$_ak_total keys present, expected 1 — extra keys beyond vault key; inspect: cat $_ak"
-  elif [[ "$_ak_total" -eq 0 ]]; then
-    record "authorized-keys-exclusive" "WARN" "$_ak exists but has no key entries"
-  else
-    record "authorized-keys-exclusive" "PASS"
-  fi
 fi
-unset _ak _ak_total
+unset _ak
 
 _kh="$HOME/.ssh/known_hosts"
 if [[ -f "$_kh" ]]; then
@@ -839,7 +831,7 @@ if [[ -d "$_notes_dir/.git" ]]; then
         record "notes-transcrypt" "FAIL" "transcrypt password incorrect or repo locked — no plaintext files found in working tree"
       fi
     else
-      record "notes-transcrypt" "WARN" "repo exists but transcrypt not initialized (run: make vault-edit (encrypt the stub first with ansible-vault encrypt group_vars/all/vault.yml) to populate vault_notes_transcrypt_password)"
+      record "notes-transcrypt" "WARN" "repo exists but transcrypt not initialized (set vault_notes_transcrypt_password: make vault-init the first time, make vault-edit after)"
     fi
   else
     record "notes-transcrypt" "WARN" "transcrypt not installed"

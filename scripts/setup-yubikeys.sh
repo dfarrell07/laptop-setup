@@ -6,7 +6,7 @@
 #
 # Requires: ykman (yubikey-manager — installed by 'make bootstrap')
 # Run after: make bootstrap, before make all (CLAUDE.md first-time steps)
-# Run before: ansible-vault encrypt group_vars/all/vault.yml
+# Run before: make vault-init (encrypts group_vars/all/vault.yml)
 #
 # Design:
 #   - Generates a random 20-byte HMAC secret; programs every YubiKey with it
@@ -393,11 +393,10 @@ printf "       ssh-keygen -t ed25519-sk -O verify-required -f ~/.ssh/id_ed25519_
 printf "       # With -O resident (discoverable credential stored on YubiKey itself):\n"
 printf "       ssh-keygen -t ed25519-sk -O resident -O verify-required -f ~/.ssh/id_ed25519_sk\n"
 printf "     Add the public key to GitHub (token needs the admin:public_key scope: gh auth refresh -h github.com -s admin:public_key):\n"
-printf "       gh ssh-key add ~/.ssh/id_ed25519_sk.pub --title 'YubiKey'\n\n"
+printf "       gh ssh-key add ~/.ssh/id_ed25519_sk.pub --title 'YubiKey'\n"
+printf "     Optional commit-signing key: SECURITY.md § SSH Key Rotation.\n\n"
 printf "  3. Populate group_vars/all/vault.yml with your keys (from now on every Ansible make target needs the key inserted and a touch):\n"
-printf "       git update-index --skip-worktree group_vars/all/vault.yml  # first: keep the real vault out of commits (the committed one is a stub)\n"
-printf "       ansible-vault encrypt group_vars/all/vault.yml  # then encrypt\n"
-printf "       make vault-edit                                 # then paste keys (multi-line format: see the file header)\n\n"
+printf "       make vault-init  # skip-worktree (the committed vault stays a stub), encrypt, then paste keys (format: file header)\n\n"
 printf "  4. Deploy the keys:\n"
 printf "       make chunk-ssh_client\n\n"
 printf "  5. Last, at the console with a second session open: make chunk-ssh_authorized_keys (see docs/rollout-plan.md).\n"

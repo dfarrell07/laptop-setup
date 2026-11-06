@@ -314,7 +314,8 @@ lockdown activates. Both protections are needed.
 
 ## Vault Security
 
-- Vault ships as a plaintext stub (`vault_placeholder`); encrypt it before adding real secrets (`make vault-edit` adds them)
+- Vault ships as a plaintext stub (`vault_placeholder`); `make vault-init` encrypts it and opens it for the first secrets
+  (`make vault-edit` for later changes)
 - The production vault password is derived from YubiKey HMAC-SHA1 challenge-response
 - `vault-pass.sh` is gitignored; `make bootstrap` creates a stub from `vault-pass-ci.sh` (integrity-checked)
 - The pre-commit hook blocks committing unencrypted vault files that contain real variables
@@ -354,9 +355,13 @@ Then:
 ```bash
 chmod 700 scripts/vault-pass.sh
 (cd scripts && sha256sum vault-pass.sh > vault-pass.sh.sha256)  # make checks this; relative path required
-git update-index --skip-worktree group_vars/all/vault.yml  # keep the real vault out of commits
-ansible-vault encrypt group_vars/all/vault.yml
+make vault-init
 ```
+
+With skip-worktree set, a pull that changes the committed stub aborts ("would be overwritten"); nothing is lost. To take it:
+copy `group_vars/all/vault.yml` aside, `git update-index --no-skip-worktree group_vars/all/vault.yml`,
+`git checkout -- group_vars/all/vault.yml`, pull, `git update-index --skip-worktree group_vars/all/vault.yml`, then copy the
+encrypted file back (in that order, so the encrypted vault is never a stageable change).
 
 ### Lost or Compromised YubiKey
 
@@ -396,7 +401,7 @@ encrypted file and fails on plaintext.)
 4. Shred the temporary script and unset the variable: `shred -u "$tmp/vault-pass-temp.sh"; rmdir "$tmp"; unset VAULT_PASS`
 
 **No YubiKey and no saved password** — the vault is permanently inaccessible. Re-create the secrets, replace `group_vars/all/vault.yml`
-with a fresh plaintext template, then run `make setup-yubikeys` and `ansible-vault encrypt group_vars/all/vault.yml`.
+with a fresh plaintext template, then run `make setup-yubikeys` and `make vault-init`.
 
 ## Internal SSH Git Host Setup
 

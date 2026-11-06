@@ -55,8 +55,8 @@ and `make chunk-repos`; until then those hosts and their repos are skipped. See 
 2. `cp default.config.yml config.yml`, then replace every `CHANGE_ME` in it (preflight fails while any remain).
    Also set `system_timezone` (default `UTC`; not a `CHANGE_ME` sentinel; preflight fails if the key is absent from `config.yml`).
 3. First thing after config, before any chunk: `make setup-yubikeys` programs the keys and writes `vault-pass.sh` (it
-   does not touch the vault); then run `git update-index --skip-worktree group_vars/all/vault.yml` (the committed vault must stay the
-   plaintext stub; CI rejects a real one), `ansible-vault encrypt group_vars/all/vault.yml`, and `make vault-edit` to add the SSH keys.
+   does not touch the vault); then `make vault-init` marks `group_vars/all/vault.yml` skip-worktree (the committed vault must stay the
+   plaintext stub; CI rejects a real one), encrypts it and opens the editor to add the SSH keys (later edits: `make vault-edit`).
    From then on every make target that starts Ansible needs the key inserted and a touch. A first provision without secrets works at the
    console from the plaintext stub: container provisioning is deferred (`make container`) and internal git hosts with placeholder
    fingerprints are skipped (`make chunk-ssh_client`, then `make chunk-repos`). Provisioning over SSH with no ed25519/FIDO2 key is
@@ -103,7 +103,7 @@ make container | container-rebuild  # distrobox/toolbox dev container
 make usb-add                # allow blocked USB devices, save rules to config.yml (then make chunk-sys_usbguard)
 make aide-rebaseline        # accept current files as the AIDE baseline
 make smoke-test | smoke-test-user | smoke-test-container   # host | no sudo | distrobox
-make vault-edit | vault-view
+make vault-init | vault-edit | vault-view
 make migration-inventory | workstation-audit  # private reports for a laptop move
 make lint                   # ansible-lint, yamllint, shellcheck, markdownlint, check-vars-sync, script integrity
 make syntax-check | shellcheck | markdownlint | commitlint | check-vars-sync

@@ -1,7 +1,7 @@
 .PHONY: status plan verify rollout-banner bootstrap-hooks help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check test smoke-test \
        dotfiles packages repos notes \
        ssh desktop system repos_dnf redhat containers claude codex container \
-       container-rebuild csb-audit vault-edit vault-view update hooks \
+       container-rebuild csb-audit vault-init vault-edit vault-view update hooks \
        smoke-test-container smoke-test-user \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
        test-scripts test-poller test-gitleaks test-% \
@@ -110,6 +110,7 @@ help:
 	@echo "First-run setup:"
 	@echo "  bootstrap              Install dependencies, git hooks and checksum-pinned gitleaks"
 	@echo "  setup-yubikeys         Program YubiKeys and write vault-pass.sh"
+	@echo "  vault-init             Encrypt the vault stub and add keys (after setup-yubikeys)"
 	@echo "  vault-edit             Edit the vault (vault-view: read only)"
 	@echo "  usb-add                Allow blocked USB devices (USBGuard) and save their rules to config.yml"
 	@echo "  preflight              Check prerequisites and CSB detection"
@@ -512,6 +513,9 @@ smoke-test-user:
 	scripts/smoke-test.sh --user-only
 
 # --- Vault ---
+
+vault-init: guard-not-root
+	scripts/vault-init.sh
 
 vault-edit:
 	EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) ansible-vault edit group_vars/all/vault.yml
