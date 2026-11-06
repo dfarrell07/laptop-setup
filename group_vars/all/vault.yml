@@ -1,10 +1,9 @@
 ---
 # Ansible Vault file, shipped as a PLAINTEXT stub (no secrets) — encrypt before adding real secrets.
 #
-#   make vault-init   # after make setup-yubikeys: skip-worktree (the committed file stays this stub),
-#                     # ansible-vault encrypt, then opens the editor (later edits: make vault-edit)
+#   make vault-init   # after make setup-yubikeys (later edits: make vault-edit)
 #
-# Expected variables (add them in the editor make vault-init opens; later: make vault-edit):
+# Expected variables:
 #   vault_ssh_auth_key      contents of ~/.ssh/id_ed25519_sk (the key file without .pub)
 #   vault_ssh_auth_key_pub  contents of ~/.ssh/id_ed25519_sk.pub; every line goes to authorized_keys, so add a
 #                           backup YubiKey's .pub as a second line (use |, as for key files below)
