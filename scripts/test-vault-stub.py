@@ -62,6 +62,7 @@ echo "$*" >> "$(dirname "$0")/calls.log"
 case "$2" in
   encrypt) printf '$ANSIBLE_VAULT;1.1;AES256\\n3031\\n' > "$3" ;;
   edit) [ -z "${FAKE_EDIT:-}" ] || echo 3032 >> "$3"; exit "${FAKE_EDIT_RC:-0}" ;;
+  view) printf '%s\\n' "${FAKE_VIEW:-vault_ssh_auth_key: x}" ;;
 esac
 """
 
@@ -147,7 +148,14 @@ class VaultInitTests(unittest.TestCase):
         self.assertIn('already encrypted', out)
         self.assertIn('vault unchanged (nothing saved)', out)  # keys may be present: no 'still empty' claim
         self.assertNotIn('still empty', out)
-        self.assertEqual([c.split()[1] for c in self.calls()], ['encrypt', 'edit', 'edit'])
+        self.assertEqual([c.split()[1] for c in self.calls()], ['encrypt', 'edit', 'view', 'edit'])
+
+    def test_invalid_yaml_after_edit_fails(self):
+        self.write_pass("pass='real-yubikey-derived'")
+        rc, out = self.run_init(FAKE_EDIT='1', FAKE_VIEW="vault_ssh_auth_key: ''\n  -----BEGIN")
+        self.assertNotEqual(rc, 0)
+        self.assertIn('not valid YAML', out)
+        self.assertNotIn('vault saved', out)
 
     def test_unchanged_first_edit_warns_keys_empty(self):
         self.write_pass("pass='real-yubikey-derived'")
