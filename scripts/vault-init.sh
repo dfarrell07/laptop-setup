@@ -38,6 +38,7 @@ else
   ok "$VAULT marked skip-worktree (git ignores local changes to it)"
 fi
 
+encrypted_now=false
 if head -c 14 "$VAULT" | grep -qF "\$ANSIBLE_VAULT"; then
   ok "$VAULT already encrypted"
 else
@@ -45,18 +46,24 @@ else
   "$DISPATCH" ansible-vault encrypt "$VAULT" \
     || die "encrypt failed: insert the YubiKey and re-run make vault-init (safe to repeat)"
   ok "$VAULT encrypted"
+  encrypted_now=true
 fi
 
 before=$(cksum < "$VAULT")
-printf 'Opening the vault in vi (touch the YubiKey). Paste key files indented 2 spaces under "key: |";\n'
-printf 'run :set paste before pasting, then :wq to save. Format: see the comments at the top.\n'
+printf 'Opening the vault in vi (touch the YubiKey). Format: see the comments at the top. To insert a key\n'
+printf 'file indented under "key: |", put the cursor on that line and run :r !sed "s/^/  /" ~/.ssh/id_ed25519_sk\n'
+printf 'then :wq to save.\n'
 if ! "$DISPATCH" ansible-vault edit "$VAULT"; then
-  die "ansible-vault edit failed. If the vault was encrypted earlier with a different password (e.g. the
-       old stub), restore and re-run: git update-index --no-skip-worktree $VAULT;
-       git checkout -- $VAULT; make vault-init"
+  die "ansible-vault edit failed. Usually the YubiKey was not inserted or not touched in time: re-run make vault-init.
+       Only if the vault was encrypted with another password (e.g. the old stub) and holds nothing you need:
+       cp $VAULT ~/vault.yml.bak; git update-index --no-skip-worktree $VAULT; git checkout -- $VAULT; make vault-init"
 fi
 if [[ $(cksum < "$VAULT") == "$before" ]]; then
-  warn "vault unchanged: vault_ssh_auth_key(_pub) are still empty. Generate the keys (setup-yubikeys step 2), then make vault-edit"
+  if $encrypted_now; then
+    warn "vault unchanged: vault_ssh_auth_key(_pub) are still empty. Generate the keys (setup-yubikeys step 2), then make vault-edit"
+  else
+    ok "vault unchanged (nothing saved)"
+  fi
   exit 0
 fi
 ok "vault saved. Next: make chunk-ssh_client (later changes: make vault-edit)"

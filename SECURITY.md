@@ -314,7 +314,8 @@ lockdown activates. Both protections are needed.
 
 ## Vault Security
 
-- Vault ships as a plaintext stub (`vault_placeholder`); `make vault-init` encrypts it and opens it for the first secrets (`make vault-edit` for later changes)
+- Vault ships as a plaintext stub (`vault_placeholder`); `make vault-init` encrypts it and opens it for the first secrets
+  (`make vault-edit` for later changes)
 - The production vault password is derived from YubiKey HMAC-SHA1 challenge-response
 - `vault-pass.sh` is gitignored; `make bootstrap` creates a stub from `vault-pass-ci.sh` (integrity-checked)
 - The pre-commit hook blocks committing unencrypted vault files that contain real variables
@@ -359,7 +360,8 @@ make vault-init  # skip-worktree (keeps the real vault out of commits), ansible-
 
 With skip-worktree set, a pull that changes the committed stub aborts ("would be overwritten"); nothing is lost. To take it:
 copy `group_vars/all/vault.yml` aside, `git update-index --no-skip-worktree group_vars/all/vault.yml`,
-`git checkout -- group_vars/all/vault.yml`, pull, copy the encrypted file back, then `make vault-init` (sets skip-worktree again).
+`git checkout -- group_vars/all/vault.yml`, pull, `git update-index --skip-worktree group_vars/all/vault.yml`, then copy the
+encrypted file back (in that order, so the encrypted vault is never a stageable change).
 
 ### Lost or Compromised YubiKey
 
