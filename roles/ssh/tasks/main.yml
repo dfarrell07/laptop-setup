@@ -93,17 +93,11 @@
 - name: Assert SSH auth public key type is accepted by sshd hardening
   ansible.builtin.assert:
     that:
-      - _ssh_auth_key_types | difference(ssh_pubkey_accepted_algorithms) | length == 0
+      - ssh_auth_key_pub.splitlines() | map('split') | map('first') | difference(ssh_pubkey_accepted_algorithms) | length == 0
     fail_msg: >-
-      SECURITY: SSH Authentication Lockout via Incompatible Key Algorithm.
-      Input: ssh_auth_key_pub (vault) has key types '{{ _ssh_auth_key_types | join(', ') }}'.
-      Mechanism: sshd-hardening.conf.j2 PubkeyAcceptedAlgorithms restricts accepted types;
-      non-matching types silently rejected at auth time with no fallback.
-      Example: RSA key deployed when only ed25519/FIDO2 keys are accepted causes permanent lockout.
-      Impact: SSH login failure, potential lockout from provisioned machine.
-      Fix: Use only {{ ssh_pubkey_accepted_algorithms | join(', ') }}.
-  vars:
-    _ssh_auth_key_types: "{{ ssh_auth_key_pub.splitlines() | map('split') | map('first') | list }}"
+      SECURITY: a line of vault_ssh_auth_key_pub is not a public key of an accepted type (one key per line; a private
+      key pasted here also fails). sshd-hardening.conf.j2 PubkeyAcceptedAlgorithms rejects other types at login, a lockout.
+      Use only {{ ssh_pubkey_accepted_algorithms | join(', ') }}.
   when:
     - ansible_facts['system'] == 'Linux'  # the system role hardens sshd only on Linux
     - ssh_auth_key_pub | trim | length > 0
