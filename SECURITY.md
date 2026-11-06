@@ -354,8 +354,7 @@ Then:
 ```bash
 chmod 700 scripts/vault-pass.sh
 (cd scripts && sha256sum vault-pass.sh > vault-pass.sh.sha256)  # make checks this; relative path required
-git update-index --skip-worktree group_vars/all/vault.yml  # keep the real vault out of commits
-ansible-vault encrypt group_vars/all/vault.yml
+make vault-init  # skip-worktree (keeps the real vault out of commits), ansible-vault encrypt, then edit
 ```
 
 ### Lost or Compromised YubiKey

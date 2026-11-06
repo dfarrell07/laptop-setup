@@ -1,9 +1,8 @@
 ---
 # Ansible Vault file, shipped as a PLAINTEXT stub (no secrets) — encrypt before adding real secrets.
 #
-#   git update-index --skip-worktree group_vars/all/vault.yml  # first: the committed file stays this stub
-#   ansible-vault encrypt group_vars/all/vault.yml
-#   make vault-edit
+#   make vault-init   # after make setup-yubikeys: skip-worktree (the committed file stays this stub),
+#                     # ansible-vault encrypt, then opens the editor (later edits: make vault-edit)
 #
 # Expected variables (add them with make vault-edit after encrypting):
 #   vault_ssh_auth_key      contents of ~/.ssh/id_ed25519_sk (the key file without .pub)
