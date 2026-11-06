@@ -50,9 +50,9 @@ else
 fi
 
 before=$(cksum < "$VAULT")
-printf 'Opening the vault in vi (touch the YubiKey). Format: see the comments at the top. To insert a key\n'
-printf 'file indented under "key: |", put the cursor on that line and run :r !sed "s/^/  /" ~/.ssh/id_ed25519_sk\n'
-printf 'then :wq to save.\n'
+printf 'Opening the vault in vi (touch the YubiKey). Format: see the comments at the top.\n'
+printf 'Private key: change the value on the vault_ssh_auth_key line from %s to |, keep the cursor on that line,\n' "''"
+printf 'then run :r !sed "s/^/  /" ~/.ssh/id_ed25519_sk  (.pub values stay one quoted line). :wq saves.\n'
 if ! "$DISPATCH" ansible-vault edit "$VAULT"; then
   die "ansible-vault edit failed. Usually the YubiKey was not inserted or not touched in time: re-run make vault-init.
        Only if the vault was encrypted with another password (e.g. the old stub) and holds nothing you need:
@@ -66,4 +66,15 @@ if [[ $(cksum < "$VAULT") == "$before" ]]; then
   fi
   exit 0
 fi
-ok "vault saved. Next: make chunk-ssh_client (later changes: make vault-edit)"
+printf 'Checking the saved vault parses as YAML (touch the YubiKey again)...\n'
+if ! "$DISPATCH" ansible-vault view "$VAULT" | python3 -I -c '
+import sys
+try:
+    import yaml
+except ImportError:
+    sys.exit(0)  # no PyYAML for this python3: skip the check
+yaml.safe_load(sys.stdin)' >/dev/null 2>&1; then
+  die "the saved vault is not valid YAML (or could not be decrypted): fix it with make vault-edit (format: comments at the top)"
+fi
+ok "vault saved. Next (CLAUDE.md steps 3a-3d): make usb-add with the YubiKeys still in, make preflight,"
+ok "make backup, then make chunk-ssh_client. Later changes: make vault-edit"

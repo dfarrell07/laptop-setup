@@ -37,6 +37,9 @@ Any `"status": "fail"` stops the run until fixed, unless the check is irrelevant
 needs no YubiKey; `make ssh` does). `warn` and `skip` can be passed. `--json` skips the interactive vault/YubiKey checks; the owner runs
 `make preflight` before a first provision and `make check` for a full dry run.
 
+A `vault_encrypted` warning for the plaintext stub: before any chunk the owner runs `make setup-yubikeys`, then
+`make vault-init` (CLAUDE.md step 3).
+
 Confirm the owner connected their USB devices and ran `make usb-add` before any USBGuard chunk (CLAUDE.md § USBGuard).
 A `secure_boot` warning means firmware Secure Boot is off: the owner must enable it before `sys_lockdown` (SECURITY.md § Secure Boot).
 

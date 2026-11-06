@@ -16,6 +16,7 @@ sudo dnf install -y make        # Fedora/RHEL; Debian: apt install make python3-
 make bootstrap                  # installs ansible and tools (sudo on Linux), verifies vendored collections, installs git hooks
 cp default.config.yml config.yml   # then edit: replace every CHANGE_ME (desktop_environment, identity), set system_timezone
 make setup-yubikeys             # optional: programs YubiKey slot 2 (overwrites it), writes vault-pass.sh
+make vault-init                 # after setup-yubikeys: encrypt the vault, add the ed25519 key
 make preflight                  # prerequisite checks; fix each [FAIL] line, then re-run (re-run after editing config.yml too)
 make backup-dry-run && make backup   # copy dotfiles, SSH and agent config to ~/laptop-setup-backup-<timestamp> (0700) first
 make status                     # which chunks are on, their risk, whether they need sudo, and the next suggestion
