@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ssh-keys.sh (make ssh-keys) — after make setup-yubikeys, one YubiKey at a time: set its FIDO2 PIN (12-character
+# ssh-keys.sh (make ssh-keys) — after make setup-yubikeys, one YubiKey at a time: set its FIDO2 PIN (6-character
 # floor) if none is set, then make a resident ed25519-sk SSH key. The first key file is ~/.ssh/id_ed25519_sk, later ones
 # (backup YubiKeys) id_ed25519_sk_backup, _backup2, ... A YubiKey that already has a key file (comment yubikey-<serial>)
 # is skipped, so a re-run only adds new keys. Next: make vault-init.
@@ -41,15 +41,15 @@ while :; do
     pin=$(printf '%s\n' "$info" | sed -n 's/^PIN: *//p')
     case $pin in
       'Not set')
-        printf 'YubiKey %s has no FIDO2 PIN: choose one of at least 12 characters.\n' "$serial"
-        ykman fido access set-min-length 12 || warn "could not set the 12-character floor: still pick 12 or more"
+        printf 'YubiKey %s has no FIDO2 PIN: choose one of 6 or more characters.\n' "$serial"
+        ykman fido access set-min-length 6 || warn "could not set the 6-character floor: still pick 6 or more"
         ykman fido access change-pin || die "setting the PIN failed: re-run make ssh-keys" ;;
       [0-9]*' attempt'*)
         [[ $info != *'must be changed'* ]] || die "YubiKey $serial must change its FIDO2 PIN first: ykman fido access change-pin"
         [[ $info != *'temporarily blocked'* ]] || die "YubiKey $serial PIN is temporarily blocked: re-insert it and re-run make ssh-keys"
         ok "YubiKey $serial already has a FIDO2 PIN (kept)"
-        [[ $(printf '%s\n' "$info" | sed -n 's/^Minimum PIN length: *//p') -ge 12 ]] \
-          || warn "its PIN may be shorter than 12: ykman fido access set-min-length 12 (forces a PIN change only if it is shorter)" ;;
+        [[ $(printf '%s\n' "$info" | sed -n 's/^Minimum PIN length: *//p') -ge 6 ]] \
+          || warn "its PIN may be shorter than 6: ykman fido access set-min-length 6 (forces a PIN change only if it is shorter)" ;;
       *) die "YubiKey $serial FIDO2 PIN state is '$pin' (blocked: ykman fido reset wipes its FIDO keys; disabled: ykman config usb)" ;;
     esac
     key=$SSH_DIR/id_ed25519_sk
