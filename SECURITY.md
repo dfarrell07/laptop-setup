@@ -314,13 +314,13 @@ lockdown activates. Both protections are needed.
 
 ## Vault Security
 
-- Vault ships as a plaintext stub (`vault_placeholder`); `make vault-init` encrypts it and opens it for the first secrets
+- Vault ships as a plaintext stub (`vault_placeholder`); `make vault-init` encrypts it with the SSH keys from `make ssh-keys`
   (`make vault-edit` for later changes)
 - The production vault password is derived from YubiKey HMAC-SHA1 challenge-response
 - `vault-pass.sh` is gitignored; `make bootstrap` creates a stub from `vault-pass-ci.sh` (integrity-checked)
 - The pre-commit hook blocks committing unencrypted vault files that contain real variables
-- Rotate the password: `ansible-vault decrypt group_vars/all/vault.yml`, `make setup-yubikeys` (it refuses an encrypted vault), then
-  `ansible-vault encrypt group_vars/all/vault.yml` (a bare `ansible-vault rekey` asks for a typed password, not the YubiKey's)
+- Rotate the password or add a YubiKey: § "Lost or Compromised YubiKey" (decrypt, `make setup-yubikeys`, `make ssh-keys`,
+  add each new `.pub` line to `vault_ssh_auth_key_pub`, `make vault-init`)
 
 ### Setting Up vault-pass.sh
 
@@ -355,7 +355,7 @@ Then:
 ```bash
 chmod 700 scripts/vault-pass.sh
 (cd scripts && sha256sum vault-pass.sh > vault-pass.sh.sha256)  # make checks this; relative path required
-make vault-init
+make ssh-keys && make vault-init
 ```
 
 With skip-worktree set, a pull that changes the committed stub aborts ("would be overwritten"); nothing is lost. To take it:
@@ -373,9 +373,16 @@ encrypted file back (in that order, so the encrypted vault is never a stageable 
    password and refuses to continue until you answer y that it is saved in your password manager (it cannot verify that).
 
 The HMAC secret cannot be read back from a YubiKey and the script never displays it, so a replacement key cannot be cloned afterwards.
-To rotate to new keys, decrypt with a surviving key (or the saved password), re-run `make setup-yubikeys` (which generates a new secret and
-so changes the vault password), then re-encrypt the decrypted vault with `ansible-vault encrypt group_vars/all/vault.yml`. (`rekey` needs an
-encrypted file and fails on plaintext.)
+To rotate to new keys, decrypt with a surviving key (`ansible-vault decrypt group_vars/all/vault.yml`) or the saved password (below),
+re-run `make setup-yubikeys` (which generates a new secret and so changes the vault password), update the SSH keys (below) in the
+decrypted file, then re-encrypt it with `make vault-init`. (`rekey` needs an encrypted file and fails on plaintext.) Adding a backup
+YubiKey later is the same procedure with every key.
+
+**Replacing SSH keys** (new, lost or rotated YubiKey): `make ssh-keys` with the new key, then edit the vault (`make vault-edit`, or the
+decrypted file directly). `vault_ssh_auth_key_pub` holds one `.pub` line per YubiKey: add the new one and delete a lost one. Its
+first line must match `vault_ssh_auth_key`: if the lost key was `id_ed25519_sk`, set `vault_ssh_auth_key` to a surviving key file (such
+as `id_ed25519_sk_backup`) and move its `.pub` line first. Once the vault is encrypted (`make vault-init` after a decrypt), run
+`make chunk-ssh_client`, then `make chunk-ssh_authorized_keys` at the console with a second session open.
 
 **Recovering with the saved password:**
 
@@ -396,12 +403,14 @@ encrypted file and fails on plaintext.)
    ansible-vault decrypt --vault-password-file "$tmp/vault-pass-temp.sh" group_vars/all/vault.yml
    ```
 
-   After `decrypt`, program the replacement key with `make setup-yubikeys`, then run `ansible-vault encrypt group_vars/all/vault.yml`.
+   After `decrypt`, program the replacement key with `make setup-yubikeys`, update the SSH keys (Replacing SSH keys above) and
+   re-encrypt with `make vault-init`.
 
 4. Shred the temporary script and unset the variable: `shred -u "$tmp/vault-pass-temp.sh"; rmdir "$tmp"; unset VAULT_PASS`
 
 **No YubiKey and no saved password** — the vault is permanently inaccessible. Re-create the secrets, replace `group_vars/all/vault.yml`
-with a fresh plaintext template, then run `make setup-yubikeys` and `make vault-init`.
+with the stub (`git show HEAD:group_vars/all/vault.yml > group_vars/all/vault.yml`), move the lost keys' `~/.ssh/id_ed25519_sk*`
+files aside (`vault-init` would fill them in), then run `make setup-yubikeys`, `make ssh-keys` and `make vault-init`.
 
 ## Internal SSH Git Host Setup
 
@@ -425,14 +434,8 @@ repos only from hosts already in `known_hosts` and defers the rest to `make chun
 
 ## SSH Key Rotation
 
-Generate `ed25519-sk` keys with `-O verify-required`, and set a FIDO2 PIN first so a stolen key cannot be used by touch alone:
-
-```bash
-ykman fido access change-pin
-ssh-keygen -t ed25519-sk -O verify-required -f ~/.ssh/id_ed25519_sk
-ssh-keygen -t ed25519-sk -O verify-required -f ~/.ssh/id_ed25519_sk_signing
-# Or add -O resident to store a discoverable credential on the key
-```
+Auth keys: move `~/.ssh/id_ed25519_sk`, its `.pub` and `id_ed25519_sk_backup*` aside, then `make ssh-keys` (FIDO2 PIN,
+`-O verify-required`, one key per YubiKey). Signing key: `ssh-keygen -t ed25519-sk -O verify-required -f ~/.ssh/id_ed25519_sk_signing`.
 
 Then:
 
