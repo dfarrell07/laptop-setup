@@ -831,7 +831,7 @@ if [[ -d "$_notes_dir/.git" ]]; then
         record "notes-transcrypt" "FAIL" "transcrypt password incorrect or repo locked — no plaintext files found in working tree"
       fi
     else
-      record "notes-transcrypt" "WARN" "repo exists but transcrypt not initialized (set vault_notes_transcrypt_password: make vault-init the first time, make vault-edit after)"
+      record "notes-transcrypt" "WARN" "repo exists but transcrypt not initialized (set vault_notes_transcrypt_password: make vault-edit)"
     fi
   else
     record "notes-transcrypt" "WARN" "transcrypt not installed"

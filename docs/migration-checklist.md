@@ -41,7 +41,8 @@ acceptance checks pass. Skip AI transcript and session history; restore AI tooli
    `claude_pinned_version`; the pin does not freeze later auto-updates.
 2. Reuse the encrypted vault and a reviewed `scripts/vault-pass.sh` with your existing hardware keys. After
    restoring the helper, `chmod 700 scripts/vault-pass.sh` and refresh its integrity file:
-   `(cd scripts && sha256sum vault-pass.sh > vault-pass.sh.sha256)`. Check with `make vault-view` in a private
+   `(cd scripts && sha256sum vault-pass.sh > vault-pass.sh.sha256)`, then `make vault-init` (with an encrypted vault it only
+   marks it skip-worktree, so git never commits it). Check with `make vault-view` in a private
    terminal. **Do not run `make setup-yubikeys` just to move laptops**: it generates a new secret and can
    overwrite slot 2, which locks you out of the existing vault. Keep `vault_*` values out of `config.yml`.
 3. Power: native management (tuned) is the baseline. TLP and charge thresholds need `system_tlp_enabled: true`;

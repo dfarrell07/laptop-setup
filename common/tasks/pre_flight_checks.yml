@@ -91,7 +91,7 @@
               Impact: all vault secrets (SSH keys, git keys, registry tokens, GRUB hash) are exposed.
               Fix: decrypt it with the stub first ('ansible-vault decrypt group_vars/all/vault.yml';
               make setup-yubikeys refuses an encrypted vault), run 'make setup-yubikeys' to replace the stub with
-              YubiKey HMAC-SHA1 vault-pass.sh, then re-encrypt: 'ansible-vault encrypt group_vars/all/vault.yml'.
+              YubiKey HMAC-SHA1 vault-pass.sh, then 'make ssh-keys' (if not done) and re-encrypt: 'make vault-init'.
               See SECURITY.md for manual vault-pass.sh setup.
 
     - name: SECURITY — Assert vault-pass.sh and vault.yml have restrictive permissions (distrobox $HOME exposure)
@@ -567,7 +567,7 @@
           (make chunk-ssh_authorized_keys)'
           if (ssh_auth_key_pub | default('') | trim | length > 0) else 'vault empty' }}).
           After hardening, sshd accepts no logins until one is added — console login is
-          unaffected. If the vault is empty, run 'make setup-yubikeys' and populate it; then run
+          unaffected. If the vault is empty, run 'make setup-yubikeys', 'make ssh-keys' and 'make vault-init'; then run
           'make chunk-ssh_authorized_keys' before 'make chunk-sys_remote_access'.
 
     - name: SECURITY CRITICAL — Block provisioning over SSH when hardening would lock the session out
@@ -591,10 +591,8 @@
 
           1. Populate vault.yml BEFORE provisioning (RECOMMENDED):
              a. Run: make setup-yubikeys
-             b. Run: make vault-init (encrypts the stub, opens the editor)
-             c. In the editor set vault_ssh_auth_key_pub
-                (MUST be ed25519 type: ssh-ed25519, sk-ssh-ed25519@openssh.com, or cert variants)
-             d. Run: make all
+             b. Run: make ssh-keys, then make vault-init
+             c. Run: make all
 
           2. Bootstrap at local console (temporary workaround):
              a. Generate ed25519 key: ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_local

@@ -292,7 +292,7 @@ class SmokeTests(unittest.TestCase):
     def test_scripts_run_on_macos_bash_3(self):
         """macOS /bin/bash is 3.2: no ${var,,}/${var^^} case conversion, declare -A or mapfile."""
         import re
-        for name in ('smoke-test.sh', 'preflight.sh', 'vault-init.sh'):
+        for name in ('smoke-test.sh', 'preflight.sh', 'vault-init.sh', 'ssh-keys.sh'):
             text = (ROOT / 'scripts' / name).read_text()
             for pattern in (r'\$\{[A-Za-z_][A-Za-z0-9_]*(,,|\^\^)\}', r'\bdeclare -A\b', r'\b(mapfile|readarray)\b'):
                 self.assertIsNone(re.search(pattern, text), f'{name}: bash 4 construct {pattern}')

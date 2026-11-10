@@ -205,7 +205,7 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   settings. Apply `packages`, then rebuild with `make container-rebuild`.
 - **Verify:** `make verify CHUNK=distrobox` (`distrobox-container`). With the vault still the empty stub the role defers container
   creation, the check is WARN and the command exits 1; that is expected, not a failed chunk. Populate the vault
-  (`make setup-yubikeys`, then `make vault-init`), then `make container` and re-verify.
+  (`make setup-yubikeys`, `make ssh-keys`, then `make vault-init`), then `make container` and re-verify.
 - **Undo:** `podman rm -f fedora-dev` (or the configured `container_name`; works for Distrobox and Toolbx containers). Then remove the
   exported wrappers that would shadow host tools:
   `for f in oc kubectl golangci-lint; do grep -q '^# distrobox_binary' ~/.local/bin/$f 2>/dev/null && rm ~/.local/bin/$f; done`.
@@ -392,8 +392,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 ## ssh_authorized_keys
 
 - **Why:** key-only login needs exactly the vault keys (each line of `vault_ssh_auth_key_pub`) in `authorized_keys`.
-- **Breaks if wrong:** the exclusive write removes every key not in the vault, so put a backup YubiKey's `.pub` on a second line first;
-  with sshd hardened an RSA key is rejected.
+- **Breaks if wrong:** the exclusive write removes every key not in the vault, so run `make ssh-keys` with the backup YubiKey
+  before `make vault-init` (later: add its `.pub` line with `make vault-edit`); with sshd hardened an RSA key is rejected.
 - **Verify:** `make verify CHUNK=ssh_authorized_keys`; log in from a second device with the new key before closing any session.
 - **Undo:** restore `~/.ssh/authorized_keys` from `~/authorized_keys.before` (the `cp -a ~/.ssh/authorized_keys` line of the snapshot block:
   run it just before this chunk if no system chunk has been run yet; the role takes no copy. `make backup` also copies this file, but

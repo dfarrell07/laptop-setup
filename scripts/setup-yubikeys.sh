@@ -6,7 +6,7 @@
 #
 # Requires: ykman (yubikey-manager — installed by 'make bootstrap')
 # Run after: make bootstrap, before make all (CLAUDE.md first-time steps)
-# Run before: make vault-init (encrypts group_vars/all/vault.yml)
+# Run before: make ssh-keys, then make vault-init (encrypts group_vars/all/vault.yml)
 #
 # Design:
 #   - Generates a random 20-byte HMAC secret; programs every YubiKey with it
@@ -88,7 +88,7 @@ if head -c 14 "$VAULT_FILE" 2>/dev/null | grep -qF "\$ANSIBLE_VAULT"; then
   die "group_vars/all/vault.yml is encrypted with the current YubiKey password. Reprogramming
        would make it permanently undecryptable. First decrypt it with a currently programmed key:
          ansible-vault decrypt group_vars/all/vault.yml
-       then re-run make setup-yubikeys and encrypt it again with the new keys."
+       then re-run make setup-yubikeys and re-encrypt it with make vault-init."
 fi
 
 # Decide about an existing vault-pass.sh before anything irreversible happens
@@ -381,25 +381,12 @@ printf "\n%s\n" "═════════════════════
 printf " Done — %d YubiKey(s) programmed\n" "$PROGRAMMED_COUNT"
 printf "%s\n\n" "═══════════════════════════════════════════════"
 printf "Next steps:\n\n"
-printf "  1. Set a strong FIDO2 PIN and enforce a minimum length (run in this order):\n"
-printf "       ykman fido access set-min-length 12  # set 12-char floor first\n"
-printf "                                            # ratchet: cannot shorten without full FIDO reset\n"
-printf "                                            # (full reset wipes all resident keys)\n"
-printf "       ykman fido access force-change        # only if a PIN is already set: invalidates one shorter than the floor\n"
-printf "       ykman fido access change-pin          # set (or change) the PIN (must be >=12 chars)\n\n"
-printf "  2. Generate your hardware SSH key (YubiKey must be inserted):\n"
-printf "       # Without -O resident (portable; key stored as file referencing YubiKey):\n"
-printf "       ssh-keygen -t ed25519-sk -O verify-required -f ~/.ssh/id_ed25519_sk\n"
-printf "       # With -O resident (discoverable credential stored on YubiKey itself):\n"
-printf "       ssh-keygen -t ed25519-sk -O resident -O verify-required -f ~/.ssh/id_ed25519_sk\n"
-printf "     Add the public key to GitHub (token needs the admin:public_key scope: gh auth refresh -h github.com -s admin:public_key):\n"
-printf "       gh ssh-key add ~/.ssh/id_ed25519_sk.pub --title 'YubiKey'\n"
-printf "     Optional commit-signing key: SECURITY.md § SSH Key Rotation.\n\n"
-printf "  3. Populate group_vars/all/vault.yml with your keys (from now on every Ansible make target needs the key inserted and a touch):\n"
-printf "       make vault-init  # skip-worktree (the committed vault stays a stub), encrypt, then paste keys (format: file header)\n\n"
-printf "  4. Deploy the keys:\n"
-printf "       make chunk-ssh_client\n\n"
-printf "  5. Last, at the console with a second session open: make chunk-ssh_authorized_keys (see docs/rollout-plan.md).\n"
+printf "  1. FIDO2 PIN and SSH key on each YubiKey (optionally added to GitHub):\n"
+printf "       make ssh-keys\n\n"
+printf "  2. Encrypt group_vars/all/vault.yml with those keys (from now on every Ansible make target needs a key and a touch):\n"
+printf "       make vault-init\n"
+printf "     Optional commit-signing key: SECURITY.md § SSH Key Rotation (signing key only).\n\n"
+printf "  3. Last, at the console with a second session open: make chunk-ssh_authorized_keys (see docs/rollout-plan.md).\n"
 printf "     Reboot only after it wrote authorized_keys; otherwise SSH login on port 722 fails.\n\n"
 warn "Store each YubiKey in a different physical location."
 if [[ $PROGRAMMED_COUNT -ge 2 ]]; then
