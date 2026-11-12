@@ -34,7 +34,7 @@
         msg: >-
           DESKTOP PACKAGE INSTALL FAILED: {{ ansible_failed_result.msg | default('unknown error') | truncate(300) }}.
           The install is one transaction, so none of the desktop packages were installed; fix the
-          cause (network, repos) and re-run make chunk-desktop.
+          cause (network, repos) and re-run make chunk CHUNK=desktop.
 
 - name: Install desktop packages (apt)
   when: is_apt
@@ -59,7 +59,7 @@
         msg: >-
           DESKTOP PACKAGE INSTALL FAILED: {{ ansible_failed_result.msg | default('unknown error') | truncate(300) }}.
           The install is one transaction, so none of the desktop packages were installed; fix the
-          cause (network, repos) and re-run make chunk-desktop.
+          cause (network, repos) and re-run make chunk CHUNK=desktop.
 
 # --- Alacritty config ---
 - name: Deploy Alacritty configuration

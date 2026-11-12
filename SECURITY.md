@@ -382,7 +382,7 @@ YubiKey later is the same procedure with every key.
 decrypted file directly). `vault_ssh_auth_key_pub` holds one `.pub` line per YubiKey: add the new one and delete a lost one. Its
 first line must match `vault_ssh_auth_key`: if the lost key was `id_ed25519_sk`, set `vault_ssh_auth_key` to a surviving key file (such
 as `id_ed25519_sk_backup`) and move its `.pub` line first. Once the vault is encrypted (`make vault-init` after a decrypt), run
-`make chunk-ssh_client`, then `make chunk-ssh_authorized_keys` at the console with a second session open.
+`make chunk CHUNK=ssh_client`, then `make chunk CHUNK=ssh_authorized_keys` at the console with a second session open.
 
 **Recovering with the saved password:**
 
@@ -429,8 +429,8 @@ ssh_work_keyscan_hosts:
    `SHA256:` value defers the host: nothing is seeded and its SSH repos are skipped until you set the real value
 
 `roles/ssh/tasks/keyscan_host.yml` seeds `~/.ssh/known_hosts` (work profile only). The `git_repos` role does not seed hosts: it clones SSH
-repos only from hosts already in `known_hosts` and defers the rest to `make chunk-ssh_client` then
-`make chunk-repos`. GitHub keys are seeded from a pinned key.
+repos only from hosts already in `known_hosts` and defers the rest to `make chunk CHUNK=ssh_client` then
+`make chunk CHUNK=repos`. GitHub keys are seeded from a pinned key.
 
 ## SSH Key Rotation
 
@@ -441,8 +441,8 @@ Then:
 
 1. Run `make vault-edit` and update `vault_ssh_auth_key`, `vault_ssh_auth_key_pub`, `vault_ssh_signing_key`, `vault_ssh_signing_key_pub`
    (multi-line key files go in as YAML block scalars, `vault_ssh_auth_key: |` with every line indented; see the `vault.yml` header)
-2. Run `make chunk-ssh_client`, then `make chunk-ssh_authorized_keys` (at the console, second session open);
-   `authorized_keys` is written with `exclusive: true`, so the old key is removed from this machine. Then `make chunk-dotfiles`
+2. Run `make chunk CHUNK=ssh_client`, then `make chunk CHUNK=ssh_authorized_keys` (at the console, second session open);
+   `authorized_keys` is written with `exclusive: true`, so the old key is removed from this machine. Then `make chunk CHUNK=dotfiles`
    rewrites `~/.config/git/allowed_signers` with the new signing key.
 3. Remove the old public key from `authorized_keys` on every other machine that trusted it
 

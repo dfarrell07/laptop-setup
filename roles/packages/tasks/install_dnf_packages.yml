@@ -105,7 +105,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(300) }}.
           Fix the cause (network, repo access, a package name) and re-run make packages.
           On RHEL/Rocky, gh and tailscale come from repos added by the repos_dnf chunk: apply it first
-          (make chunk-repos_dnf), or set repo_gh_cli / repo_tailscale to false in config.yml and
+          (make chunk CHUNK=repos_dnf), or set repo_gh_cli / repo_tailscale to false in config.yml and
           list gh / tailscale in packages_extra_dnf if you still want them.
       when: not csb_rhel
 

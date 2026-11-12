@@ -4,7 +4,7 @@
 With USBGuard running, every blocked device is allowed for this session
 (usbguard allow-device) and a matching rule is appended to
 system_usbguard_extra_rules in config.yml (unless that exact rule, or an id-only rule, is
-already saved), so the next `make chunk-sys_usbguard` writes it to /etc/usbguard/rules.conf. rules.conf itself is Ansible-managed, so it is
+already saved), so the next `make chunk CHUNK=sys_usbguard` writes it to /etc/usbguard/rules.conf. rules.conf itself is Ansible-managed, so it is
 never edited here.
 
 While USBGuard is not running, connected devices whose VID:PID no 'allow id' rule covers
@@ -349,7 +349,7 @@ def main(argv=None):
                     print("  - '%s'" % rule.replace("'", "''"), file=sys.stderr)
         raise
     print('\nSaved %d rule(s) to %s (%s).' % (len(added), args.config.name, KEY))
-    print('Review them, then run: make chunk-sys_usbguard   (writes /etc/usbguard/rules.conf)')
+    print('Review them, then run: make chunk CHUNK=sys_usbguard   (writes /etc/usbguard/rules.conf)')
     return 1 if capped else 0
 
 

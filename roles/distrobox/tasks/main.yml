@@ -162,7 +162,7 @@
     msg: >-
       subuid/subgid missing for {{ ansible_facts['user_id'] }}.
       Rootless podman will fail. Enable the sys_signin chunk (make plan CHUNK=sys_signin,
-      then make chunk-sys_signin). On RHEL CSB, ask IT. Otherwise run:
+      then make chunk CHUNK=sys_signin). On RHEL CSB, ask IT. Otherwise run:
       echo "{{ ansible_facts['user_id'] }}:165536:165536" | sudo tee -a /etc/subuid /etc/subgid
   when:
     - distrobox_tool != 'none'

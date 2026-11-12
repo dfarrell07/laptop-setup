@@ -315,11 +315,11 @@ if $IS_LINUX && command -v podman &>/dev/null; then
   if ! $_containers_policy_enabled; then
     record "containers-policy" "PASS" "pull policy disabled (containers_policy_enabled: false)"
   elif [[ ! -f "$_pj" ]]; then
-    record "containers-policy" "WARN" "$_pj missing — image pulls are not restricted; run: make chunk-containers"
+    record "containers-policy" "WARN" "$_pj missing — image pulls are not restricted; run: make chunk CHUNK=containers"
   elif tr -d ' \n\t' < "$_pj" | grep -q '"default":\[{"type":"reject"'; then
     record "containers-policy" "PASS"
   else
-    record "containers-policy" "WARN" "$_pj does not default to reject — run: make chunk-containers"
+    record "containers-policy" "WARN" "$_pj does not default to reject — run: make chunk CHUNK=containers"
   fi
   unset _pj
 fi
@@ -433,7 +433,7 @@ else
   # Signing is switched on here, but its key file is deployed by ssh_client: until it exists every commit fails.
   _sk=$(git config --file "$_gc" --get user.signingkey 2>/dev/null || true)
   case "$_sk" in \~/*) _sk="$HOME/${_sk#\~/}" ;; esac
-  if [[ -n "$_sk" && ! -e "$_sk" ]]; then record "dotfile-gitconfig" "FAIL" "signing key file $_sk is missing, so every commit fails; run: make chunk-ssh_client"
+  if [[ -n "$_sk" && ! -e "$_sk" ]]; then record "dotfile-gitconfig" "FAIL" "signing key file $_sk is missing, so every commit fails; run: make chunk CHUNK=ssh_client"
   else record "dotfile-gitconfig" "PASS"; fi
   unset _sk
 fi
@@ -477,7 +477,7 @@ unset _rg
 # alacritty config (deployed for every desktop; checked only where sway or i3 is installed)
 _alc="$HOME/.config/alacritty/alacritty.toml"
 if [[ "$_desktop_terminal" == "alacritty" ]] && { command -v sway &>/dev/null || command -v i3 &>/dev/null; }; then
-  if [[ ! -f "$_alc" ]]; then record "dotfile-alacritty" "FAIL" "not deployed — run: make chunk-desktop"
+  if [[ ! -f "$_alc" ]]; then record "dotfile-alacritty" "FAIL" "not deployed — run: make chunk CHUNK=desktop"
   elif ! grep -q 'Ansible managed' "$_alc"; then record "dotfile-alacritty" "WARN" "$_alc present but not Ansible-managed"
   else
     record "dotfile-alacritty" "PASS"
@@ -489,9 +489,9 @@ unset _alc
 # i3-specific tool checks (only on i3 desktop machines)
 if command -v i3 &>/dev/null; then
   for _i3t in \
-    'playerctl:playerctl not installed — XF86Audio media keys non-functional in i3 (run: make chunk-desktop)' \
-    'clipit:clipit not installed — clipboard contents lost on app close in i3 (run: make chunk-desktop)' \
-    'wpctl:wpctl not installed — XF86AudioRaiseVolume/LowerVolume/Mute keybindings non-functional (run: make chunk-desktop)'; do
+    'playerctl:playerctl not installed — XF86Audio media keys non-functional in i3 (run: make chunk CHUNK=desktop)' \
+    'clipit:clipit not installed — clipboard contents lost on app close in i3 (run: make chunk CHUNK=desktop)' \
+    'wpctl:wpctl not installed — XF86AudioRaiseVolume/LowerVolume/Mute keybindings non-functional (run: make chunk CHUNK=desktop)'; do
     _i3t_name="${_i3t%%:*}"; _i3t_msg="${_i3t#*:}"
     if command -v "$_i3t_name" &>/dev/null; then record "i3-${_i3t_name}" 'PASS'
     else record "i3-${_i3t_name}" 'FAIL' "$_i3t_msg"; fi
@@ -499,7 +499,7 @@ if command -v i3 &>/dev/null; then
 fi
 if command -v sway &>/dev/null || command -v i3 &>/dev/null; then
   if command -v meld &>/dev/null; then record "meld" "PASS"
-  else record "meld" "WARN" "meld not installed — graphical diff/merge tool absent (run: make chunk-desktop)"; fi
+  else record "meld" "WARN" "meld not installed — graphical diff/merge tool absent (run: make chunk CHUNK=desktop)"; fi
 fi
 
 # GTK theme config (only on Sway desktop — no GNOME settings daemon)
@@ -511,7 +511,7 @@ if command -v sway &>/dev/null; then
   unset _gtk3
   # Sway also uses wpctl for audio keybindings (same as i3)
   if command -v wpctl &>/dev/null; then record "sway-wpctl" "PASS"
-  else record "sway-wpctl" "FAIL" "wpctl not installed — XF86AudioRaiseVolume/LowerVolume/Mute keybindings non-functional in Sway (run: make chunk-desktop)"; fi
+  else record "sway-wpctl" "FAIL" "wpctl not installed — XF86AudioRaiseVolume/LowerVolume/Mute keybindings non-functional in Sway (run: make chunk CHUNK=desktop)"; fi
 
   # TrackPoint device ID validation (prevents silent scroll failure after device ID changes)
   if [[ -n "$_trackpoint_id" ]]; then
@@ -532,7 +532,7 @@ if command -v sway &>/dev/null; then
       # Get actual TrackPoint devices from system for remediation guidance
       _tp_actual=$(grep -E 'Name=.*(TrackPoint|Pointing Stick)' /proc/bus/input/devices 2>/dev/null | sed 's/.*Name="\([^"]*\)".*/\1/' | head -1 || true)
       if [[ -n "$_tp_actual" ]]; then
-        record "sway-trackpoint-device" "WARN" "Configured device '$_tp_name' not found. Actual: '$_tp_actual'. Update desktop_sway_trackpoint_id in config.yml and run: make chunk-desktop"
+        record "sway-trackpoint-device" "WARN" "Configured device '$_tp_name' not found. Actual: '$_tp_actual'. Update desktop_sway_trackpoint_id in config.yml and run: make chunk CHUNK=desktop"
       else
         record "sway-trackpoint-device" "WARN" "Configured device '$_tp_name' not found and no TrackPoint detected in /proc/bus/input/devices. Verify device or remove desktop_sway_trackpoint_id from config.yml."
       fi
@@ -686,11 +686,11 @@ unset _ak
 _kh="$HOME/.ssh/known_hosts"
 if [[ -f "$_kh" ]]; then
   check_perms "known-hosts-perms" "$_kh" "600"
-  # chunk-ssh_client leaves only the pinned ED25519 key; leftover RSA/ECDSA github.com entries mean it has not run yet
+  # the ssh_client chunk leaves only the pinned ED25519 key; leftover RSA/ECDSA github.com entries mean it has not run yet
   _kh_github=$(ssh-keygen -F github.com -f "$_kh" 2>/dev/null | grep -v '^#' || true)
-  if [[ -z "$_kh_github" ]]; then record "known-hosts-github" "FAIL" "github.com not in known_hosts — run: make chunk-ssh_client"
+  if [[ -z "$_kh_github" ]]; then record "known-hosts-github" "FAIL" "github.com not in known_hosts — run: make chunk CHUNK=ssh_client"
   elif grep -qE '[[:space:]](ssh-rsa|ecdsa-sha2-[a-z0-9]+)[[:space:]]' <<<"$_kh_github"; then
-    record "known-hosts-github" "FAIL" "known_hosts still has RSA/ECDSA github.com keys (chunk-ssh_client keeps only the pinned ED25519 key) — run: make chunk-ssh_client"
+    record "known-hosts-github" "FAIL" "known_hosts still has RSA/ECDSA github.com keys (the ssh_client chunk keeps only the pinned ED25519 key) — run: make chunk CHUNK=ssh_client"
   else record "known-hosts-github" "PASS"; fi
 unset _kh_github
 fi
@@ -871,15 +871,15 @@ if $IS_LINUX; then
       if grep -q 'Ansible managed' "$HOME/.config/sway/config"; then
         record "sway-config" "PASS"
         if grep -q 'swayidle' "$HOME/.config/sway/config"; then record "sway-idle-lock" "PASS"
-        else record "sway-idle-lock" "FAIL" "swayidle not configured in sway config — screen will not lock; run: make chunk-desktop"; fi
+        else record "sway-idle-lock" "FAIL" "swayidle not configured in sway config — screen will not lock; run: make chunk CHUNK=desktop"; fi
       else record "sway-config" "WARN" "present but not Ansible-managed"; fi
     else
-      record "sway-config" "FAIL" "$HOME/.config/sway/config not deployed — run: make chunk-desktop"
+      record "sway-config" "FAIL" "$HOME/.config/sway/config not deployed — run: make chunk CHUNK=desktop"
     fi
     if [[ -f "$HOME/.config/swaylock/config" ]]; then
       record "swaylock-config" "PASS"
     else
-      record "swaylock-config" "FAIL" "$HOME/.config/swaylock/config not deployed — run: make chunk-desktop"
+      record "swaylock-config" "FAIL" "$HOME/.config/swaylock/config not deployed — run: make chunk CHUNK=desktop"
     fi
   fi
 fi
@@ -898,7 +898,7 @@ if $IS_LINUX && [[ -z "$CONTAINER" ]]; then
     if ! podman container exists "$_dbx_name" 2>/dev/null; then
       record "distrobox-container" "WARN" "container $_dbx_name not found (distrobox chunk not applied, or the vault is still empty)"
     elif [[ "$_dbx_state" == created || "$_dbx_state" == configured ]]; then
-      record "distrobox-container" "WARN" "container $_dbx_name exists but never started (check: podman logs $_dbx_name; re-run make chunk-distrobox)"
+      record "distrobox-container" "WARN" "container $_dbx_name exists but never started (check: podman logs $_dbx_name; re-run make chunk CHUNK=distrobox)"
     else record "distrobox-container" "PASS"; fi
     unset _dbx_name _dbx_state
   fi
@@ -946,7 +946,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else record "dns-over-tls" "WARN" "config deployed but TLS not negotiated on this network (opportunistic — plain DNS in use)"; fi
   elif $CSB_HOST; then
     record "dns-over-tls" "PASS"  # 99-dot.conf intentionally not deployed on CSB (DHCP DNS in use)
-  else record "dns-over-tls" "FAIL" "99-dot.conf not deployed — run: make chunk-sys_time_dns"; fi
+  else record "dns-over-tls" "FAIL" "99-dot.conf not deployed — run: make chunk CHUNK=sys_time_dns"; fi
 
   # DNSSEC: WARN-level observability check consistent with DoT "opportunistic" pattern
   if [[ -f /etc/systemd/resolved.conf.d/99-dot.conf ]]; then
@@ -1044,11 +1044,11 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       # Verify sshd_config loads the drop-in directory (absent Include = drop-in deployed but never read)
       if grep -qE '^\s*Include\s+/etc/ssh/sshd_config\.d/' /etc/ssh/sshd_config 2>/dev/null; then record "sshd-include" "PASS"
       elif $_csb_non_fedora; then record "sshd-include" "WARN" "sshd drop-in not loaded on RHEL CSB — IT manages sshd_config"
-      else record "sshd-include" "FAIL" "/etc/ssh/sshd_config missing Include /etc/ssh/sshd_config.d/*.conf — 00-hardening.conf not loaded; run: make chunk-sys_remote_access"; fi
+      else record "sshd-include" "FAIL" "/etc/ssh/sshd_config missing Include /etc/ssh/sshd_config.d/*.conf — 00-hardening.conf not loaded; run: make chunk CHUNK=sys_remote_access"; fi
       _ssh_port=$(grep -oP '^Port \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || true)
       if [[ -n "$_ssh_port" && "$_ssh_port" == "$_cfg_ssh_port" && "$_ssh_port" -ne 22 ]]; then record "sshd-port" "PASS"
       elif $_csb_non_fedora; then record "sshd-port" "WARN" "sshd drop-in not deployed on RHEL CSB — IT manages sshd port (likely 22)"
-      else record "sshd-port" "FAIL" "Port='${_ssh_port:-missing}' expected ssh_port ${_cfg_ssh_port} from config.yml (and not 22); run: make chunk-sys_remote_access (console/tmux, not over SSH)"; fi
+      else record "sshd-port" "FAIL" "Port='${_ssh_port:-missing}' expected ssh_port ${_cfg_ssh_port} from config.yml (and not 22); run: make chunk CHUNK=sys_remote_access (console/tmux, not over SSH)"; fi
       if [[ -n "$_ssh_port" ]] && command -v semanage &>/dev/null; then
         if semanage port -l 2>/dev/null | grep -qE "ssh_port_t.*\b${_ssh_port}\b"; then record "selinux-ssh-port" "PASS"
         else record "selinux-ssh-port" "FAIL" "port ${_ssh_port} not labeled ssh_port_t — sshd cannot bind"; fi
@@ -1085,7 +1085,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     elif $CSB_HOST; then
       # nm.yml never moves wt0 on any CSB tier; IT's firewall role owns it
       record "firewall-wt0-permanent" "WARN" "wt0 in neither redhat nor trusted zone on CSB — playbook does not move wt0 there (IT manages zones)"
-    else record "firewall-wt0-permanent" "FAIL" "wt0 not in permanent trusted zone config — NetBird peer traffic will be dropped (run: make chunk-sys_remote_access)"; fi
+    else record "firewall-wt0-permanent" "FAIL" "wt0 not in permanent trusted zone config — NetBird peer traffic will be dropped (run: make chunk CHUNK=sys_remote_access)"; fi
     if ip link show wt0 &>/dev/null; then
       wt_zone=$(firewall-cmd --get-zone-of-interface=wt0 2>/dev/null || echo "?")
       if [[ "$wt_zone" == "$wt_expect" ]]; then record "firewall-wt0-zone" "PASS"
@@ -1126,7 +1126,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       done
       if $_fw_fail; then
         record "firewall-fedora-workstation-cleanup" "FAIL" \
-          "FedoraWorkstation zone not hardened — ${_fw_msgs[*]}; run: make chunk-sys_remote_access"
+          "FedoraWorkstation zone not hardened — ${_fw_msgs[*]}; run: make chunk CHUNK=sys_remote_access"
       else
         record "firewall-fedora-workstation-cleanup" "PASS"
       fi
@@ -1308,8 +1308,8 @@ EOF
     else
       if grep -q '^Banner /etc/issue.net$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null; then
         if [[ -s /etc/issue.net ]]; then record "sshd-banner" "PASS"
-        else record "sshd-banner" "FAIL" "Banner directive present but /etc/issue.net is empty — NIST AC-8 login notice not shown; run: make chunk-sys_baseline"; fi
-      else record "sshd-banner" "FAIL" "Banner /etc/issue.net absent from sshd drop-in — NIST AC-8 login warning notice missing; run: make chunk-sys_remote_access"; fi
+        else record "sshd-banner" "FAIL" "Banner directive present but /etc/issue.net is empty — NIST AC-8 login notice not shown; run: make chunk CHUNK=sys_baseline"; fi
+      else record "sshd-banner" "FAIL" "Banner /etc/issue.net absent from sshd drop-in — NIST AC-8 login warning notice missing; run: make chunk CHUNK=sys_remote_access"; fi
     fi
   elif $_csb_non_fedora; then
     record "sshd-banner" "WARN" "sshd drop-in not deployed on CSB — IT manages SSH banner"
@@ -1379,8 +1379,8 @@ EOF
       if grep -qxE '!/etc/NetworkManager/system-connections[[:space:]]*' /etc/aide.conf 2>/dev/null \
          && ! grep -qE '^/etc/NetworkManager/system-connections[[:space:]]' /etc/aide.conf 2>/dev/null; then
         record "aide-nm-connections-excluded" "PASS"
-      else record "aide-nm-connections-excluded" "WARN" "/etc/aide.conf must exclude (!) /etc/NetworkManager/system-connections and not monitor it — run: make chunk-sys_optional"; fi
-    else record "aide-not-configured" "WARN" "/etc/aide.conf absent — set system_aide_enabled: true in config.yml, then run: make chunk-sys_optional (the run builds the baseline at its end)"; fi
+      else record "aide-nm-connections-excluded" "WARN" "/etc/aide.conf must exclude (!) /etc/NetworkManager/system-connections and not monitor it — run: make chunk CHUNK=sys_optional"; fi
+    else record "aide-not-configured" "WARN" "/etc/aide.conf absent — set system_aide_enabled: true in config.yml, then run: make chunk CHUNK=sys_optional (the run builds the baseline at its end)"; fi
     # TLP paths only added to aide.conf when TLP is enabled (system_tlp_enabled=true opts in)
     if [[ -f /etc/tlp.conf ]]; then
       for _path in "/etc/tlp.d" "/etc/tlp.conf"; do
@@ -1396,7 +1396,7 @@ EOF
   if $_disable_usb_storage; then
     if grep -q '^blacklist usb_storage' /etc/modprobe.d/hardening.conf 2>/dev/null && grep -q '^install usb_storage /bin/false' /etc/modprobe.d/hardening.conf 2>/dev/null; then
       record "usb-storage-blocked" "PASS"
-    else record "usb-storage-blocked" "WARN" "usb_storage not kernel-blocked although system_disable_usb_storage: true — run: make chunk-sys_sysctl"; fi
+    else record "usb-storage-blocked" "WARN" "usb_storage not kernel-blocked although system_disable_usb_storage: true — run: make chunk CHUNK=sys_sysctl"; fi
   fi
 
   # coredump config — verify drop-in is deployed with Storage= and ProcessSizeMax= directives
@@ -1429,18 +1429,18 @@ EOF
   if grep -q '^Storage=persistent' /etc/systemd/journald.conf.d/99-hardening.conf 2>/dev/null; then
     record "journald-persistent" "PASS"
   elif $_csb_non_fedora; then record "journald-persistent" "WARN" "skipped on RHEL CSB — journald config not deployed (IT may forward to SIEM; Ansible guard intentional)"
-  else record "journald-persistent" "FAIL" "journald Storage=persistent not configured — run: make chunk-sys_baseline"; fi
+  else record "journald-persistent" "FAIL" "journald Storage=persistent not configured — run: make chunk CHUNK=sys_baseline"; fi
   if grep -q '^SystemMaxUse=4G' /etc/systemd/journald.conf.d/99-hardening.conf 2>/dev/null; then
     record "journald-maxuse" "PASS"
   elif $_csb_non_fedora; then record "journald-maxuse" "WARN" "skipped on RHEL CSB — journald config not deployed (IT may forward to SIEM; Ansible guard intentional)"
-  else record "journald-maxuse" "FAIL" "journald SystemMaxUse=4G not configured — run: make chunk-sys_baseline"; fi
+  else record "journald-maxuse" "FAIL" "journald SystemMaxUse=4G not configured — run: make chunk CHUNK=sys_baseline"; fi
 
   # bluetooth: masked when system_disable_bluetooth: true (default); skip check when intentionally enabled
   if $_disable_bluetooth && ! $_csb_non_fedora; then
     if [[ "$(systemctl is-enabled bluetooth.service 2>/dev/null)" == 'masked' ]]; then
       record 'bluetooth-masked' 'PASS'
     else
-      record 'bluetooth-masked' 'FAIL' 'bluetooth.service not masked — run: make chunk-sys_baseline (or set system_disable_bluetooth: false to allow bluetooth)'
+      record 'bluetooth-masked' 'FAIL' 'bluetooth.service not masked — run: make chunk CHUNK=sys_baseline (or set system_disable_bluetooth: false to allow bluetooth)'
     fi
   fi
 
@@ -1464,7 +1464,7 @@ EOF
     record "cups-printing" "PASS" "cups disabled + socket/path masked (system_disable_printing: true)"
   elif [[ "$_cups_svc" == "enabled" && "$_cups_sock" != "masked" && "$_cups_path" != "masked" ]]; then
     record "cups-printing" "PASS" "cups enabled (system_disable_printing: false — set true to harden)"
-  else record "cups-printing" "WARN" "cups in mixed state (service: '$_cups_svc', socket: '$_cups_sock', path: '$_cups_path') — re-run make chunk-sys_baseline"; fi
+  else record "cups-printing" "WARN" "cups in mixed state (service: '$_cups_svc', socket: '$_cups_sock', path: '$_cups_path') — re-run make chunk CHUNK=sys_baseline"; fi
   unset _cups_svc _cups_sock _cups_path
 
   # avahi-daemon masked (or intentionally enabled via system_disable_avahi: false)
@@ -1562,7 +1562,7 @@ EOF
   if [[ -f /proc/cpuinfo ]] && grep -q 'GenuineIntel' /proc/cpuinfo 2>/dev/null; then
     _thermald_state="$(systemctl is-enabled thermald 2>/dev/null || true)"
     if [[ "$_thermald_state" == "masked" ]]; then
-      record "thermald-unmasked-on-intel" "WARN" "thermald is masked on Intel hardware — run: make chunk-sys_baseline"
+      record "thermald-unmasked-on-intel" "WARN" "thermald is masked on Intel hardware — run: make chunk CHUNK=sys_baseline"
     elif [[ -z "$_thermald_state" || "$_thermald_state" == "not-found" ]]; then
       record "thermald-unmasked-on-intel" "WARN" "thermald service unavailable or unreadable on Intel hardware"
     else record "thermald-unmasked-on-intel" "PASS"; fi
@@ -1596,7 +1596,7 @@ EOF
   if [[ ! -f /etc/systemd/system/aide-check.timer ]] && ! $_csb_non_fedora; then
     if grep -qiE '^ID="?(fedora|rhel|centos|rocky|almalinux)"?$' /etc/os-release 2>/dev/null; then
       if $_aide_enabled; then
-        record "aide-disabled" "FAIL" "system_aide_enabled: true but AIDE not deployed — run: make chunk-sys_optional"
+        record "aide-disabled" "FAIL" "system_aide_enabled: true but AIDE not deployed — run: make chunk CHUNK=sys_optional"
       else
         record "aide-disabled" "SKIP" "AIDE disabled (system_aide_enabled: false, the default); setuid-scan.timer covers the setuid gap"
       fi
@@ -1615,7 +1615,7 @@ EOF
     else record "setuid-scan-baseline" "WARN" "setuid-scan baseline not yet created (timer has not fired; run: systemctl start setuid-scan.service)"; fi
   elif ! $_csb_non_fedora; then
     if grep -qiE '^ID="?(fedora|rhel|centos|rocky|almalinux)"?$' /etc/os-release 2>/dev/null; then
-      record "setuid-scan-timer" "WARN" "setuid-scan.timer not deployed — setuid binary scan absent; run: make chunk-sys_optional (nothing is deployed while system_setuid_scan_enabled: false)"
+      record "setuid-scan-timer" "WARN" "setuid-scan.timer not deployed — setuid binary scan absent; run: make chunk CHUNK=sys_optional (nothing is deployed while system_setuid_scan_enabled: false)"
     fi
   fi
 
@@ -1946,11 +1946,11 @@ EOF
   # inotify limits (required for IDE/file-watcher tools — system role sets these)
   _inotify_watches=$(sysctl -n fs.inotify.max_user_watches 2>/dev/null || echo "0")
   if [[ "$_inotify_watches" -ge 1048576 ]] 2>/dev/null; then record "inotify-max-user-watches" "PASS"
-  else record "inotify-max-user-watches" "FAIL" "fs.inotify.max_user_watches=$_inotify_watches, expected >=1048576 (run: make chunk-sys_sysctl)"; fi
+  else record "inotify-max-user-watches" "FAIL" "fs.inotify.max_user_watches=$_inotify_watches, expected >=1048576 (run: make chunk CHUNK=sys_sysctl)"; fi
   unset _inotify_watches
   _inotify_instances=$(sysctl -n fs.inotify.max_user_instances 2>/dev/null || echo "0")
   if [[ "$_inotify_instances" -ge 8192 ]] 2>/dev/null; then record "inotify-max-user-instances" "PASS"
-  else record "inotify-max-user-instances" "FAIL" "fs.inotify.max_user_instances=$_inotify_instances, expected >=8192 (run: make chunk-sys_sysctl)"; fi
+  else record "inotify-max-user-instances" "FAIL" "fs.inotify.max_user_instances=$_inotify_instances, expected >=8192 (run: make chunk CHUNK=sys_sysctl)"; fi
   unset _inotify_instances
 
   # ctrl+alt+del disabled (physical security)
@@ -2035,7 +2035,7 @@ EOF
   else record "dconf-db-local" "FAIL" "compiled database /etc/dconf/db/local missing (run: dconf update)"; fi
   # GDM database — WARN not FAIL: not every session uses GDM
   if [[ -f /etc/dconf/db/gdm ]]; then record "dconf-db-gdm" "PASS"
-  else record "dconf-db-gdm" "WARN" "/etc/dconf/db/gdm missing although gdm.service exists — run: make chunk-sys_baseline"; fi
+  else record "dconf-db-gdm" "WARN" "/etc/dconf/db/gdm missing although gdm.service exists — run: make chunk CHUNK=sys_baseline"; fi
   # Media-handling automount/autorun (CIS 1.8.6-1.8.8)
   if grep -q '^automount=false' /etc/dconf/db/local.d/50-hardening 2>/dev/null && \
      grep -q '^autorun-never=true' /etc/dconf/db/local.d/50-hardening 2>/dev/null && \
@@ -2070,7 +2070,7 @@ EOF
   if grep -q '^disable-user-list=true' /etc/dconf/db/gdm.d/03-hardening 2>/dev/null; then
     record "dconf-gdm-user-list" "PASS"
   elif [[ ! -f /etc/dconf/db/gdm.d/03-hardening ]]; then
-    record "dconf-gdm-user-list" "WARN" "gdm.d/03-hardening not deployed although gdm.service exists — run: make chunk-sys_baseline"
+    record "dconf-gdm-user-list" "WARN" "gdm.d/03-hardening not deployed although gdm.service exists — run: make chunk CHUNK=sys_baseline"
   else record "dconf-gdm-user-list" "FAIL" "disable-user-list=true missing in /etc/dconf/db/gdm.d/03-hardening"; fi
   # GDM lock file: ensure disable-user-list cannot be overridden by users
   if grep -q '^/org/gnome/login-screen/disable-user-list$' /etc/dconf/db/gdm.d/locks/03-hardening 2>/dev/null; then
@@ -2165,11 +2165,11 @@ EOF
   if grep -q '^IdleAction=lock' /etc/systemd/logind.conf.d/99-hardening.conf 2>/dev/null; then
     record "logind-idle-lock" "PASS"
   elif $_csb_non_fedora; then record "logind-idle-lock" "WARN" "skipped on RHEL CSB — IT manages session policy"
-  else record "logind-idle-lock" "FAIL" "logind IdleAction not set to lock — check /etc/systemd/logind.conf.d/99-hardening.conf; fix: make chunk-sys_baseline"; fi
+  else record "logind-idle-lock" "FAIL" "logind IdleAction not set to lock — check /etc/systemd/logind.conf.d/99-hardening.conf; fix: make chunk CHUNK=sys_baseline"; fi
   if grep -qE '^IdleActionSec=[1-9]' /etc/systemd/logind.conf.d/99-hardening.conf 2>/dev/null; then
     record "logind-idle-sec" "PASS"
   elif $_csb_non_fedora; then record "logind-idle-sec" "WARN" "skipped on RHEL CSB — IT manages session policy"
-  else record "logind-idle-sec" "FAIL" "logind IdleActionSec not configured (idle-lock timeout undefined) — check /etc/systemd/logind.conf.d/99-hardening.conf; fix: make chunk-sys_baseline"; fi
+  else record "logind-idle-sec" "FAIL" "logind IdleActionSec not configured (idle-lock timeout undefined) — check /etc/systemd/logind.conf.d/99-hardening.conf; fix: make chunk CHUNK=sys_baseline"; fi
 
   # Session lingering (required for rootless podman.socket to survive provisioning SSH sessions)
   if [[ "${SUDO_USER:-$USER}" == "root" ]]; then
@@ -2241,7 +2241,7 @@ EOF
     elif [[ -z "$_val" ]]; then
       if [[ ! -f /etc/modules-load.d/br_netfilter.conf ]]; then
         record "$_label" "WARN" \
-          "br_netfilter not loaded AND persistence file missing — reboot will NOT fix this; run: make chunk-sys_sysctl"
+          "br_netfilter not loaded AND persistence file missing — reboot will NOT fix this; run: make chunk CHUNK=sys_sysctl"
       else
         record "$_label" "WARN" "$_loaded_warn"
       fi
@@ -2258,7 +2258,7 @@ EOF
   elif grep -q 'vsyscall=none' /etc/kernel/cmdline 2>/dev/null; then
     record "vsyscall-none" "FAIL" "vsyscall=none in /etc/kernel/cmdline but NOT active in running kernel — vsyscall page at 0xffffffffff600000 mapped (fixed ROP gadget); reboot required"
   else
-    record "vsyscall-none" "WARN" "vsyscall=none absent from /proc/cmdline — run: make chunk-sys_lockdown"
+    record "vsyscall-none" "WARN" "vsyscall=none absent from /proc/cmdline — run: make chunk CHUNK=sys_lockdown"
   fi
   # IOMMU kernel param (DMA remapping — vendor-specific; absent = PCIe DMA unprotected until reboot)
   if grep -q 'AuthenticAMD' /proc/cpuinfo 2>/dev/null; then
@@ -2377,33 +2377,33 @@ if [[ -f /etc/modprobe.d/hardening.conf ]]; then
     record "modprobe-hardening" "PASS"
   else record "modprobe-hardening" "FAIL" "modprobe hardening not deployed or missing key blacklist entries"; fi
 elif $IS_LINUX && ! $USER_ONLY && [[ -z "$CONTAINER" ]]; then
-  record "modprobe-hardening" "FAIL" "/etc/modprobe.d/hardening.conf missing — run: make chunk-sys_sysctl"
+  record "modprobe-hardening" "FAIL" "/etc/modprobe.d/hardening.conf missing — run: make chunk CHUNK=sys_sysctl"
 fi
 
 # NM conf.d content checks — file-gated; silently skip on macOS or where system role was not run
 if [[ -f /etc/NetworkManager/conf.d/99-dns.conf ]]; then
-  # Not deployed on any CSB tier (csb_detected): a leftover file from an earlier run is removed by the next make chunk-sys_remote_access.
+  # Not deployed on any CSB tier (csb_detected): a leftover file from an earlier run is removed by the next make chunk CHUNK=sys_remote_access.
   # The resolv.conf stub link is still enforced on hybrid Fedora CSB (see resolv-stub).
   if grep -q '^dns=systemd-resolved' /etc/NetworkManager/conf.d/99-dns.conf; then
     record "nm-dns-resolved" "PASS"
-  elif $CSB_HOST; then record "nm-dns-resolved" "WARN" "not managed on CSB — NM dns=systemd-resolved override is removed by make chunk-sys_remote_access (Fedora already uses resolved)"
+  elif $CSB_HOST; then record "nm-dns-resolved" "WARN" "not managed on CSB — NM dns=systemd-resolved override is removed by make chunk CHUNK=sys_remote_access (Fedora already uses resolved)"
   else record "nm-dns-resolved" "FAIL" "NM dns=systemd-resolved not configured (/etc/NetworkManager/conf.d/99-dns.conf)"; fi
 fi
 if [[ -f /etc/NetworkManager/conf.d/99-wifi-powersave.conf ]]; then
   if grep -q '^wifi.powersave=2' /etc/NetworkManager/conf.d/99-wifi-powersave.conf; then
     record "nm-wifi-powersave" "PASS"
-  elif $CSB_HOST; then record "nm-wifi-powersave" "WARN" "leftover on CSB (IT manages NM power policy) — make chunk-sys_remote_access removes it"
+  elif $CSB_HOST; then record "nm-wifi-powersave" "WARN" "leftover on CSB (IT manages NM power policy) — make chunk CHUNK=sys_remote_access removes it"
   else record "nm-wifi-powersave" "WARN" "WiFi power saving not disabled (/etc/NetworkManager/conf.d/99-wifi-powersave.conf)"; fi
 fi
 if [[ -f /etc/NetworkManager/conf.d/tailscale.conf ]]; then
   if grep -q 'interface-name:tailscale' /etc/NetworkManager/conf.d/tailscale.conf; then
     record "nm-tailscale-unmanaged" "PASS"
-  else record "nm-tailscale-unmanaged" "FAIL" "tailscale.conf missing or incomplete (/etc/NetworkManager/conf.d/tailscale.conf) — NM may manage kind/OVN/Tailscale interfaces; run: make chunk-sys_remote_access"; fi
+  else record "nm-tailscale-unmanaged" "FAIL" "tailscale.conf missing or incomplete (/etc/NetworkManager/conf.d/tailscale.conf) — NM may manage kind/OVN/Tailscale interfaces; run: make chunk CHUNK=sys_remote_access"; fi
 fi
 if [[ -f /etc/NetworkManager/conf.d/99-dhcp-privacy.conf ]]; then
   if grep -q '^ipv4.dhcp-send-hostname=false' /etc/NetworkManager/conf.d/99-dhcp-privacy.conf; then
     record "nm-dhcp-privacy" "PASS"
-  else record "nm-dhcp-privacy" "WARN" "DHCP hostname privacy not configured (/etc/NetworkManager/conf.d/99-dhcp-privacy.conf) — run: make chunk-sys_remote_access"; fi
+  else record "nm-dhcp-privacy" "WARN" "DHCP hostname privacy not configured (/etc/NetworkManager/conf.d/99-dhcp-privacy.conf) — run: make chunk CHUNK=sys_remote_access"; fi
 fi
 
 # resolved.conf.d/99-dot.conf content check (file-gated; silently skips on macOS or where system role was not run)
@@ -2412,7 +2412,7 @@ if [[ -f /etc/systemd/resolved.conf.d/99-dot.conf ]]; then
      grep -qE '^Domains=~\.' /etc/systemd/resolved.conf.d/99-dot.conf; then
     record "resolved-dot-conf" "PASS"
   else
-    record "resolved-dot-conf" "FAIL" "99-dot.conf missing a valid DNSOverTLS= value or Domains=~. directive — run: make chunk-sys_time_dns"
+    record "resolved-dot-conf" "FAIL" "99-dot.conf missing a valid DNSOverTLS= value or Domains=~. directive — run: make chunk CHUNK=sys_time_dns"
   fi
 fi
 
@@ -2431,7 +2431,7 @@ if [[ -f /etc/systemd/resolved.conf.d/98-llmnr.conf ]]; then
   fi
 elif $IS_LINUX && ! $USER_ONLY && [[ -z "$CONTAINER" ]]; then
   if $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then record "llmnr-disabled" "WARN" "skipped on RHEL CSB — IT manages resolved config"
-  else record "llmnr-disabled" "FAIL" "/etc/systemd/resolved.conf.d/98-llmnr.conf not deployed — run: make chunk-sys_time_dns"; fi
+  else record "llmnr-disabled" "FAIL" "/etc/systemd/resolved.conf.d/98-llmnr.conf not deployed — run: make chunk CHUNK=sys_time_dns"; fi
 fi
 
 # --only: a selected check that never ran (not applicable here, or needs root/--system-only) is SKIP, which fails the run

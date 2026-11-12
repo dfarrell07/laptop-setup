@@ -391,20 +391,14 @@ class MakeInjectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             marker = Path(directory) / 'injected'
             self.assertNotIn(' ', str(marker))
-            # A goal name is not re-expanded by make ($ stays $); a CHUNK= value is, so it needs $$ to reach the recipe as $.
-            # Either would create the marker file if the recipe put the text into the shell command line.
-            stem_payload, value_payload = f'$(>{marker})', f'$$(>{marker})'
-            result = subprocess.run(['make', *[a.replace('STEMPAYLOAD', stem_payload).replace('PAYLOAD', value_payload) for a in args]], cwd=ROOT,
+            # make re-expands a CHUNK= value, so $$ reaches the recipe as $: it would create the marker file if the
+            # recipe put the value into the shell command line.
+            result = subprocess.run(['make', *[a.replace('PAYLOAD', f'$$(>{marker})') for a in args]], cwd=ROOT,
                                     capture_output=True, text=True, timeout=120)
             return result, marker.exists()  # evaluate before the temporary directory disappears
 
-    def test_chunk_target_name_is_not_executed(self):
-        result, created = self.run_make('chunk-xSTEMPAYLOAD')
-        self.assertNotEqual(result.returncode, 0)
-        self.assertFalse(created, 'the chunk name was executed as shell text')
-
     def test_chunk_variable_is_not_executed(self):
-        for target in ('verify', 'plan'):
+        for target in ('verify', 'plan', 'chunk'):
             with self.subTest(target=target):
                 result, created = self.run_make(target, 'CHUNK=PAYLOAD')
                 self.assertNotEqual(result.returncode, 0)
