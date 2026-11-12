@@ -163,7 +163,12 @@ else
   fi
 fi
 if [[ "$yk_found" == true ]]; then
-  record "yubikey_present" "pass" "detected via ${yk_detect_method}"
+  yk_count=$(lsusb 2>/dev/null | grep -ciE "yubico|1050:" || true)
+  if [[ ${yk_count:-0} -gt 1 ]]; then
+    record "yubikey_present" "warn" "${yk_count} YubiKeys inserted: unplug all but one (the touch test and vault-pass.sh need exactly one)"
+  else
+    record "yubikey_present" "pass" "detected via ${yk_detect_method}"
+  fi
   if command -v ykman &>/dev/null; then
     if [[ "$JSON" == false ]]; then
       if ! command -v timeout &>/dev/null; then
