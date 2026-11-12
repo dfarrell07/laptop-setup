@@ -92,7 +92,7 @@
           every USB device plugged in later, including a re-plugged keyboard. Fix the template and re-run before enabling.
       when: not ansible_check_mode
 
-    - name: Enforce usbguard-daemon.conf setting {{ item.key }}
+    - name: Enforce usbguard-daemon.conf settings
       ansible.builtin.lineinfile:
         path: /etc/usbguard/usbguard-daemon.conf
         regexp: '^{{ item.key }}='
