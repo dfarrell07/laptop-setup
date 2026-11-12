@@ -56,8 +56,8 @@ audits it for gaps the automation does not cover yet.
    repos on that host for the run; existing access grants and your work SSH key (`dotfiles_ssh_redhat_key_basename`)
    are still required.
 5. Choose chunks with `rollout_enable`, run `make preflight`, then stage prerequisites chunk by chunk, in this
-   order: `make chunk-repos_dnf` (DNF hosts), `make chunk-packages`, `make chunk-ssh_client`,
-   `make chunk-dotfiles`. Avoid `make ssh`: it also rewrites `~/.ssh/authorized_keys` to exactly the vault keys.
+   order: `make chunk CHUNK=repos_dnf` (DNF hosts), `make chunk CHUNK=packages`, `make chunk CHUNK=ssh_client`,
+   `make chunk CHUNK=dotfiles`. Avoid `make ssh`: it also rewrites `~/.ssh/authorized_keys` to exactly the vault keys.
    Run `gh auth login`, then check GitHub and internal Git access over SSH. Review old host entries instead of
    replacing the managed `.ssh/config`; put compatible extras in `.ssh/config.local` (SSH keeps the first value
    it sees per setting, so late includes cannot override managed values).
@@ -66,7 +66,7 @@ audits it for gaps the automation does not cover yet.
 
 ## 3. Provision and recover workspaces
 
-1. Apply the remaining chunks one at a time (`make status`, `make plan CHUNK=x`, `make chunk-x`,
+1. Apply the remaining chunks one at a time (`make status`, `make plan CHUNK=x`, `make chunk CHUNK=x`,
    `make verify CHUNK=x`) or `make all`. The repo role succeeds when some clones fail: read its failed-clone
    report, reconnect the VPN if network changes dropped it, and re-run the affected category. Reboot, run
    `make smoke-test`, and check GNOME preference warnings, suspend/resume and charging in a real session.

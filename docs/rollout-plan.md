@@ -19,7 +19,7 @@ constraints: [design-principles.md](design-principles.md). Undo steps: [rollout-
   rejects unknown names (with a "did you mean"), duplicates and unmet `requires`; the wrapper rejects `-e` overrides.
 - **Box type** is the facts the repo already computes (`profile`, `csb_detected`, `is_apt`, `is_macos`, the
   container group); roles already no-op where they do not apply.
-- **Commands**: `make status`, `make plan CHUNK=x`, `make chunk-x`, `make verify [CHUNK=x]`. Existing targets
+- **Commands**: `make status`, `make plan CHUNK=x`, `make chunk CHUNK=x`, `make verify [CHUNK=x]`. Existing targets
   keep working; `make minimal` and `make container` are tag-based aliases and the enabled list applies on top.
 - **Sshd lockout guard**: the Play 0 pre-flight check (`pre-flight.yml`) blocks, over SSH, unless an ed25519 or
   FIDO2 key is in `authorized_keys` or the vault key will be deployed by this run; at the console it only prints a
@@ -32,7 +32,7 @@ constraints: [design-principles.md](design-principles.md). Undo steps: [rollout-
    then `make usb-add` with every USB device connected, hooks and scanner (`make hooks && make bootstrap-hooks`), IT's compliance job green,
    `make backup` plus `dconf dump / > ~/dconf-before.ini`, a rehearsed break-glass (recovery sheet), and the
    `config.yml` defaults below.
-2. Per chunk: `make plan CHUNK=x`, read it, `make chunk-x`, `make verify CHUNK=x`, soak, next.
+2. Per chunk: `make plan CHUNK=x`, read it, `make chunk CHUNK=x`, `make verify CHUNK=x`, soak, next.
 3. System chunks only after a snapshot, a second session and the recovery sheet. Reboot checkpoints after
    `sys_baseline`, `sys_mounts`, `sys_lockdown`, `sys_usbguard`, `sys_remote_access`.
 4. `ssh_authorized_keys` and `sys_remote_access` last, with a tested ed25519 or `ed25519-sk` key and a second

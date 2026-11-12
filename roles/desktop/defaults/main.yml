@@ -16,7 +16,7 @@ desktop_sway_hidpi_scale: "1.0"  # ThinkPad P16v 2560x1600: set 1.5 in config.ym
 desktop_sway_cursor_theme: Adwaita  # cursor theme; propagated to seat config and XCURSOR_THEME for XWayland apps
 desktop_sway_cursor_size: "{{ (24 * desktop_sway_hidpi_scale | float) | int }}"  # cursor size in px; seat config + XCURSOR_SIZE
 desktop_sway_libva_driver: ''  # VA-API driver: radeonsi (AMD), iHD (Intel); empty string omits export for libva auto-detection
-# i3: idle/lock color apply only when ~/.config/i3/config is first seeded (delete it and re-run make chunk-desktop to re-seed)
+# i3: idle/lock color apply only when ~/.config/i3/config is first seeded (delete it and re-run make chunk CHUNK=desktop to re-seed)
 desktop_wm_idle_lock_timeout: 300   # seconds idle before lock (swaylock; i3lock via xautolock rounds down to whole minutes, min 1)
 desktop_wm_idle_display_timeout: 600  # seconds of idle before display powers off
 desktop_wm_lock_color: "000000"     # screen lock background color (hex, no #) — used by swaylock (Sway) and i3lock (i3)

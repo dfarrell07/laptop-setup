@@ -176,7 +176,7 @@ def root_command(catalog, enabled, name=None):
 
 
 def next_step(catalog, name):
-    """The hint after a successful chunk-<name>: verify only when a smoke check is mapped to it."""
+    """The hint after a successful make chunk: verify only when a smoke check is mapped to it."""
     if catalog.get(name, {}).get('verify'):
         if name.startswith('sys_'):
             return (f'Next: make verify CHUNK={name} (root-only checks WARN as a normal user; run them as root: sudo '
@@ -242,7 +242,7 @@ def main(argv=None):
             print(f'\nmake all applies only the ON chunks ({len(enabled)} of {len(catalog)}).')
             print(next_hint(catalog, enabled))
         else:
-            print('\nAll chunks are enabled. make all applies every one; apply one at a time with make plan CHUNK=x and make chunk-x '
+            print('\nAll chunks are enabled. make all applies every one; apply one at a time with make plan CHUNK=x and make chunk CHUNK=x '
                   '(a rollout_enable list limits make all).')
             print(next_hint(catalog, list(catalog)))
     elif args.command == 'next-step':

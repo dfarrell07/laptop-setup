@@ -7,7 +7,7 @@ named make target.
 ## Chunk selection
 
 - a role target (`make dotfiles`...) does nothing: its chunk is not in `rollout_enable`; `make status` shows ON/off, add it to `config.yml`
-- `chunk 'x' is not enabled; add it to rollout_enable` (`make chunk-x`, `plan`, `verify`): add the chunk to `rollout_enable`
+- `chunk 'x' is not enabled; add it to rollout_enable` (`make chunk CHUNK=x`, `plan`, `verify`): add the chunk to `rollout_enable`
 - `unknown chunk 'x' (did you mean ...)` or `rollout_enable ... unknown chunk`: typo; names are in `make status` /
   `group_vars/all/rollout.yml`
 - `rollout_enable is missing prerequisites`: add the listed chunks too; prerequisites are never enabled implicitly
@@ -17,7 +17,7 @@ named make target.
 - Play 0: `every chunk that is not enabled must be passed as --skip-tags` or `rollout_enable must be 'all' or a list of known chunks`: you
   ran `ansible-playbook` directly; use `make` (or `scripts/verify-ansible-args.sh`), which adds the skip tags
 - `usage: make plan CHUNK=<name>`: `plan` needs a chunk; `make check` dry-runs the whole enabled list
-- `'x' is a high-risk chunk ... run it from a terminal` or `not confirmed`: run `make chunk-x` from a terminal and type the chunk name when
+- `'x' is a high-risk chunk ... run it from a terminal` or `not confirmed`: run `make chunk CHUNK=x` from a terminal and type the chunk name when
   asked
 - `make verify CHUNK=x` says state is unknown: no smoke check is mapped to that chunk (prints `state is unknown`). A mapped check that did
   not run prints `SKIP  <check> — check did not run on this box (not applicable, or needs root)` and the run exits 1 (see the next row)
@@ -27,17 +27,17 @@ named make target.
 ## Hardening toggles that surprise people
 
 - No Bluetooth adapter, `rfkill` blocked: `system_disable_bluetooth: false` (true); re-run
-  `make chunk-sys_baseline` and `make chunk-sys_sysctl`
+  `make chunk CHUNK=sys_baseline` and `make chunk CHUNK=sys_sysctl`
 - USB drive does not mount: `make usb-add` (USBGuard blocks unlisted drives); `system_disable_usb_storage` (false; true also blocks
-  `usb_storage`/`uas` in the kernel); re-run `make usb-add`, `make chunk-sys_usbguard`, and `make chunk-sys_sysctl` if you changed
+  `usb_storage`/`uas` in the kernel); re-run `make usb-add`, `make chunk CHUNK=sys_usbguard`, and `make chunk CHUNK=sys_sysctl` if you changed
   `system_disable_usb_storage`
-- `.local` names do not resolve: `system_disable_avahi: false` (true); re-run `make chunk-sys_baseline`
-- ABRT units `masked`: `system_mask_abrt: false` (true); re-run `make chunk-sys_baseline`
-- Shell exits when idle: `system_tmout: 0` (0 = off; 1-900 enforces); re-run `make chunk-sys_optional`
+- `.local` names do not resolve: `system_disable_avahi: false` (true); re-run `make chunk CHUNK=sys_baseline`
+- ABRT units `masked`: `system_mask_abrt: false` (true); re-run `make chunk CHUNK=sys_baseline`
+- Shell exits when idle: `system_tmout: 0` (0 = off; 1-900 enforces); re-run `make chunk CHUNK=sys_optional`
 - `ssh -L` / VS Code port panel fails: `system_ssh_allow_tcp_forwarding: local` (local; `no` blocks all, `yes` adds `-R`); re-run
-  `make chunk-sys_remote_access`
+  `make chunk CHUNK=sys_remote_access`
 - Account locked for 15 minutes: `system_faillock_unlock_time` (900); immediate fix in [recovery](../docs/rollout-recovery.md#rescue-boot);
-  re-run `make chunk-sys_signin`
+  re-run `make chunk CHUNK=sys_signin`
 
 Overrides persist across runs; delete one to restore the default.
 
@@ -56,7 +56,7 @@ RHEL CSB and Debian skip it). If the machine does not boot, follow [Rescue boot]
 ## SSH
 
 - Connection refused after provisioning: sshd moved to port 722 (`ssh_port`); use `ssh -p 722 user@host` or `Port 722` in `~/.ssh/config`.
-  To change it, set `ssh_port` (not 22) in `config.yml` and re-run `make chunk-sys_remote_access` from the console or tmux
+  To change it, set `ssh_port` (not 22) in `config.yml` and re-run `make chunk CHUNK=sys_remote_access` from the console or tmux
 - sshd fails or rejects you: from the console inspect `/etc/ssh/sshd_config.d/00-hardening.conf` (`AllowUsers`, `Port`) and
   `sudo sshd -T | grep -i port`. Only ed25519 and FIDO2 (`sk-ssh-ed25519`) keys are accepted; an empty vault writes no `authorized_keys`
 - FIDO2 signing: "agent refused operation": `SSH_AUTH_SOCK` points at a GNOME agent. The dotfiles role masks `gcr-ssh-agent` and deploys
@@ -74,7 +74,7 @@ then `make setup-yubikeys` or follow `SECURITY.md` "Setting Up vault-pass.sh". `
 
 ## system: USBGuard Blocks YubiKey or Keyboard
 
-Plug the device in and run `make usb-add`, then `make chunk-sys_usbguard`. While USBGuard runs, `usb-add` allows every blocked device now
+Plug the device in and run `make usb-add`, then `make chunk CHUNK=sys_usbguard`. While USBGuard runs, `usb-add` allows every blocked device now
 and saves rules to `system_usbguard_extra_rules`; while it is stopped it only saves rules for connected devices no rule covers. By hand:
 `sudo usbguard list-devices --blocked`, `sudo usbguard allow-device <id>`, then add a rule to `system_usbguard_extra_rules`. `usb-add`
 writes this form (hub interface class 09:00:00):
@@ -110,7 +110,7 @@ skipped on CSB hosts. Diagnose with `resolvectl status` and `resolvectl query ex
 - **Slow or failing on a restricted network:** set `system_dot_mode: "no"` (unencrypted DNS), optionally `system_dns_primary` to the local
   resolver; revert afterwards.
 - **Internal names fail on a VPN:** NetworkManager VPNs that push routing domains win over `~.`. If not, set `system_dns_domains: ""`
-  and re-run `make chunk-sys_time_dns`.
+  and re-run `make chunk CHUNK=sys_time_dns`.
 - **standalone wg-quick DNS:** `wg*` interfaces are NM-unmanaged on non-CSB hosts, so a `DNS =` line gets no routing domain and the
   catch-all wins. Register one in the tunnel config, or import the profile into NetworkManager
   (`nmcli connection import type wireguard file /etc/wireguard/wg0.conf`):

@@ -2,7 +2,7 @@
 
 Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS (Debian secondary). Human front door: [README.md](README.md).
 
-**Agents do not run provisioning** (`make all`, `check`, `update`, `system`, `chunk-*`, any sudo target); the owner does, at the console.
+**Agents do not run provisioning** (`make all`, `check`, `update`, `system`, `chunk`, any sudo target); the owner does, at the console.
 Read [docs/design-principles.md](docs/design-principles.md) before changing roles, Make targets or hardening. Rollout design:
 [docs/rollout-plan.md](docs/rollout-plan.md); undo steps: [docs/rollout-recovery.md](docs/rollout-recovery.md). The remote is public: host
 facts go in the gitignored `CLAUDE.local.md`. Sessions on several machines at once: [docs/multi-machine.md](docs/multi-machine.md).
@@ -38,13 +38,13 @@ logs and transcripts. The wrapper and the vault scripts disable xtrace, but do n
 unless a rule allows it. Before the first `sys_usbguard` run, connect every device you use (drives, docks, keyboards), run `lsusb`, then
 `make usb-add` (or add `"allow id VVVV:PPPP"` entries to `system_usbguard_extra_rules`). ThinkPad P16v Gen 1 AMD: ACPI reports internal USB
 devices as `not used`, not `hardwired`, so the base rule fails and internal devices need explicit VID:PID rules. Blocked
-afterwards: plug in, `make usb-add`, `make chunk-sys_usbguard`. Details: `references/troubleshooting.md`.
+afterwards: plug in, `make usb-add`, `make chunk CHUNK=sys_usbguard`. Details: `references/troubleshooting.md`.
 
 ### Internal SSH git hosts
 
 For internal hosts set `ssh_work_keyscan_hosts` in `config.yml` (`{host: ..., fingerprint: "SHA256:..."}`); get fingerprints out of band.
-Without `fingerprint` it is trust-on-first-use. Pin the real fingerprints only after the VPN works, then run `make chunk-ssh_client`
-and `make chunk-repos`; until then those hosts and their repos are skipped. See SECURITY.md § "Internal SSH Git Host Setup".
+Without `fingerprint` it is trust-on-first-use. Pin the real fingerprints only after the VPN works, then run `make chunk CHUNK=ssh_client`
+and `make chunk CHUNK=repos`; until then those hosts and their repos are skipped. See SECURITY.md § "Internal SSH Git Host Setup".
 
 ### First time on a new machine
 
@@ -60,8 +60,8 @@ and `make chunk-repos`; until then those hosts and their repos are skipped. See 
    with those keys filled in (later edits: `make vault-edit`).
    From then on every make target that starts Ansible needs the key inserted and a touch. A first provision without secrets works at the
    console from the plaintext stub: container provisioning is deferred (`make container`) and internal git hosts with placeholder
-   fingerprints are skipped (`make chunk-ssh_client`, then `make chunk-repos`). Provisioning over SSH with no ed25519/FIDO2 key is
-   blocked. **WARNING**: with an empty vault no `authorized_keys` is written; after reboot sshd is on port 722 and hardening rejects
+   fingerprints are skipped (`make chunk CHUNK=ssh_client`, then `make chunk CHUNK=repos`). Provisioning over SSH with no ed25519/FIDO2
+   key is blocked. **WARNING**: with an empty vault no `authorized_keys` is written; after reboot sshd is on port 722 and hardening rejects
    RSA/ECDSA keys (only ed25519 and `sk-ssh-ed25519`, plain or certificate variants), so an RSA-only `authorized_keys` locks you out.
    Put an ed25519 key in the vault or in `authorized_keys` before rebooting.
 3a. USB devices, early, with the YubiKeys still plugged in: connect every device you use (dock, Moonlander, drives), run `lsusb`, then
@@ -72,7 +72,7 @@ and `make chunk-repos`; until then those hosts and their repos are skipped. See 
 3c. `make check`: sudo `--check --diff` of every play. `make check` and `make all` log to `~/.cache/laptop-setup/logs/`
     (`check-latest.log`, `all-latest.log`; newest 20 kept).
 3d. Recommended over `make all`: roll out in chunks. Optionally set `rollout_enable: [list]` in `config.yml`, then per chunk
-    `make status`, `make plan CHUNK=x`, `make chunk-x`, `make verify CHUNK=x`. The first run creates `.venv` (needs network); until then
+    `make status`, `make plan CHUNK=x`, `make chunk CHUNK=x`, `make verify CHUNK=x`. The first run creates `.venv` (needs network); until then
     only the chunk banner is skipped, and the wrapper validates `rollout_enable` with system python3 and stops if ansible is not
     importable.
 4. `make all` applies every enabled chunk (asks for sudo). **Run at the local console or in tmux, NOT over SSH**: the system role restarts
@@ -91,7 +91,7 @@ and `make chunk-repos`; until then those hosts and their repos are skipped. See 
 ```bash
 make status                 # chunks on/off (rollout_enable); list: group_vars/all/rollout.yml
 make plan CHUNK=x           # preview one chunk (--check --diff); whole enabled list: make check
-make chunk-x                # apply one enabled chunk (high-risk ones need a typed name and a terminal)
+make chunk CHUNK=x          # apply one enabled chunk (high-risk ones need a typed name and a terminal)
 make verify CHUNK=x         # smoke checks for that chunk (all enabled if no CHUNK); fails on WARN/SKIP; sys_* need sudo; exits 1 for chunks with no check (packages desktop repos redhat repos_dnf): use make plan
 make all | offline | minimal  # full / no binary downloads / dotfiles+ssh+repos only, no sudo
 make update                 # reinstall vendored collections + full run with git_repos_pull=true
@@ -102,7 +102,7 @@ make bootstrap | hooks | bootstrap-hooks  # deps and collections | git hooks | c
 make collections            # verify and reinstall vendored collections, no sudo (after pulling a collections-dist bump)
 make vendor-collections     # re-vendor into collections-dist/ (SECURITY.md Collections Supply Chain)
 make container | container-rebuild  # distrobox/toolbox dev container
-make usb-add                # allow blocked USB devices, save rules to config.yml (then make chunk-sys_usbguard)
+make usb-add                # allow blocked USB devices, save rules to config.yml (then make chunk CHUNK=sys_usbguard)
 make aide-rebaseline        # accept current files as the AIDE baseline
 make smoke-test | smoke-test-user | smoke-test-container   # host | no sudo | distrobox
 make ssh-keys | vault-init | vault-edit | vault-view
@@ -118,7 +118,7 @@ make pip-lock | pip-sync    # regenerate / install requirements-test.lock
 ```
 
 Role targets re-run one role (`make dotfiles packages ssh notes repos desktop system repos_dnf redhat containers claude codex`) and apply
-all its enabled chunks without the high-risk prompt; prefer `make chunk-x` for `sys_*` and `ssh_authorized_keys`. `make repos-<group>`
+all its enabled chunks without the high-risk prompt; prefer `make chunk CHUNK=x` for `sys_*` and `ssh_authorized_keys`. `make repos-<group>`
 runs `git_repos` for one `repo_category`. `make help` lists everything; scenario names are in `molecule/`.
 
 ## Project Structure

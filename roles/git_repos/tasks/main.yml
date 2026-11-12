@@ -87,7 +87,7 @@
     msg: >-
       VPN-gated host {{ git_repos_vpn_check_host }} is unreachable (port {{ git_repos_vpn_check_port }}).
       Skipping repos at {{ git_repos_vpn_check_host }} this run. Once the VPN works, pin its fingerprint in
-      ssh_work_keyscan_hosts if still a placeholder, then run 'make chunk-ssh_client' and 'make chunk-repos'.
+      ssh_work_keyscan_hosts if still a placeholder, then run 'make chunk CHUNK=ssh_client' and 'make chunk CHUNK=repos'.
   when: git_repos_vpn_check.failed | default(false)
 
 # Drop repos on the VPN-gated host for this run so their clones are not attempted and
@@ -128,8 +128,8 @@
 
 # accept_newhostkey below would trust an unseen host key, so SSH repos are cloned only from
 # hosts the ssh role already seeded (pinned fingerprint, TOFU keyscan or the pinned github.com key).
-# Unseeded hosts (off VPN, fingerprint not yet pinned) are deferred to a later 'make chunk-ssh_client', then
-# 'make chunk-repos', instead of failing the run.
+# Unseeded hosts (off VPN, fingerprint not yet pinned) are deferred to a later 'make chunk CHUNK=ssh_client', then
+# 'make chunk CHUNK=repos', instead of failing the run.
 - name: Check SSH git repo hosts are in known_hosts
   ansible.builtin.command:
     cmd: >-
@@ -158,7 +158,7 @@
         msg: >-
           Skipping SSH repos on {{ _unseeded | join(', ') }}: no known_hosts entry (host
           unreachable or its fingerprint is not pinned in ssh_work_keyscan_hosts). Pin the
-          fingerprint, then run 'make chunk-ssh_client' and 'make chunk-repos' on a network that reaches the host.
+          fingerprint, then run 'make chunk CHUNK=ssh_client' and 'make chunk CHUNK=repos' on a network that reaches the host.
 
     - name: Drop SSH repos on unseeded hosts
       ansible.builtin.set_fact:
