@@ -1,8 +1,9 @@
 #!/bin/bash
 # {{ ansible_managed }}
-# Bar status_command: runs i3status and adds a VPN field naming the active VPNs
-# (NetworkManager VPN/WireGuard profiles, Tailscale, NetBird), placed before the Wi-Fi field.
+# Bar status_command: runs i3status, drops the GiB unit from RAM, shortens disk units (893.1G) and, with
+# desktop_i3status_vpn, adds a VPN field naming active VPNs (NetworkManager VPN/WireGuard, Tailscale, NetBird).
 set -u
+show_vpn={{ desktop_i3status_vpn | bool | ternary('1', '0') }}
 {% raw %}
 
 vpn_block() {
@@ -23,6 +24,10 @@ vpn_block() {
   fi
 }
 
+# Patterns live in variables: quotes inside [[ =~ ]] are shell quoting, not literal characters
+mem_re='\{"name":"memory"[^}]*\}'
+disk_re='\{"name":"disk_info"[^}]*\}'
+
 i3status --config "$HOME/.config/i3status/config" | {
   # i3bar protocol: a version header and the opening "[", then one JSON array per update
   IFS= read -r line && printf '%s\n' "$line"
@@ -30,11 +35,26 @@ i3status --config "$HOME/.config/i3status/config" | {
   while IFS= read -r line; do
     prefix=
     [[ $line == ,* ]] && prefix=, && line=${line#,}
-    block=$(vpn_block)
-    if [[ $line == *'{"name":"wireless"'* ]]; then
-      line=${line/'{"name":"wireless"'/"$block"',{"name":"wireless"'}
-    else
-      line="${line%]},$block]"
+    if [[ $line =~ $mem_re ]]; then
+      blk=${BASH_REMATCH[0]}
+      line=${line/"$blk"/"${blk// GiB/}"}
+    fi
+    rest=$line
+    while [[ $rest =~ $disk_re ]]; do
+      blk=${BASH_REMATCH[0]}
+      new=${blk// TiB/T}
+      new=${new// GiB/G}
+      new=${new// MiB/M}
+      line=${line/"$blk"/"$new"}
+      rest=${rest#*"$blk"}
+    done
+    if ((show_vpn)); then
+      block=$(vpn_block)
+      if [[ $line == *'{"name":"wireless"'* ]]; then
+        line=${line/'{"name":"wireless"'/"$block"',{"name":"wireless"'}
+      else
+        line="${line%]},$block]"
+      fi
     fi
     printf '%s%s\n' "$prefix" "$line"
   done

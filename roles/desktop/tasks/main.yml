@@ -214,12 +214,11 @@
         mode: "0644"
         backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
 
-    - name: Deploy the bar VPN wrapper (status_command when desktop_i3status_vpn)
+    - name: Deploy the bar status_command wrapper (RAM units, VPN field)
       ansible.builtin.template:
-        src: i3status-vpn.sh.j2
-        dest: "{{ ansible_facts['user_dir'] }}/.config/i3status/vpn-status"
+        src: i3status-bar.sh.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/i3status/bar-status"
         mode: "0755"
-      when: desktop_i3status_vpn | bool
 
 # --- Shell ---
 # ansible.builtin.user calls usermod, which cannot modify SSSD/LDAP-only accounts
