@@ -43,8 +43,9 @@
         content: |
           #!/bin/sh
           # Molecule stub — satisfies the version-string guard so go install is skipped.
-          echo "golangci-lint version v2.12.2"
-          exit 0
+          # Only the real v2 CLI's "version --short" succeeds, so a wrong flag in the guard fails here.
+          [ "$*" = "version --short" ] || { echo "Error: unknown flag" >&2; exit 1; }
+          echo "2.12.2"
         mode: "0755"
 
     - name: Create stub subctl binary (satisfies version-string guard in converge)

@@ -499,6 +499,9 @@
     ansible_connection: containers.podman.podman
     ansible_host: "{{ distrobox_container_name }}"
     ansible_python_interpreter: "{{ distrobox_python.stdout | trim }}"
+    # The image's default user is root: run as the distrobox user (passwordless sudo for become),
+    # so distrobox-export works and files in the shared home stay owned by the host user.
+    ansible_user: "{{ real_user_id | default(ansible_facts['user_id']) }}"
     distrobox_packages: "{{ distrobox_packages }}"
     distrobox_host_exec_commands: "{{ distrobox_host_exec_commands }}"
     distrobox_oc_version: "{{ distrobox_oc_version }}"

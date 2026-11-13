@@ -132,7 +132,7 @@
 # --- Go tools (not in Fedora repos) ---
 - name: Check golangci-lint version
   ansible.builtin.command:
-    cmd: "{{ ansible_env.HOME }}/go/bin/golangci-lint version --format short"
+    cmd: "{{ ansible_env.HOME }}/go/bin/golangci-lint version --short"
   register: container_golangci_lint_check
   changed_when: false
   failed_when: false
