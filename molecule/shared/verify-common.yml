@@ -320,7 +320,8 @@
     cmd: >-
       python3 -c "import json, sys;
       d = json.load(open('{{ item }}'));
-      assert d.get('sandbox', {}).get('enabled'), 'sandbox.enabled is not true';
+      assert d.get('sandbox', {}).get('enabled', False) is {{ claude_sandbox_enabled | default(false) | bool }},
+      'sandbox.enabled does not match claude_sandbox_enabled';
       assert d.get('sandbox', {}).get('failIfUnavailable'), 'sandbox.failIfUnavailable is not true (allows sandbox bypass)';
       assert not d.get('sandbox', {}).get('allowUnsandboxedCommands'), 'sandbox.allowUnsandboxedCommands is not false';
       assert d.get('enableAllProjectMcpServers', True) == False, 'enableAllProjectMcpServers is missing or not false';

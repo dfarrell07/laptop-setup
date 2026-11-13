@@ -408,7 +408,7 @@ plan: guard-not-root .venv rollout-banner
 
 # CHUNK reaches each recipe through the environment, never as shell text (no injection via its value).
 apply: guard-not-root .venv
-	@[ -n "$$CHUNK" ] || { echo "usage: make apply CHUNK=<name>  (names: make status)" >&2; exit 2; }
+	@[ "$(origin CHUNK)" = "command line" ] && [ -n "$$CHUNK" ] || { echo "usage: make apply CHUNK=<name>  (names: make status)" >&2; exit 2; }
 	@args=$$(.venv/bin/python3 -I scripts/rollout.py chunk-args "$$CHUNK") || exit 2; \
 	  $(VERIFY_AND_RUN) ansible-playbook site.yml $$args && .venv/bin/python3 -I scripts/rollout.py next-step "$$CHUNK"
 

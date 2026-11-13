@@ -496,8 +496,8 @@ fi
 # re-prompts at once instead of failing after the pre-flight play. Ansible then reads it from
 # stdin (no file, argv or environment). -k with a command neither uses nor updates sudo's cached
 # credentials, so the check leaves no sudo ticket behind. Each wrong try counts toward pam_faillock, as before.
-# Not a terminal, passwordless sudo, or a password with edge whitespace (Ansible strips a
-# password file): Ansible's own prompt is kept.
+# Not a terminal, passwordless sudo, or an empty password or one with an edge CR (Ansible's
+# stdin reader rejects or strips those): Ansible's own prompt is kept.
 _bp_stdin=false
 if [[ -t 0 ]]; then
     for ((_i=0; _i<${#args[@]}; _i++)); do
@@ -507,14 +507,15 @@ if [[ -t 0 ]]; then
         for _try in 1 2 3; do
             IFS= read -rsp 'BECOME password: ' _bp || { echo >&2; exit 1; }
             echo >&2
-            if printf '%s\n' "$_bp" | /usr/bin/sudo -k -S -p '' true 2>/dev/null; then _bp_ok=true; break; fi
-            echo "Sorry, try again." >&2
+            if _bp_err=$(printf '%s\n' "$_bp" | /usr/bin/sudo -k -S -p '' true 2>&1 >/dev/null); then _bp_ok=true; break; fi
+            [[ $_try -eq 3 ]] || echo "Sorry, try again." >&2
         done
         if ! "$_bp_ok"; then
-            echo "ERROR: sudo authentication failed 3 times; nothing has run. pam_faillock counts these: sudo faillock --user \"\$USER\"" >&2
+            printf '%s\n' "$_bp_err" | tail -n 1 >&2
+            echo "ERROR: sudo authentication failed 3 times; nothing has run. pam_faillock may count these: sudo faillock --user \"\$USER\"" >&2
             exit 1
         fi
-        [[ "$_bp" =~ ^[[:space:]]|[[:space:]]$ ]] && break
+        [[ -z "$_bp" || "$_bp" == $'\r'* || "$_bp" == *$'\r' ]] && break
         args[_i]='--become-password-file=-'
         _bp_stdin=true
         break

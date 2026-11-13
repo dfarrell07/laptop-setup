@@ -581,7 +581,7 @@
           SECURITY CRITICAL: SSH LOCKOUT RISK — provisioning over SSH blocked (this session would be stranded).
           Input: ssh_auth_key_pub is {{ 'EMPTY' if (ssh_auth_key_pub | default('') | trim | length == 0)
           else ('not an ed25519/FIDO2 key' if (ssh_auth_key_pub | trim | regex_search('^(sk-)?ssh-ed25519') is none)
-          else 'populated but this run does not deploy it (apply make apply CHUNK=ssh_authorized_keys first)') }}.
+          else 'populated but this run does not deploy it (run make apply CHUNK=ssh_authorized_keys first)') }}.
           Mechanism: SSHD hardening applies PasswordAuthentication no + SSH port {{ ssh_port | default(722) }}
           + PubkeyAcceptedAlgorithms restricts to ed25519 variants only.
           Impact: After reboot, SSH login impossible — no password auth, existing RSA keys rejected,

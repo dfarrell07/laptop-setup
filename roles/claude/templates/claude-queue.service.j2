@@ -35,8 +35,8 @@ ProtectClock=true
 PrivateDevices=true
 RestrictSUIDSGID=true
 SystemCallArchitectures=native
-# Claude Code's sandbox runs bubblewrap, which needs user namespaces and mount syscalls, and
-# cannot mount a fresh /proc when systemd has masked paths under it. So: no RestrictNamespaces,
+# Claude Code's sandbox (the queue requires claude_sandbox_enabled) runs bubblewrap, which needs user namespaces and
+# mount syscalls, and cannot mount a fresh /proc when systemd has masked paths under it. So: no RestrictNamespaces,
 # ProtectKernelTunables, ProtectKernelLogs or ProtectHostname, and @mount is allowed. Verified
 # with systemd-run --user and bwrap --unshare-all --proc /proc.
 SystemCallFilter=@system-service @mount

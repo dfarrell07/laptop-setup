@@ -142,9 +142,9 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 ## agents
 
 - **Why:** Claude Code and Codex installs and settings.
-- **Breaks if wrong:** with `claude_sandbox_enabled: true` (default false) it installs `bubblewrap` and `socat` with dnf (Claude Code refuses
-  to start without them, `failIfUnavailable: true`); it overwrites each instance `CLAUDE.md` and deletes a legacy-shaped `settings.local.json` with no backup of its own; settings merges
-  can drop local edits. Run `make backup` right before `make apply CHUNK=agents` and check that `~/laptop-setup-backup-<timestamp>/` holds
+- **Breaks if wrong:** with `claude_sandbox_enabled: true` (default false) it installs `bubblewrap` and `socat` with dnf (Claude
+  Code refuses to start without them, `failIfUnavailable: true`); it overwrites each instance `CLAUDE.md` and deletes a legacy-shaped
+  `settings.local.json` with no backup of its own; settings merges can drop local edits. Run `make backup` right before `make apply CHUNK=agents` and check that `~/laptop-setup-backup-<timestamp>/` holds
   `.claude*/CLAUDE.md` and `.claude*/settings.local.json`.
 - **Verify:** `make verify CHUNK=agents` (`claude-privacy-tmpfiles`: the tmpfiles file exists; `codex`: `codex --version` runs, so a failed
   Codex npm install, which the role only warns about, shows up here). Claude's sandbox settings are not mapped: check
