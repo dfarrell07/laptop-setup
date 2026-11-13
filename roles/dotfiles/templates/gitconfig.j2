@@ -86,6 +86,10 @@
 [fetch]
 	fsckObjects = true
 	prune = true
+# Old commits in some upstreams (FRRouting/frr) carry malformed timezones; this cosmetic check otherwise aborts the
+# clone. Path, symlink and .gitmodules checks stay errors.
+[fetch "fsck"]
+	badTimezone = ignore
 [receive]
 	fsckObjects = true
 
