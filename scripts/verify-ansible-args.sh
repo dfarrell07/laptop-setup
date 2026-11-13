@@ -498,6 +498,7 @@ fi
 # credentials, so the check leaves no sudo ticket behind. Each wrong try counts toward pam_faillock, as before.
 # Not a terminal, passwordless sudo, or a password with edge whitespace (Ansible strips a
 # password file): Ansible's own prompt is kept.
+_bp_stdin=false
 if [[ -t 0 ]]; then
     for ((_i=0; _i<${#args[@]}; _i++)); do
         [[ "${args[$_i]}" == --ask-become-pass || "${args[$_i]}" == -K ]] || continue
@@ -515,7 +516,12 @@ if [[ -t 0 ]]; then
         fi
         [[ "$_bp" =~ ^[[:space:]]|[[:space:]]$ ]] && break
         args[_i]='--become-password-file=-'
-        exec "${args[@]}" < <(printf '%s' "$_bp")
+        _bp_stdin=true
+        break
     done
 fi
-exec "${args[@]}"
+if "$_bp_stdin"; then
+    exec "${args[@]}" < <(printf '%s' "$_bp")
+else
+    exec "${args[@]}"
+fi
