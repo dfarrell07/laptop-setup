@@ -69,6 +69,12 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(data['permissions']['defaultMode'], 'plan')
         self.assertEqual(len(list(self.dir.glob('settings.json.bak-*'))), 1)
 
+    def test_drops_retired_proc_rules(self):
+        self.path.write_text(json.dumps({'permissions': {'deny': ['Read(//proc/*/environ)', 'Edit(//proc/*/fd/**)', 'Read(~/x)']}}))
+        self.path.chmod(0o600)
+        self.assertEqual(run(self.path).returncode, 0)
+        self.assertEqual(self.load()['permissions']['deny'], POLICY['permissions']['deny'] + ['Read(~/x)'])
+
     def test_idempotent(self):
         run(self.path)
         before = self.path.read_text()

@@ -7,7 +7,7 @@ Prints "changed" or "unchanged". Exits non-zero (and leaves the file alone) when
 the existing file or the policy is not a JSON object.
 
 Merge rules: user keys are kept; permissions.deny is the de-duplicated union
-(policy entries first); permissions.allow/ask stay the user's; every other policy
+(policy entries first, retired policy entries dropped); permissions.allow/ask stay the user's; every other policy
 key (sandbox, enableAllProjectMcpServers, env keys) overrides
 the user's value, merging dictionaries recursively. --defaults (plugin declarations)
 only adds absent keys and absent marketplace or plugin entries, so a user's entry,
@@ -19,6 +19,9 @@ import sys
 import tempfile
 import time
 
+# Earlier policy entries that are no longer written: //proc globs break the Linux sandbox (one bind mount per process).
+RETIRED_DENY = {'%s(//proc/*/%s)' % (tool, leaf) for tool in ('Read', 'Edit')
+                for leaf in ('environ', 'cmdline', 'mem', 'maps', 'smaps', 'fd/**')}
 POLICY_KEYS = {'env', 'sandbox', 'cleanupPeriodDays', 'enableAllProjectMcpServers', 'permissions'}
 
 
@@ -65,7 +68,7 @@ def merge(existing, policy):
     current = merged.get('permissions', {})
     if not isinstance(current, dict):
         fail('existing "permissions" is not an object; refusing to overwrite it')
-    deny = list(dict.fromkeys(list(perms.get('deny', [])) + list(current.get('deny', []))))
+    deny = [d for d in dict.fromkeys(list(perms.get('deny', [])) + list(current.get('deny', []))) if d not in RETIRED_DENY]
     out_perms = deep_merge(current, {k: v for k, v in perms.items() if k not in ('deny', 'allow', 'ask')})
     for key in ('allow', 'ask'):
         if key not in current and key in perms:
