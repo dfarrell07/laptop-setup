@@ -78,14 +78,15 @@
       changed_when: system_lockdown_result.rc == 0
       failed_when: system_lockdown_result.rc != 0 and system_grubby_info.rc == 0
 
-    - name: Enable IOMMU for DMA protection (AMD)
+    # AMD needs no argument: the IOMMU is on by default and amd_iommu=on is not a valid option
+    # (the kernel logs "AMD-Vi: Unknown option"). Remove it where earlier runs added it.
+    - name: Remove the invalid amd_iommu=on argument
       ansible.builtin.command:
-        cmd: grubby --args="amd_iommu=on" --update-kernel=ALL
+        cmd: grubby --remove-args="amd_iommu=on" --update-kernel=ALL
       register: system_iommu_amd_result
       when:
         - system_grubby_info.rc == 0
-        - "'amd_iommu=on' not in (system_grubby_info.stdout)"
-        - ansible_facts['processor'] | join(' ') | lower is search('amd')
+        - "'amd_iommu=on' in (system_grubby_info.stdout)"
       changed_when: system_iommu_amd_result.rc == 0
       failed_when: false
 

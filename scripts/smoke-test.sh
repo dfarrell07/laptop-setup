@@ -2279,8 +2279,9 @@ EOF
   fi
   # IOMMU kernel param (DMA remapping — vendor-specific; absent = PCIe DMA unprotected until reboot)
   if grep -q 'AuthenticAMD' /proc/cpuinfo 2>/dev/null; then
-    if grep -q 'amd_iommu=on' /proc/cmdline 2>/dev/null; then record "amd-iommu" "PASS"
-    else record "amd-iommu" "WARN" "amd_iommu=on not in cmdline (requires reboot; AMD only)"; fi
+    # On by default (no kernel argument); /sys/class/iommu lists the active units.
+    if compgen -G '/sys/class/iommu/*' >/dev/null; then record "amd-iommu" "PASS"
+    else record "amd-iommu" "WARN" "no active IOMMU in /sys/class/iommu — enable IOMMU (AMD-Vi) in firmware"; fi
   fi
   if grep -q 'GenuineIntel' /proc/cpuinfo 2>/dev/null; then
     if grep -q 'intel_iommu=on' /proc/cmdline 2>/dev/null; then record "intel-iommu" "PASS"
@@ -2367,9 +2368,7 @@ EOF
     [[ "$_kcmd" == *"page_alloc.shuffle=1"* ]] || _kcmd_ok=false
     if $_init_on_free && [[ "$_kcmd" != *"init_on_free=1"* ]]; then _kcmd_ok=false; fi
     [[ -z "$_lockdown_intended" || "$_kcmd" == *"lockdown=${_lockdown_intended}"* ]] || _kcmd_ok=false
-    if grep -q "AuthenticAMD" /proc/cpuinfo 2>/dev/null; then
-      [[ "$_kcmd" == *"amd_iommu=on"* ]]       || _kcmd_ok=false
-    elif grep -q "GenuineIntel" /proc/cpuinfo 2>/dev/null; then
+    if grep -q "GenuineIntel" /proc/cpuinfo 2>/dev/null; then
       [[ "$_kcmd" == *"intel_iommu=on"* ]]     || _kcmd_ok=false
     fi
     grep -q 'iommu=pt' /proc/cmdline 2>/dev/null && { [[ "$_kcmd" == *"iommu=pt"* ]] || _kcmd_ok=false; }
