@@ -91,6 +91,7 @@ Homes below are defaults; substitute configured paths and transfer custom homes 
 | `owork` (work profile) | `.codex` | `CODEX_HOME="$HOME/.codex" codex login` |
 | `oper` | `.codex-personal` | `CODEX_HOME="$HOME/.codex-personal" codex login` |
 | `gper` | Separate `agy` CLI | Vendor install and login |
+| `gper2` (Linux) | `agy`, `.gemini-per2`, login kept out of the desktop keyring | Sign in separately |
 
 `cwork` sources the managed `~/.config/claude/work-env`, which sources a restored
 `~/.config/claude-code-vertex/env.sh` when present and forces Vertex. For GCP, macOS work provisioning installs
@@ -99,7 +100,7 @@ repository, RHEL CSB or hybrid Fedora CSB); other Linux hosts use the
 [vendor install](https://docs.cloud.google.com/sdk/docs/install-sdk). Authentication and private project settings stay outside Git.
 
 The launchers keep their old bypass arguments: Claude `--dangerously-skip-permissions --plugin-dir .`, Codex
-`--ask-for-approval=never --sandbox=danger-full-access`, gper
+`--ask-for-approval=never --sandbox=danger-full-access`, gper and gper2
 `--mode=accept-edits --dangerously-skip-permissions`. Do not treat the managed sandbox and deny config as an
 enforcement guarantee while they are in place. To drop them:
 

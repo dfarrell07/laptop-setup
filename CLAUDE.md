@@ -192,8 +192,8 @@ runs `git_repos` for one `repo_category`. `make help` lists everything; scenario
 
 ## Moving from the old laptop
 
-See the [transfer checklist](docs/migration-checklist.md). Direct launchers `cwork`, `cper`, `cper2`, `owork`, `oper` and `gper` keep the
-old workflow (`gper` needs the separate Antigravity CLI); `~/.config/zsh/local.zsh` is preserved.
+See the [transfer checklist](docs/migration-checklist.md). Direct launchers `cwork`, `cper`, `cper2`, `owork`, `oper`, `gper` and
+`gper2` keep the old workflow (`gper*` need the separate Antigravity CLI); `~/.config/zsh/local.zsh` is preserved.
 
 Codex installs in user space from a committed npm integrity lock with lifecycle scripts disabled; `packages_install_binaries: false` skips
 the download and `codex_enabled: false` skips the role. Config files are seed-only. To bump the pin, edit `roles/codex/files/package.json`,

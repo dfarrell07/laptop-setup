@@ -337,7 +337,7 @@ class MigrationTests(unittest.TestCase):
             launchers = content[content.index('_claude_check_base_url()'):content.index('# --- Device access')]
             binary_dir = directory / 'bin'
             binary_dir.mkdir()
-            recorder = '#!/usr/bin/env python3\nimport os,sys,json\nprint(json.dumps({"tool":os.path.basename(sys.argv[0]),"args":sys.argv[1:],"env":{k:v for k,v in os.environ.items() if k.startswith(("CLAUDE_","ANTHROPIC_","GOOGLE_","CODEX_","OPENAI_"))}}))\n'
+            recorder = '#!/usr/bin/env python3\nimport os,sys,json\nprint(json.dumps({"tool":os.path.basename(sys.argv[0]),"args":sys.argv[1:],"env":{k:v for k,v in os.environ.items() if k.startswith(("CLAUDE_","ANTHROPIC_","GOOGLE_","CODEX_","OPENAI_","DBUS_"))}}))\n'
             for tool in ['claude', 'codex', 'agy']:
                 path = binary_dir / tool
                 path.write_text(recorder)
@@ -355,12 +355,15 @@ cwork third
 oper fourth
 owork fifth
 gper sixth
-print -r -- "PARENT:$CLAUDE_CODE_USE_VERTEX:$CODEX_HOME:$ANTHROPIC_API_KEY"
+gper2 seventh
+print -r -- "PARENT:$CLAUDE_CODE_USE_VERTEX:$CODEX_HOME:$ANTHROPIC_API_KEY:${DBUS_SESSION_BUS_ADDRESS-unset}"
 ''')
-            env = dict(os.environ, HOME=name, PATH=str(binary_dir) + ':' + os.environ['PATH'],
+            env = dict(os.environ, HOME=name, DBUS_SESSION_BUS_ADDRESS='fixture-bus', PATH=str(binary_dir) + ':' + os.environ['PATH'],
                        CLAUDE_CODE_USE_VERTEX='1', CODEX_HOME='original', ANTHROPIC_API_KEY='fixture-key',
                        ANTHROPIC_AUTH_TOKEN='fixture-token', GOOGLE_APPLICATION_CREDENTIALS='/fixture/adc',
                        OPENAI_API_KEY='fixture-openai', ANTHROPIC_BASE_URL='')
+            (Path(name) / '.gemini-per2').mkdir()
+            (Path(name) / '.gemini-per2').chmod(0o755)  # gper2 must tighten an existing dir
             result = subprocess.run(['zsh', '-f', str(probe)], env=env, capture_output=True, text=True, check=True)
             rows = result.stdout.splitlines()
             records = [json.loads(line) for line in rows[:-1]]
@@ -382,7 +385,12 @@ print -r -- "PARENT:$CLAUDE_CODE_USE_VERTEX:$CODEX_HOME:$ANTHROPIC_API_KEY"
             self.assertNotIn('OPENAI_API_KEY', records[3]['env'])
             self.assertEqual(records[4]['env']['CODEX_HOME'], name + '/.codex')
             self.assertEqual(records[5]['tool'], 'agy')
-            self.assertEqual(rows[-1], 'PARENT:1:original:fixture-key')
+            self.assertEqual(records[6]['tool'], 'agy')
+            self.assertEqual(records[6]['args'], ['--gemini_dir=' + name + '/.gemini-per2',
+                                                  '--mode=accept-edits', '--dangerously-skip-permissions', 'seventh'])
+            self.assertEqual(records[6]['env']['DBUS_SESSION_BUS_ADDRESS'], 'unix:path=/dev/null')
+            self.assertEqual(oct((Path(name) / '.gemini-per2').stat().st_mode & 0o777), '0o700')
+            self.assertEqual(rows[-1], 'PARENT:1:original:fixture-key:fixture-bus')
             # Exercise the extra shell parsing level used by tmux with the same custom paths.
             tmux = binary_dir / 'tmux'
             tmux.write_text('#!/usr/bin/env python3\nimport os,sys,subprocess\n'
@@ -408,6 +416,7 @@ print -r -- "PARENT:$CLAUDE_CODE_USE_VERTEX:$CODEX_HOME:$ANTHROPIC_API_KEY"
             subprocess.run(['zsh', '-n', str(config)], check=True)
             content = config.read_text()
             self.assertIn('/opt/homebrew/bin:$PATH', content)
+            self.assertNotIn('gper2()', content)  # Linux only: the Keychain would share gper's login
             path_exports = '\n'.join(line for line in content.splitlines() if line.startswith('export PATH='))
             effective_path = subprocess.check_output([shutil.which('zsh'), '-f', '-c',
                 path_exports + '\nprint -r -- "$PATH"'], env=dict(os.environ, HOME=name), text=True).strip().split(':')

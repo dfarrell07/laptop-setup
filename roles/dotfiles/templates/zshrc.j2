@@ -205,6 +205,17 @@ oper() (
 )
 # Antigravity CLI is a separate vendor tool from npm's Gemini CLI.
 gper() { command agy {{ dotfiles_gemini_launcher_args | map('quote') | join(' ') }} "$@"; }
+{% if _system == 'Linux' %}
+# Second Antigravity account in its own home. The null session bus keeps its login out of the desktop keyring gper's
+# account uses; tools it runs (gh, git credential helpers) cannot reach the keyring either. Linux only: on macOS agy
+# keeps its login in the Keychain, which this does not separate.
+gper2() (
+  local dir="$HOME/.gemini-per2"
+  mkdir -p "$dir" && chmod 700 "$dir" || return 1
+  export DBUS_SESSION_BUS_ADDRESS=unix:path=/dev/null
+  command agy --gemini_dir="$dir" {{ dotfiles_gemini_launcher_args | map('quote') | join(' ') }} "$@"
+)
+{% endif %}
 
 # --- Device access (Tailscale + mosh) ---
 {% if dotfiles_laptop_tailscale_host %}
