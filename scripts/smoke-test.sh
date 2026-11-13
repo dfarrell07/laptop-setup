@@ -90,6 +90,8 @@ _disable_bluetooth=true
 grep -qiE '^system_disable_bluetooth:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _disable_bluetooth=false
 _mask_nfs=true
 grep -qiE '^system_mask_nfs_server:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_nfs=false
+_luks_discards=false
+grep -qiE '^system_luks_discards_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _luks_discards=true
 _mask_iscsi=true
 grep -qiE '^system_mask_iscsi:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_iscsi=false
 _usbguard_enabled=true
@@ -387,10 +389,12 @@ else record "ssh-agent-key" "WARN" "key loaded but not sk-ssh-ed25519 type"; fi
 
 # LUKS discard protection (Linux only — mitigates SSD wear-pattern fingerprinting attacks)
 if $IS_LINUX; then
-  if grep -qE 'rd\.luks\.options=[^[:space:]]*discard|rd\.luks\.allow-discards' /proc/cmdline 2>/dev/null; then
-    record "luks-discard-protection" "WARN" "LUKS discard enabled (rd.luks.options=discard or rd.luks.allow-discards in kernel cmdline) — SSD wear-patterns may leak plaintext locations"
-  else
+  if ! grep -qE 'rd\.luks\.options=[^[:space:]]*discard|rd\.luks\.allow-discards' /proc/cmdline 2>/dev/null; then
     record "luks-discard-protection" "PASS"
+  elif $_luks_discards; then
+    record "luks-discard-protection" "PASS" "discard enabled on purpose (system_luks_discards_enabled: true)"
+  else
+    record "luks-discard-protection" "WARN" "LUKS discard enabled (rd.luks.options=discard or rd.luks.allow-discards in kernel cmdline) — SSD wear-patterns may leak plaintext locations"
   fi
 fi
 
