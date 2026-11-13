@@ -386,7 +386,7 @@ printf "       make ssh-keys\n\n"
 printf "  2. Encrypt group_vars/all/vault.yml with those keys (from now on every Ansible make target needs a key and a touch):\n"
 printf "       make vault-init\n"
 printf "     Optional commit-signing key: SECURITY.md § SSH Key Rotation (signing key only).\n\n"
-printf "  3. Last, at the console with a second session open: make chunk CHUNK=ssh_authorized_keys (see docs/rollout-plan.md).\n"
+printf "  3. Last, at the console with a second session open: make apply CHUNK=ssh_authorized_keys (see docs/rollout-plan.md).\n"
 printf "     Reboot only after it wrote authorized_keys; otherwise SSH login on port 722 fails.\n\n"
 warn "Store each YubiKey in a different physical location."
 if [[ $PROGRAMMED_COUNT -ge 2 ]]; then

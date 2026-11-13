@@ -24,7 +24,7 @@ If a chunk or role is given, handle only that. Otherwise follow the phases below
 
 **Who runs what.** Agents do not run provisioning (`docs/design-principles.md` § 6). Run read-only and no-sudo commands yourself
 (`make status`, `scripts/preflight.sh --json`, `make verify`, `scripts/smoke-test.sh --user-only`). For anything that applies changes or
-needs sudo (`make plan`, `make chunk CHUNK=x`, role targets, `make check`), give the owner the exact command to run at the console and read the
+needs sudo (`make plan`, `make apply CHUNK=x`, role targets, `make check`), give the owner the exact command to run at the console and read the
 output they paste back. Never use `--start-at-task`, `-e` overrides or `--skip-tags` to get around the chunk wrapper.
 
 ## Phase 0: Peers on other machines
@@ -65,10 +65,10 @@ Do not run `make all` in one shot: one chunk per invocation gives a clear pass/f
    `requires` (chunks that must also be on); read it from `group_vars/all/rollout.yml`. Disabled chunks are skipped by every make
    target; do not work around that.
 2. Pick chunks with the owner in `make status` order (low risk first).
-3. Per chunk, the owner runs `make plan CHUNK=x` (read the diff together), `make chunk CHUNK=x`, then `make verify CHUNK=x`. Say what a sudo
+3. Per chunk, the owner runs `make plan CHUNK=x` (read the diff together), `make apply CHUNK=x`, then `make verify CHUNK=x`. Say what a sudo
    chunk will change and get a go-ahead before each; do not chain them.
 4. High-risk chunks (`sys_mounts`, `sys_lockdown`, `sys_auditd`, `sys_usbguard`, `sys_signin`, `ssh_authorized_keys`, `sys_remote_access`):
-   only at the local console or in tmux, a second session open, after reading `docs/rollout-recovery.md`. Use `make chunk CHUNK=x`, which asks
+   only at the local console or in tmux, a second session open, after reading `docs/rollout-recovery.md`. Use `make apply CHUNK=x`, which asks
    for typed confirmation; role targets do not. `sys_*` chunks restart sshd or change boot settings: never over SSH.
    With peers (Phase 0), announce each chunk before the owner applies it, do not rebase between its plan and verify, and send `AWAY`
    before a reboot, logout or a chunk that restarts the agent (`docs/multi-machine.md` § During provisioning, § Check-ins).

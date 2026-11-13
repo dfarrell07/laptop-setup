@@ -1,4 +1,4 @@
-.PHONY: status plan chunk verify rollout-banner bootstrap-hooks help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check test smoke-test \
+.PHONY: status plan apply verify rollout-banner bootstrap-hooks help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check test smoke-test \
        dotfiles packages repos notes \
        ssh desktop system repos_dnf redhat containers claude codex container \
        container-rebuild csb-audit ssh-keys vault-init vault-edit vault-view update hooks \
@@ -91,7 +91,7 @@ help:
 	@echo "Rollout (one chunk at a time; start with make status):"
 	@echo "  status                 Show which chunks are on (rollout_enable)"
 	@echo "  plan CHUNK=<name>      Preview one chunk (--check --diff)"
-	@echo "  chunk CHUNK=<name>     Apply one chunk"
+	@echo "  apply CHUNK=<name>     Apply one chunk"
 	@echo "  verify [CHUNK=<name>]  Run smoke checks for a chunk (all enabled if omitted)"
 	@echo
 	@echo "Provision:"
@@ -138,7 +138,7 @@ help:
 	@echo "  pip-lock, pip-sync     Regenerate / install requirements-test.lock"
 	@echo
 	@echo "Options:"
-	@echo "  CHUNK=<name>           Chunk for plan, chunk and verify (names: make status)"
+	@echo "  CHUNK=<name>           Chunk for plan, apply and verify (names: make status)"
 	@echo "  QUIET=1                Hide ok results, including debug warnings (e.g. make all QUIET=1)"
 
 # --- Primary targets ---
@@ -306,7 +306,7 @@ ssh-keys: guard-not-root
 	scripts/ssh-keys.sh
 
 # With USBGuard running: allow blocked USB devices now and save their rules. Otherwise: only save
-# rules for connected devices no rule covers yet. Rules go to config.yml for the next `make chunk CHUNK=sys_usbguard`.
+# rules for connected devices no rule covers yet. Rules go to config.yml for the next `make apply CHUNK=sys_usbguard`.
 usb-add: guard-not-root
 	python3 scripts/usb-add.py
 
@@ -393,7 +393,7 @@ check: guard-not-root rollout-banner preflight
 	$(VERIFY_AND_RUN) --run-log=check ansible-playbook site.yml --check --diff --ask-become-pass
 
 # --- Chunks (registry: group_vars/all/rollout.yml; design: docs/rollout-plan.md) ---
-# status: which chunks are on (config.yml rollout_enable). plan: preview one chunk (CHUNK=name). chunk: apply exactly one enabled chunk. verify: run only the smoke checks mapped to it.
+# status: which chunks are on (config.yml rollout_enable). plan: preview one chunk (CHUNK=name). apply: apply exactly one enabled chunk. verify: run only the smoke checks mapped to it.
 # Validate rollout_enable (config.yml) first and print which chunks are skipped, before preflight or any sudo prompt.
 rollout-banner:
 	@if [ -x .venv/bin/python3 ]; then .venv/bin/python3 -I scripts/rollout.py banner || exit 2; fi
@@ -407,8 +407,8 @@ plan: guard-not-root .venv rollout-banner
 	  $(VERIFY_AND_RUN) ansible-playbook site.yml $$args --check --diff
 
 # CHUNK reaches each recipe through the environment, never as shell text (no injection via its value).
-chunk: guard-not-root .venv
-	@[ -n "$$CHUNK" ] || { echo "usage: make chunk CHUNK=<name>  (names: make status)" >&2; exit 2; }
+apply: guard-not-root .venv
+	@[ -n "$$CHUNK" ] || { echo "usage: make apply CHUNK=<name>  (names: make status)" >&2; exit 2; }
 	@args=$$(.venv/bin/python3 -I scripts/rollout.py chunk-args "$$CHUNK") || exit 2; \
 	  $(VERIFY_AND_RUN) ansible-playbook site.yml $$args && .venv/bin/python3 -I scripts/rollout.py next-step "$$CHUNK"
 

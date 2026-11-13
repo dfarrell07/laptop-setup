@@ -18,7 +18,7 @@ what pace. `make all` means "every chunk enabled in `config.yml`", never more.
 1. **Low risk and high value first.** UI, dotfiles, agents and repos come first; system changes last, one
    subsystem at a time.
 2. **Plan, apply, verify, then wait.** Every enabled chunk can be previewed (`make plan CHUNK=x`), applied alone
-   (`make chunk CHUNK=x`) and undone from the recovery sheet. `make verify CHUNK=x` covers only chunks that have a
+   (`make apply CHUNK=x`) and undone from the recovery sheet. `make verify CHUNK=x` covers only chunks that have a
    `verify:` list in `group_vars/all/rollout.yml` (not `packages`, `desktop`, `repos`, `redhat` or `repos_dnf`). High-risk chunks need a typed confirmation. Soak before the next one: about 3 days for UI
    and agents, a week for repos and each system chunk, two weeks for `sys_lockdown`.
 3. **No surprises.** When chunks are off, `make all`, `update`, `check`, `system` and `plan` print a `ROLLOUT:`

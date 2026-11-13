@@ -93,7 +93,7 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   `ssh-keyscan` (it trusts whatever answers).
 - **Verify:** `make verify CHUNK=ssh_client` (`known-hosts-github`: no RSA/ECDSA github.com key remains in `known_hosts`).
 - **Undo:** run `make backup` BEFORE the chunk (the role overwrites key files without a copy), then restore `~/.ssh` files from
-  that directory (`~/laptop-setup-backup-<timestamp>`), or re-run `make chunk CHUNK=ssh_client` to
+  that directory (`~/laptop-setup-backup-<timestamp>`), or re-run `make apply CHUNK=ssh_client` to
   re-seed `known_hosts` (not `make ssh`: it also rewrites `~/.ssh/authorized_keys`). Stop commit signing (on when the vault holds a signing
   key) with `git config --global commit.gpgsign false`;
   `make dotfiles` re-enables it until `vault_ssh_signing_key_pub` is cleared in the vault.
@@ -122,7 +122,7 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 
 ## desktop
 
-- **Why:** GNOME, sway, i3 or AeroSpace configuration. Apply it with `make chunk CHUNK=desktop`: the role target `make desktop` also applies
+- **Why:** GNOME, sway, i3 or AeroSpace configuration. Apply it with `make apply CHUNK=desktop`: the role target `make desktop` also applies
   `login_shell` (zsh and, for an SSSD account, the sssd override) whenever that chunk is enabled.
 - **Breaks if wrong:** a bad compositor config can leave the session unusable; keys that IT or `sys_baseline` lock are ignored.
 - **Verify:** no check is mapped, so `make verify CHUNK=desktop` exits 1 (state unknown) by design. Pass criterion: `make plan
@@ -144,7 +144,7 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Why:** Claude Code and Codex installs and settings.
 - **Breaks if wrong:** it installs `bubblewrap` and `socat` with dnf (Claude Code refuses to start without them, `failIfUnavailable: true`),
   and it overwrites each instance `CLAUDE.md` and deletes a legacy-shaped `settings.local.json` with no backup of its own; settings merges
-  can drop local edits. Run `make backup` right before `make chunk CHUNK=agents` and check that `~/laptop-setup-backup-<timestamp>/` holds
+  can drop local edits. Run `make backup` right before `make apply CHUNK=agents` and check that `~/laptop-setup-backup-<timestamp>/` holds
   `.claude*/CLAUDE.md` and `.claude*/settings.local.json`.
 - **Verify:** `make verify CHUNK=agents` (`claude-privacy-tmpfiles`: the tmpfiles file exists; `codex`: `codex --version` runs, so a failed
   Codex npm install, which the role only warns about, shows up here). Claude's sandbox settings are not mapped: check
