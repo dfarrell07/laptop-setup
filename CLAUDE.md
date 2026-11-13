@@ -105,7 +105,7 @@ make container | container-rebuild  # distrobox/toolbox dev container
 make usb-add                # allow blocked USB devices, save rules to config.yml (then make apply CHUNK=sys_usbguard)
 make aide-rebaseline        # accept current files as the AIDE baseline
 make smoke-test | smoke-test-user | smoke-test-container   # host | no sudo | distrobox
-make ssh-keys | vault-init | vault-edit | vault-view
+make ssh-keys | github-ssh-keys | vault-init | vault-edit | vault-view  # github-ssh-keys: add missing YubiKey keys to GitHub
 make migration-inventory | workstation-audit  # private reports for a laptop move
 make lint                   # ansible-lint, yamllint, shellcheck, markdownlint, check-vars-sync, script integrity
 make syntax-check | shellcheck | markdownlint | commitlint | check-vars-sync
