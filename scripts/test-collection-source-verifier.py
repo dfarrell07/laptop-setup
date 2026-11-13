@@ -63,6 +63,22 @@ class CollectionChecksumAndSignatureTests(unittest.TestCase):
                     self.assertIn('gpg is required', result.stderr)
                     self.assertNotIn('signature verification FAILED', result.stderr)
 
+    def test_empty_collections_dir_from_interrupted_install_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'scripts').mkdir()
+            shutil.copy2(ROOT / 'scripts/gpg-policy.sh', root / 'scripts/gpg-policy.sh')
+            (root / '.gpg-enforcement').write_text('disabled\n')
+            shutil.copytree(ROOT / 'collections-dist', root / 'collections-dist')
+            verifier = root / 'scripts/verify-collections.sh'
+            verifier.write_text(BASELINE_SOURCE)
+            fresh = subprocess.run(['/bin/bash', str(verifier)], capture_output=True, text=True)
+            self.assertEqual(fresh.returncode, 0, fresh.stderr)  # fresh clone: no collections/ yet
+            (root / 'collections').mkdir()
+            interrupted = subprocess.run(['/bin/bash', str(verifier)], capture_output=True, text=True)
+            self.assertNotEqual(interrupted.returncode, 0)
+            self.assertIn('Re-run: make collections', interrupted.stderr)
+
     def test_disabled_signatures_still_reject_archive_hash_mismatch(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

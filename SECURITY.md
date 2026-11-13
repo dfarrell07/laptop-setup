@@ -164,7 +164,7 @@ non-production checks) permits a missing key but still fails on an invalid signa
 `scripts/verify-collections.sh` hashes the `.py` and `.so` files under `plugins/`, `module_utils/` and `roles/` and compares them with the
 vendored tarballs. Collections installed in `~/.ansible/collections` or `/usr/share/ansible/collections` are not verified. It also fails on
 any symlink (including a symlinked or broken `collections/` root) and on an `__init__.py` in the collections root, namespace or collection
-directories, and warns on stderr when a vendored collection is not installed (partial bootstrap).
+directories, and fails when a vendored collection is not installed or `collections/` has no `ansible_collections/` (an interrupted install).
 
 To configure a real owner signature:
 
@@ -217,7 +217,7 @@ suspected compromise to the [Galaxy security team](https://galaxy.ansible.com/se
 ### Verification layers
 
 1. **Pre-commit hook** blocks `collections-dist/*.tar.gz` changes without a `SHA256SUMS` update
-2. **`make bootstrap`** runs `sha256sum -c SHA256SUMS` and `scripts/verify-collections-galaxy.sh`
+2. **`make bootstrap`** and **`make collections`** run `sha256sum -c SHA256SUMS` and `scripts/verify-collections-galaxy.sh` first
 3. **Runtime** `scripts/verify-collections.sh` re-verifies before every wrapped run (TOCTOU guard)
 4. **CI** `collections-integrity` runs the Galaxy and runtime checks; `collections-manifest` checks the Python manifest;
    `galaxy-recheck` and `upstream-collections-check` (`scripts/verify-vendor-tarball.sh`) compare against Galaxy and upstream release tags

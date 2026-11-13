@@ -7,7 +7,7 @@
        test-scripts test-poller test-gitleaks test-% \
        repos-% \
        preflight guard-not-root guard-libvirt-group \
-       pip-lock pip-sync npm setup-yubikeys vendor-collections migration-inventory workstation-audit usb-add aide-rebaseline \
+       pip-lock pip-sync npm setup-yubikeys collections vendor-collections migration-inventory workstation-audit usb-add aide-rebaseline \
        test-vm repos-dnf
 
 # *** ORDERING CRITICAL — DO NOT MOVE THESE BLOCKS ***
@@ -133,6 +133,7 @@ help:
 	@echo "                         packages-binaries ssti-guard"
 	@echo "  test-scripts           Hook and script tests (test-poller, test-gitleaks)"
 	@echo "  hooks                  Install git hooks (bootstrap-hooks: with gitleaks; npm: commitlint)"
+	@echo "  collections            Re-verify and reinstall vendored collections, no sudo (after pulling a bump; needs network)"
 	@echo "  vendor-collections     Re-vendor Ansible collections into collections-dist/"
 	@echo "  pip-lock, pip-sync     Regenerate / install requirements-test.lock"
 	@echo
@@ -262,6 +263,18 @@ npm:
 		echo "NOTE: npm not found — commitlint stays off until nodejs and npm are installed (make packages), then run: make npm"; \
 	fi
 
+# Bootstrap's collection checks without its sudo package installs (e.g. after pulling a collections-dist bump). The install
+# is clean because ansible-galaxy skips an installed version, so modified or dropped collections would otherwise linger.
+collections: export PATH := $(CURDIR)/.venv/bin:$(PATH)
+collections: guard-not-root .venv
+	@[ ! -L collections ] || { echo "ERROR: collections is a symlink; refusing to delete through it" >&2; exit 1; }
+	cd scripts && sha256sum -c verify-collections.sh.sha256 verify-collections-galaxy.sh.sha256
+	cd collections-dist && sha256sum -c SHA256SUMS
+	scripts/verify-collections-galaxy.sh
+	rm -rf collections/ansible_collections
+	$(INSTALL_COLLECTIONS)
+	scripts/verify-collections.sh
+
 vendor-collections: guard-not-root
 	@mkdir -p collections-dist
 	@# SECURITY: Download collection tarballs from Galaxy and cross-verify SHA256 against
@@ -310,8 +323,7 @@ aide-rebaseline: guard-not-root
 
 update: guard-not-root rollout-banner preflight
 	$(MAKE) npm
-	cd collections-dist && sha256sum -c SHA256SUMS
-	$(INSTALL_COLLECTIONS)
+	$(MAKE) collections
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --ask-become-pass -e git_repos_pull=true
 
 # --- Individual roles ---

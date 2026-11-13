@@ -15,8 +15,8 @@ set -euo pipefail
 #   1. SHA256SUMS.asc: GPG signature check when repository policy enables it
 #   2. SHA256SUMS: tarball integrity (fatal on mismatch)
 #   3. Installed tree (once collections/ exists): .py/.so files match tarballs + PYTHON_MANIFEST.json;
-#      any symlink or collection-root __init__.py is fatal; a vendored collection that is not
-#      installed only warns (stderr, exit 0)
+#      any symlink or collection-root __init__.py is fatal, and so is a vendored collection that is not
+#      installed or a collections/ without ansible_collections/ (an interrupted install)
 # Usage: called by verify-ansible-args.sh (the Makefile's VERIFY_AND_RUN wrapper)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -230,6 +230,7 @@ for namespace_dir in extracted_root.glob('*/'):
             # If ansible_collections/ exists, all legitimate collections have tmpdir entries.
             # An absent fresh_path means an unrecognized directory was injected on disk.
             print(f"ERROR: {collection_name}: directory exists on disk but has no corresponding verified tarball entry — possible unauthorized collection injection", file=sys.stderr)
+            print("       Expected after pulling a collections-dist change; otherwise investigate. Then re-run: make collections", file=sys.stderr)
             sys.exit(1)
 
         fresh_files = extract_python_files(fresh_path)
@@ -247,7 +248,7 @@ for namespace_dir in extracted_root.glob('*/'):
                 print(f"  + {f}", file=sys.stderr)
             if len(tarball_extra) > 10:
                 print(f"  ... and {len(tarball_extra) - 10} more", file=sys.stderr)
-            print("       Tarball may have been replaced. Re-run: make bootstrap", file=sys.stderr)
+            print("       Expected after pulling a collections-dist change; otherwise a tarball may have been replaced. Then re-run: make collections", file=sys.stderr)
             sys.exit(1)
 
         # TOCTOU disk tampering: files on disk NOT in tarball
@@ -260,7 +261,7 @@ for namespace_dir in extracted_root.glob('*/'):
             if len(disk_extra) > 10:
                 print(f"  ... and {len(disk_extra) - 10} more", file=sys.stderr)
             print("       Possible TOCTOU disk tampering (file injected after extraction).", file=sys.stderr)
-            print("       Re-run: make bootstrap", file=sys.stderr)
+            print("       Expected after pulling a collections-dist change; otherwise investigate. Then re-run: make collections", file=sys.stderr)
             sys.exit(1)
 
         # Check for modified files
@@ -275,7 +276,7 @@ for namespace_dir in extracted_root.glob('*/'):
                 print(f"  ~ {f}", file=sys.stderr)
             if len(modified) > 10:
                 print(f"  ... and {len(modified) - 10} more", file=sys.stderr)
-            print("       Possible TOCTOU tampering. Re-run: make bootstrap", file=sys.stderr)
+            print("       Expected after pulling a collections-dist change; otherwise possible TOCTOU tampering. Then re-run: make collections", file=sys.stderr)
             sys.exit(1)
 
         # Compare every runtime path and content hash to the committed baseline.
@@ -292,14 +293,21 @@ for namespace_dir in extracted_root.glob('*/'):
 for fresh_namespace in sorted(p for p in tmpdir.glob('*/') if p.is_dir()):
     for fresh_collection in sorted(p for p in fresh_namespace.glob('*/') if p.is_dir()):
         if not (extracted_root / fresh_namespace.name / fresh_collection.name).is_dir():
-            print(f"WARN: {fresh_namespace.name}/{fresh_collection.name} is vendored but not installed under collections/ "
-                  "(partial bootstrap?); Ansible may load an unverified copy from another collections path", file=sys.stderr)
+            print(f"ERROR: {fresh_namespace.name}/{fresh_collection.name} is vendored but not installed under collections/ "
+                  "(interrupted install?); Ansible would load an unverified copy from another collections path", file=sys.stderr)
+            print("       Re-run: make collections", file=sys.stderr)
+            sys.exit(1)
 
 print("✓ All collection Python files match verified tarballs")
 PYEOF
 
+elif [[ -d "$_extracted" ]]; then
+  # A fresh clone has no collections/ (gitignored); an empty one is an interrupted install, and Ansible would
+  # silently load unverified copies from ~/.ansible or system paths.
+  echo "FATAL: ${_extracted} has no ansible_collections/ (interrupted install?). Re-run: make collections" >&2
+  exit 1
 else
-  echo "✓ Collections not yet bootstrapped (verify will run after make bootstrap)"
+  echo "✓ Collections not yet installed (verify will run after make bootstrap or make collections)"
 fi
 
 exit 0
