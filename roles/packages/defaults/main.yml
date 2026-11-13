@@ -178,7 +178,7 @@ packages_apt:
 packages_apt_work:
   - awscli
   # Debian 13 ships Go 1.24; gofumpt/govulncheck need 1.25, gopls needs 1.26.
-  # GOTOOLCHAIN=auto (opt-in via packages_gotoolchain: auto) downloads the toolchain on demand.
+  # GOTOOLCHAIN=auto (packages_gotoolchain default) downloads the toolchain on demand.
   - golang  # work-only on Debian (mirrors packages_languages_work on Fedora); 300+ MB — skip for personal
   - gcc     # CGO builds — mirrors packages_languages_work on Fedora
   - nmap    # network scanner; work-only (mirrors packages_networking_work on Fedora)
@@ -272,10 +272,10 @@ packages_kubectl_version: "1.36.3"
 packages_kubectl_sha256: "ebbd080e7c2e275093b55915722043257eb24004363e20acb3c4d71919f88336"  # x86_64 Linux
 
 packages_go_install: []  # no universal Go tools; all dev tools are profile-scoped below
-# GOTOOLCHAIN env for go install; 'local' prevents runtime toolchain downloads (aligns with SHA256-pinned pattern).
-packages_gotoolchain: local
-# Set 'auto' in config.yml only when intentionally allowing toolchain self-replacement
-# (only needed where the distro Go is older than the tools need, e.g. Debian 13).
+# GOTOOLCHAIN for go install and the login shell. 'auto' honours a module's go/toolchain lines (frr-k8s, mapt
+# and Konflux repos need newer Go than Fedora ships); downloaded toolchains are verified against sum.golang.org.
+# 'local' never downloads a toolchain and fails such builds.
+packages_gotoolchain: auto
 
 # Work-profile-only Go tools (OVN-K codegen + Submariner + Kubernetes + Go IDE/CI toolchain)
 # Integrity via GOSUMDB (sum.golang.org) — not post-compilation SHA256. Built binaries depend on the
