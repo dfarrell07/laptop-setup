@@ -2,10 +2,10 @@
 desktop_environment: CHANGE_ME  # sway, i3, gnome (Linux); aerospace (macOS); set in config.yml
 
 desktop_alacritty_font_family: DejaVu Sans Mono
-desktop_alacritty_font_size: 10.0
+desktop_alacritty_font_size: 9.0
 desktop_alacritty_scrollback_lines: 50000
 desktop_wm_font_family: DejaVu Sans Mono
-desktop_wm_font_size: 9
+desktop_wm_font_size: 8
 desktop_terminal: "{{ 'ghostty' if ansible_facts['system'] | default('Linux') == 'Darwin' else 'alacritty' }}"
 desktop_macos_terminal_app: "{{ {'ghostty': 'Ghostty', 'terminal': 'Terminal', 'alacritty': 'Alacritty'}[desktop_terminal] }}"
 desktop_macos_terminal_path: >-
