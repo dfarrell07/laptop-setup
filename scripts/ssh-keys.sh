@@ -71,24 +71,14 @@ done
 
 compgen -G "$SSH_DIR/id_ed25519_sk_backup*.pub" >/dev/null \
   || warn "no backup YubiKey SSH key: losing this YubiKey locks SSH out. Re-run make ssh-keys with the backup."
-not_on_github=()
 if [[ ${#added[@]} -gt 0 ]]; then
-  not_on_github=("${added[@]}")
-  if command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
-    printf 'Add the new public keys to GitHub with gh? [y/N] '
-    read -r answer || answer=
-    if [[ $answer == [yY] ]]; then
-      not_on_github=()
-      for pub in "${added[@]}"; do
-        gh ssh-key add "$pub" --title "$(cut -d' ' -f3 "$pub")" || not_on_github+=("$pub")
-      done
-    fi
+  printf 'Add the new public keys to GitHub now (make github-ssh-keys)? [y/N] '
+  read -r answer || answer=
+  # Without this, SSH to GitHub fails later (smoke check github-ssh-auth) with no hint of why.
+  if [[ $answer != [yY] ]] || ! "$(dirname "$0")/github-ssh-keys.sh"; then
+    warn "the new keys may not be on GitHub yet: make github-ssh-keys"
   fi
 fi
-# Without this, SSH to GitHub fails later (smoke check github-ssh-auth) with no hint of why.
-for pub in ${not_on_github[@]+"${not_on_github[@]}"}; do
-  warn "$pub is not on GitHub: gh auth refresh -h github.com -s admin:public_key, then gh ssh-key add $pub --title $(cut -d' ' -f3 "$pub")"
-done
 # vault-init fills only the empty stub lines: keys added after that go in by hand.
 if grep -qx "vault_ssh_auth_key_pub: ''" "$(dirname "$0")/../group_vars/all/vault.yml" 2>/dev/null; then
   ok "Next: insert one YubiKey, then make vault-init"

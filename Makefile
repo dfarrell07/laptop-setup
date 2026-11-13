@@ -1,7 +1,7 @@
 .PHONY: status plan apply verify rollout-banner bootstrap-hooks help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check test smoke-test \
        dotfiles packages repos notes \
        ssh desktop system repos_dnf redhat containers claude codex container \
-       container-rebuild csb-audit ssh-keys vault-init vault-edit vault-view update hooks \
+       container-rebuild csb-audit ssh-keys github-ssh-keys vault-init vault-edit vault-view update hooks \
        smoke-test-container smoke-test-user \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
        test-scripts test-poller test-gitleaks test-% \
@@ -111,6 +111,7 @@ help:
 	@echo "  bootstrap              Install dependencies, git hooks and checksum-pinned gitleaks"
 	@echo "  setup-yubikeys         Program YubiKeys and write vault-pass.sh"
 	@echo "  ssh-keys               Set each YubiKey's FIDO2 PIN and make its SSH key"
+	@echo "  github-ssh-keys        Add the YubiKey SSH keys GitHub lacks (asks gh for the key scope)"
 	@echo "  vault-init             Encrypt the vault stub with the SSH keys (after ssh-keys)"
 	@echo "  vault-edit             Edit the vault (vault-view: read only)"
 	@echo "  usb-add                Allow blocked USB devices (USBGuard) and save their rules to config.yml"
@@ -304,6 +305,9 @@ setup-yubikeys: guard-not-root
 
 ssh-keys: guard-not-root
 	scripts/ssh-keys.sh
+
+github-ssh-keys: guard-not-root
+	scripts/github-ssh-keys.sh
 
 # With USBGuard running: allow blocked USB devices now and save their rules. Otherwise: only save
 # rules for connected devices no rule covers yet. Rules go to config.yml for the next `make apply CHUNK=sys_usbguard`.

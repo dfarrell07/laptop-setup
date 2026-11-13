@@ -188,7 +188,7 @@ else
   elif printf '%s\n' "$_ssh_err" | grep -q 'Server accepts key'; then
     record "github-ssh-auth" "PASS" "GitHub accepts the key; signing needs the PIN and a touch, so confirm with: ssh -T git@github.com"
   elif printf '%s\n' "$_ssh_err" | grep -q 'Offering public key'; then
-    record "github-ssh-auth" "WARN" "GitHub rejected every offered key: gh auth refresh -h github.com -s admin:public_key, then gh ssh-key add ~/.ssh/id_ed25519_sk.pub (and each id_ed25519_sk_backup*.pub)"
+    record "github-ssh-auth" "WARN" "GitHub rejected every offered key: make github-ssh-keys"
   else
     record "github-ssh-auth" "WARN" "ssh auth unconfirmed (exit $_ssh_ret)"
   fi
@@ -991,7 +991,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if command -v getenforce &>/dev/null; then
     se=$(getenforce 2>/dev/null || echo "?")
     if [[ "$se" == "Enforcing" ]]; then record "selinux" "PASS"
-    else record "selinux" "FAIL" "$se, expected Enforcing — fix: sudo setenforce 1 && sudo sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config"; fi
+    else record "selinux" "FAIL" "$se, expected Enforcing — fix: make apply CHUNK=sys_baseline (sets enforcing now and in /etc/selinux/config)"; fi
   fi
 
   # Kernel lockdown (system_kernel_lockdown: '' in config.yml removes the param — silent skip then)
@@ -1609,7 +1609,7 @@ EOF
     else record "aide-timer" "WARN" "timer not enabled"; fi
     if [[ $EUID -ne 0 && ! -r /var/lib/aide ]]; then record "aide-db" "WARN" "needs root (re-run: sudo scripts/smoke-test.sh --system-only) — /var/lib/aide is unreadable"
     elif [[ -f /var/lib/aide/aide.db.gz ]]; then record "aide-db" "PASS"
-    else record "aide-db" "$($_aide_enabled && echo FAIL || echo WARN)" "AIDE database not initialized (run: sudo bash -c 'aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz')"; fi
+    else record "aide-db" "$($_aide_enabled && echo FAIL || echo WARN)" "AIDE database not initialized (run: make apply CHUNK=sys_optional, which builds the baseline at its end)"; fi
     if grep -q '^RestrictAddressFamilies=none$' /etc/systemd/system/aide-check.service 2>/dev/null; then
       record "aide-service-no-network" "PASS"
     elif [[ -f /etc/systemd/system/aide-check.service ]]; then
