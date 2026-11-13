@@ -1,0 +1,116 @@
+---
+# roles/antigravity/tasks/main.yml — Antigravity CLI (agy) for the gper/gper2 launchers. Mirrors the vendor's
+# install.sh (manifest, SHA-512 check, extract one binary) without its `agy install` step, which edits shell rc files.
+
+- name: SECURITY assert the Antigravity manifest and install paths are constrained
+  ansible.builtin.assert:
+    that:
+      - antigravity_manifest_base is match('^https://antigravity-cli-auto-updater-[0-9]+\.us-central1\.run\.app/manifests$')
+      - antigravity_bin_dir is match('^' ~ (ansible_facts['user_dir'] | regex_escape) ~ '/[a-zA-Z0-9/._-]+$')
+    fail_msg: antigravity_manifest_base must be the vendor's Cloud Run manifest host; antigravity_bin_dir must be inside the home.
+
+- name: Check whether agy is installed
+  ansible.builtin.stat:
+    path: "{{ antigravity_bin_dir }}/agy"
+  register: _agy_bin
+
+- name: Report Antigravity install not simulated in check mode
+  ansible.builtin.debug:
+    msg: "CHECK MODE: agy would be installed into {{ antigravity_bin_dir }} from the vendor manifest; not simulated."
+  when:
+    - ansible_check_mode
+    - not _agy_bin.stat.exists
+    - packages_install_binaries | bool
+
+- name: Install the Antigravity CLI from the vendor manifest
+  when:
+    - not _agy_bin.stat.exists
+    - packages_install_binaries | bool
+    - not ansible_check_mode
+  block:
+    - name: Resolve the manifest platform
+      ansible.builtin.set_fact:
+        _agy_platform: >-
+          {{ {'Linux': 'linux', 'Darwin': 'darwin'}[ansible_facts['system']] }}_{{
+          {'x86_64': 'amd64', 'amd64': 'amd64', 'aarch64': 'arm64', 'arm64': 'arm64'}[ansible_facts['architecture']] }}
+
+    - name: Fetch the Antigravity release manifest
+      ansible.builtin.uri:
+        url: "{{ antigravity_manifest_base }}/{{ _agy_platform }}.json"
+        return_content: true
+      register: _agy_manifest
+
+    - name: SECURITY assert the manifest names a vendor tarball and a SHA-512
+      ansible.builtin.assert:
+        that:
+          - _agy_manifest.json.url is match(_agy_url_re)
+          - _agy_manifest.json.sha512 is match('^[a-f0-9]{128}$')
+          - _agy_manifest.json.version | string is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+        fail_msg: The Antigravity manifest is malformed or points outside the vendor's storage bucket.
+      vars:
+        _agy_url_re: '^https://storage\.googleapis\.com/antigravity-public/antigravity-cli/[A-Za-z0-9._/-]+\.tar\.gz$'
+
+    - name: Create a private staging directory
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: agy
+      register: _agy_staging
+
+    - name: Download the Antigravity tarball, verified against the manifest SHA-512
+      ansible.builtin.get_url:
+        url: "{{ _agy_manifest.json.url }}"
+        dest: "{{ _agy_staging.path }}/agy.tar.gz"
+        checksum: "sha512:{{ _agy_manifest.json.sha512 }}"
+        mode: "0600"
+        timeout: 300
+
+    - name: Extract the agy binary
+      ansible.builtin.unarchive:
+        src: "{{ _agy_staging.path }}/agy.tar.gz"
+        dest: "{{ _agy_staging.path }}"
+        remote_src: true
+        include: [antigravity]
+
+    - name: Ensure the user bin directory exists
+      ansible.builtin.file:
+        path: "{{ antigravity_bin_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Install agy {{ _agy_manifest.json.version }}
+      ansible.builtin.copy:
+        src: "{{ _agy_staging.path }}/antigravity"
+        dest: "{{ antigravity_bin_dir }}/agy"
+        remote_src: true
+        mode: "0755"
+
+  # agy is optional: a blocked manifest host or download must not stop the remaining user-play roles.
+  rescue:
+    - name: Warn that the Antigravity CLI install failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: agy was not installed ({{ ansible_failed_result.msg | default('unknown error') }}). gper and gper2
+          need it; re-run `make apply CHUNK=agents` when {{ antigravity_manifest_base }} is reachable.
+
+  always:
+    - name: Remove the staging directory
+      ansible.builtin.file:
+        path: "{{ _agy_staging.path }}"
+        state: absent
+      when: _agy_staging.path is defined
+
+# agy's self-updater keeps each replaced binary as agy.<n>.old (about 280 MB each).
+- name: Find binaries left by agy self-updates
+  ansible.builtin.find:
+    paths: "{{ antigravity_bin_dir }}"
+    patterns: "agy.*.old"
+    file_type: file
+  register: _agy_old
+
+- name: Remove binaries left by agy self-updates
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ _agy_old.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"

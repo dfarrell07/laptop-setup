@@ -1,0 +1,8 @@
+---
+# Antigravity CLI (`agy`), used by the gper/gper2 launchers. The vendor publishes no package or pinned release: a
+# manifest names the latest tarball and its SHA-512. The role installs from it only when agy is missing (agy updates
+# itself afterwards) and never runs `agy install`, which would edit the managed shell rc files.
+antigravity_enabled: true
+packages_install_binaries: true  # shared offline switch
+antigravity_manifest_base: https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests
+antigravity_bin_dir: "{{ ansible_facts['user_dir'] }}/.local/bin"

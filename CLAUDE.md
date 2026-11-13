@@ -123,7 +123,7 @@ runs `git_repos` for one `repo_category`. `make help` lists everything; scenario
 
 ## Project Structure
 
-- **site.yml**: 3 plays (system with become, user without, container over podman). **14 roles** in `roles/`; `common/` holds shared task
+- **site.yml**: 3 plays (system with become, user without, container over podman). **15 roles** in `roles/`; `common/` holds shared task
   files (CSB detection, failure handler, CSB report, pre-flight checks, config SSTI guard, become probe, git-lfs setup);
   `scripts/` holds preflight, smoke-test, backup, vault and test scripts; `molecule/shared/` holds task includes reused by scenarios, and
   `system-container-overrides.yml` there holds the CI-critical variable overrides for fedora/rocky/debian converge.
