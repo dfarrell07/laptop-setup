@@ -1,19 +1,8 @@
 # {{ ansible_managed }}
 {% set _mounts = ansible_facts['mounts'] | default([]) %}
-{# Free-space fields for desktop_i3status_disks that are mounted; a path on a block device already listed
-   (btrfs subvolumes such as /home on the / volume) shares its free space and is skipped #}
-{% set _desktop_disks = [] %}
-{% set _seen_devs = [] %}
-{% for p in desktop_i3status_disks %}
-{% set m = _mounts | selectattr('mount', 'equalto', p) | first | default({}) %}
-{% if m and (m.device is not match('^/dev/') or m.device not in _seen_devs) %}
-{% set _ = _seen_devs.append(m.device) %}
-{% set _ = _desktop_disks.append(p | regex_replace('[^A-Za-z0-9/._-]', '')) %}
-{% endif %}
-{% endfor %}
-{% if not _desktop_disks %}
-{% set _ = _desktop_disks.append('/') %}
-{% endif %}
+{# Free-space fields for the desktop_i3status_disks paths that are mounted #}
+{% set _desktop_disks = desktop_i3status_disks | select('in', _mounts | map(attribute='mount') | list)
+     | map('regex_replace', '[^A-Za-z0-9/._-]', '') | list or ['/'] %}
 {# Wired field only when a wired NIC (en*) exists; otherwise it is an always-empty slot #}
 {% set _desktop_has_wired = ansible_facts['interfaces'] | default([]) | select('match', '^en') | list | length > 0 %}
 
