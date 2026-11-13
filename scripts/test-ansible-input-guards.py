@@ -290,7 +290,7 @@ class InputGuardTests(unittest.TestCase):
     def test_vendor_polkit_rules_fail_closed(self):
         source = yaml.safe_load((ROOT / 'roles/system/tasks/hardening_core.yml').read_text())
         block = next(task['block'] for task in source if task['name'] == 'Polkit rules directory scan')
-        tasks = block[-2:]  # Execute the production classification and rejection tasks.
+        tasks = block[-4:]  # Execute the production classification, rejection and CSB warning tasks.
         vendor = '/etc/polkit-1/rules.d/49-polkit-pkla-compat.rules'
         unknown = '/etc/polkit-1/rules.d/unknown.rules'
         cases = [([vendor], 'polkit-pkla-compat', 0, '', True),
@@ -299,12 +299,13 @@ class InputGuardTests(unittest.TestCase):
                  ([vendor], 'polkit-pkla-compat', 0, 'modified file', False),
                  ([vendor, unknown], 'polkit-pkla-compat', 0, '', False),
                  ([], '', 1, '', True)]
-        for files, owner, rc, output, accepted in cases:
-            with self.subTest(files=files, owner=owner, rc=rc, output=output):
-                self.check(tasks, {'system_polkitd_whitelist': [],
-                                  '_polkit_rules_found': {'files': [{'path': path, 'isdir': False} for path in files]},
-                                  '_polkit_compat_owner': {'rc': 0, 'stdout': owner},
-                                  '_polkit_compat_integrity': {'rc': rc, 'stdout': output}}, accepted)
+        for csb in (False, True):  # on CSB an unexpected rule only warns
+            for files, owner, rc, output, accepted in cases:
+                with self.subTest(files=files, owner=owner, rc=rc, output=output, csb=csb):
+                    self.check(tasks, {'system_polkitd_whitelist': [], 'csb_detected': csb,
+                                      '_polkit_rules_found': {'files': [{'path': path, 'isdir': False} for path in files]},
+                                      '_polkit_compat_owner': {'rc': 0, 'stdout': owner},
+                                      '_polkit_compat_integrity': {'rc': rc, 'stdout': output}}, accepted or csb)
 
     def test_native_homebrew_update_configuration(self):
         task = guard('roles/packages/tasks/install_brew.yml', 'Validate native Homebrew update configuration')
