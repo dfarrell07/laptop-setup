@@ -17,8 +17,8 @@ desktop_sway_cursor_theme: Adwaita  # cursor theme; propagated to seat config an
 desktop_sway_cursor_size: "{{ (24 * desktop_sway_hidpi_scale | float) | int }}"  # cursor size in px; seat config + XCURSOR_SIZE
 desktop_sway_libva_driver: ''  # VA-API driver: radeonsi (AMD), iHD (Intel); empty string omits export for libva auto-detection
 # i3: idle/lock color apply only when ~/.config/i3/config is first seeded (delete it and re-run make apply CHUNK=desktop to re-seed)
-desktop_wm_idle_lock_timeout: 300   # seconds idle before lock (swaylock; i3lock via xautolock rounds down to whole minutes, min 1)
-desktop_wm_idle_display_timeout: 600  # seconds of idle before display powers off
+desktop_wm_idle_lock_timeout: 3600  # seconds idle before lock (owner choice, above CIS 1.8.4 900; i3 xautolock rounds to minutes)
+desktop_wm_idle_display_timeout: 3900  # seconds idle before display off; must exceed the lock timeout
 desktop_wm_lock_color: "000000"     # screen lock background color (hex, no #) — used by swaylock (Sway) and i3lock (i3)
 desktop_sway_keyboard_layout: ''  # e.g. us, de, fr — empty omits xkb_layout (sway/XKB default)
 desktop_sway_keyboard_variant: ''    # XKB variant (e.g. 'intl', 'altgr-intl'); empty = none
@@ -258,6 +258,9 @@ desktop_gnome_ui_dconf:
   # keyboard repeat interval — match Sway/i3 50 rep/s → 20ms
   - key: /org/gnome/desktop/peripherals/keyboard/repeat-interval
     value: "uint32 {{ (1000 / desktop_wm_repeat_rate) | int }}"
+  # suspend after 1 h idle on battery (GNOME default 15 min); screen lock is the separate idle-delay
+  - key: /org/gnome/settings-daemon/plugins/power/sleep-inactive-battery-timeout
+    value: "3600"
 
 desktop_macos_key_repeat: 2          # macOS key repeat rate (lower = faster; macOS default 6)
 desktop_macos_initial_key_repeat: 15  # macOS delay before repeat starts (lower = shorter; macOS default 25)
