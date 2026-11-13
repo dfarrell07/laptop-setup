@@ -2,8 +2,8 @@
 
 <!-- markdownlint-disable MD013 -->
 
-Companion to [rollout-plan.md](rollout-plan.md). Print it or keep it on another device: after the agent chunk the Claude sandbox
-blocks `~/.ssh`, shell rc files and sudoers paths and cannot supply the sudo password, so recovery from system chunks is human-only.
+Companion to [rollout-plan.md](rollout-plan.md). Print it or keep it on another device: after the agent chunk Claude's deny rules
+block `~/.ssh`, shell rc files and sudoers paths and it cannot supply the sudo password, so recovery from system chunks is human-only.
 One `##` section per chunk, named exactly like `group_vars/all/rollout.yml` (a test checks this), in registry order. Each lists why the
 chunk exists, how it breaks, how to verify it and how to undo it. Replace `<...>` placeholders.
 
@@ -142,13 +142,13 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 ## agents
 
 - **Why:** Claude Code and Codex installs and settings.
-- **Breaks if wrong:** it installs `bubblewrap` and `socat` with dnf (Claude Code refuses to start without them, `failIfUnavailable: true`),
-  and it overwrites each instance `CLAUDE.md` and deletes a legacy-shaped `settings.local.json` with no backup of its own; settings merges
+- **Breaks if wrong:** with `claude_sandbox_enabled: true` (default false) it installs `bubblewrap` and `socat` with dnf (Claude Code refuses
+  to start without them, `failIfUnavailable: true`); it overwrites each instance `CLAUDE.md` and deletes a legacy-shaped `settings.local.json` with no backup of its own; settings merges
   can drop local edits. Run `make backup` right before `make apply CHUNK=agents` and check that `~/laptop-setup-backup-<timestamp>/` holds
   `.claude*/CLAUDE.md` and `.claude*/settings.local.json`.
 - **Verify:** `make verify CHUNK=agents` (`claude-privacy-tmpfiles`: the tmpfiles file exists; `codex`: `codex --version` runs, so a failed
   Codex npm install, which the role only warns about, shows up here). Claude's sandbox settings are not mapped: check
-  `jq .sandbox ~/.claude/settings.json`.
+  `jq .sandbox ~/.claude/settings.json` (`enabled` follows `claude_sandbox_enabled`).
 - **Undo:** per instance, restore the oldest `~/.claude*/settings.json.bak-<timestamp>` (written by the merge, which keeps every backup); if
   the instance had no `settings.json` before the chunk, delete `settings.json` instead (the backup then holds only the seeded file), and
   delete instance directories the chunk created (for example `~/.claude-per2`). The replaced `CLAUDE.md` and legacy

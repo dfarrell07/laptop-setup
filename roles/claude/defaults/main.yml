@@ -26,6 +26,11 @@ claude_telemetry_env:
   # Do NOT set DISABLE_TELEMETRY — breaks feature flags (extended context window models)
   # Do NOT set CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC — same + disables updater
 
+# Claude Code's Bash sandbox (bubblewrap on Linux). Off by default: on Fedora it left every command with a read-only
+# filesystem (no writable project dir or TMPDIR). The deny lists below still apply to the Read and Edit tools.
+# When true, the policy also sets failIfUnavailable and allowUnsandboxedCommands: false, and Linux gets bubblewrap and socat.
+claude_sandbox_enabled: false
+
 # settings-policy.json.j2 always writes sandbox.enableWeakerNestedSandbox; its value is true only when this instance runs inside a
 # container (system_is_container, distrobox, CSB container tier) and false on normal hosts.
 claude_nested_sandbox: "{{ (system_is_container | default(false)) or (needs_container_tier | default('host-only')) == 'container' }}"

@@ -92,6 +92,8 @@ _mask_nfs=true
 grep -qiE '^system_mask_nfs_server:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_nfs=false
 _luks_discards=false
 grep -qiE '^system_luks_discards_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _luks_discards=true
+_claude_sandbox=false
+grep -qiE '^claude_sandbox_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _claude_sandbox=true
 _mask_iscsi=true
 grep -qiE '^system_mask_iscsi:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_iscsi=false
 _usbguard_enabled=true
@@ -772,7 +774,12 @@ for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-per2"; do
   sec_file="$d/settings.json"
   [[ -f "$sec_file" ]] || continue
   label="${d##*/}"
-  if command -v jq &>/dev/null; then
+  if ! $_claude_sandbox; then
+    # Off by policy (claude_sandbox_enabled: false); only the MCP policy is checked.
+    if python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("enableAllProjectMcpServers") is False else 1)' "$sec_file" 2>/dev/null; then
+      record "mcp-disabled($label)" "PASS"
+    else record "mcp-disabled($label)" "WARN" "enableAllProjectMcpServers not false"; fi
+  elif command -v jq &>/dev/null; then
     if jq -e '.sandbox.enabled == true' "$sec_file" &>/dev/null; then
       record "sandbox($label)" "PASS"
     else record "sandbox($label)" "FAIL" "sandbox not enabled in $sec_file — run: make claude"; fi

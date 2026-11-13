@@ -60,7 +60,7 @@
     _work_settings: "{{ verify_claude_work_content.content | b64decode | from_json }}"
   ansible.builtin.assert:
     that:
-      - _work_settings.sandbox.enabled | default(false) == true
+      - _work_settings.sandbox.enabled | default(false) == (claude_sandbox_enabled | default(false) | bool)
       - _work_settings.sandbox.failIfUnavailable | default(false) == true
       - _work_settings.sandbox.allowUnsandboxedCommands | default(true) == false
       - _work_settings.enableAllProjectMcpServers | default(true) == false

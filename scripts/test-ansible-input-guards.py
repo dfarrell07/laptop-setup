@@ -218,14 +218,14 @@ class InputGuardTests(unittest.TestCase):
         task = guard('molecule/shared/verify-claude-work.yml', 'Validate Claude work settings.json')
         for failure in [None, 'sandbox', 'fallback', 'mcp', 'deny', 'self-lockout']:
             with self.subTest(failure=failure):
-                settings = {'sandbox': {'enabled': True, 'failIfUnavailable': True, 'allowUnsandboxedCommands': False},
+                settings = {'sandbox': {'enabled': False, 'failIfUnavailable': True, 'allowUnsandboxedCommands': False},
                             'enableAllProjectMcpServers': False,
                             'permissions': {'deny': ['Read(~/.claude-work/.credentials.json)',
                                                      'Edit(**/.git/hooks/**)', 'Edit(**/.githooks/**)']}}
                 if failure == 'self-lockout':
                     settings['permissions']['deny'].append('Read(~/.claude-work/**)')
                 if failure == 'sandbox':
-                    settings['sandbox']['enabled'] = False
+                    settings['sandbox']['enabled'] = True  # claude_sandbox_enabled defaults to false
                 if failure == 'fallback':
                     del settings['sandbox']['allowUnsandboxedCommands']
                 if failure == 'mcp':
