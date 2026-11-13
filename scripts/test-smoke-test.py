@@ -312,12 +312,41 @@ class SmokeTests(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertTrue(result.stdout.startswith('github-ssh-auth ' + expect), result.stdout)
                     if 'Permission denied' in stderr:
-                        self.assertIn('gh ssh-key add', result.stdout)
+                        self.assertIn('make github-ssh-keys', result.stdout)
+
+    def test_github_ssh_keys_adds_only_missing_keys_and_refreshes_scope_once(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            (home / '.ssh').mkdir()
+            (home / '.ssh/id_ed25519_sk.pub').write_text('sk-ssh-ed25519@openssh.com AAAAprimary yubikey-1\n')
+            (home / '.ssh/id_ed25519_sk_backup.pub').write_text('sk-ssh-ed25519@openssh.com AAAAbackup yubikey-2\n')
+            log = home / 'gh.log'
+            gh = home / 'gh'
+            # user/keys fails until refreshed (no scope), then lists only the primary key
+            gh.write_text('#!/bin/sh\necho "$*" >> %s\ncase "$1 $2" in\n'
+                          '"auth status") exit 0 ;;\n"auth refresh") touch %s/scoped; exit 0 ;;\n'
+                          '"api --hostname") [ -f %s/scoped ] || exit 1; echo "ssh-ed25519 AAAAprimary"; exit 0 ;;\n'
+                          'esac\nexit 0\n' % (log, home, home))
+            gh.chmod(0o755)
+            env = dict(os.environ, HOME=str(home), PATH=str(home) + ':' + os.environ['PATH'])
+            def run():
+                return subprocess.run([str(ROOT / 'scripts/github-ssh-keys.sh')], env=env,
+                                      capture_output=True, text=True, stdin=subprocess.DEVNULL)
+            result = run()  # no terminal: cannot run the interactive scope refresh
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('admin:public_key', result.stderr)
+            (home / 'scoped').touch()
+            result = run()
+            self.assertEqual(result.returncode, 0, result.stderr)
+            calls = log.read_text().splitlines()
+            adds = [c for c in calls if c.startswith('ssh-key add')]
+            self.assertEqual(adds, ['ssh-key add %s/.ssh/id_ed25519_sk_backup.pub --title yubikey-2' % home])
+            self.assertFalse(any(c.startswith('auth refresh') for c in calls))
 
     def test_scripts_run_on_macos_bash_3(self):
         """macOS /bin/bash is 3.2: no ${var,,}/${var^^} case conversion, declare -A or mapfile."""
         import re
-        for name in ('smoke-test.sh', 'preflight.sh', 'vault-init.sh', 'ssh-keys.sh'):
+        for name in ('smoke-test.sh', 'preflight.sh', 'vault-init.sh', 'ssh-keys.sh', 'github-ssh-keys.sh'):
             text = (ROOT / 'scripts' / name).read_text()
             for pattern in (r'\$\{[A-Za-z_][A-Za-z0-9_]*(,,|\^\^)\}', r'\bdeclare -A\b', r'\b(mapfile|readarray)\b'):
                 self.assertIsNone(re.search(pattern, text), f'{name}: bash 4 construct {pattern}')
