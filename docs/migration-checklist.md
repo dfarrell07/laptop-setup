@@ -17,11 +17,12 @@ acceptance checks pass. Skip AI transcript and session history; restore AI tooli
    (including `.ssh/config`). When the checkout is under `~/` and the files exist, it also copies the repo's
    `config.yml`, `group_vars/all/vault.yml`, `scripts/vault-pass.sh` and `CLAUDE.local.md` (a plaintext vault or
    `vault-pass.sh` aborts the run). Other links, nested SSH files and custom AI homes need separate transfer.
-4. AI coverage is selected config and credentials, local skills, Claude plans and project memory in
-   `.claude`, `.claude-work`, `.claude-personal` and `.claude-per2`, and selected Codex config in `.codex` and
-   `.codex-personal`. Claude plugin registrations are captured for `.claude` and `.claude-per2` only, and
-   symlinked skills are skipped. Do not use the optional `--ai-history` snapshot; keep project facts in their
-   owning repositories. For GnuPG, make a consistent export: a live keybox copy is not a verified snapshot.
+4. AI coverage is selected config and credentials, local skills, Claude plans and project memory in `.claude`,
+   `.claude-work`, `.claude-personal` and `.claude-per2`, selected Codex config in `.codex` and `.codex-personal`,
+   and Antigravity config and file-stored logins in `.gemini` and `.gemini-per2`. Claude plugin registrations are captured for
+   `.claude` and `.claude-per2` only, and symlinked skills are skipped. Do not use the optional `--ai-history`
+   snapshot; keep project facts in their owning repositories. For GnuPG, make a consistent export: a live keybox copy
+   is not a verified snapshot.
 5. For each important Git repository, run `git bundle create <file> --all` then `git bundle verify <file>`.
    Bundles include stash refs but not working files, reflogs or Git LFS objects: save patches and untracked
    files separately (or copy the closed workspace) and transfer LFS objects yourself. Unborn repositories need

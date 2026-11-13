@@ -138,6 +138,8 @@ DOTFILES=(
   .gemini/config/config.json
   .gemini/config/mcp_config.json
   .gemini/antigravity-cli/settings.json
+  .gemini-per2/config/mcp_config.json
+  .gemini-per2/antigravity-cli/settings.json
   .config/.jira/.config.yml
   .config/cve-fix/repos.yaml
   .config/go/env
@@ -195,6 +197,7 @@ OPTIONAL_FILES=(
   .gemini/oauth_creds.json
   .gemini/google_accounts.json
   .gemini/antigravity-cli/antigravity-oauth-token
+  .gemini-per2/antigravity-cli/antigravity-oauth-token
   .gnupg/trustdb.gpg
   .gnupg/common.conf
 )
