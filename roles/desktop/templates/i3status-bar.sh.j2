@@ -1,12 +1,28 @@
 #!/bin/bash
 # {{ ansible_managed }}
-# Bar status_command: runs i3status, drops the GiB unit from RAM, shortens disk units (893.1G) and, with
-# desktop_i3status_vpn, adds a VPN field naming active VPNs (NetworkManager VPN/WireGuard, Tailscale, NetBird).
+# Bar status_command: runs i3status and rewrites each update. Drops the GiB unit from RAM, shortens disk units
+# (893.1G), adds watts to the battery while discharging, and adds fields i3status cannot produce: REBOOT (a core
+# package is newer than the boot), CSB FAIL (IT's last compliance run failed), STALL (memory pressure), CTR
+# (running containers), AI (local agent CLIs) and, with desktop_i3status_vpn, VPN (active VPN names).
 set -u
 show_vpn={{ desktop_i3status_vpn | bool | ternary('1', '0') }}
+battery=/sys/class/power_supply/BAT{{ desktop_i3status_battery_num | string | regex_replace('[^0-9]', '') }}
 {% raw %}
+red='#FF0000'
+green='#00FF00'
+# Packages whose update only takes effect after a reboot (the set dnf needs-restarting -r checks, trimmed)
+reboot_pkgs=(kernel-core glibc systemd dbus-broker linux-firmware microcode_ctl)
+boot_time=$(awk '/^btime/ {print $2}' /proc/stat)
 
-vpn_block() {
+field() { # name text [color]
+  if (($# > 2)); then
+    printf '{"name":"%s","full_text":"%s","color":"%s"}' "$1" "$2" "$3"
+  else
+    printf '{"name":"%s","full_text":"%s"}' "$1" "$2"
+  fi
+}
+
+vpn_field() {
   local names=() n t
   while IFS=: read -r n t; do
     case "$t" in vpn | wireguard) names+=("${n//[\"\\]/}") ;; esac
@@ -18,27 +34,63 @@ vpn_block() {
   [[ -e /sys/class/net/wt0 ]] && names+=(NetBird)
   if ((${#names[@]})); then
     local IFS=,
-    printf '{"name":"vpn","full_text":"VPN %s","color":"#00FF00"}' "${names[*]}"
+    field vpn "VPN ${names[*]}" "$green"
   else
-    printf '{"name":"vpn","full_text":"VPN off"}'
+    field vpn "VPN off"
   fi
+}
+
+reboot_needed() {
+  command -v rpm >/dev/null || return 1
+  local newest
+  newest=$(rpm -q --qf '%{INSTALLTIME}\n' "${reboot_pkgs[@]}" 2>/dev/null | grep -E '^[0-9]+$' | sort -n | tail -1)
+  [[ -n $newest ]] && ((newest > boot_time))
 }
 
 # Patterns live in variables: quotes inside [[ =~ ]] are shell quoting, not literal characters
 mem_re='\{"name":"memory"[^}]*\}'
 disk_re='\{"name":"disk_info"[^}]*\}'
+bat_re='\{"name":"battery"[^}]*"full_text":"([^"]*)"[^}]*\}'
 
+tick=0
+containers=
+reboot=
 i3status --config "$HOME/.config/i3status/config" | {
-  # i3bar protocol: a version header and the opening "[", then one JSON array per update
+  # i3bar protocol: a version header and the opening "[", then one JSON array per update (every 5 s)
   IFS= read -r line && printf '%s\n' "$line"
   IFS= read -r line && printf '%s\n' "$line"
   while IFS= read -r line; do
     prefix=
     [[ $line == ,* ]] && prefix=, && line=${line#,}
+
+    # Slower checks: containers every 30 s, reboot state every minute
+    if ((tick % 6 == 0)) && command -v podman >/dev/null; then
+      containers=$(podman ps -q 2>/dev/null | wc -l)
+    fi
+    if ((tick % 12 == 0)); then
+      reboot=
+      reboot_needed && reboot=1
+    fi
+    tick=$((tick + 1))
+
+    # Alerts first, shown only when something needs attention
+    lead=
+    [[ -n $reboot ]] && lead+="$(field reboot REBOOT "$red"),"
+    grep -qs '"status": "failed"' /run/csb_ansible_compliance.json && lead+="$(field csb 'CSB FAIL' "$red"),"
+    [[ -n $lead ]] && line="[${lead}${line#[}"
+
+    # RAM without units, followed by STALL when tasks wait on memory over 5% of the last 10 s
     if [[ $line =~ $mem_re ]]; then
       blk=${BASH_REMATCH[0]}
-      line=${line/"$blk"/"${blk// GiB/}"}
+      new=${blk// GiB/}
+      avg10=avg10=0
+      { read -r _ avg10 _ </proc/pressure/memory; } 2>/dev/null
+      stall=${avg10#avg10=}
+      stall=${stall%.*}
+      ((${stall:-0} >= 5)) && new+=",$(field stall "STALL ${stall}%" "$red")"
+      line=${line/"$blk"/"$new"}
     fi
+
     rest=$line
     while [[ $rest =~ $disk_re ]]; do
       blk=${BASH_REMATCH[0]}
@@ -48,13 +100,25 @@ i3status --config "$HOME/.config/i3status/config" | {
       line=${line/"$blk"/"$new"}
       rest=${rest#*"$blk"}
     done
-    if ((show_vpn)); then
-      block=$(vpn_block)
-      if [[ $line == *'{"name":"wireless"'* ]]; then
-        line=${line/'{"name":"wireless"'/"$block"',{"name":"wireless"'}
-      else
-        line="${line%]},$block]"
-      fi
+
+    # Battery power draw while discharging
+    if [[ $line =~ $bat_re ]] && [[ $(cat "$battery/status" 2>/dev/null) == Discharging ]]; then
+      blk=${BASH_REMATCH[0]}
+      text=${BASH_REMATCH[1]}
+      watts=$(($(cat "$battery/power_now" 2>/dev/null || echo 0) / 1000000))
+      new=${blk/"\"$text\""/"\"${text% } ${watts}W\""}
+      line=${line/"$blk"/"$new"}
+    fi
+
+    # CTR, AI and VPN go before the Wi-Fi field (or at the end)
+    tail_fields=
+    [[ -n $containers ]] && tail_fields+="$(field containers "CTR $containers"),"
+    tail_fields+="$(field agents "AI $(pgrep -c -x 'claude|codex|agy')"),"
+    ((show_vpn)) && tail_fields+="$(vpn_field),"
+    if [[ $line == *'{"name":"wireless"'* ]]; then
+      line=${line/'{"name":"wireless"'/"$tail_fields"'{"name":"wireless"'}
+    else
+      line="${line%]},${tail_fields%,}]"
     fi
     printf '%s%s\n' "$prefix" "$line"
   done
