@@ -79,6 +79,7 @@ packages_security_rhel:
 
 packages_containers:
   - podman  # Fedora Workstation default since F33; explicit for RHEL/Rocky and non-Workstation targets
+  - podman-docker  # docker CLI backed by rootless podman: Shipyard's Dapper (Submariner) and other docker-only dev tooling
   - distrobox
 
 # Work-profile-only container tools (OCI image builder — not needed for personal distrobox/podman-run usage)
@@ -163,6 +164,7 @@ packages_apt:
   - bat
   - gh
   - podman
+  - podman-docker  # docker CLI backed by rootless podman (mirrors packages_containers on Fedora)
   - distrobox
   - shfmt
   - nodejs             # runtime for commitlint and markdownlint (make ci/lint)
