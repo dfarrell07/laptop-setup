@@ -33,7 +33,8 @@ class KernelCmdlineTests(unittest.TestCase):
                 self.assertNotIn('vsyscall=emulate', arguments)
                 self.assertIn('page_alloc.shuffle=1', arguments)
                 self.assertEqual([v for v in arguments if v.startswith('lockdown=')], ['lockdown=' + mode] if mode else [])
-                self.assertIn(processor + '_iommu=on', arguments)
+                self.assertEqual('intel_iommu=on' in arguments, processor == 'intel')
+                self.assertNotIn('amd_iommu=on', arguments)
                 self.assertEqual('iommu=pt' in arguments, passthrough)
                 self.assertEqual('init_on_free=1' in arguments, free)
                 if free:
@@ -47,7 +48,7 @@ class KernelCmdlineTests(unittest.TestCase):
 
     def test_preserve_grub_regenerated_argument_order(self):
         text = ('root=UUID=fixture ro rootflags=subvol=root lockdown=integrity '
-                'vsyscall=none init_on_free=1 page_alloc.shuffle=1 amd_iommu=on '
+                'vsyscall=none init_on_free=1 page_alloc.shuffle=1 '
                 'no_timer_check console=tty1 console=ttyS0,115200n8 rootflags=subvol=root')
         self.assertEqual(compiler.merge_arguments(text, self.settings()), text)
         changed = text.replace('lockdown=integrity', 'lockdown=none')
@@ -56,6 +57,11 @@ class KernelCmdlineTests(unittest.TestCase):
         self.assertNotIn('lockdown=none', restored)
         duplicate = text + ' lockdown=none'
         self.assertNotIn('lockdown=none', compiler.merge_arguments(duplicate, self.settings()))
+
+    def test_drops_invalid_amd_iommu_on_only(self):
+        merged = shlex.split(compiler.merge_arguments('root=UUID=fixture amd_iommu=on amd_iommu=force_isolation', self.settings()))
+        self.assertNotIn('amd_iommu=on', merged)
+        self.assertIn('amd_iommu=force_isolation', merged)
 
     def test_preserve_quoted_values_and_variables(self):
         text = 'root=UUID=fixture foo="keep these spaces" $tuned_params rd.luks.key=/private/key'

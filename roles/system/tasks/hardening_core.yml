@@ -107,18 +107,32 @@
                  and _polkit_compat_integrity.stdout | default('') | length == 0)
              else [] }}
 
+    - name: Record unexpected polkit rules
+      ansible.builtin.set_fact:
+        _polkit_unexpected: >-
+          {{ _polkit_rules_found.files | rejectattr('isdir') | map(attribute='path') | map('basename')
+             | difference(system_polkitd_whitelist + _polkit_verified_vendor_rules) | list }}
+
     - name: Fail on unexpected polkit rules
       ansible.builtin.fail:
         msg: >-
-          Unexpected file(s) in /etc/polkit-1/rules.d:
-          {{ _polkit_rules_found.files | rejectattr('isdir') | map(attribute='path') | map('basename')
-             | difference(system_polkitd_whitelist + _polkit_verified_vendor_rules) | join(', ') }}.
+          Unexpected file(s) in /etc/polkit-1/rules.d: {{ _polkit_unexpected | join(', ') }}.
           A backdoor .rules file grants all pkexec/systemctl/GNOME actions without
           authentication. Remove the file or add its basename to
           system_polkitd_whitelist in config.yml to permit it.
-      when: >-
-        (_polkit_rules_found.files | rejectattr('isdir') | map(attribute='path') | map('basename')
-         | difference(system_polkitd_whitelist + _polkit_verified_vendor_rules)) | length > 0
+      when:
+        - _polkit_unexpected | length > 0
+        - not csb_detected
+
+    # Hybrid CSB: IT may deploy polkit rules, as with the D-Bus and sudoers.d scans, so warn instead.
+    - name: "WARNING: unexpected polkit rules (CSB — IT may deploy them)"
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: Unexpected file(s) in /etc/polkit-1/rules.d: {{ _polkit_unexpected | join(', ') }}.
+          Confirm IT owns them, then add their basenames to system_polkitd_whitelist to silence this.
+      when:
+        - _polkit_unexpected | length > 0
+        - csb_detected
 
 - name: Mount hardening
   ansible.builtin.include_tasks: mounts.yml

@@ -27,7 +27,11 @@ def merge_arguments(text, settings):
         key, _, value = decoded[0].partition('=')
         if key in {'BOOT_IMAGE', 'lockdown', 'vsyscall', 'init_on_free', 'page_alloc.shuffle'}:
             continue
-        if key in {'amd_iommu', 'intel_iommu'} and settings[key[:key.index('_')]]:
+        if key == 'intel_iommu' and settings['intel']:
+            continue
+        # The AMD driver has no amd_iommu=on (it logs 'Unknown option'; the IOMMU is on by default).
+        # Earlier runs added it, so drop exactly that token and keep any other amd_iommu= value.
+        if decoded[0] == 'amd_iommu=on':
             continue
         if key == 'iommu' and (settings['passthrough'] or value == 'pt'):
             continue
@@ -53,9 +57,8 @@ def merge_arguments(text, settings):
     if settings['init_on_free']:
         values.append('init_on_free=1')
     values.append('page_alloc.shuffle=1')
-    for vendor in ['amd', 'intel']:
-        if settings[vendor]:
-            values.append(vendor + '_iommu=on')
+    if settings['intel']:
+        values.append('intel_iommu=on')
     if settings['passthrough'] and (settings['amd'] or settings['intel']):
         values.append('iommu=pt')
     # grub2-mkconfig can reorder equivalent arguments. Keep its text when
