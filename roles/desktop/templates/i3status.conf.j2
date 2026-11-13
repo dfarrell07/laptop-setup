@@ -1,4 +1,9 @@
 # {{ ansible_managed }}
+{% set _mounts = ansible_facts['mounts'] | default([]) %}
+{% set _root_dev = _mounts | selectattr('mount', 'equalto', '/') | map(attribute='device') | first | default('') %}
+{% set _home_dev = _mounts | selectattr('mount', 'equalto', '/home') | map(attribute='device') | first | default('') %}
+{# /home gets its own block only on a separate filesystem; btrfs subvolumes share the device and free space #}
+{% set _desktop_separate_home = _home_dev != '' and _home_dev != _root_dev %}
 
 general {
     colors = true
@@ -11,7 +16,9 @@ order += "cpu_temperature 0"
 {% endif %}
 order += "memory"
 order += "disk /"
+{% if _desktop_separate_home %}
 order += "disk /home"
+{% endif %}
 {% if desktop_i3status_battery_num != '' %}
 order += "battery {{ desktop_i3status_battery_num | string | regex_replace('[^0-9]', '') }}"
 {% endif %}
@@ -22,7 +29,7 @@ order += "ethernet _first_"
 order += "wireless _first_"
 
 cpu_usage {
-    format = " %usage"
+    format = "CPU %usage"
     max_threshold = 80
 }
 
@@ -31,33 +38,35 @@ cpu_usage {
 # Override desktop_i3status_cpu_temp_path in config.yml for different PCI topologies.
 # Example: /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon8/temp1_input (ThinkPad P16v Gen 1 AMD k10temp)
 cpu_temperature 0 {
-    format = " %degrees°C"
+    format = "TEMP %degrees°C"
     path = "{{ desktop_i3status_cpu_temp_path | regex_replace('[^/a-zA-Z0-9._:-]', '') }}"
     max_threshold = 90
 }
 {% endif %}
 
 memory {
-    format = " %used / %total"
+    format = "MEM %used / %total"
     threshold_degraded = "10%"
-    format_degraded = " LOW (%available)"
+    format_degraded = "MEM LOW (%available free)"
 }
 
 disk "/" {
-    format = " %avail"
+    format = "DISK %avail free"
     prefix_type = si
     low_threshold = 10
 }
 
+{% if _desktop_separate_home %}
 disk "/home" {
-    format = " %avail"
+    format = "HOME %avail free"
     low_threshold = 20
     prefix_type = si
 }
+{% endif %}
 
 {% if desktop_i3status_battery_num != '' %}
 battery {{ desktop_i3status_battery_num | string | regex_replace('[^0-9]', '') }} {
-    format = " %status %percentage %remaining"
+    format = "BAT %status %percentage %remaining"
     last_full_capacity = true
     status_chr = "⚡"
     status_bat = "🔋"
@@ -68,26 +77,26 @@ battery {{ desktop_i3status_battery_num | string | regex_replace('[^0-9]', '') }
 # volume master uses PipeWire's PulseAudio compatibility layer (device = "pulse" works on Fedora 44)
 volume master {
     device = "pulse"
-    format = " %volume"
-    format_muted = " muted"
+    format = "VOL %volume"
+    format_muted = "VOL muted"
     mixer = "Master"
 }
 
 time {
-    format = " %a %d %b %H:%M"
+    format = "%a %d %b %H:%M"
 }
 
 tztime utc {
-    format = " UTC %H:%M"
+    format = "UTC %H:%M"
     timezone = "UTC"
 }
 
 ethernet _first_ {
-    format_up = " %ip"
+    format_up = "ETH %ip"
     format_down = ""
 }
 
 wireless _first_ {
-    format_up = " (%quality) %ip"
+    format_up = "WIFI %quality %ip"
     format_down = ""
 }
