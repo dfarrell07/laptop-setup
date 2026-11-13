@@ -34,6 +34,12 @@ desktop_gtk_icon_theme: Adwaita  # GTK icon theme for Sway
 # k10temp hwmon index on ThinkPad P16v Gen 1 AMD. hwmon index varies by machine/kernel; verify with:
 # ls /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon*/temp1_input
 desktop_i3status_cpu_temp_path: ""  # set correct hwmon sysfs path in config.yml; empty disables the block
+# Status-bar VPN field naming active VPNs (NetworkManager VPN/WireGuard, Tailscale, NetBird) via a bar wrapper
+desktop_i3status_vpn: true
+# Extra clocks after local time, e.g. teammates' zones; label is shown before the weekday and time; [] disables
+desktop_i3status_timezones:
+  - {label: IN, timezone: Asia/Kolkata}
+  - {label: IL, timezone: Asia/Jerusalem}
 # '*' = all displays (safe default); set specific name in config.yml for per-output scale/adaptive_sync
 desktop_sway_output: "*"  # find output names with: swaymsg -t get_outputs
 desktop_sway_adaptive_sync: "disabled"  # VRR/FreeSync; enable per-output in config.yml with a specific output name for VRR-capable displays

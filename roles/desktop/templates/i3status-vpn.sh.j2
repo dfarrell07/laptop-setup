@@ -1,0 +1,42 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Bar status_command: runs i3status and adds a VPN field naming the active VPNs
+# (NetworkManager VPN/WireGuard profiles, Tailscale, NetBird), placed before the Wi-Fi field.
+set -u
+{% raw %}
+
+vpn_block() {
+  local names=() n t
+  while IFS=: read -r n t; do
+    case "$t" in vpn | wireguard) names+=("${n//[\"\\]/}") ;; esac
+  done < <(nmcli -t -f NAME,TYPE connection show --active 2>/dev/null)
+  if command -v tailscale >/dev/null &&
+    tailscale status --json --peers=false 2>/dev/null | grep -q '"BackendState": "Running"'; then
+    names+=(Tailscale)
+  fi
+  [[ -e /sys/class/net/wt0 ]] && names+=(NetBird)
+  if ((${#names[@]})); then
+    local IFS=,
+    printf '{"name":"vpn","full_text":"VPN %s","color":"#00FF00"}' "${names[*]}"
+  else
+    printf '{"name":"vpn","full_text":"VPN off"}'
+  fi
+}
+
+i3status --config "$HOME/.config/i3status/config" | {
+  # i3bar protocol: a version header and the opening "[", then one JSON array per update
+  IFS= read -r line && printf '%s\n' "$line"
+  IFS= read -r line && printf '%s\n' "$line"
+  while IFS= read -r line; do
+    prefix=
+    [[ $line == ,* ]] && prefix=, && line=${line#,}
+    block=$(vpn_block)
+    if [[ $line == *'{"name":"wireless"'* ]]; then
+      line=${line/'{"name":"wireless"'/"$block"',{"name":"wireless"'}
+    else
+      line="${line%]},$block]"
+    fi
+    printf '%s%s\n' "$prefix" "$line"
+  done
+}
+{% endraw %}
