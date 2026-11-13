@@ -1,13 +1,19 @@
 ---
-# Git repositories to clone under ~/src/ (or git_repos_base_dir).
-# Filter with: -e repo_category=ovnk
+# Git repositories to clone under ~/src/ (or git_repos_base_dir), grouped by category.
+# Clone one group with: make repos-<category>  (e.g. make repos-evpn)
 #
-# Categories: personal, downstream, bpfman, ovnk, konflux, evpn, rh-context
+# Categories: personal, downstream (Submariner/ACM), ovnk (OpenShift networking, AI tooling),
+# evpn (EVPN gateway, FRR, openperouter), konflux, bpfman, rh-context (internal hosts, local_repos.yml).
 # Work defaults: all categories. Personal defaults: personal + ovnk; explicit category filters override the profile.
 # Repos without an enabled field are included by default (enabled is opt-in only for overrides).
+#
+# Conventions:
+# - origin is the upstream repo over HTTPS; a fork you push to is an extra remote named `fork`
+#   (older entries keep their short names, e.g. dfarrell07_subm, so existing clones stay valid).
+# - depth: 1 for reference-only repos; omit it where you rebase or push branches.
 
 git_repos_public:
-  # --- personal ---
+  # ===== personal =====
   - url: https://github.com/{{ dotfiles_github_user }}/notes-ai
     dest: "{{ dotfiles_github_user }}/notes-ai"
     depth: 1
@@ -23,7 +29,23 @@ git_repos_public:
     depth: 1
     category: personal
 
-  # --- submariner-io (category: downstream) ---
+  - url: "https://github.com/{{ dotfiles_github_user }}/health.git"
+    dest: "{{ dotfiles_github_user }}/health"
+    category: personal
+
+  - url: "https://github.com/{{ dotfiles_github_user }}/patents.git"
+    dest: "{{ dotfiles_github_user }}/patents"
+    category: personal
+
+  - url: "https://github.com/{{ dotfiles_github_user }}/startups.git"
+    dest: "{{ dotfiles_github_user }}/startups"
+    category: personal
+
+  - url: "https://github.com/{{ dotfiles_github_user }}/dotfiles.git"
+    dest: "{{ dotfiles_github_user }}/dotfiles"
+    category: personal
+
+  # ===== downstream: submariner-io =====
   - url: https://github.com/submariner-io/submariner-operator
     dest: submariner-io/submariner-operator
     category: downstream  # depth omitted: full history required for rebase/fork workflow
@@ -108,7 +130,26 @@ git_repos_public:
       - name: "{{ dotfiles_github_user }}_get"
         url: "git@github.com:{{ dotfiles_github_user }}/get.submariner.io.git"
 
-  # --- stolostron / ACM (category: downstream) ---
+  - url: https://github.com/submariner-io/coastguard.git
+    dest: submariner-io/coastguard
+    category: downstream
+    extra_remotes:
+      - name: "{{ dotfiles_github_user }}_cg"
+        url: "git@github.com:{{ dotfiles_github_user }}/coastguard.git"
+
+  - url: https://github.com/submariner-io/submariner-diagnostics.git
+    dest: submariner-io/submariner-diagnostics
+    category: downstream
+    extra_remotes:
+      - name: "{{ dotfiles_github_user }}_diag"
+        url: "git@github.com:{{ dotfiles_github_user }}/submariner-diagnostics.git"
+
+  - url: https://github.com/submariner-io/submariner-bot
+    dest: submariner-io/submariner-bot
+    depth: 1
+    category: downstream
+
+  # ===== downstream: ACM / stolostron and the APIs Submariner implements =====
   - url: https://github.com/stolostron/submariner-addon
     dest: stolostron/submariner-addon
     category: downstream  # depth omitted: full history required for rebase/fork workflow
@@ -134,39 +175,31 @@ git_repos_public:
     dest: stolostron/rhacm-docs
     depth: 1
     category: downstream
+    extra_remotes:
+      - name: fork
+        url: "git@github.com:{{ dotfiles_github_user }}/rhacm-docs.git"
 
-  # --- bpfman ---
-  - url: https://github.com/openshift/bpfman
-    dest: bpfman/openshift/bpfman
+  - url: https://github.com/stolostron/acmqe-mcn-test
+    dest: stolostron/acmqe-mcn-test
     depth: 1
-    category: bpfman
+    category: downstream
 
-  - url: https://github.com/openshift/bpfman-catalog
-    dest: bpfman/openshift/bpfman-catalog
+  - url: https://github.com/stolostron/acm-threat-model
+    dest: stolostron/acm-threat-model
     depth: 1
-    category: bpfman
+    category: downstream
 
-  - url: https://github.com/openshift/bpfman-operator
-    dest: bpfman/openshift/bpfman-operator
+  - url: https://github.com/open-cluster-management-io/ocm
+    dest: open-cluster-management-io/ocm
     depth: 1
-    category: bpfman
+    category: downstream
 
-  - url: https://github.com/bpfman/bpfman-operator
-    dest: bpfman/bpfman/bpfman-operator
+  - url: https://github.com/kubernetes-sigs/mcs-api
+    dest: kubernetes-sigs/mcs-api
     depth: 1
-    category: bpfman
+    category: downstream
 
-  - url: https://github.com/bpfman/bpfman
-    dest: bpfman/bpfman/bpfman
-    depth: 1
-    category: bpfman
-
-  - url: https://github.com/cilium/ebpf
-    dest: bpfman/cilium/ebpf
-    depth: 1
-    category: bpfman
-
-  # --- ovnk ---
+  # ===== ovnk: OVN-Kubernetes and OpenShift networking =====
   - url: https://github.com/{{ dotfiles_github_user }}/ovnk-workspace
     dest: "ovnk/{{ dotfiles_github_user }}/ovnk-workspace"
     depth: 1
@@ -186,18 +219,31 @@ git_repos_public:
 
   - url: https://github.com/openshift/cluster-network-operator
     dest: ovnk/openshift/cluster-network-operator
-    depth: 1
     category: ovnk
+    extra_remotes:
+      - name: fork
+        url: "git@github.com:{{ dotfiles_github_user }}/cluster-network-operator.git"
 
   - url: https://github.com/openshift/cloud-network-config-controller
     dest: ovnk/openshift/cloud-network-config-controller
-    depth: 1
     category: ovnk
+    extra_remotes:
+      - name: fork
+        url: "git@github.com:{{ dotfiles_github_user }}/cloud-network-config-controller.git"
 
   - url: https://github.com/openshift/multus-cni
     dest: ovnk/openshift/multus-cni
-    depth: 1
     category: ovnk
+    extra_remotes:
+      - name: fork
+        url: "git@github.com:{{ dotfiles_github_user }}/multus-cni.git"
+
+  - url: https://github.com/openshift/ingress-node-firewall
+    dest: ovnk/openshift/ingress-node-firewall
+    category: ovnk
+    extra_remotes:
+      - name: fork
+        url: "git@github.com:{{ dotfiles_github_user }}/ingress-node-firewall.git"
 
   - url: https://github.com/k8snetworkplumbingwg/multus-cni
     dest: ovnk/k8snetworkplumbingwg/multus-cni
@@ -219,10 +265,81 @@ git_repos_public:
     depth: 1
     category: ovnk
 
+  - url: https://github.com/ovn-org/ovn
+    dest: ovnk/ovn-org/ovn
+    depth: 1
+    category: ovnk
+
+  - url: https://github.com/ovn-org/ovn-fake-multinode
+    dest: ovnk/ovn-org/ovn-fake-multinode
+    depth: 1
+    category: ovnk
+
+  - url: https://github.com/ovn-org/ovn-heater
+    dest: ovnk/ovn-org/ovn-heater
+    depth: 1
+    category: ovnk
+
+  - url: https://github.com/ovn-org/ovn-website
+    dest: ovnk/ovn-org/ovn-website
+    depth: 1
+    category: ovnk
+
+  - url: https://github.com/ovn-kubernetes/kubernetes-traffic-flow-tests
+    dest: ovnk/ovn-kubernetes/kubernetes-traffic-flow-tests
+    depth: 1
+    category: ovnk
+
+  - url: https://github.com/ovn-kubernetes/libovsdb
+    dest: ovnk/ovn-kubernetes/libovsdb
+    depth: 1
+    category: ovnk
+
+  - url: https://github.com/ovn-kubernetes/ovn-kubernetes-mcp
+    dest: ovnk/ovn-kubernetes/ovn-kubernetes-mcp
+    category: ovnk
+    extra_remotes:
+      - name: fork
+        url: "git@github.com:{{ dotfiles_github_user }}/ovn-kubernetes-mcp.git"
+
+  - url: https://github.com/openvswitch/ovs
+    dest: ovnk/openvswitch/ovs
+    depth: 1
+    category: ovnk
+
+  - url: https://github.com/containernetworking/plugins
+    dest: ovnk/containernetworking/plugins
+    depth: 1
+    category: ovnk
+
+  - url: https://github.com/kubernetes/enhancements
+    dest: ovnk/kubernetes/enhancements
+    depth: 1
+    category: ovnk
+
+  - url: https://github.com/kubernetes-sigs/network-policy-api
+    dest: ovnk/kubernetes-sigs/network-policy-api
+    depth: 1
+    category: ovnk
+
+  - url: https://github.com/kubernetes-sigs/kube-agentic-networking
+    dest: ovnk/kubernetes-sigs/kube-agentic-networking
+    depth: 1
+    category: ovnk
+
+  - url: https://github.com/containers/kubernetes-mcp-server
+    dest: ovnk/containers/kubernetes-mcp-server
+    depth: 1
+    category: ovnk
+
+  # ===== ovnk: OpenShift CI, release and AI tooling =====
   - url: https://github.com/openshift/release
     dest: ovnk/openshift/release
     category: ovnk
     depth: 1
+    extra_remotes:
+      - name: fork
+        url: "git@github.com:{{ dotfiles_github_user }}/release.git"
 
   - url: https://github.com/openshift/openshift-docs
     dest: ovnk/openshift/openshift-docs
@@ -251,8 +368,10 @@ git_repos_public:
 
   - url: https://github.com/openshift-eng/ai-helpers
     dest: ovnk/openshift-eng/ai-helpers
-    depth: 1
     category: ovnk
+    extra_remotes:
+      - name: fork
+        url: "git@github.com:{{ dotfiles_github_user }}/ai-helpers.git"
 
   - url: https://github.com/openshift-eng/ci-test-mapping
     dest: ovnk/openshift-eng/ci-test-mapping
@@ -289,77 +408,171 @@ git_repos_public:
     depth: 1
     category: ovnk
 
-  - url: https://github.com/ovn-org/ovn
-    dest: ovnk/ovn-org/ovn
-    depth: 1
-    category: ovnk
+  # ===== evpn: EVPN gateway appliance, FRR and openperouter =====
+  - url: "https://github.com/openshift/evpn-gateway-appliance.git"
+    dest: "evpn/openshift/evpn-gateway-appliance"
+    category: evpn
+    extra_remotes:
+      - name: fork
+        url: "git@github.com:{{ dotfiles_github_user }}/evpn-gateway-appliance.git"
 
-  - url: https://github.com/ovn-org/ovn-fake-multinode
-    dest: ovnk/ovn-org/ovn-fake-multinode
-    depth: 1
-    category: ovnk
+  - url: "https://github.com/{{ dotfiles_github_user }}/evpn-gateway-appliance-context.git"
+    dest: "evpn/{{ dotfiles_github_user }}/evpn-gateway-appliance-context"
+    category: evpn
 
-  - url: https://github.com/ovn-org/ovn-heater
-    dest: ovnk/ovn-org/ovn-heater
-    depth: 1
-    category: ovnk
-
-  - url: https://github.com/ovn-org/ovn-website
-    dest: ovnk/ovn-org/ovn-website
-    depth: 1
-    category: ovnk
-
-  - url: https://github.com/ovn-kubernetes/kubernetes-traffic-flow-tests
-    dest: ovnk/ovn-kubernetes/kubernetes-traffic-flow-tests
-    depth: 1
-    category: ovnk
-
-  - url: https://github.com/ovn-kubernetes/libovsdb
-    dest: ovnk/ovn-kubernetes/libovsdb
-    depth: 1
-    category: ovnk
-
-  - url: https://github.com/ovn-kubernetes/ovn-kubernetes-mcp
-    dest: ovnk/ovn-kubernetes/ovn-kubernetes-mcp
-    depth: 1
-    category: ovnk
-
-  - url: https://github.com/openvswitch/ovs
-    dest: ovnk/openvswitch/ovs
-    depth: 1
-    category: ovnk
-
-  - url: https://github.com/containernetworking/plugins
-    dest: ovnk/containernetworking/plugins
-    depth: 1
-    category: ovnk
-
-  - url: https://github.com/kubernetes/enhancements
-    dest: ovnk/kubernetes/enhancements
-    depth: 1
-    category: ovnk
-
-  - url: https://github.com/kubernetes-sigs/network-policy-api
-    dest: ovnk/kubernetes-sigs/network-policy-api
-    depth: 1
-    category: ovnk
-
-  - url: https://github.com/kubernetes-sigs/kube-agentic-networking
-    dest: ovnk/kubernetes-sigs/kube-agentic-networking
-    depth: 1
-    category: ovnk
-
+  # The EVPN metrics prototype lives on the fork's prototype/evpn-metrics-full branch.
   - url: https://github.com/metallb/frr-k8s
-    dest: ovnk/metallb/frr-k8s
-    depth: 1
-    category: ovnk
+    dest: evpn/metallb/frr-k8s
+    category: evpn
+    extra_remotes:
+      - name: fork
+        url: "git@github.com:{{ dotfiles_github_user }}/frr-k8s.git"
 
-  - url: https://github.com/containers/kubernetes-mcp-server
-    dest: ovnk/containers/kubernetes-mcp-server
+  - url: https://github.com/metallb/metallb
+    dest: evpn/metallb/metallb
     depth: 1
-    category: ovnk
+    category: evpn
 
-  # --- konflux ---
+  - url: https://github.com/FRRouting/frr
+    dest: evpn/FRRouting/frr
+    category: evpn
+    extra_remotes:
+      - name: fork
+        url: "git@github.com:{{ dotfiles_github_user }}/frr.git"
+
+  - url: https://github.com/openshift/frr
+    dest: evpn/openshift/frr
+    depth: 1
+    category: evpn
+
+  - url: "https://github.com/{{ dotfiles_github_user }}/frr-metrics-exporter.git"
+    dest: "evpn/{{ dotfiles_github_user }}/frr-metrics-exporter"
+    category: evpn
+
+  - url: https://github.com/tynany/frr_exporter
+    dest: evpn/tynany/frr_exporter
+    depth: 1
+    category: evpn
+
+  - url: "https://github.com/openperouter/openperouter"
+    dest: "evpn/openperouter/openperouter"
+    category: evpn
+
+  - url: "https://github.com/openshift-kni/openperouter"
+    dest: "evpn/openshift-kni/openperouter"
+    category: evpn
+
+  - url: "https://github.com/openshift/bgp-cloud-connector"
+    dest: "evpn/openshift/bgp-cloud-connector"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/openshift/network.offline_migration_sdn_to_ovnk"
+    dest: "evpn/openshift/network.offline_migration_sdn_to_ovnk"
+    category: evpn
+    depth: 1
+
+  # ===== evpn: appliance image, CI and test tooling =====
+  - url: "https://github.com/osbuild/bootc-image-builder.git"
+    dest: "evpn/osbuild/bootc-image-builder"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/containers/bootc.git"
+    dest: "evpn/containers/bootc"
+    category: evpn
+    depth: 1
+
+  - url: "https://gitlab.com/redhat/centos-stream/containers/bootc.git"
+    dest: "evpn/redhat/centos-stream/containers/bootc"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/osbuild/bootc-foundry.git"
+    dest: "evpn/osbuild/bootc-foundry"
+    category: evpn
+    depth: 1
+
+  - url: https://github.com/ansible-automation-platform/automation-portal-bootc-container
+    dest: evpn/ansible-automation-platform/automation-portal-bootc-container
+    depth: 1
+    category: evpn
+
+  - url: "https://github.com/ansible-automation-platform/aap-konflux-pipelines.git"
+    dest: "evpn/ansible-automation-platform/aap-konflux-pipelines"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/ansible/ansible-content-actions"
+    dest: "evpn/ansible/ansible-content-actions"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/redhat-developer/mapt.git"
+    dest: "evpn/redhat-developer/mapt"
+    category: evpn
+    depth: 1
+
+  - url: https://github.com/teemtee/tmt
+    dest: evpn/teemtee/tmt
+    depth: 1
+    category: evpn
+
+  - url: "https://github.com/kubernetes-sigs/prow"
+    dest: "evpn/kubernetes-sigs/prow"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/red-hat-data-services/aipcc-konflux-data"
+    dest: "evpn/red-hat-data-services/aipcc-konflux-data"
+    category: evpn
+    depth: 1
+
+  # Konflux services the appliance pipeline builds on (cloned under evpn/)
+  - url: "https://github.com/konflux-ci/build-service"
+    dest: "evpn/konflux-ci/build-service"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/konflux-ci/container-build-catalog"
+    dest: "evpn/konflux-ci/container-build-catalog"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/konflux-ci/integration-service"
+    dest: "evpn/konflux-ci/integration-service"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/konflux-ci/release-service"
+    dest: "evpn/konflux-ci/release-service"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/konflux-ci/release-service-utils"
+    dest: "evpn/konflux-ci/release-service-utils"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/konflux-ci/tekton-integration-catalog"
+    dest: "evpn/konflux-ci/tekton-integration-catalog"
+    category: evpn
+    depth: 1
+    extra_remotes:
+      - name: fork
+        url: "git@github.com:{{ dotfiles_github_user }}/tekton-integration-catalog.git"
+
+  - url: "https://github.com/konflux-ci/mintmaker-presets"
+    dest: "evpn/konflux-ci/mintmaker-presets"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/konflux-ci/multi-platform-controller"
+    dest: "evpn/konflux-ci/multi-platform-controller"
+    category: evpn
+    depth: 1
+
+  # ===== konflux: build and release =====
   - url: https://github.com/konflux-ci/build-definitions
     dest: konflux/konflux-ci/build-definitions
     depth: 1
@@ -379,6 +592,9 @@ git_repos_public:
     dest: konflux/release-engineering/rhtap-ec-policy
     depth: 1
     category: konflux
+    extra_remotes:
+      - name: fork
+        url: "git@github.com:{{ dotfiles_github_user }}/rhtap-ec-policy.git"
 
   - url: https://github.com/konflux-ci/olm-operator-konflux-sample
     dest: konflux/konflux-ci/olm-operator-konflux-sample
@@ -387,6 +603,16 @@ git_repos_public:
 
   - url: https://github.com/konflux-ci/rpm-lockfile-prototype
     dest: konflux/konflux-ci/rpm-lockfile-prototype
+    depth: 1
+    category: konflux
+
+  - url: "https://github.com/konflux-ci/konflux-qe-definitions.git"
+    dest: "konflux/konflux-ci/konflux-qe-definitions"
+    category: konflux
+    depth: 1
+
+  - url: https://github.com/redhat-appstudio/infra-deployments
+    dest: konflux/redhat-appstudio/infra-deployments
     depth: 1
     category: konflux
 
@@ -405,158 +631,41 @@ git_repos_public:
     depth: 1
     category: konflux
 
-  - url: "https://github.com/osbuild/bootc-image-builder.git"
-    dest: "evpn/osbuild/bootc-image-builder"
-    category: evpn
-    depth: 1
-
-  - url: "https://github.com/containers/bootc.git"
-    dest: "evpn/containers/bootc"
-    category: evpn
-    depth: 1
-
-  - url: "https://github.com/ansible-automation-platform/aap-konflux-pipelines.git"
-    dest: "evpn/ansible-automation-platform/aap-konflux-pipelines"
-    category: evpn
-    depth: 1
-
-  - url: "https://github.com/osbuild/bootc-foundry.git"
-    dest: "evpn/osbuild/bootc-foundry"
-    category: evpn
-    depth: 1
-
-  - url: "https://github.com/redhat-developer/mapt.git"
-    dest: "evpn/redhat-developer/mapt"
-    category: evpn
-    depth: 1
-
-  - url: "https://github.com/ansible/ansible-content-actions"
-    dest: "evpn/ansible/ansible-content-actions"
-    category: evpn
-    depth: 1
-
-  - url: "https://github.com/openshift/bgp-cloud-connector"
-    dest: "evpn/openshift/bgp-cloud-connector"
-    category: evpn
-    depth: 1
-
-  - url: "https://github.com/konflux-ci/build-service"
-    dest: "evpn/konflux-ci/build-service"
-    category: evpn
-    depth: 1
-
-  - url: "https://github.com/konflux-ci/container-build-catalog"
-    dest: "evpn/konflux-ci/container-build-catalog"
-    category: evpn
-    depth: 1
-
-  - url: "https://github.com/konflux-ci/integration-service"
-    dest: "evpn/konflux-ci/integration-service"
-    category: evpn
-    depth: 1
-
-  - url: "https://github.com/openshift/network.offline_migration_sdn_to_ovnk"
-    dest: "evpn/openshift/network.offline_migration_sdn_to_ovnk"
-    category: evpn
-    depth: 1
-
-  - url: "https://github.com/konflux-ci/release-service"
-    dest: "evpn/konflux-ci/release-service"
-    category: evpn
-    depth: 1
-
-  - url: "https://github.com/konflux-ci/tekton-integration-catalog"
-    dest: "evpn/konflux-ci/tekton-integration-catalog"
-    category: evpn
-    depth: 1
-
-  - url: "https://github.com/konflux-ci/release-service-utils"
-    dest: "evpn/konflux-ci/release-service-utils"
-    category: evpn
-    depth: 1
-
-  - url: "https://github.com/konflux-ci/mintmaker-presets"
-    dest: "evpn/konflux-ci/mintmaker-presets"
-    category: evpn
-    depth: 1
-
-  - url: "https://github.com/konflux-ci/multi-platform-controller"
-    dest: "evpn/konflux-ci/multi-platform-controller"
-    category: evpn
-    depth: 1
-
-  - url: "https://github.com/openperouter/openperouter"
-    dest: "evpn/openperouter/openperouter"
-    category: evpn
-
-  - url: "https://github.com/openshift-kni/openperouter"
-    dest: "evpn/openshift-kni/openperouter"
-    category: evpn
-
-  - url: "https://github.com/red-hat-data-services/aipcc-konflux-data"
-    dest: "evpn/red-hat-data-services/aipcc-konflux-data"
-    category: evpn
-    depth: 1
-
-  - url: "https://gitlab.com/redhat/centos-stream/containers/bootc.git"
-    dest: "evpn/redhat/centos-stream/containers/bootc"
-    category: evpn
-    depth: 1
-
-  - url: "https://github.com/kubernetes-sigs/prow"
-    dest: "evpn/kubernetes-sigs/prow"
-    category: evpn
-    depth: 1
-
-  - url: "https://github.com/{{ dotfiles_github_user }}/evpn-gateway-appliance-context.git"
-    dest: "evpn/{{ dotfiles_github_user }}/evpn-gateway-appliance-context"
-    category: evpn
-
-  - url: "https://github.com/openshift/evpn-gateway-appliance.git"
-    dest: "evpn/openshift/evpn-gateway-appliance"
-    category: evpn
-    extra_remotes:
-      - name: fork
-        url: "git@github.com:{{ dotfiles_github_user }}/evpn-gateway-appliance.git"
-
-  # --- konflux (old laptop inventory) ---
   - url: "https://gitlab.com/testing-farm/integrations-konflux.git"
     dest: "konflux/testing-farm/integrations-konflux"
     category: konflux
     depth: 1
 
-  - url: "https://github.com/konflux-ci/konflux-qe-definitions.git"
-    dest: "konflux/konflux-ci/konflux-qe-definitions"
-    category: konflux
+  # ===== bpfman =====
+  - url: https://github.com/openshift/bpfman
+    dest: bpfman/openshift/bpfman
     depth: 1
+    category: bpfman
 
-  # --- additional durable personal workspaces ---
-  - url: "https://github.com/{{ dotfiles_github_user }}/patents.git"
-    dest: "{{ dotfiles_github_user }}/patents"
-    category: personal
+  - url: https://github.com/openshift/bpfman-catalog
+    dest: bpfman/openshift/bpfman-catalog
+    depth: 1
+    category: bpfman
 
-  - url: "https://github.com/{{ dotfiles_github_user }}/startups.git"
-    dest: "{{ dotfiles_github_user }}/startups"
-    category: personal
+  - url: https://github.com/openshift/bpfman-operator
+    dest: bpfman/openshift/bpfman-operator
+    depth: 1
+    category: bpfman
 
-  - url: "https://github.com/{{ dotfiles_github_user }}/dotfiles.git"
-    dest: "{{ dotfiles_github_user }}/dotfiles"
-    category: personal
+  - url: https://github.com/bpfman/bpfman-operator
+    dest: bpfman/bpfman/bpfman-operator
+    depth: 1
+    category: bpfman
 
-  # --- additional Submariner development sources ---
-  - url: https://github.com/submariner-io/coastguard.git
-    dest: submariner-io/coastguard
-    category: downstream
-    extra_remotes:
-      - name: "{{ dotfiles_github_user }}_cg"
-        url: "git@github.com:{{ dotfiles_github_user }}/coastguard.git"
+  - url: https://github.com/bpfman/bpfman
+    dest: bpfman/bpfman/bpfman
+    depth: 1
+    category: bpfman
 
-  - url: https://github.com/submariner-io/submariner-diagnostics.git
-    dest: submariner-io/submariner-diagnostics
-    category: downstream
-    extra_remotes:
-      - name: "{{ dotfiles_github_user }}_diag"
-        url: "git@github.com:{{ dotfiles_github_user }}/submariner-diagnostics.git"
+  - url: https://github.com/cilium/ebpf
+    dest: bpfman/cilium/ebpf
+    depth: 1
+    category: bpfman
 
 # Internal-host repos live in the gitignored group_vars/all/local_repos.yml
 # (see local_repos.yml.example); concatenated here. Falls back to public only.
