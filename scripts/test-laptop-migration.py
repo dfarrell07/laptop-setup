@@ -380,9 +380,9 @@ print -r -- "PARENT:$CLAUDE_CODE_USE_VERTEX:$CODEX_HOME:$ANTHROPIC_API_KEY:${DBU
             rows = result.stdout.splitlines()
             records = [json.loads(line) for line in rows[:-1]]
             self.assertEqual(records[0]['args'][-1], 'argument with spaces')
-            self.assertEqual(records[0]['args'], ['--dangerously-skip-permissions', 'argument with spaces'])
-            self.assertEqual(records[1]['args'], ['--dangerously-skip-permissions', 'second'])
-            self.assertEqual(records[2]['args'], ['--dangerously-skip-permissions', 'third'])
+            self.assertEqual(records[0]['args'], ['--remote-control', '--dangerously-skip-permissions', 'argument with spaces'])
+            self.assertEqual(records[1]['args'], ['--remote-control', '--dangerously-skip-permissions', 'second'])
+            self.assertEqual(records[2]['args'], ['--remote-control', '--dangerously-skip-permissions', 'third'])
             for record in records[3:5]:
                 self.assertEqual(record['args'][:2], ['--ask-for-approval=never', '--sandbox=danger-full-access'])
             self.assertEqual(records[0]['env']['CLAUDE_CONFIG_DIR'], name + '/.claude')
@@ -443,7 +443,8 @@ print -r -- "PARENT:$CLAUDE_CODE_USE_VERTEX:$CODEX_HOME:$ANTHROPIC_API_KEY:${DBU
                 self.assertEqual(record['env']['CLAUDE_CONFIG_DIR'], defaults['claude_work_config_dir'])
                 self.assertEqual(record['env']['CLAUDE_CODE_USE_VERTEX'], '1')
                 self.assertNotIn('ANTHROPIC_API_KEY', record['env'])
-            self.assertEqual(tmux_records[1]['args'], ['--worktree', 'fixture-worktree'])
+            self.assertEqual(tmux_records[0]['args'], ['--remote-control'])
+            self.assertEqual(tmux_records[1]['args'], ['--remote-control', '--worktree', 'fixture-worktree'])
             defaults['ansible_facts']['system'] = 'Darwin'
             run_play(directory, tasks=[{'name': 'Render work macOS shell', 'ansible.builtin.template': {
                 'src': str(ROOT / 'roles/dotfiles/templates/zshrc.j2'), 'dest': str(config), 'mode': '0600'}}],

@@ -104,7 +104,8 @@ _claude_check_base_url() {
   fi
 }
 
-# Instance guard + tmux launchers:
+# Instance guard + tmux launchers. Every launcher starts Claude with --remote-control (claude.ai/code and the
+# mobile app can drive the session); keep it first, before a dash option, so its optional name never takes a prompt.
 claude() {
   if [[ -z "${CLAUDE_CONFIG_DIR:-}" ]]; then
     echo "ERROR: CLAUDE_CONFIG_DIR not set. Use {% if profile == 'work' %}'cwork' (work), {% endif %}'cper'{% if claude_personal2_instance_enabled | bool %} or 'cper2'{% endif %} (personal)." >&2
@@ -122,7 +123,7 @@ cw() {
   [[ -f "$work_env" ]] || { echo "ERROR: $work_env missing — run: make claude" >&2; return 1; }
   local dir="${PWD##*/}"; dir="${dir//[^a-zA-Z0-9_-]/_}"; [[ -z "$dir" ]] && dir="root"
   local s="work-${dir}"
-  tmux new-session -As "$s" "source ${(q)work_env} && claude; zsh"
+  tmux new-session -As "$s" "source ${(q)work_env} && claude --remote-control; zsh"
 }
 
 cls() { tmux list-sessions 2>/dev/null | grep -E "^work-"; }
@@ -136,7 +137,7 @@ cwt() {
   _claude_check_base_url || return 1
   local work_env={{ (claude_runtime_config_dir ~ '/work-env') | quote }}
   [[ -f "$work_env" ]] || { echo "ERROR: $work_env missing — run: make claude" >&2; return 1; }
-  tmux new-session -As "work-$n" "source ${(q)work_env} && claude --worktree $n; zsh"
+  tmux new-session -As "work-$n" "source ${(q)work_env} && claude --remote-control --worktree $n; zsh"
 }
 cstatus() {
   for s in $(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -E '^work-'); do
@@ -167,7 +168,7 @@ _claude_personal() (
   export CLAUDE_CONFIG_DIR="$config_dir" CLAUDE_CODE_USE_VERTEX=0
   export CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION={{ dotfiles_claude_max_subagents | int }}
   local -a _claude_dev_args; _claude_plugin_dev_args
-  claude {{ dotfiles_claude_launcher_args | map('quote') | join(' ') }} "${_claude_dev_args[@]}" "$@"
+  claude --remote-control {{ dotfiles_claude_launcher_args | map('quote') | join(' ') }} "${_claude_dev_args[@]}" "$@"
 )
 cper() { _claude_personal {{ claude_default_config_dir | quote }} "$@"; }
 {% if claude_personal2_instance_enabled | bool %}
@@ -181,7 +182,7 @@ cwork() (
   export CLAUDE_CODE_USE_VERTEX=1
   export CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION={{ dotfiles_claude_max_subagents | int }}
   local -a _claude_dev_args; _claude_plugin_dev_args
-  claude {{ dotfiles_claude_launcher_args | map('quote') | join(' ') }} "${_claude_dev_args[@]}" "$@"
+  claude --remote-control {{ dotfiles_claude_launcher_args | map('quote') | join(' ') }} "${_claude_dev_args[@]}" "$@"
 )
 {% endif %}
 
