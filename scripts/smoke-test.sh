@@ -218,7 +218,10 @@ if [[ "$profile" == "work" ]]; then _tools+=("kind:kind version" "helm:helm vers
 for tool in "${_tools[@]}"; do
   name="${tool%%:*}"; cmd="${tool#*:}"
   # shellcheck disable=SC2086  # intentional word-split: cmd is "binary arg1 arg2"
-  if exec_cmd $cmd &>/dev/null; then record "$name" "PASS"; else record "$name" "$_tool_absent" "not found"; fi
+  if exec_cmd $cmd &>/dev/null; then record "$name" "PASS"
+  # Hybrid tier: the dev container does not carry every host tool (helm, sops, ...).
+  elif [[ -n "$CONTAINER" ]] && command -v "${cmd%% *}" &>/dev/null; then record "$name" "SKIP" "host-only CLI"
+  else record "$name" "$_tool_absent" "not found"; fi
 done
 if [[ "$profile" == "work" ]] && $IS_LINUX && [[ "$(uname -m)" == x86_64 ]]; then
   if [[ -x "$HOME/.krew/bin/kubectl-krew" ]]; then
