@@ -231,6 +231,20 @@
     - not (system_is_container)  # scope:user systemd crashes Podman container PID 1
     - _socket_state not in ['active', 'activating']
 
+# testcontainers' Ryuk reaper mounts the Podman socket; SELinux denies container_t the connection, so Ryuk never
+# reports "Started" and every testcontainers suite times out. Privileged (no SELinux label) applies to Ryuk only;
+# through the socket it already controls the user's Podman, so this widens nothing. Other keys in the file are kept.
+- name: Let the testcontainers Ryuk reaper use the rootless Podman socket
+  ansible.builtin.lineinfile:
+    path: "{{ ansible_facts['user_dir'] }}/.testcontainers.properties"
+    regexp: '^ryuk\.container\.privileged='
+    line: ryuk.container.privileged=true
+    create: true
+    mode: "0600"
+  when:
+    - is_linux
+    - not (system_is_container)
+
 # --- workstation-wide rootless Podman settings (also required for kind nodes) ---
 - name: Assert containers_pids_limit is a non-negative integer
   ansible.builtin.assert:
