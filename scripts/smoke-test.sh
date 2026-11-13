@@ -177,18 +177,23 @@ if [[ -n "$ONLY" && "$ONLY" != *",github-ssh-auth,"* ]]; then
 elif [[ -z "$_timeout_bin" ]]; then
   record "github-ssh-auth" "WARN" "timeout not available (install gnu-coreutils on macOS) — skipping GitHub SSH auth check"
 else
-  # Read-only: never write known_hosts, never prompt
-  "$_timeout_bin" 10 ssh -T -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
-    -o BatchMode=yes git@github.com &>/dev/null || _ssh_ret=$?
+  # Read-only: never write known_hosts, never prompt. -v tells "key not on GitHub" from "key accepted, but BatchMode
+  # cannot enter the FIDO2 PIN of a verify-required key (make ssh-keys)": the server answers the key query before signing.
+  _ssh_err=$("$_timeout_bin" 10 ssh -v -T -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+    -o BatchMode=yes git@github.com 2>&1 >/dev/null) || _ssh_ret=$?
   if [[ "$_ssh_ret" -eq 1 ]]; then
     record "github-ssh-auth" "PASS" "exit 1 = GitHub auth success"
   elif [[ "$_ssh_ret" -eq 124 ]]; then
     record "github-ssh-auth" "WARN" "ssh timed out after 10s — network slow or github.com unreachable; auth status unknown"
+  elif printf '%s\n' "$_ssh_err" | grep -q 'Server accepts key'; then
+    record "github-ssh-auth" "PASS" "GitHub accepts the key; signing needs the PIN and a touch, so confirm with: ssh -T git@github.com"
+  elif printf '%s\n' "$_ssh_err" | grep -q 'Offering public key'; then
+    record "github-ssh-auth" "WARN" "GitHub rejected every offered key: gh auth refresh -h github.com -s admin:public_key, then gh ssh-key add ~/.ssh/id_ed25519_sk.pub (and each id_ed25519_sk_backup*.pub)"
   else
     record "github-ssh-auth" "WARN" "ssh auth unconfirmed (exit $_ssh_ret)"
   fi
 fi
-unset _ssh_ret
+unset _ssh_ret _ssh_err
 
 # Active non-console SSH session check (PAM handle constraint)
 # pam_handle_t is allocated at pam_start() and held for the session lifetime. Any SSH session
@@ -392,7 +397,7 @@ if printf '%s\n' "$_ssh_add_out" | grep -q '^sk-ssh-ed25519@openssh.com '; then 
 elif [[ "$_ssh_add_rc" -eq 2 ]]; then
   record "ssh-agent-key" "WARN" "ssh-agent socket unreachable (SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-<unset>} — log out and back in)"
 elif [[ "$_ssh_add_rc" -eq 1 ]]; then
-  record "ssh-agent-key" "WARN" "no keys loaded in ssh-agent"
+  record "ssh-agent-key" "WARN" "no keys loaded in ssh-agent (normal after login: AddKeysToAgent loads the key on its first use)"
 else record "ssh-agent-key" "WARN" "key loaded but not sk-ssh-ed25519 type"; fi
 
 # LUKS discard protection (Linux only — mitigates SSD wear-pattern fingerprinting attacks)
@@ -689,7 +694,7 @@ else
   if grep -qE '^[[:space:]]*(([^[:space:]"#]+|"([^"\\]|\\.)*")+[[:space:]]+)?(ssh-ed25519|sk-ssh-ed25519@openssh\.com)[[:space:]]+[^[:space:]]' "$_ak"; then
     record "authorized-keys-ed25519" "PASS"
   else
-    record "authorized-keys-ed25519" "WARN" "no ed25519/FIDO2 key in $_ak: hardened sshd accepts only those, so remote login would stop (RSA is rejected)"
+    record "authorized-keys-ed25519" "WARN" "no ed25519/FIDO2 key in $_ak: hardened sshd accepts only those, so remote login would stop (RSA is rejected); make apply CHUNK=ssh_authorized_keys writes the vault keys"
   fi
   check_perms "authorized-keys-perms" "$_ak" "600"
 fi
