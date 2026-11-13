@@ -9,6 +9,8 @@
 - Use feature branches by default and commit logical changes as you go with
   `--signoff` (`-s`). Follow explicit repository workflows and user authorization
   for publishing; a printed push/deploy command is not permission to execute it.
+- When other agent sessions share a repository, push only to your own branch and PR,
+  warn them before a force-push, and force-push only with `--force-with-lease`.
 - Preserve existing local work. Keep credentials, private infrastructure details,
   conversation history and personal attribution out of public commits and PR prose.
 - Capture durable machine changes in the laptop-setup automation. Locate its
