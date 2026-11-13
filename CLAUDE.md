@@ -99,6 +99,7 @@ make check                  # full sudo dry run; runs preflight first
 make preflight              # prerequisites and CSB detection; run after bootstrap
 make backup | backup-dry-run  # back up dotfiles before re-provisioning
 make bootstrap | hooks | bootstrap-hooks  # deps and collections | git hooks | checksum-pinned gitleaks
+make collections            # verify and reinstall vendored collections, no sudo (after pulling a collections-dist bump)
 make vendor-collections     # re-vendor into collections-dist/ (SECURITY.md Collections Supply Chain)
 make container | container-rebuild  # distrobox/toolbox dev container
 make usb-add                # allow blocked USB devices, save rules to config.yml (then make chunk-sys_usbguard)
@@ -182,9 +183,9 @@ runs `git_repos` for one `repo_category`. `make help` lists everything; scenario
   `make syntax-check`, `make test-scripts` and `make check-vars-sync`. `LAPTOP_SETUP_TEST_TIMEOUT=180 make test-scripts` raises the
   Ansible test deadlines on a busy host.
 - Gates in a second worktree (one per session sharing a machine): keep it on disk, not tmpfs, since it gets its own `.venv`
-  and `node_modules`. Copy `scripts/vault-pass-ci.sh` to `scripts/vault-pass.sh` (a fixed dummy) and the main checkout's
-  `collections` (`cp -a`; verification rejects a symlink), then `make npm`; the first gate run builds the
-  worktree's own `.venv` (a symlinked one would let pip install into the main checkout's).
+  and `node_modules`. Copy `scripts/vault-pass-ci.sh` to `scripts/vault-pass.sh` (a fixed dummy), then run `make npm` and
+  `make collections`, which also builds the worktree's own `.venv`. Never symlink `.venv` or `collections`: pip would
+  install into the main checkout's venv, and verification rejects a symlinked `collections`.
 - Molecule scenarios (Podman, no libvirt): fedora, rocky, debian, container, container-offline, container-offline-distrobox,
   distrobox-role, packages-binaries, ssti-guard; macos needs a macOS runner; vm needs `make bootstrap-test`. CI runs lint plus these on
   every PR and skips molecule for doc-only PRs.

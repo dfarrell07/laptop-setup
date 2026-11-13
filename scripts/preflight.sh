@@ -147,7 +147,7 @@ done
 if [[ ${#missing_cols[@]} -eq 0 ]]; then
   record "ansible_collections" "pass" "all required collections installed"
 else
-  record "ansible_collections" "fail" "missing: ${missing_cols[*]} — run: make bootstrap"
+  record "ansible_collections" "fail" "missing: ${missing_cols[*]} — run: make collections (fresh machine: make bootstrap)"
 fi
 
 # --- YubiKey presence ---
