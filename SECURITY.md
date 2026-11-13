@@ -24,8 +24,9 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   `system_dnssec_mode: yes` for strict enforcement (breaks captive portals)
 - **Git security** — `core.fsmonitor=false`, `safe.bareRepository=explicit`, `transfer.fsckObjects=true`, `protocol.file.allow=user`,
   SSH commit signing, gitleaks pre-commit, `core.hooksPath` guard (CI and hooks)
-- **Claude Code isolation** — instance separation, sandbox config, deny lists for credential paths and other instances' data,
-  settings self-modify protection, API endpoint guard, telemetry controls, `enableAllProjectMcpServers=false`, auditd monitoring
+- **Claude Code isolation** — instance separation, sandbox config (Bash sandbox off unless `claude_sandbox_enabled`), deny lists
+  for credential paths and other instances' data, settings self-modify protection, API endpoint guard, telemetry controls,
+  `enableAllProjectMcpServers=false`, auditd monitoring
 - **Supply chain** — `.npmrc ignore-scripts=true`, vendored and verified Ansible collections, SHA256-verified
   binary downloads, oh-my-zsh pinned to a commit, Go module checksum verification (see "Go Module Supply Chain")
 - **CI supply chain** — actionlint, zizmor and gitleaks run as SHA256-verified binary downloads (no third-party node actions); all GitHub

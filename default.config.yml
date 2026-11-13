@@ -422,6 +422,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #       curl -fsSL https://claude.ai/install.sh -o /tmp/claude-install.sh && sha256sum /tmp/claude-install.sh
 #     Update it only when the installer script changes (get_url fails with a checksum mismatch);
 #     a Claude release or pin bump alone does not change it.
+#   claude_sandbox_enabled: false      (roles/claude/defaults) — Claude Code Bash sandbox (bubblewrap); off because on Fedora it left
+#     commands with no writable directory. Deny rules for the Read/Edit tools apply either way.
 #   claude_queue_enabled: false        (roles/claude/defaults) — enable Claude queue poller
 #     (claude-queue-poller.sh via a systemd user timer; launchd on macOS)
 #   claude_queue_repo: ""              (roles/claude/defaults) — REQUIRED when claude_queue_enabled: true;

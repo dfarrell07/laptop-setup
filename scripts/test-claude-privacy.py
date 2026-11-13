@@ -91,7 +91,7 @@ class ClaudePrivacyTests(unittest.TestCase):
                 sandbox = json.loads(out.read_text())['sandbox']
                 self.assertIs(sandbox['enableWeakerNestedSandbox'], expected, (in_container, tier))
                 self.assertEqual({k: v for k, v in sandbox.items() if k != 'enableWeakerNestedSandbox'},
-                                 {'enabled': True, 'allowUnsandboxedCommands': False, 'failIfUnavailable': True})
+                                 {'enabled': False, 'allowUnsandboxedCommands': False, 'failIfUnavailable': True})
 
 
 if __name__ == '__main__':

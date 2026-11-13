@@ -229,7 +229,7 @@
     force: false
   loop: "{{ _claude_instances }}"
 
-# The merged policy enables the sandbox with failIfUnavailable: Claude Code refuses to start
+# With claude_sandbox_enabled the merged policy sets failIfUnavailable: Claude Code refuses to start
 # without bubblewrap and socat on Linux (macOS uses the built-in sandbox), so install them here
 # rather than relying on the work-profile package list.
 - name: Install Claude Code sandbox dependencies (Linux)
@@ -239,6 +239,7 @@
   become: true
   tags: [become]
   when:
+    - claude_sandbox_enabled | bool
     - is_linux
     - not (system_is_container)
 
