@@ -288,10 +288,12 @@
       when: not _pf_is_molecule
       tags: [always]
 
+    # The podman connection runs raw commands without a shell (shlex.split, then podman exec), so
+    # the || fallback needs an explicit sh -c.
     - name: Bootstrap Python inside container
-      ansible.builtin.raw: |
-        sudo dnf install -y python3 python3-libdnf5 2>/dev/null || \
-        sudo dnf install -y python3 python3-dnf 2>/dev/null || true
+      ansible.builtin.raw: >-
+        sh -c 'sudo dnf install -y python3 python3-libdnf5 2>/dev/null
+        || sudo dnf install -y python3 python3-dnf 2>/dev/null || true'
       changed_when: false
       tags: [always]
 
