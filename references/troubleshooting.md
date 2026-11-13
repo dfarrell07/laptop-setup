@@ -139,7 +139,11 @@ skipped on CSB hosts. Diagnose with `resolvectl status` and `resolvectl query ex
 - **Test containers get `Permission denied` on a bind mount (ory/dockertest, FRR):** SELinux denies unlabeled binds; the project needs
   `:z` on the mount. Do not turn labelling off globally.
 - **kind multi-hop routing fails (frr-k8s e2e BGP sessions stuck in Connect):** containers inherit `net.ipv4.ip_forward` from the host;
-  `make apply CHUNK=sys_sysctl` sets it.
+  `make apply CHUNK=sys_sysctl` sets it. With `br_netfilter` loaded (for kind and OVN-K), every new network namespace starts with
+  `bridge-nf-call-iptables=1`, so bridged traffic in rootless Podman's namespace hits netavark's FORWARD rules, which accept only a
+  network's own subnet; a container routing between two Podman networks is dropped (Docker accepts same-bridge traffic). After the
+  kind cluster is up, before the e2e run: `podman unshare --rootless-netns sysctl -w net.bridge.bridge-nf-call-iptables=0
+  net.bridge.bridge-nf-call-ip6tables=0` (lasts until the last Podman network container stops).
 - **`ovs-vsctl: cannot connect to ovsdb-server`:** the system role masks openvswitch and OVN units on the work profile. Temporary:
 
   ```bash
