@@ -134,6 +134,12 @@ skipped on CSB hosts. Diagnose with `resolvectl status` and `resolvectl query ex
   `make` runs `sh`, not zsh, so `.zshrc` exports are not seen. Set `containers_environment_d_enabled: true` (default false), run
   `make containers`, log out and in. It writes `~/.config/environment.d/containers.conf` (`DOCKER_HOST`,
   `KIND_EXPERIMENTAL_PROVIDER=podman`). Check `ls "$XDG_RUNTIME_DIR/podman/podman.sock"`.
+- **Image build fails with `Permission denied` after `USER <non-root>`:** the shell `umask 077` makes checkouts `0600`/`0700`, and
+  `COPY` keeps those modes. The project should `chmod -R a+rX` the copied tree; until then clone that repo with `umask 022`.
+- **Test containers get `Permission denied` on a bind mount (ory/dockertest, FRR):** SELinux denies unlabeled binds; the project needs
+  `:z` on the mount. Do not turn labelling off globally.
+- **kind multi-hop routing fails (frr-k8s e2e BGP sessions stuck in Connect):** containers inherit `net.ipv4.ip_forward` from the host;
+  `make apply CHUNK=sys_sysctl` sets it.
 - **`ovs-vsctl: cannot connect to ovsdb-server`:** the system role masks openvswitch and OVN units on the work profile. Temporary:
 
   ```bash
