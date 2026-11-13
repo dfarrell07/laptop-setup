@@ -3,6 +3,8 @@
 Prepare on the source laptop, provision from the destination at its local console, and keep the source until the
 acceptance checks pass. Skip AI transcript and session history; restore AI tooling from the tracked baseline
 (section 4). Provisioning itself is chunked: see [README.md](../README.md) and [rollout-plan.md](rollout-plan.md).
+When agent sessions on both laptops help, follow [multi-machine.md](multi-machine.md): the old laptop's session
+audits it for gaps the automation does not cover yet.
 
 ## 1. Preserve source state
 

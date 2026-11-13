@@ -5,7 +5,7 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS (Debia
 **Agents do not run provisioning** (`make all`, `check`, `update`, `system`, `chunk-*`, any sudo target); the owner does, at the console.
 Read [docs/design-principles.md](docs/design-principles.md) before changing roles, Make targets or hardening. Rollout design:
 [docs/rollout-plan.md](docs/rollout-plan.md); undo steps: [docs/rollout-recovery.md](docs/rollout-recovery.md). The remote is public: host
-facts go in the gitignored `CLAUDE.local.md`.
+facts go in the gitignored `CLAUDE.local.md`. Sessions on several machines at once: [docs/multi-machine.md](docs/multi-machine.md).
 
 ## Quick Reference
 
@@ -181,6 +181,10 @@ runs `git_repos` for one `repo_category`. `make help` lists everything; scenario
 - Before committing run the focused `scripts/test-*.py` for the change (`.venv/bin/python3 scripts/test-X.py`), then `make lint`,
   `make syntax-check`, `make test-scripts` and `make check-vars-sync`. `LAPTOP_SETUP_TEST_TIMEOUT=180 make test-scripts` raises the
   Ansible test deadlines on a busy host.
+- Gates in a second worktree (one per session sharing a machine): keep it on disk, not tmpfs, since it gets its own `.venv`
+  and `node_modules`. Copy `scripts/vault-pass-ci.sh` to `scripts/vault-pass.sh` (a fixed dummy) and the main checkout's
+  `collections` (`cp -a`; verification rejects a symlink), then `make npm`; the first gate run builds the
+  worktree's own `.venv` (a symlinked one would let pip install into the main checkout's).
 - Molecule scenarios (Podman, no libvirt): fedora, rocky, debian, container, container-offline, container-offline-distrobox,
   distrobox-role, packages-binaries, ssti-guard; macos needs a macOS runner; vm needs `make bootstrap-test`. CI runs lint plus these on
   every PR and skips molecule for doc-only PRs.
