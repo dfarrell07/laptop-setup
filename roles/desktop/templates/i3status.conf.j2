@@ -10,9 +10,11 @@
 general {
     colors = true
     interval = 5
+    output_format = "i3bar"  # explicit: under the VPN wrapper the parent is bash, not the bar
 }
 
 order += "cpu_usage"
+order += "load"
 {% if desktop_i3status_cpu_temp_path %}
 order += "cpu_temperature 0"
 {% endif %}
@@ -26,6 +28,9 @@ order += "battery {{ desktop_i3status_battery_num | string | regex_replace('[^0-
 {% endif %}
 order += "volume master"
 order += "time"
+{% for z in desktop_i3status_timezones %}
+order += "tztime team{{ loop.index }}"
+{% endfor %}
 {% if _desktop_has_wired %}
 order += "ethernet _first_"
 {% endif %}
@@ -41,27 +46,32 @@ cpu_usage {
 # Override desktop_i3status_cpu_temp_path in config.yml for different PCI topologies.
 # Example: /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon8/temp1_input (ThinkPad P16v Gen 1 AMD k10temp)
 cpu_temperature 0 {
-    format = "TEMP %degrees°C"
+    format = "%degrees°C"
     path = "{{ desktop_i3status_cpu_temp_path | regex_replace('[^/a-zA-Z0-9._:-]', '') }}"
     max_threshold = 90
 }
 {% endif %}
 
+load {
+    format = "LOAD %1min %5min %15min"
+    max_threshold = "{{ ansible_facts['processor_vcpus'] | default(4) | int }}"  # red above one task per CPU
+}
+
 memory {
-    format = "MEM %used / %total"
+    format = "RAM %used/%total"
     threshold_degraded = "10%"
-    format_degraded = "MEM LOW (%available free)"
+    format_degraded = "RAM LOW %available free"
 }
 
 disk "/" {
-    format = "DISK %avail free"
+    format = "DISK %avail"
     prefix_type = si
     low_threshold = 10
 }
 
 {% if _desktop_separate_home %}
 disk "/home" {
-    format = "HOME %avail free"
+    format = "HOME %avail"
     low_threshold = 20
     prefix_type = si
 }
@@ -69,11 +79,12 @@ disk "/home" {
 
 {% if desktop_i3status_battery_num != '' %}
 battery {{ desktop_i3status_battery_num | string | regex_replace('[^0-9]', '') }} {
-    format = "BAT %status %percentage %remaining"
+    format = "BAT %status%percentage %remaining"
+    integer_battery_capacity = true
     last_full_capacity = true
     status_chr = "⚡"
-    status_bat = "🔋"
-    status_full = "✓"
+    status_bat = ""
+    status_full = ""
 }
 {% endif %}
 
@@ -89,6 +100,13 @@ time {
     format = "%a %d %b %H:%M"
 }
 
+{% for z in desktop_i3status_timezones %}
+tztime team{{ loop.index }} {
+    format = "{{ z.label | regex_replace('[^A-Za-z0-9]', '') }} %a %H:%M"
+    timezone = "{{ z.timezone | regex_replace('[^A-Za-z0-9/_+-]', '') }}"
+}
+
+{% endfor %}
 {% if _desktop_has_wired %}
 ethernet _first_ {
     format_up = "ETH %ip"

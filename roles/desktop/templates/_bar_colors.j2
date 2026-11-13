@@ -1,5 +1,9 @@
 bar {
+{% if desktop_i3status_vpn | bool %}
+    status_command {{ ansible_facts['user_dir'] }}/.config/i3status/vpn-status
+{% else %}
     status_command i3status --config {{ ansible_facts['user_dir'] }}/.config/i3status/config
+{% endif %}
     position top
     colors {
         background {{ desktop_bar_bg | regex_replace('[^#0-9a-fA-F]', '') }}
