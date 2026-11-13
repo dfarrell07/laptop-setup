@@ -163,7 +163,8 @@ else
   fi
 fi
 if [[ "$yk_found" == true ]]; then
-  yk_count=$(lsusb 2>/dev/null | grep -ciE "yubico|1050:" || true)
+  if command -v ykman &>/dev/null; then yk_count=$(ykman list --serials 2>/dev/null | grep -c . || true)
+  else yk_count=$(lsusb 2>/dev/null | grep -ciE "yubico|1050:" || true); fi
   if [[ ${yk_count:-0} -gt 1 ]]; then
     record "yubikey_present" "warn" "${yk_count} YubiKeys inserted: unplug all but one (the touch test and vault-pass.sh need exactly one)"
   else

@@ -775,7 +775,10 @@ for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-per2"; do
   [[ -f "$sec_file" ]] || continue
   label="${d##*/}"
   if ! $_claude_sandbox; then
-    # Off by policy (claude_sandbox_enabled: false); only the MCP policy is checked.
+    # Off by policy (claude_sandbox_enabled: false): the file must say so, or Bash may break where bubblewrap fails.
+    if python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("sandbox",{}).get("enabled") is False else 1)' "$sec_file" 2>/dev/null; then
+      record "sandbox-off($label)" "PASS"
+    else record "sandbox-off($label)" "WARN" "sandbox.enabled is not false in $sec_file — run: make apply CHUNK=agents"; fi
     if python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("enableAllProjectMcpServers") is False else 1)' "$sec_file" 2>/dev/null; then
       record "mcp-disabled($label)" "PASS"
     else record "mcp-disabled($label)" "WARN" "enableAllProjectMcpServers not false"; fi

@@ -72,8 +72,8 @@ and `make apply CHUNK=repos`; until then those hosts and their repos are skipped
 3c. `make check`: sudo `--check --diff` of every play. `make check` and `make all` log to `~/.cache/laptop-setup/logs/`
     (`check-latest.log`, `all-latest.log`; newest 20 kept).
 3d. Recommended over `make all`: roll out in chunks. Optionally set `rollout_enable: [list]` in `config.yml`, then per chunk
-    `make status`, `make plan CHUNK=x`, `make apply CHUNK=x`, `make verify CHUNK=x`. The first run creates `.venv` (needs network); until then
-    only the chunk banner is skipped, and the wrapper validates `rollout_enable` with system python3 and stops if ansible is not
+    `make status`, `make plan CHUNK=x`, `make apply CHUNK=x`, `make verify CHUNK=x`. The first run creates `.venv` (needs network);
+    until then only the chunk banner is skipped, and the wrapper validates `rollout_enable` with system python3 and stops if ansible is not
     importable.
 4. `make all` applies every enabled chunk (asks for sudo). **Run at the local console or in tmux, NOT over SSH**: the system role restarts
    sshd and kills an SSH-hosted run (`tmux new-session -s provision 'make all'`).

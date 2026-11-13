@@ -4,7 +4,7 @@
     {{ key | to_json }}: {{ value | to_json }}{{ "," if not loop.last else "" }}
 {% endfor %}
   },
-  "sandbox": {"enabled": {{ claude_sandbox_enabled | bool | lower }},"allowUnsandboxedCommands": false, "failIfUnavailable": true, "enableWeakerNestedSandbox": {{ claude_nested_sandbox | bool | lower }}},
+  "sandbox": {"enabled": {{ claude_sandbox_enabled | bool | lower }}, "allowUnsandboxedCommands": false, "failIfUnavailable": true, "enableWeakerNestedSandbox": {{ claude_nested_sandbox | bool | lower }}},
   "enableAllProjectMcpServers": {{ claude_enable_all_project_mcp_servers | to_json }},
   "permissions": {
     "deny": [

@@ -302,6 +302,15 @@
       Set a list of trusted GitHub logins, e.g.: claude_queue_allowed_authors: [myuser]
   when: claude_queue_enabled | bool
 
+- name: Assert the queue poller runs with the Bash sandbox
+  ansible.builtin.assert:
+    that:
+      - claude_sandbox_enabled | bool
+    fail_msg: >-
+      claude_queue_enabled runs claude -p unattended on GitHub issue text; set claude_sandbox_enabled: true in config.yml
+      so its Bash commands stay in the sandbox.
+  when: claude_queue_enabled | bool
+
 - name: Assert dotfiles_github_user is set for macOS launchd agent naming
   ansible.builtin.assert:
     that:
