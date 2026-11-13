@@ -111,12 +111,8 @@ claude_deny_sensitive:
   - "~/.npmrc"
   - "**/.env"
   - "**/.git/config"
-  - "//proc/*/environ"
-  - "//proc/*/cmdline"
-  - "//proc/*/mem"
-  - "//proc/*/maps"
-  - "//proc/*/smaps"
-  - "//proc/*/fd/**"
+  # No //proc/*/... rules: the Linux sandbox expands each glob into one bind mount per host process, which fails
+  # and leaves Bash unable to start; sandboxed commands get their own PID namespace and /proc anyway.
   - "~/.password-store/**"
   - "~/.mozilla/**"
   - "~/.config/google-chrome/**"
