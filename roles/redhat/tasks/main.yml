@@ -37,11 +37,9 @@
   when: _rh_cert_result is failed
 
 - name: Check for IT's NetBird VPN client
-  ansible.builtin.command: rpm -q netbird
+  ansible.builtin.stat:
+    path: /usr/bin/netbird
   register: _rh_netbird
-  changed_when: false
-  failed_when: false
-  check_mode: false
   when: install_vpn and csb_detected and not system_is_container
 
 - name: Install VPN packages via dnf
@@ -52,7 +50,7 @@
     - install_vpn
     - csb_detected  # corporate VPN: RHEL CSB or CSB-detected Fedora only
     - not system_is_container
-    - _rh_netbird.rc | default(1) != 0  # IT's NetBird client already provides the VPN
+    - not (_rh_netbird.stat.exists | default(false))  # IT's NetBird client already provides the VPN
   become: true
   tags: [become]
   ignore_errors: true
