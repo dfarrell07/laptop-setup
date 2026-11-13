@@ -289,6 +289,31 @@ class SmokeTests(unittest.TestCase):
             (home / '.ssh/id_ed25519_sk_signing.pub').unlink()
             self.assertEqual(run(), 'dotfile-gitconfig PASS')
 
+    def test_github_ssh_auth_tells_unregistered_key_from_pin_needed(self):
+        """A verify-required FIDO2 key always exits 255 under BatchMode: -v output says whether GitHub knows the key."""
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('_ssh_ret=0\n_timeout_bin=')
+        end = source.index('unset _ssh_ret _ssh_err', start)
+        with tempfile.TemporaryDirectory() as directory:
+            ssh = Path(directory) / 'ssh'
+            for stderr, code, expect in [
+                ('debug1: Offering public key: k ED25519-SK\\ndebug1: Server accepts key: k ED25519-SK\\n', 255, 'PASS'),
+                ('debug1: Offering public key: k ED25519-SK\\ngit@github.com: Permission denied (publickey).\\n', 255, 'WARN'),
+                ('ssh: connect to host github.com port 22: Network is unreachable\\n', 255, 'WARN'),
+                ('', 1, 'PASS'),
+            ]:
+                with self.subTest(stderr=stderr, code=code):
+                    ssh.write_text('#!/bin/sh\necho stdout-noise\nprintf "%s" "' + stderr + '" >&2\nexit ' + str(code) + '\n')
+                    ssh.chmod(0o755)
+                    result = subprocess.run(['bash', '-u', '-c',
+                        'record() { printf "%s %s %s\\n" "$1" "$2" "$3"; }; ONLY=;\n' + source[start:end]],
+                        env=dict(os.environ, PATH=directory + ':' + os.environ['PATH']),
+                        capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertTrue(result.stdout.startswith('github-ssh-auth ' + expect), result.stdout)
+                    if 'Permission denied' in stderr:
+                        self.assertIn('gh ssh-key add', result.stdout)
+
     def test_scripts_run_on_macos_bash_3(self):
         """macOS /bin/bash is 3.2: no ${var,,}/${var^^} case conversion, declare -A or mapfile."""
         import re
