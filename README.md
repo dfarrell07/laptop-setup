@@ -71,6 +71,7 @@ variables and feature toggles. Secrets live in the Ansible vault (`group_vars/al
 | [references/troubleshooting.md](references/troubleshooting.md) | Common failures by symptom (chunk errors, SSH, DNS, PAM, containers) |
 | [docs/migration-checklist.md](docs/migration-checklist.md) | Moving from an old laptop |
 | [docs/multi-machine.md](docs/multi-machine.md) | Agent sessions on several machines working on this repo together |
+| [docs/agent-config.md](docs/agent-config.md) | Claude and Codex configuration: findings and proposals |
 | [SECURITY.md](SECURITY.md) | Threat model, vault, hooks, supply chain, hardening scope |
 | [AGENTS.md](AGENTS.md) | Rules for AI agents working in this repo |
 

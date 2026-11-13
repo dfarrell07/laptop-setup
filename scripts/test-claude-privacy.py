@@ -21,7 +21,7 @@ class ClaudePrivacyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
             default = home / '.claude'
-            personal = home / '.claude-personal'
+            personal = home / '.claude-per2'
             nested = default / 'nested'
             nested.mkdir(parents=True)
             personal.mkdir()

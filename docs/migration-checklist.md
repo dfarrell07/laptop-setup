@@ -22,7 +22,8 @@ audits it for gaps the automation does not cover yet.
 4. AI coverage is selected config and credentials, local skills, Claude plans and project memory in `.claude`,
    `.claude-work`, `.claude-personal` and `.claude-per2`, selected Codex config in `.codex` and `.codex-personal`,
    and Antigravity config and file-stored logins in `.gemini` and `.gemini-per2`. Claude plugin registrations are captured for
-   `.claude` and `.claude-per2` only, and symlinked skills are skipped. Do not use the optional `--ai-history`
+   `.claude` and `.claude-per2` only, and symlinked skills are skipped. `.claude-personal` is retired: move anything
+   wanted from it into `.claude-per2` and do not restore it as a home. Do not use the optional `--ai-history`
    snapshot; keep project facts in their owning repositories. For GnuPG, make a consistent export: a live keybox copy
    is not a verified snapshot.
 5. For each important Git repository, run `git bundle create <file> --all` then `git bundle verify <file>`.
@@ -102,10 +103,14 @@ the `gcloud-cli` cask; on DNF hosts set `repo_google_cloud_sdk: true` (any `csb_
 repository, RHEL CSB or hybrid Fedora CSB); other Linux hosts use the
 [vendor install](https://docs.cloud.google.com/sdk/docs/install-sdk). Authentication and private project settings stay outside Git.
 
-The launchers keep their old bypass arguments: Claude `--dangerously-skip-permissions --plugin-dir .`, Codex
+The launchers keep their old bypass arguments: Claude `--dangerously-skip-permissions`, Codex
 `--ask-for-approval=never --sandbox=danger-full-access`, gper and gper2
 `--mode=accept-edits --dangerously-skip-permissions`. Do not treat the managed sandbox and deny config as an
-enforcement guarantee while they are in place. To drop them:
+enforcement guarantee while they are in place. The old `--plugin-dir .` is gone: a session started in any other
+directory no longer loads it as a plugin (skills, hooks, MCP servers, `bin/` on PATH). Inside a repository listed
+in `dotfiles_claude_plugin_dev_dirs`, or a worktree of one, the launchers pass `--plugin-dir <its top level>`;
+the default lists only `claude-skills` under `git_repos_base_dir`, so add other plugin checkouts you develop
+(absolute paths; a checkout left at an old location does not match). To drop the bypass arguments:
 
 ```yaml
 dotfiles_claude_launcher_args: []
@@ -113,12 +118,16 @@ dotfiles_codex_launcher_args: []
 dotfiles_gemini_launcher_args: []
 ```
 
-Codex config and `AGENTS.md` are seeded once, and Claude preferences (fullscreen UI, mobile notifications,
-repository marketplace declarations) are seeded once; existing user files are kept and not merged with new defaults. Managed Claude
-`settings.json` is reapplied every run, so put policy changes in Ansible config. Override
-`claude_personal_plugin_settings` and `claude_work_plugin_settings` to change the seed. Declarations do not vouch
-for a downloaded plugin or its hooks: review and install them in the client after authenticating. Old cached
-plugin registrations are references, not portable installs.
+Codex config and `AGENTS.md` are seeded once, and Claude preferences (fullscreen UI, mobile notifications) are seeded once;
+existing user files are kept and not merged with new defaults. Managed Claude `settings.json` is reapplied every run, so put
+policy changes in Ansible config. Repository marketplace and plugin declarations
+(`claude_personal_plugin_settings`, plus `claude_work_plugin_settings` in the work home) are added when missing
+and never change an entry already there. To opt out, disable the plugin (`claude plugin disable` writes
+`"name@marketplace": false`); `claude plugin uninstall` and `claude plugin marketplace remove` delete the entry,
+so the next `make claude` adds it back. To drop a declaration for good, override those variables in `config.yml`.
+Declarations do not vouch for a downloaded plugin or its hooks: review and install them in each home after authenticating
+(`CLAUDE_CONFIG_DIR=<home> claude plugin install <name@marketplace>`), and run `claude plugin update` there after
+a release. Old cached plugin registrations are references, not portable installs.
 
 The shared [working agreements](../roles/common/files/agent-baseline.md) are copied into Codex homes and rendered
 into the managed Claude instructions; keep project facts in project instructions, not machine-specific memory

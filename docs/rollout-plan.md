@@ -44,4 +44,4 @@ Suggested `config.yml` for such a machine (not the `default.config.yml` defaults
 `install_virtualization: false`; `install_vpn: false`; `system_tmout: 0`; `system_aide_enabled: false`;
 `system_enable_ip_forward: false`; launcher args without the bypass flags (the defaults in
 `roles/dotfiles/defaults/main.yml` include them, and the `.zshrc` template adds none; each list replaces the whole
-default); `claude_work_plugin_settings: {}` (no work-home marketplace seeds; seed-only, an existing `settings.json` is untouched).
+default); `claude_work_plugin_settings: {}` (no work-home marketplace declarations; existing entries in `settings.json` are kept).

@@ -42,10 +42,10 @@ dotfiles_ssh_agent_label: "com.{% if dotfiles_github_user != 'CHANGE_ME' %}{{ do
 dotfiles_claude_queue_repo: "{{ dotfiles_github_user }}/claude-tasks"
 
 
-# Work org directory names under ~/src/ — used by gitconfig.j2 includeIf blocks and
-# the ccp() guard in zshrc.j2 to route work repos to the work git identity / block personal Claude.
+# Work org directory names under ~/src/ — used by gitconfig.j2 includeIf blocks to route work repos
+# to the work git identity.
 # Override in config.yml to add or remove work orgs without editing templates.
-dotfiles_work_src_dirs: []  # set in config.yml: e.g. [my-org, my-other-org]; without this, ccp() has no work-directory guard
+dotfiles_work_src_dirs: []  # set in config.yml: e.g. [my-org, my-other-org]
 
 real_user_id: "{{ lookup('env', 'USER') }}"  # fallback; authoritative in site.yml play vars
 dotfiles_ssh_hardware_key_basename: id_ed25519_sk  # fallback; authoritative in group_vars/all/vars.yml
@@ -75,14 +75,20 @@ dotfiles_user_email_work: 'CHANGE_ME@work.invalid'  # override in config.yml
 dotfiles_user_email_personal: 'CHANGE_ME@personal.invalid'  # override in config.yml
 
 # Familiar direct launchers from the old laptop; lists are shell-quoted per argument.
-dotfiles_claude_launcher_args: [--dangerously-skip-permissions, --plugin-dir, .]
+dotfiles_claude_launcher_args: [--dangerously-skip-permissions]
+# Plugin repositories under development: when cper, cper2 or cwork starts inside one of them (any
+# subdirectory or linked worktree), the launcher adds --plugin-dir <its top level> so the working copy
+# replaces the installed plugin. Other directories never load as plugins. Work plugin repositories are not
+# listed by default: every session there, including ordinary code work, would load the checked-out branch.
+# Entries are absolute paths (no ~).
+dotfiles_claude_plugin_dev_dirs:
+  - "{{ git_repos_base_dir | default(ansible_facts['user_dir'] ~ '/src') }}/{{ dotfiles_github_user }}/claude-skills"
 dotfiles_codex_launcher_args: [--ask-for-approval=never, --sandbox=danger-full-access]
 dotfiles_gemini_launcher_args: [--mode=accept-edits, --dangerously-skip-permissions]
 dotfiles_claude_max_subagents: 2000
 # Cross-role fallbacks for standalone dotfiles provisioning.
 claude_default_config_dir: "{{ ansible_facts['user_dir'] }}/.claude"
 claude_runtime_config_dir: "{{ ansible_facts['user_dir'] }}/.config/claude"
-claude_personal_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-personal"
 claude_personal2_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-per2"
 claude_personal2_instance_enabled: true
 codex_work_config_dir: "{{ ansible_facts['user_dir'] }}/.codex"

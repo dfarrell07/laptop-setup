@@ -17,10 +17,8 @@ claude_queue_poller_path: "{{ ansible_facts['user_dir'] }}/.local/bin/claude-que
 
 claude_default_config_dir: "{{ ansible_facts['user_dir'] }}/.claude"
 claude_work_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-work"
-claude_personal_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-personal"
 claude_personal2_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-per2"
 claude_personal2_instance_enabled: true
-claude_personal_instance_enabled: true  # set false in config.yml for work-only machines
 
 claude_telemetry_env:
   DISABLE_ERROR_REPORTING: "1"
@@ -42,8 +40,9 @@ claude_user_preferences:
   agentPushNotifEnabled: true  # proactive mobile notifications (Remote Control / claude.ai app)
   inputNeededNotifEnabled: true  # mobile push when a permission prompt or question is waiting
 
-# Seed declarations from repositories, not cached marketplace paths or installed state.
-# Existing settings.json remains user-owned; work plugins stay in the isolated work home.
+# Plugin declarations from repositories, not cached marketplace paths or installed state. Every run adds
+# the ones missing from settings.json and never changes a value already there, so a disabled plugin
+# ("...": false) stays disabled; work plugins go only to the isolated work home.
 claude_personal_plugin_settings:
   extraKnownMarketplaces:
     claude-skills:

@@ -131,6 +131,25 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(run(self.path, POLICY, '--remove-legacy', str(legacy)).returncode, 0)
         self.assertTrue(legacy.exists())
 
+    def test_defaults_fill_only_missing_keys(self):
+        defaults = {'extraKnownMarketplaces': {'m': {'source': {'source': 'github', 'repo': 'o/m'}}},
+                    'enabledPlugins': {'p@m': True, 'q@m': True}}
+        self.path.write_text(json.dumps({'enabledPlugins': {'p@m': False},
+                                         'extraKnownMarketplaces': {'m': {'source': {'source': 'directory',
+                                                                                      'path': '/src/m'}}}}))
+        self.path.chmod(0o600)
+        result = run(self.path, POLICY, '--defaults', json.dumps(defaults))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = self.load()
+        self.assertEqual(data['enabledPlugins'], {'p@m': False, 'q@m': True})
+        self.assertEqual(data['extraKnownMarketplaces'], {'m': {'source': {'source': 'directory', 'path': '/src/m'}}})
+        self.assertEqual(run(self.path, POLICY, '--defaults', json.dumps(defaults)).stdout.strip(), 'unchanged')
+
+    def test_defaults_must_be_an_object(self):
+        self.assertNotEqual(run(self.path, POLICY, '--defaults', '[]').returncode, 0)
+        self.assertNotEqual(run(self.path, POLICY, '--defaults').returncode, 0)
+        self.assertFalse(self.path.exists())
+
 
 if __name__ == '__main__':
     unittest.main()
