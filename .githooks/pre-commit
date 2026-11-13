@@ -145,12 +145,13 @@ else
   failed=1
 fi
 
-# YAML lint staged files
+# YAML lint staged files. The pinned .venv copy (what make lint runs) comes first when it runs: a PATH yamllint can
+# be another version or a stale pip/pipx install whose interpreter is gone.
 YAMLLINT=""
-if command -v yamllint >/dev/null 2>&1; then
-  YAMLLINT=yamllint
-elif [ -x ".venv/bin/yamllint" ]; then
+if .venv/bin/yamllint --version >/dev/null 2>&1; then
   YAMLLINT=".venv/bin/yamllint"
+elif command -v yamllint >/dev/null 2>&1; then
+  YAMLLINT=yamllint
 fi
 if [ -n "$YAMLLINT" ]; then
   while IFS= read -r -d '' f; do
