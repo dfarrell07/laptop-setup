@@ -24,6 +24,7 @@
         system_tmout: 300  # system-container-overrides.yml sets this in converge; enables TMOUT assertions
         real_user_id: molecule  # ansible_user_id=root in container; subuid/subgid provisioned for molecule
         claude_queue_enabled: true  # re-state so verify-claude-queue.yml assertions execute (service/timer skipped — test-vm only)
+        claude_sandbox_enabled: true  # matches shared/ci-default-vars.yml
 
   tasks:
     # --- Shared assertions (all platforms) ---
