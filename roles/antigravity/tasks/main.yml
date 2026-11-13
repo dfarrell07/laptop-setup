@@ -38,29 +38,41 @@
       ansible.builtin.uri:
         url: "{{ antigravity_manifest_base }}/{{ _agy_platform }}.json"
         return_content: true
-      register: _agy_manifest
+      register: _agy_manifest_raw
+
+    - name: Parse the manifest regardless of the served content type
+      ansible.builtin.set_fact:
+        _agy_manifest: "{{ _agy_manifest_raw.content | from_json }}"
 
     - name: SECURITY assert the manifest names a vendor tarball and a SHA-512
       ansible.builtin.assert:
         that:
-          - _agy_manifest.json.url is match(_agy_url_re)
-          - _agy_manifest.json.sha512 is match('^[a-f0-9]{128}$')
-          - _agy_manifest.json.version | string is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+          - _agy_manifest.url is match(_agy_url_re)
+          - _agy_manifest.sha512 is match('^[a-f0-9]{128}$')
+          - _agy_manifest.version | string is match('^[0-9]+\.[0-9]+\.[0-9]+$')
         fail_msg: The Antigravity manifest is malformed or points outside the vendor's storage bucket.
       vars:
         _agy_url_re: '^https://storage\.googleapis\.com/antigravity-public/antigravity-cli/[A-Za-z0-9._/-]+\.tar\.gz$'
+
+    # The tarball and the extracted binary need about 400 MB: stage on disk, not in a tmpfs /tmp with a per-user quota.
+    - name: Ensure the user cache directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.cache"
+        state: directory
+        mode: "0700"
 
     - name: Create a private staging directory
       ansible.builtin.tempfile:
         state: directory
         suffix: agy
+        path: "{{ ansible_facts['user_dir'] }}/.cache"
       register: _agy_staging
 
     - name: Download the Antigravity tarball, verified against the manifest SHA-512
       ansible.builtin.get_url:
-        url: "{{ _agy_manifest.json.url }}"
+        url: "{{ _agy_manifest.url }}"
         dest: "{{ _agy_staging.path }}/agy.tar.gz"
-        checksum: "sha512:{{ _agy_manifest.json.sha512 }}"
+        checksum: "sha512:{{ _agy_manifest.sha512 }}"
         mode: "0600"
         timeout: 300
 
@@ -77,7 +89,7 @@
         state: directory
         mode: "0755"
 
-    - name: Install agy {{ _agy_manifest.json.version }}
+    - name: Install agy {{ _agy_manifest.version }}
       ansible.builtin.copy:
         src: "{{ _agy_staging.path }}/antigravity"
         dest: "{{ antigravity_bin_dir }}/agy"
