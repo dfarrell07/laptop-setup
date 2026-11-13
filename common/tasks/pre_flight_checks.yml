@@ -442,7 +442,7 @@
               Run 'timedatectl list-timezones' to find your zone, then add
               system_timezone: <zone> to config.yml.
           when:
-            - ansible_facts['system'] != 'Darwin'  # the system role (timedatectl) never runs on macOS
+            - ansible_facts['system'] | default('') != 'Darwin'  # no timedatectl on macOS; the container play has no facts
 
         - name: Assert USBGuard whitelist/extra_rules in play namespace are well-formed
             (USBGuard injection guard)
