@@ -1,9 +1,18 @@
 # {{ ansible_managed }}
 {% set _mounts = ansible_facts['mounts'] | default([]) %}
-{% set _root_dev = _mounts | selectattr('mount', 'equalto', '/') | map(attribute='device') | first | default('') %}
-{% set _home_dev = _mounts | selectattr('mount', 'equalto', '/home') | map(attribute='device') | first | default('') %}
-{# /home gets its own block only on a separate filesystem; btrfs subvolumes share the device and free space #}
-{% set _desktop_separate_home = _home_dev != '' and _home_dev != _root_dev %}
+{# One disk field per filesystem: btrfs subvolumes (/home, ...) share their device and free space with / #}
+{% set _desktop_disks = [] %}
+{% set _seen_devs = [] %}
+{% for m in _mounts | selectattr('device', 'match', '^/dev/') | rejectattr('device', 'match', '^/dev/loop')
+     | rejectattr('fstype', 'in', ['squashfs', 'iso9660', 'udf']) | sort(attribute='mount') %}
+{% if m.device not in _seen_devs %}
+{% set _ = _seen_devs.append(m.device) %}
+{% set _ = _desktop_disks.append(m.mount | regex_replace('[^A-Za-z0-9/._-]', '')) %}
+{% endif %}
+{% endfor %}
+{% if not _desktop_disks %}
+{% set _ = _desktop_disks.append('/') %}
+{% endif %}
 {# Wired field only when a wired NIC (en*) exists; otherwise it is an always-empty slot #}
 {% set _desktop_has_wired = ansible_facts['interfaces'] | default([]) | select('match', '^en') | list | length > 0 %}
 
@@ -19,10 +28,9 @@ order += "load"
 order += "cpu_temperature 0"
 {% endif %}
 order += "memory"
-order += "disk /"
-{% if _desktop_separate_home %}
-order += "disk /home"
-{% endif %}
+{% for d in _desktop_disks %}
+order += "disk {{ d }}"
+{% endfor %}
 {% if desktop_i3status_battery_num != '' %}
 order += "battery {{ desktop_i3status_battery_num | string | regex_replace('[^0-9]', '') }}"
 {% endif %}
@@ -58,24 +66,19 @@ load {
 }
 
 memory {
-    format = "RAM %used/%total"
+    format = "RAM %used/%total"  # the bar wrapper strips the GiB unit
+    unit = "Gi"
     threshold_degraded = "10%"
     format_degraded = "RAM LOW %available free"
 }
 
-disk "/" {
-    format = "DISK %avail"
-    prefix_type = si
+{% for d in _desktop_disks %}
+disk "{{ d }}" {
+    format = "{{ d }} %avail"  # the bar wrapper shortens GiB/MiB to G/M
     low_threshold = 10
 }
 
-{% if _desktop_separate_home %}
-disk "/home" {
-    format = "HOME %avail"
-    low_threshold = 20
-    prefix_type = si
-}
-{% endif %}
+{% endfor %}
 
 {% if desktop_i3status_battery_num != '' %}
 battery {{ desktop_i3status_battery_num | string | regex_replace('[^0-9]', '') }} {
