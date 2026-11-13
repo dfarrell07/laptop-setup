@@ -112,9 +112,9 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   `.config/tmux/tmux.conf` also keep a copy beside them named `<file>.<pid>.<date>@<time>~`. Unmanaged git template hooks and
   `environment.d` files the role moved aside are in `~/.local/state/laptop-setup/quarantine/` (move them back, dropping the
   timestamp suffix). One-way steps: `~/.gitconfig` and `~/.tmux.conf` are moved to `<file>.pre-xdg-migration` (move back if
-  wanted) and a stock `~/.oh-my-zsh` is deleted (re-clone it). The chunk also adds the `cwork`/`cper`/`cper2` launchers to `~/.zshrc`
-  (the managed `~/.bashrc` does not source `~/.config/zsh/local.zsh`, so until `login_shell` makes zsh the shell, run
-  `source ~/.config/zsh/local.zsh` in bash for functions defined there) and switches the SSH agent:
+  wanted) and a stock `~/.oh-my-zsh` is deleted (re-clone it). The chunk also adds the `cwork`/`cper`/`cper2`/`gper2` launchers to
+  `~/.zshrc` (the managed `~/.bashrc` does not source `~/.config/zsh/local.zsh`, so until `login_shell` makes zsh the shell,
+  run `source ~/.config/zsh/local.zsh` in bash for functions defined there) and switches the SSH agent:
   `systemctl --user unmask gcr-ssh-agent.socket gcr-ssh-agent.service`, `systemctl --user disable --now ssh-agent`,
   delete `~/.config/autostart/gnome-keyring-ssh.desktop`, `~/.config/environment.d/ssh-agent.conf` and
   `~/.config/systemd/user/ssh-agent.service`, then log in again so `SSH_AUTH_SOCK` changes back.
