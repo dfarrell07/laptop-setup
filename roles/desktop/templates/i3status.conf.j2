@@ -26,7 +26,6 @@ order += "battery {{ desktop_i3status_battery_num | string | regex_replace('[^0-
 {% endif %}
 order += "volume master"
 order += "time"
-order += "tztime utc"
 {% if _desktop_has_wired %}
 order += "ethernet _first_"
 {% endif %}
@@ -88,11 +87,6 @@ volume master {
 
 time {
     format = "%a %d %b %H:%M"
-}
-
-tztime utc {
-    format = "UTC %H:%M"
-    timezone = "UTC"
 }
 
 {% if _desktop_has_wired %}
