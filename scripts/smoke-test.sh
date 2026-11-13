@@ -237,8 +237,11 @@ else
 fi
 unset _tool_absent _tools
 
+_is_x() { # executable where exec_cmd runs it: inside the container with --container
+  if [[ -n "$CONTAINER" ]]; then exec_cmd test -x "$1"; else [[ -x "$1" ]]; fi
+}
 _test_if_installed() { # guard_path record_name cmd...
-  [[ -x "$1" ]] || return 0
+  _is_x "$1" || return 0
   local _p="$1" _n="$2"; shift 2
   if exec_cmd "$@" &>/dev/null; then record "$_n" "PASS"
   else record "$_n" "FAIL" "$_p present but command failed"; fi
@@ -253,11 +256,11 @@ for _bin in "$HOME"/.local/bin/subctl[0-9]*; do
   _test_if_installed "$_bin" "$(basename "$_bin")" "$_bin" version
 done
 
-if [[ -x /usr/local/bin/oc ]]; then
+if _is_x /usr/local/bin/oc; then
   if exec_cmd oc version --client &>/dev/null; then record "oc" "PASS"
   else record "oc" "FAIL" "oc binary present but 'oc version --client' failed"; fi
   # kubectl (OCP tarball, or dl.k8s.io with packages_kubectl_source: upstream) is installed alongside oc at /usr/local/bin/kubectl
-  if [[ ! -x /usr/local/bin/kubectl ]]; then
+  if ! _is_x /usr/local/bin/kubectl; then
     record "kubectl-ocp" "FAIL" "/usr/local/bin/kubectl absent despite oc present — OCP tarball extraction incomplete"
   elif exec_cmd /usr/local/bin/kubectl version --client &>/dev/null; then
     record "kubectl-ocp" "PASS"
