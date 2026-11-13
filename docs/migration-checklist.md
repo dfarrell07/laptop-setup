@@ -110,8 +110,8 @@ dotfiles_codex_launcher_args: []
 dotfiles_gemini_launcher_args: []
 ```
 
-Codex config and `AGENTS.md` are seeded once, and Claude preferences (fullscreen UI, repository marketplace
-declarations) are seeded once; existing user files are kept and not merged with new defaults. Managed Claude
+Codex config and `AGENTS.md` are seeded once, and Claude preferences (fullscreen UI, mobile notifications,
+repository marketplace declarations) are seeded once; existing user files are kept and not merged with new defaults. Managed Claude
 `settings.json` is reapplied every run, so put policy changes in Ansible config. Override
 `claude_personal_plugin_settings` and `claude_work_plugin_settings` to change the seed. Declarations do not vouch
 for a downloaded plugin or its hooks: review and install them in the client after authenticating. Old cached
