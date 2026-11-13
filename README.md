@@ -29,7 +29,7 @@ Then roll out one chunk at a time, in `make status` order:
 
 ```bash
 make plan CHUNK=ssh_client      # preview: a --check --diff run of that chunk only
-make chunk CHUNK=ssh_client     # apply exactly that chunk
+make apply CHUNK=ssh_client     # apply exactly that chunk
 make verify CHUNK=ssh_client    # run only the smoke checks for that chunk
 ```
 

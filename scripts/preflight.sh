@@ -532,7 +532,7 @@ if [[ "$JSON" == true ]]; then
 else
   echo ""
   if [[ $FAILURES -eq 0 ]]; then
-    printf "${GRN}Ready${NC}: next 'make status', then 'make plan CHUNK=<name>' and 'make chunk CHUNK=<name>' one chunk at a time (CLAUDE.md); 'make all' applies every enabled chunk\n"
+    printf "${GRN}Ready${NC}: next 'make status', then 'make plan CHUNK=<name>' and 'make apply CHUNK=<name>' one chunk at a time (CLAUDE.md); 'make all' applies every enabled chunk\n"
   else
     printf "${RED}%d check(s) failed — resolve before provisioning${NC}\n" "$FAILURES"
   fi

@@ -398,7 +398,7 @@ class MakeInjectionTests(unittest.TestCase):
             return result, marker.exists()  # evaluate before the temporary directory disappears
 
     def test_chunk_variable_is_not_executed(self):
-        for target in ('verify', 'plan', 'chunk'):
+        for target in ('verify', 'plan', 'apply'):
             with self.subTest(target=target):
                 result, created = self.run_make(target, 'CHUNK=PAYLOAD')
                 self.assertNotEqual(result.returncode, 0)
