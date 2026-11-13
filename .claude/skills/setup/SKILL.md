@@ -7,7 +7,7 @@ description: >-
   from role task files and troubleshooting docs, guides interactive auth steps,
   runs smoke tests, and drafts CSB IT ticket text when needed. Safe to re-run
   (idempotent).
-version: 1.1.0
+version: 1.2.0
 argument-hint: "[chunk or role] (e.g., dotfiles, packages, repos, or blank to start from make status)"
 user-invocable: true
 allowed-tools: Bash, Read, Edit, Glob
@@ -26,6 +26,13 @@ If a chunk or role is given, handle only that. Otherwise follow the phases below
 (`make status`, `scripts/preflight.sh --json`, `make verify`, `scripts/smoke-test.sh --user-only`). For anything that applies changes or
 needs sudo (`make plan`, `make chunk-x`, role targets, `make check`), give the owner the exact command to run at the console and read the
 output they paste back. Never use `--start-at-task`, `-e` overrides or `--skip-tags` to get around the chunk wrapper.
+
+## Phase 0: Peers on other machines
+
+Ask the owner whether agent sessions on other machines work on this repository now (also check open PRs and, in Claude Code,
+`ListAgents`). If so, follow `docs/multi-machine.md` as the provisioning session: handshake (§ Confirming identity), agree a split by
+file (§ Ground rules), start the check-in timer (§ Check-ins), and expect each provisioned machine to run its gap audit (§ Auditing a
+provisioned machine for gaps). Until `gh` is logged in, read GitHub anonymously and keep fixes as local commits (§ Roles).
 
 ## Phase 1: Pre-flight
 
@@ -63,6 +70,8 @@ Do not run `make all` in one shot: one chunk per invocation gives a clear pass/f
 4. High-risk chunks (`sys_mounts`, `sys_lockdown`, `sys_auditd`, `sys_usbguard`, `sys_signin`, `ssh_authorized_keys`, `sys_remote_access`):
    only at the local console or in tmux, a second session open, after reading `docs/rollout-recovery.md`. Use `make chunk-x`, which asks
    for typed confirmation; role targets do not. `sys_*` chunks restart sshd or change boot settings: never over SSH.
+   With peers (Phase 0), announce each chunk before the owner applies it, do not rebase between its plan and verify, and send `AWAY`
+   before a reboot, logout or a chunk that restarts the agent (`docs/multi-machine.md` § During provisioning, § Check-ins).
 5. Role targets (`make dotfiles`, `packages`, `ssh`, `repos`, `notes`, `redhat`, `containers`, `desktop`, `claude`, `codex`, `container`)
    suit a whole role once all its chunks are enabled.
 
@@ -111,4 +120,5 @@ review; never submit them.
 ## Phase 7: Summary
 
 Report completed, failed (with reason) and skipped (with reason) chunks, auth status, smoke-test counts, drafted tickets, and the concrete
-next steps for the owner.
+next steps for the owner. With peers, tell them the chunks are applied, collect the gap-audit fixes they moved into the automation (the
+owner re-plans affected chunks after those PRs merge), and send `DONE` with your PRs and heads (`docs/multi-machine.md` § Check-ins).
