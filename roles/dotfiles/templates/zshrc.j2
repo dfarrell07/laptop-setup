@@ -107,7 +107,7 @@ _claude_check_base_url() {
 # Instance guard + tmux launchers:
 claude() {
   if [[ -z "${CLAUDE_CONFIG_DIR:-}" ]]; then
-    echo "ERROR: CLAUDE_CONFIG_DIR not set. Use {% if profile == 'work' %}'cw' (work) or {% endif %}'ccp' (personal)." >&2
+    echo "ERROR: CLAUDE_CONFIG_DIR not set. Use {% if profile == 'work' %}'cwork' (work), {% endif %}'cper'{% if claude_personal2_instance_enabled | bool %} or 'cper2'{% endif %} (personal)." >&2
     return 1
   fi
   _claude_check_base_url || return 1
@@ -124,28 +124,9 @@ cw() {
   local s="work-${dir}"
   tmux new-session -As "$s" "source ${(q)work_env} && claude; zsh"
 }
-{% endif %}
 
-ccp() {
-  command -v tmux &>/dev/null || { echo "ERROR: tmux not found"; return 1; }
-  local phys="$(pwd -P)"
-{% if profile == 'work' and dotfiles_work_src_dirs %}
-  case "$phys" in
-{% for d in dotfiles_work_src_dirs %}
-  */src/{{ d | regex_replace('[^a-zA-Z0-9_-]', '') }}|*/src/{{ d | regex_replace('[^a-zA-Z0-9_-]', '') }}/*)
-    echo "ERROR: Work directory detected. Use 'cw' for work repos." >&2; return 1;;
-{% endfor %}
-  esac
-{% endif %}
-  _claude_check_base_url || return 1
-  local dir="${PWD##*/}"; dir="${dir//[^a-zA-Z0-9_-]/_}"; [[ -z "$dir" ]] && dir="root"
-  local s="personal-${dir}"
-  tmux new-session -As "$s" "unset CLAUDE_CODE_USE_VERTEX ANTHROPIC_VERTEX_PROJECT_ID CLOUD_ML_REGION GOOGLE_APPLICATION_CREDENTIALS GOOGLE_CLOUD_PROJECT; export CLAUDE_CONFIG_DIR={{ claude_personal_config_dir }}; claude; zsh"
-}
-
-cls() { tmux list-sessions 2>/dev/null | grep -E "work-|personal-"; }
-ca() { command -v fzf &>/dev/null || { echo "ca: fzf not installed" >&2; return 1; }; local s; s=$(tmux list-sessions -F '#{session_name}' | grep -E 'work-|personal-' | fzf --height=40% --prompt="Attach: ") && [[ -n "$s" ]] && tmux attach -t "$s"; }
-{% if profile == 'work' %}
+cls() { tmux list-sessions 2>/dev/null | grep -E "^work-"; }
+ca() { command -v fzf &>/dev/null || { echo "ca: fzf not installed" >&2; return 1; }; local s; s=$(tmux list-sessions -F '#{session_name}' | grep -E '^work-' | fzf --height=40% --prompt="Attach: ") && [[ -n "$s" ]] && tmux attach -t "$s"; }
 cwt() {
   local n="${1:?Usage: cwt <worktree-name>}"
   if [[ "$n" =~ [^a-zA-Z0-9_-] ]]; then
@@ -157,10 +138,22 @@ cwt() {
   [[ -f "$work_env" ]] || { echo "ERROR: $work_env missing — run: make claude" >&2; return 1; }
   tmux new-session -As "work-$n" "source ${(q)work_env} && claude --worktree $n; zsh"
 }
-{% endif %}
 cstatus() {
-  for s in $(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -E 'work-|personal-'); do
+  for s in $(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -E '^work-'); do
     echo "=== $s ==="; tmux capture-pane -t "$s" -p | tail -3; echo
+  done
+}
+{% endif %}
+
+# Load the working copy of a listed plugin repository: its own .git, so linked worktrees count too but
+# nested clones and submodules inside it do not.
+_claude_plugin_dev_args() {
+  _claude_dev_args=()
+  local top common dir
+  top=$(command git rev-parse --show-toplevel 2>/dev/null) || return 0
+  common=$(command git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 0
+  for dir in {{ dotfiles_claude_plugin_dev_dirs | map('quote') | join(' ') }}; do
+    [[ -n "$dir" && "${common:A}" == "${dir:A}/.git" ]] && { _claude_dev_args=(--plugin-dir "$top"); return 0; }
   done
 }
 
@@ -173,7 +166,8 @@ _claude_personal() (
   unset CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_FOUNDRY
   export CLAUDE_CONFIG_DIR="$config_dir" CLAUDE_CODE_USE_VERTEX=0
   export CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION={{ dotfiles_claude_max_subagents | int }}
-  claude {{ dotfiles_claude_launcher_args | map('quote') | join(' ') }} "$@"
+  local -a _claude_dev_args; _claude_plugin_dev_args
+  claude {{ dotfiles_claude_launcher_args | map('quote') | join(' ') }} "${_claude_dev_args[@]}" "$@"
 )
 cper() { _claude_personal {{ claude_default_config_dir | quote }} "$@"; }
 {% if claude_personal2_instance_enabled | bool %}
@@ -186,7 +180,8 @@ cwork() (
   source "$work_env" || return 1
   export CLAUDE_CODE_USE_VERTEX=1
   export CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION={{ dotfiles_claude_max_subagents | int }}
-  claude {{ dotfiles_claude_launcher_args | map('quote') | join(' ') }} "$@"
+  local -a _claude_dev_args; _claude_plugin_dev_args
+  claude {{ dotfiles_claude_launcher_args | map('quote') | join(' ') }} "${_claude_dev_args[@]}" "$@"
 )
 {% endif %}
 

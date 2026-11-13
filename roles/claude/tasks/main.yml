@@ -37,7 +37,6 @@
   ansible.builtin.set_fact:
     _claude_instances: >-
       {{ ([claude_default_config_dir]
-          + ([claude_personal_config_dir] if (claude_personal_instance_enabled | bool) else [])
           + ([claude_personal2_config_dir] if (claude_personal2_instance_enabled | bool) else [])
           + ([claude_work_config_dir] if (profile == 'work') else []))
          | unique }}
@@ -221,14 +220,10 @@
 # settings.local.json from the config dir (it reads <cwd>/.claude/settings.local.json),
 # and some sandbox/credential keys are honored only from user/managed/CLI scope.
 # The seed below only creates the file; the merge step applies the policy every run
-# while preserving every user/CLI-written key.
+# while preserving every user/CLI-written key, and adds plugin declarations that are absent.
 - name: Seed Claude user preferences without replacing CLI edits
   ansible.builtin.copy:
-    content: |
-      {{ claude_personal_plugin_settings
-         | combine(claude_work_plugin_settings if item == claude_work_config_dir else {}, recursive=true)
-         | combine(claude_user_preferences, recursive=true)
-         | to_nice_json }}
+    content: "{{ claude_user_preferences | to_nice_json }}\n"
     dest: "{{ item }}/settings.json"
     mode: "0600"
     force: false
@@ -254,7 +249,10 @@
     argv: >-
       {{ [ansible_facts.get('python', {}).get('executable', 'python3'), '-I', '-c',
           lookup('ansible.builtin.file', role_path ~ '/files/merge-claude-settings.py'),
-          item ~ '/settings.json', '--remove-legacy', item ~ '/settings.local.json']
+          item ~ '/settings.json', '--remove-legacy', item ~ '/settings.local.json', '--defaults',
+          claude_personal_plugin_settings
+          | combine(claude_work_plugin_settings if item == claude_work_config_dir else {}, recursive=true)
+          | to_json]
          + (['--check'] if ansible_check_mode else []) }}
     stdin: "{{ lookup('ansible.builtin.template', 'settings-policy.json.j2') }}"
   register: _claude_settings_merge

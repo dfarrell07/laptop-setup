@@ -764,7 +764,7 @@ done
 # Claude Code sandbox enabled (use jq if available, fall back to grep)
 # The security policy is merged into each instance's settings.json (the user settings file
 # Claude Code loads; a settings.local.json in the config dir is never read).
-for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-personal" "$HOME/.claude-per2"; do
+for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-per2"; do
   sec_file="$d/settings.json"
   [[ -f "$sec_file" ]] || continue
   label="${d##*/}"
@@ -789,7 +789,7 @@ for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-personal" "$HOME/.c
 done
 
 # Claude directory permissions
-for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-personal" "$HOME/.claude-per2"; do
+for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-per2"; do
   [[ -d "$d" ]] || continue
   perms=$(stat -c '%a' "$d" 2>/dev/null || stat -f '%Lp' "$d" 2>/dev/null || echo "?")
   if [[ "$perms" == "700" ]]; then record "perms(${d##*/})" "PASS"
@@ -803,13 +803,16 @@ fi
 unset _ctf
 
 # Claude project CLAUDE.md presence
-for _cd in "$HOME/.claude" "$HOME/.claude-personal" "$HOME/.claude-work" "$HOME/.claude-per2"; do
+for _cd in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-per2"; do
   [[ -d "$_cd" ]] || continue
   label="${_cd##*/}"
   if [[ -f "$_cd/CLAUDE.md" ]]; then record "claude-md($label)" 'PASS'
   else record "claude-md($label)" 'FAIL' "CLAUDE.md missing from $_cd — run: make claude"; fi
 done
 unset _cd label
+if [[ -d "$HOME/.claude-personal" ]]; then
+  record "claude-retired-home" "WARN" "$HOME/.claude-personal is no longer managed (no 0700 tmpfiles rule); review and remove it"
+fi
 
 # --- Notes repo (transcrypt-encrypted) ---
 if [[ -d "$_notes_dir/.git" ]]; then

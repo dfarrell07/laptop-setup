@@ -223,10 +223,13 @@ class MigrationTests(unittest.TestCase):
         production = yaml.safe_load((ROOT / 'roles/claude/tasks/main.yml').read_text())
         selected = [task for task in production if task.get('name') in [
             'Seed Claude user preferences without replacing CLI edits',
+            'Merge security policy into instance settings.json',
             'Deploy instance CLAUDE.md (managed by Ansible; edits are overwritten each run)']]
         for task in selected:
             if 'ansible.builtin.template' in task:
                 task['ansible.builtin.template']['src'] = str(ROOT / 'roles/claude/templates/CLAUDE.md.j2')
+            if 'ansible.builtin.command' in task:
+                task['ansible.builtin.command']['stdin'] = '{}'  # plugin declarations only; policy has its own tests
         for system in ['Linux', 'Darwin']:
             with self.subTest(system=system), tempfile.TemporaryDirectory() as name:
                 directory = Path(name)
@@ -251,11 +254,20 @@ class MigrationTests(unittest.TestCase):
                     agreements = (directory / instance / 'CLAUDE.md').read_text()
                     self.assertIn('--signoff', agreements)
                     self.assertNotIn('~/laptop-setup', agreements)
-                    settings_file.write_text('{"model": "user-model", "enabledPlugins": {}}\n')
+                    # A restored home without the declarations gets them; a disabled plugin stays disabled.
+                    settings_file.write_text(json.dumps({'model': 'user-model', 'enabledPlugins': {
+                        'claude-skills@claude-skills': False, 'other@market': True}}) + '\n')
+                run_play(directory, tasks=selected, variables=variables)
+                for instance in ['.claude', '.claude-work', '.claude-per2']:
+                    settings = json.loads((directory / instance / 'settings.json').read_text())
+                    self.assertEqual(settings['model'], 'user-model')
+                    self.assertNotIn('tui', settings)
+                    self.assertIs(settings['enabledPlugins']['claude-skills@claude-skills'], False)
+                    self.assertTrue(settings['enabledPlugins']['other@market'])
+                    self.assertEqual('shipyard@submariner' in settings['enabledPlugins'], instance == '.claude-work')
+                    self.assertEqual('ai-helpers' in settings['extraKnownMarketplaces'], instance == '.claude-work')
                 result = run_play(directory, tasks=selected, variables=variables)
-                self.assertIn('changed=0', result)
-                self.assertEqual(json.loads((directory / '.claude-work/settings.json').read_text()),
-                                 {'model': 'user-model', 'enabledPlugins': {}})
+                self.assertRegex(result, r'changed=0\b')
 
     @unittest.skipUnless(os.environ.get('CODEX_INSTALL_TEST') == '1', 'opt-in npm download test')
     def test_codex_real_locked_install_and_repeat(self):
@@ -317,7 +329,7 @@ class MigrationTests(unittest.TestCase):
                              'profile': 'work', 'packages_gotoolchain': 'local',
                              'claude_runtime_config_dir': name + "/runtime path's config",
                              'claude_work_config_dir': name + "/work account's config",
-                             'notes_repo_path': name + '/notes', 'claude_personal_config_dir': name + '/.claude-personal'})
+                             'notes_repo_path': name + '/notes'})
             config = directory / 'zshrc'
             run_play(directory, tasks=[{'name': 'Render production shell', 'ansible.builtin.template': {
                 'src': str(ROOT / 'roles/dotfiles/templates/zshrc.j2'), 'dest': str(config), 'mode': '0600'}}],
@@ -368,8 +380,9 @@ print -r -- "PARENT:$CLAUDE_CODE_USE_VERTEX:$CODEX_HOME:$ANTHROPIC_API_KEY:${DBU
             rows = result.stdout.splitlines()
             records = [json.loads(line) for line in rows[:-1]]
             self.assertEqual(records[0]['args'][-1], 'argument with spaces')
-            for record in records[:3]:
-                self.assertEqual(record['args'][:3], ['--dangerously-skip-permissions', '--plugin-dir', '.'])
+            self.assertEqual(records[0]['args'], ['--dangerously-skip-permissions', 'argument with spaces'])
+            self.assertEqual(records[1]['args'], ['--dangerously-skip-permissions', 'second'])
+            self.assertEqual(records[2]['args'], ['--dangerously-skip-permissions', 'third'])
             for record in records[3:5]:
                 self.assertEqual(record['args'][:2], ['--ask-for-approval=never', '--sandbox=danger-full-access'])
             self.assertEqual(records[0]['env']['CLAUDE_CONFIG_DIR'], name + '/.claude')
@@ -391,6 +404,28 @@ print -r -- "PARENT:$CLAUDE_CODE_USE_VERTEX:$CODEX_HOME:$ANTHROPIC_API_KEY:${DBU
             self.assertEqual(records[6]['env']['DBUS_SESSION_BUS_ADDRESS'], 'unix:path=/dev/null')
             self.assertEqual(oct((Path(name) / '.gemini-per2').stat().st_mode & 0o777), '0o700')
             self.assertEqual(rows[-1], 'PARENT:1:original:fixture-key:fixture-bus')
+            # Only listed plugin repositories load as plugins, from any subdirectory or linked worktree.
+            git_env = dict(env, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1')
+            listed = directory / 'src/CHANGE_ME/claude-skills'
+            unlisted = directory / 'src/CHANGE_ME/claude-skills-fork'
+            for repo in [listed, unlisted]:
+                (repo / 'skills/notes').mkdir(parents=True)
+                subprocess.run(['git', 'init', '-q', str(repo)], env=git_env, check=True)
+                subprocess.run(['git', '-C', str(repo), '-c', 'user.name=t', '-c', 'user.email=t@t.invalid',
+                                'commit', '-q', '--allow-empty', '-m', 'init'], env=git_env, check=True)
+            nested = listed / 'scratch-clone'
+            subprocess.run(['git', 'init', '-q', str(nested)], env=git_env, check=True)
+            worktree = directory / 'elsewhere/skills-wt'
+            subprocess.run(['git', '-C', str(listed), 'worktree', 'add', '-q', str(worktree)], env=git_env, check=True)
+            probe.write_text(launchers + '\ncper\ncper2\ncwork\n')
+            for cwd, expected in [(listed / 'skills/notes', ['--plugin-dir', os.path.realpath(listed)]),
+                                  (worktree, ['--plugin-dir', os.path.realpath(worktree)]),
+                                  (nested, []), (unlisted, []), (directory, [])]:
+                with self.subTest(cwd=str(cwd)):
+                    dev = subprocess.run(['zsh', '-f', str(probe)], cwd=cwd, env=git_env,
+                                         capture_output=True, text=True, check=True)
+                    for line in dev.stdout.splitlines():
+                        self.assertEqual(json.loads(line)['args'], ['--dangerously-skip-permissions', *expected])
             # Exercise the extra shell parsing level used by tmux with the same custom paths.
             tmux = binary_dir / 'tmux'
             tmux.write_text('#!/usr/bin/env python3\nimport os,sys,subprocess\n'

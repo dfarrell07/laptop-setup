@@ -266,9 +266,9 @@
 - name: Verify Codex account baseline
   ansible.builtin.import_tasks: verify-codex.yml
 
-- name: Verify Claude personal config directory
+- name: Verify Claude personal2 config directory
   ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/.claude-personal"
+    path: "{{ ansible_user_dir }}/.claude-per2"
   register: verify_claude_dir
 
 - name: Assert Claude config directory exists with 0700
@@ -278,7 +278,7 @@
       - verify_claude_dir.stat.isdir
       - verify_claude_dir.stat.mode == '0700'
     fail_msg: >-
-      Claude personal config dir missing or wrong permissions
+      Claude personal2 config dir missing or wrong permissions
       (exists={{ verify_claude_dir.stat.exists | default(false) }},
       mode={{ verify_claude_dir.stat.mode | default('absent') }},
       expected 0700)
@@ -299,12 +299,12 @@
       mode={{ verify_claude_default_settings.stat.mode | default('absent') }},
       expected 0600)
 
-- name: Verify Claude personal settings.json exists
+- name: Verify Claude personal2 settings.json exists
   ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/.claude-personal/settings.json"
+    path: "{{ ansible_user_dir }}/.claude-per2/settings.json"
   register: verify_claude_settings
 
-- name: Assert Claude personal settings.json has mode 0600
+- name: Assert Claude personal2 settings.json has mode 0600
   ansible.builtin.assert:
     that:
       - verify_claude_settings.stat.exists
@@ -328,7 +328,7 @@
   changed_when: false
   loop:
     - "{{ ansible_user_dir }}/.claude/settings.json"
-    - "{{ ansible_user_dir }}/.claude-personal/settings.json"
+    - "{{ ansible_user_dir }}/.claude-per2/settings.json"
 
 - name: Verify claude-privacy tmpfiles config deployed (Linux)
   ansible.builtin.stat:
@@ -361,17 +361,17 @@
 
 - name: Verify Claude CLAUDE.md deployed
   ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/.claude-personal/CLAUDE.md"
+    path: "{{ ansible_user_dir }}/.claude-per2/CLAUDE.md"
   register: verify_claude_md
 
 - name: Assert Claude CLAUDE.md exists
   ansible.builtin.assert:
     that: verify_claude_md.stat.exists
-    fail_msg: "Claude CLAUDE.md not deployed at {{ ansible_user_dir }}/.claude-personal/CLAUDE.md"
+    fail_msg: "Claude CLAUDE.md not deployed at {{ ansible_user_dir }}/.claude-per2/CLAUDE.md"
 
 - name: Slurp Claude CLAUDE.md content
   ansible.builtin.slurp:
-    src: "{{ ansible_user_dir }}/.claude-personal/CLAUDE.md"
+    src: "{{ ansible_user_dir }}/.claude-per2/CLAUDE.md"
   register: verify_claude_md_content
   when: verify_claude_md.stat.exists
 

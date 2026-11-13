@@ -538,16 +538,16 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   codex_work_reasoning_effort: medium           (roles/codex/defaults)
 #   codex_personal_reasoning_effort: high         (roles/codex/defaults)
 #   claude_personal2_instance_enabled: true       (roles/claude/defaults)
-#   claude_personal_instance_enabled: true        (roles/claude/defaults) — set false on work-only machines
-#   dotfiles_claude_launcher_args: [--dangerously-skip-permissions, --plugin-dir, .]
+#   dotfiles_claude_launcher_args: [--dangerously-skip-permissions]
+#   dotfiles_claude_plugin_dev_dirs: [<git_repos_base_dir>/<owner>/claude-skills]  (roles/dotfiles/defaults; absolute paths)
 #   dotfiles_codex_launcher_args: [--ask-for-approval=never, --sandbox=danger-full-access]
 #   dotfiles_gemini_launcher_args: [--mode=accept-edits, --dangerously-skip-permissions]
 #   git_repos_work_categories includes evpn + rh-context; make repos-evpn / make repos-rh-context
 #   Local zsh overrides: ~/.config/zsh/local.zsh (user owned, sourced last, backed up)
 #   claude_user_preferences: {model: opus, effortLevel: medium, alwaysThinkingEnabled: false, includeCoAuthoredBy: false}
 #     Defaults also seed tui: fullscreen and mobile notifications. CLI edits to existing settings.json are preserved.
-#   claude_personal_plugin_settings: {}          — opt out of personal repo/plugin seeds
-#   claude_work_plugin_settings: {}              — opt out of additional work-home plugin seeds
+#   claude_personal_plugin_settings: {}          — stop adding personal marketplace/plugin declarations
+#   claude_work_plugin_settings: {}              — stop adding work-home declarations (existing entries stay)
 #   Shared AI working agreements: roles/common/files/agent-baseline.md (Codex seed-only; Claude managed)
 
 # Wider workstation audit additions:
