@@ -492,4 +492,30 @@ if [[ "$(basename "${args[0]}")" == ansible-playbook ]]; then
         fi
     done
 fi
+# Become password: ask for it here and check it with sudo before Ansible starts, so a typo
+# re-prompts at once instead of failing after the pre-flight play. Ansible then reads it from
+# stdin (no file, argv or environment). -k with a command neither uses nor updates sudo's cached
+# credentials, so the check leaves no sudo ticket behind. Each wrong try counts toward pam_faillock, as before.
+# Not a terminal, passwordless sudo, or a password with edge whitespace (Ansible strips a
+# password file): Ansible's own prompt is kept.
+if [[ -t 0 ]]; then
+    for ((_i=0; _i<${#args[@]}; _i++)); do
+        [[ "${args[$_i]}" == --ask-become-pass || "${args[$_i]}" == -K ]] || continue
+        /usr/bin/sudo -k -n true 2>/dev/null && break
+        _bp_ok=false
+        for _try in 1 2 3; do
+            IFS= read -rsp 'BECOME password: ' _bp || { echo >&2; exit 1; }
+            echo >&2
+            if printf '%s\n' "$_bp" | /usr/bin/sudo -k -S -p '' true 2>/dev/null; then _bp_ok=true; break; fi
+            echo "Sorry, try again." >&2
+        done
+        if ! "$_bp_ok"; then
+            echo "ERROR: sudo authentication failed 3 times; nothing has run. pam_faillock counts these: sudo faillock --user \"\$USER\"" >&2
+            exit 1
+        fi
+        [[ "$_bp" =~ ^[[:space:]]|[[:space:]]$ ]] && break
+        args[_i]='--become-password-file=-'
+        exec "${args[@]}" < <(printf '%s' "$_bp")
+    done
+fi
 exec "${args[@]}"
