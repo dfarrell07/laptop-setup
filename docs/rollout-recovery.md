@@ -117,7 +117,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   run `source ~/.config/zsh/local.zsh` in bash for functions defined there) and switches the SSH agent:
   `systemctl --user unmask gcr-ssh-agent.socket gcr-ssh-agent.service`, `systemctl --user disable --now ssh-agent`,
   delete `~/.config/autostart/gnome-keyring-ssh.desktop`, `~/.config/environment.d/ssh-agent.conf` and
-  `~/.config/systemd/user/ssh-agent.service`, then log in again so `SSH_AUTH_SOCK` changes back.
+  `~/.config/systemd/user/ssh-agent.service`, then log in again so `SSH_AUTH_SOCK` changes back. It seeds `~/.npmrc`
+  (npm prefix `~/.npm-global`) only when absent: delete it to undo.
 
 ## desktop
 
