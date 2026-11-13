@@ -116,7 +116,7 @@ distrobox_host_exec_commands:
   - podman
   - flatpak
   - kind
-  # docker: excluded by default; add back if Docker CE is installed
+  - docker  # the host's podman-docker shim (packages role): rootless podman, same trust as podman above
 
 # Binary versions for container provisioning (Play 3)
 # Reference packages_oc_version so host and container stay in sync. Update default below when bumping packages_oc_version.
