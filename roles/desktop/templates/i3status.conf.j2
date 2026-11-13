@@ -4,6 +4,8 @@
 {% set _home_dev = _mounts | selectattr('mount', 'equalto', '/home') | map(attribute='device') | first | default('') %}
 {# /home gets its own block only on a separate filesystem; btrfs subvolumes share the device and free space #}
 {% set _desktop_separate_home = _home_dev != '' and _home_dev != _root_dev %}
+{# Wired field only when a wired NIC (en*) exists; otherwise it is an always-empty slot #}
+{% set _desktop_has_wired = ansible_facts['interfaces'] | default([]) | select('match', '^en') | list | length > 0 %}
 
 general {
     colors = true
@@ -25,7 +27,9 @@ order += "battery {{ desktop_i3status_battery_num | string | regex_replace('[^0-
 order += "volume master"
 order += "time"
 order += "tztime utc"
+{% if _desktop_has_wired %}
 order += "ethernet _first_"
+{% endif %}
 order += "wireless _first_"
 
 cpu_usage {
@@ -91,10 +95,12 @@ tztime utc {
     timezone = "UTC"
 }
 
+{% if _desktop_has_wired %}
 ethernet _first_ {
     format_up = "ETH %ip"
     format_down = ""
 }
+{% endif %}
 
 wireless _first_ {
     format_up = "WIFI %quality %ip"
