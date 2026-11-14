@@ -274,8 +274,10 @@ desktop_gnome_ui_dconf:
   - key: /org/gnome/settings-daemon/plugins/power/sleep-inactive-battery-timeout
     value: "3600"
 
-desktop_macos_key_repeat: 2          # macOS key repeat rate (lower = faster; macOS default 6)
-desktop_macos_initial_key_repeat: 15  # macOS delay before repeat starts (lower = shorter; macOS default 25)
+# Derived from the sway/i3 repeat settings (desktop_wm_repeat_delay/_rate) in macOS units of 15 ms: 200 ms at
+# 50/s gives 13 and 1 (below the System Settings slider limits of 15 and 2). Both apply at the next login.
+desktop_macos_key_repeat: "{{ [((1000 / (desktop_wm_repeat_rate | int)) / 15) | round | int, 1] | max }}"
+desktop_macos_initial_key_repeat: "{{ [((desktop_wm_repeat_delay | int) / 15) | round | int, 1] | max }}"
 desktop_macos_auto_quote_substitution: false  # NSAutomaticQuoteSubstitutionEnabled — disable smart quotes
 desktop_macos_auto_dash_substitution: false   # NSAutomaticDashSubstitutionEnabled — disable smart dashes
 desktop_macos_finder_show_all_extensions: true  # AppleShowAllExtensions — show all file extensions in Finder
@@ -284,6 +286,7 @@ desktop_macos_dark_mode: true  # Dark appearance, like Adwaita-dark on Linux (ap
 desktop_macos_dock_autohide: true  # tiling-WM layout: the Dock stays out of the way
 desktop_macos_screenshot_dir: "{{ ansible_facts['user_dir'] }}/Pictures"  # Linux grim writes here too
 
+desktop_macos_tiling_wm: "{{ desktop_environment == 'aerospace' }}"
 desktop_macos_defaults:
   - domain: NSGlobalDomain
     key: KeyRepeat
@@ -331,6 +334,50 @@ desktop_macos_defaults:
   - {domain: com.apple.screencapture, key: type, type: string, value: png}
   - {domain: com.apple.screencapture, key: disable-shadow, type: bool, value: true}
   - {domain: com.apple.screencapture, key: show-thumbnail, type: bool, value: false}
+  # Keyboard as on Linux: no autocorrect, capitalization or inline prediction; Tab reaches every control
+  - {domain: NSGlobalDomain, key: NSAutomaticSpellingCorrectionEnabled, type: bool, value: false}
+  - {domain: NSGlobalDomain, key: NSAutomaticCapitalizationEnabled, type: bool, value: false}
+  - {domain: NSGlobalDomain, key: NSAutomaticPeriodSubstitutionEnabled, type: bool, value: false}
+  - {domain: NSGlobalDomain, key: NSAutomaticInlinePredictionEnabled, type: bool, value: false}
+  - {domain: NSGlobalDomain, key: WebAutomaticSpellingCorrectionEnabled, type: bool, value: false}
+  - {domain: NSGlobalDomain, key: AppleKeyboardUIMode, type: int, value: 2}
+  # Scrolling as in sway (libinput default), not "natural"
+  - {domain: NSGlobalDomain, key: com.apple.swipescrolldirection, type: bool, value: false}
+  - {domain: NSGlobalDomain, key: NSWindowResizeTime, type: float, value: 0.001}
+  # Spaces stay in a fixed order and an activating app does not switch Space (workspaces as in sway)
+  - {domain: NSGlobalDomain, key: AppleSpacesSwitchOnActivate, type: bool, value: false}
+  - {domain: com.apple.dock, key: mru-spaces, type: bool, value: false}
+  # Dock out of the way: fast, small, running apps only, no recents, no launch bounce, no hot corners (1 = none)
+  - {domain: com.apple.dock, key: autohide-time-modifier, type: float, value: 0.15}
+  - {domain: com.apple.dock, key: tilesize, type: float, value: 36}
+  - {domain: com.apple.dock, key: show-recents, type: bool, value: false}
+  - {domain: com.apple.dock, key: static-only, type: bool, value: true}
+  - {domain: com.apple.dock, key: launchanim, type: bool, value: false}
+  - {domain: com.apple.dock, key: wvous-tl-corner, type: int, value: 1}
+  - {domain: com.apple.dock, key: wvous-tr-corner, type: int, value: 1}
+  - {domain: com.apple.dock, key: wvous-bl-corner, type: int, value: 1}
+  - {domain: com.apple.dock, key: wvous-br-corner, type: int, value: 1}
+  # Stage Manager and the built-in edge tiling fight a tiling window manager (desktop_macos_tiling_wm: AeroSpace in use)
+  - {domain: com.apple.WindowManager, key: GloballyEnabled, type: bool, value: false, manage: "{{ desktop_macos_tiling_wm }}"}
+  - {domain: com.apple.WindowManager, key: EnableStandardClickToShowDesktop, type: bool, value: false}
+  - {domain: com.apple.WindowManager, key: EnableTilingByEdgeDrag, type: bool, value: false, manage: "{{ desktop_macos_tiling_wm }}"}
+  - {domain: com.apple.WindowManager, key: EnableTopTilingByEdgeDrag, type: bool, value: false, manage: "{{ desktop_macos_tiling_wm }}"}
+  - {domain: com.apple.WindowManager, key: EnableTilingOptionAccelerator, type: bool, value: false, manage: "{{ desktop_macos_tiling_wm }}"}
+  # Finder like a Linux file manager: list view, path and status bars, folders first, hidden files, home in new
+  # windows, search in the current folder, no extension-change prompt, no desktop icons
+  - {domain: com.apple.finder, key: FXPreferredViewStyle, type: string, value: Nlsv}
+  - {domain: com.apple.finder, key: NewWindowTarget, type: string, value: PfHm}
+  - {domain: com.apple.finder, key: FXDefaultSearchScope, type: string, value: SCcf}
+  - {domain: com.apple.finder, key: ShowPathbar, type: bool, value: true}
+  - {domain: com.apple.finder, key: ShowStatusBar, type: bool, value: true}
+  - {domain: com.apple.finder, key: _FXSortFoldersFirst, type: bool, value: true}
+  - {domain: com.apple.finder, key: AppleShowAllFiles, type: bool, value: true}
+  - {domain: com.apple.finder, key: FXEnableExtensionChangeWarning, type: bool, value: false}
+  - {domain: com.apple.finder, key: CreateDesktop, type: bool, value: false}
+  # No .DS_Store files on network shares and USB drives
+  - {domain: com.apple.desktopservices, key: DSDontWriteNetworkStores, type: bool, value: true}
+  - {domain: com.apple.desktopservices, key: DSDontWriteUSBStores, type: bool, value: true}
+
 
 # Always-on Mac (a desktop that serves while unattended): never system or disk sleep, restart after a power
 # failure, wake for network access. Display sleep and the screen lock are untouched. Off by default.
