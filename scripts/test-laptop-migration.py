@@ -360,7 +360,8 @@ class MigrationTests(unittest.TestCase):
                         'src': str(ROOT / f'roles/dotfiles/templates/{rc}.j2'), 'dest': str(directory / rc)}}
                     for rc in ['zshrc', 'bashrc']])
                 zshrc, bashrc = (directory / 'zshrc').read_text(), (directory / 'bashrc').read_text()
-                self.assertEqual('ZSH_THEME_TERM_TITLE_IDLE="%n@p16v:%~"' in zshrc, bool(display))
+                self.assertIn('ZSH_THEME_TERM_TITLE_IDLE="%n@' + (display or '%m') + ':%~"', zshrc)
+                self.assertIn('ZSH_THEME_TERM_TITLE_IDLE="%~"', zshrc)
                 self.assertEqual("PROMPT_USERHOST='\\u@p16v'" in bashrc, bool(display))
                 if shutil.which('zsh'):
                     subprocess.run(['zsh', '-n', str(directory / 'zshrc')], check=True)
