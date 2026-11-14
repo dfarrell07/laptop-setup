@@ -111,7 +111,7 @@
   block:
     - name: Version check — aerospace
       ansible.builtin.command:
-        cmd: aerospace --version
+        cmd: "{{ ansible_facts['user_dir'] }}/.local/bin/aerospace --version"
       register: _aerospace_version_check
       changed_when: false
       failed_when: false
@@ -146,12 +146,17 @@
             dest: "{{ _aerospace_tmpdir.path }}"
             remote_src: true
 
+        # /Applications is group-writable by admin, so an admin user installs without sudo
+        - name: Check whether /Applications is writable without sudo
+          ansible.builtin.stat:
+            path: /Applications
+          register: _aerospace_apps_dir
+
         - name: Remove existing AeroSpace.app (version update)
           ansible.builtin.file:
             path: /Applications/AeroSpace.app
             state: absent
-          become: true
-          tags: [become]
+          become: "{{ not (_aerospace_apps_dir.stat.writeable | default(false)) }}"
 
         - name: Install AeroSpace.app to /Applications  # noqa: command-instead-of-module
           # cp -r used instead of copy module to preserve symlinks inside the .app bundle
@@ -159,26 +164,22 @@
             cmd: >-
               cp -r {{ _aerospace_tmpdir.path }}/AeroSpace-v{{ packages_aerospace_version }}/AeroSpace.app
               /Applications/
-          become: true
-          tags: [become]
+          become: "{{ not (_aerospace_apps_dir.stat.writeable | default(false)) }}"
           changed_when: true
 
-        - name: Ensure /usr/local/bin exists (absent on a clean Apple Silicon Mac)
+        # ~/.local/bin is first on PATH (dotfiles), so the CLI needs no root-owned directory
+        - name: Ensure ~/.local/bin exists (packages may run before dotfiles)
           ansible.builtin.file:
-            path: /usr/local/bin
+            path: "{{ ansible_facts['user_dir'] }}/.local/bin"
             state: directory
             mode: "0755"
-          become: true
-          tags: [become]
 
-        - name: Install aerospace binary to /usr/local/bin
+        - name: Install aerospace binary to ~/.local/bin
           ansible.builtin.copy:
             src: "{{ _aerospace_tmpdir.path }}/AeroSpace-v{{ packages_aerospace_version }}/bin/aerospace"
-            dest: /usr/local/bin/aerospace
+            dest: "{{ ansible_facts['user_dir'] }}/.local/bin/aerospace"
             mode: "0755"
             remote_src: true
-          become: true
-          tags: [become]
 
         - name: Remove quarantine from AeroSpace.app
           ansible.builtin.command:
@@ -188,7 +189,7 @@
 
         - name: Remove quarantine from aerospace binary
           ansible.builtin.command:
-            cmd: xattr -d com.apple.quarantine /usr/local/bin/aerospace
+            cmd: xattr -d com.apple.quarantine {{ ansible_facts['user_dir'] }}/.local/bin/aerospace
           changed_when: false
           failed_when: false
 
