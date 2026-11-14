@@ -95,16 +95,19 @@
     - system_dnf_automatic_apply_updates | bool
     - not system_is_container
   block:
-    - name: Deploy aide-rebaseline.service
+    - name: Deploy aide-rebaseline.service and its boot retry timer
       ansible.builtin.copy:
-        src: aide-rebaseline.service
-        dest: /etc/systemd/system/aide-rebaseline.service
+        src: "{{ item }}"
+        dest: "/etc/systemd/system/{{ item }}"
         mode: "0644"
+      loop:
+        - aide-rebaseline.service
+        - aide-rebaseline.timer
       register: _aide_rebaseline_unit
 
-    - name: Enable aide-rebaseline.service (runs at boot only while a rebaseline is pending)
+    - name: Enable aide-rebaseline.timer (retries a pending rebaseline after boot)
       ansible.builtin.systemd:
-        name: aide-rebaseline.service
+        name: aide-rebaseline.timer
         enabled: true
         daemon_reload: "{{ _aide_rebaseline_unit is changed }}"
       when: not (ansible_check_mode and _aide_rebaseline_unit is changed)

@@ -221,16 +221,22 @@ class AutoUpdateTests(unittest.TestCase):
 
     def test_aide_rebaseline_service_installs_only_a_clean_update(self):
         unit = (ROOT / 'roles/system/files/aide-rebaseline.service').read_text().splitlines()
-        self.assertIn('ConditionPathExists=/var/lib/aide/rebaseline-pending', unit)
-        self.assertIn('WantedBy=multi-user.target', unit)  # retries at boot after an interrupted run
+        self.assertIn('ConditionPathExists=|/var/lib/aide/rebaseline-pending', unit)
+        self.assertIn('ConditionPathExists=|/var/lib/aide/rebaseline-pending.run', unit)  # an interrupted run resumes
+        self.assertFalse([l for l in unit if l.startswith('WantedBy')])  # never holds multi-user.target
+        timer = (ROOT / 'roles/system/files/aide-rebaseline.timer').read_text().splitlines()
+        self.assertIn('OnBootSec=10min', timer)
         start = next(l for l in unit if l.startswith('ExecStart='))[len('ExecStart='):]
         self.assertIn('ConditionPathExists=/var/lib/aide/aide.db.gz', unit)  # no baseline yet: skip, don't fail
         self.assertIn('After=aide-rebaseline.service', (ROOT / 'roles/system/files/aide-check.service').read_text())
-        for aide_rc, during, ok, pending in [(0, False, True, False), (4, False, True, False), (9, False, False, True),
-                                             (0, True, True, True)]:  # a dnf run during the scan leaves a new marker
-            with self.subTest(aide_rc=aide_rc, during=during), tempfile.TemporaryDirectory() as name:
+        for aide_rc, during, marker, ok, pending in [
+                (0, False, 'rebaseline-pending', True, False), (4, False, 'rebaseline-pending', True, False),
+                (9, False, 'rebaseline-pending', False, True),
+                (0, True, 'rebaseline-pending', True, True),  # a dnf run during the scan leaves a new marker
+                (0, False, 'rebaseline-pending.run', True, False)]:  # a run that shutdown interrupted resumes
+            with self.subTest(aide_rc=aide_rc, during=during, marker=marker), tempfile.TemporaryDirectory() as name:
                 d = Path(name)
-                (d / 'rebaseline-pending').touch()
+                (d / marker).touch()
                 again = f'touch {d}/rebaseline-pending; ' if during else ''
                 cmd = (start.replace('$$', '$').replace('/var/lib/aide', str(d)).replace('/usr/bin/bash', 'bash')
                        .replace('aide --update', f'{again}touch {d}/aide.db.new.gz; (exit {aide_rc})'))
