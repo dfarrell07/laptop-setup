@@ -418,7 +418,7 @@
     key: "{{ item.key }}"
     type: "{{ item.type }}"
     value: "{{ item.value }}"
-    check_type: false  # a value stored with another type (e.g. autohide-delay -int 0) is replaced, not a failure
+    check_type: false  # a value stored with another type (e.g. autohide-delay -int 0) is compared, not a failure
   loop: "{{ desktop_macos_defaults }}"
   loop_control:
     label: "{{ item.domain }} {{ item.key }}"
