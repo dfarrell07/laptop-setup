@@ -14,6 +14,8 @@
         ssh_signing_key_pub: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO75wHkWbQR8wfCmzR0LhcCtlFHfzYq5+3uSSgYhkU1w molecule-test@ci"
         desktop_environment: aerospace
         notes_enabled: true
+        # GitHub's macOS runners cannot run a VM, so the podman machine is not created in CI
+        containers_macos_machine_enabled: false
 
     - name: Compute OS detection facts (mirrors csb_detect.yml — not called in macOS converge)
       # group_vars/all/vars.yml sets is_macos: false / is_linux: false as static defaults.
