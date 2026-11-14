@@ -301,9 +301,11 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   `dnf-automatic` by design on RHEL CSB and FAILs `chronyd-service` unless IT already runs chronyd. IT-owned time and DNS config is never
   replaced.
 - **Verify:** `make verify CHUNK=sys_time_dns` (`llmnr-disabled`, `chronyd-service`, `dnf-automatic`).
-- **Undo:** on a CSB host (`csb_detected`) delete `/etc/systemd/resolved.conf.d/98-llmnr.conf`, run
-  `sudo systemctl restart systemd-resolved`, and on hybrid CSB Fedora `sudo systemctl disable --now dnf5-automatic.timer`; the rest applies elsewhere: restore `/etc/chrony.conf` and `/etc/dnf/automatic.conf` from the
-  snapshot (the role keeps no backup); delete
+- **Undo:** on a CSB host (`csb_detected`) delete `/etc/systemd/resolved.conf.d/98-llmnr.conf` and run
+  `sudo systemctl restart systemd-resolved`. On hybrid CSB Fedora also: `sudo systemctl disable --now dnf5-automatic.timer
+  flatpak-update.timer`, delete `/etc/dnf/automatic.conf`, `/etc/systemd/system/dnf5-automatic.service.d/aide-update.conf` and
+  `/etc/systemd/system/flatpak-update.{service,timer}`, and optionally `sudo dnf remove dnf5-plugin-automatic`. On other hosts:
+  restore `/etc/chrony.conf` and `/etc/dnf/automatic.conf` from the snapshot (the role keeps no backup); delete
   `/usr/local/bin/laptop-setup-validate-chrony` and `/etc/systemd/resolved.conf.d/{98-llmnr,99-dot}.conf`, then
   `sudo systemctl restart systemd-resolved`; `sudo systemctl disable --now dnf5-automatic.timer` (`dnf-automatic.timer` on dnf4);
   `sudo systemctl disable --now flatpak-update.timer` and delete `/etc/systemd/system/flatpak-update.{service,timer}`.

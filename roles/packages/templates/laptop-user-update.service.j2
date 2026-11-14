@@ -4,6 +4,7 @@ Description=Daily user-space software updates (npm globals, pipx, dev container)
 
 [Service]
 Type=oneshot
+Environment="LAPTOP_UPDATE_PIPX_SKIP={{ packages_user_updates_pipx_skip | join(' ') }}"
 ExecStart=%h/.local/bin/laptop-user-update {{ packages_user_updates_container | quote }}
 Nice=15
 IOSchedulingClass=idle
