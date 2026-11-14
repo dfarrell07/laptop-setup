@@ -93,6 +93,10 @@ grep -qiE '^system_mask_nfs_server:[[:space:]]*(false|no|off)([[:space:]]|$)' "$
 _luks_discards=false
 grep -qiE '^system_luks_discards_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _luks_discards=true
 _macos_always_on=false
+_idle_lock=$(awk -F: '/^desktop_wm_idle_lock_timeout:/{gsub(/[^0-9]/, "", $2); print $2}' "$_cfg" 2>/dev/null || true)
+_idle_display=$(awk -F: '/^desktop_wm_idle_display_timeout:/{gsub(/[^0-9]/, "", $2); print $2}' "$_cfg" 2>/dev/null || true)
+[[ "$_idle_lock" =~ ^[0-9]+$ ]] || _idle_lock=3600
+[[ "$_idle_display" =~ ^[0-9]+$ ]] || _idle_display=3900
 _podman_machine=true
 grep -qiE '^containers_macos_machine_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _podman_machine=false
 _podman_machine_name=$(awk -F: '/^containers_macos_machine_name:/{gsub(/[[:space:]"'"'"']/, "", $2); print $2}' "$_cfg" 2>/dev/null || true)
@@ -420,6 +424,18 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
     else record "macos-always-on" "FAIL" "AC power still sleeps or does not restart after a power loss — run: make apply CHUNK=desktop (needs sudo)"; fi
     unset _ac
   fi
+  # Screen as the Linux idle settings: screen saver at the lock timeout, locking at once; display off later
+  _ss=$(defaults -currentHost read com.apple.screensaver idleTime 2>/dev/null || true)
+  _ds=$(pmset -g custom 2>/dev/null | awk '/^AC Power:/{ac=1; next} /^[^ \t]/{ac=0} ac && $1 == "displaysleep" {print $2}')
+  _lk=$(sysadminctl -screenLock status 2>&1 || true)
+  if [[ "$_ss" != "$_idle_lock" ]]; then
+    record "macos-screen" "FAIL" "screen saver after ${_ss:-default} s, not $_idle_lock — run: make apply CHUNK=desktop NOSUDO=1"
+  elif [[ "$_ds" != "$(( (_idle_display + 59) / 60 ))" ]]; then
+    record "macos-screen" "FAIL" "display sleeps after ${_ds:-?} min, not $(( (_idle_display + 59) / 60 )) — run: make apply CHUNK=desktop (needs sudo)"
+  elif [[ "$_lk" != *immediate* && "$_lk" != *"delay is 0 seconds"* ]]; then
+    record "macos-screen" "FAIL" "the screen locks late (${_lk##*] }) — run: sysadminctl -screenLock immediate -password - (asks for your login password)"
+  else record "macos-screen" "PASS"; fi
+  unset _ss _ds _lk
   if ! command -v tailscale &>/dev/null; then record "tailscaled-daemon" "PASS" "tailscale not installed"
   elif launchctl print system/com.tailscale.tailscaled &>/dev/null || launchctl print system/homebrew.mxcl.tailscale &>/dev/null; then
     record "tailscaled-daemon" "PASS"
@@ -2520,7 +2536,7 @@ if [[ -n "$ONLY" ]]; then
       continue
     fi
     # macOS-only checks have nothing to verify on Linux
-    if $IS_LINUX && [[ " podman-machine macos-firewall macos-always-on tailscaled-daemon " == *" $_only_name "* ]]; then
+    if $IS_LINUX && [[ " podman-machine macos-firewall macos-always-on macos-screen tailscaled-daemon " == *" $_only_name "* ]]; then
       $JSON || printf 'N/A   %s (macOS-only check; nothing to verify on Linux)\n' "$_only_name"
       continue
     fi

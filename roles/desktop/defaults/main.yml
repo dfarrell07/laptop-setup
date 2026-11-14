@@ -22,6 +22,10 @@ desktop_sway_libva_driver: ''  # VA-API driver: radeonsi (AMD), iHD (Intel); emp
 # i3: idle/lock color apply only when ~/.config/i3/config is first seeded (delete it and re-run make apply CHUNK=desktop to re-seed)
 desktop_wm_idle_lock_timeout: 3600  # seconds idle before lock (owner choice, above CIS 1.8.4 900; i3 xautolock rounds to minutes)
 desktop_wm_idle_display_timeout: 3900  # seconds idle before display off; must exceed the lock timeout
+# macOS from the same two: the screen saver starts (and, with sysadminctl -screenLock immediate, locks) at the lock
+# timeout, and the display sleeps at the display timeout (pmset counts minutes; AC power only)
+desktop_macos_screensaver_idle_seconds: "{{ desktop_wm_idle_lock_timeout | int }}"
+desktop_macos_display_sleep_minutes: "{{ ((desktop_wm_idle_display_timeout | int) / 60) | round(0, 'ceil') | int }}"
 desktop_wm_lock_color: "000000"     # screen lock background color (hex, no #) — used by swaylock (Sway) and i3lock (i3)
 desktop_sway_keyboard_layout: ''  # e.g. us, de, fr — empty omits xkb_layout (sway/XKB default)
 desktop_sway_keyboard_variant: ''    # XKB variant (e.g. 'intl', 'altgr-intl'); empty = none
@@ -374,13 +378,20 @@ desktop_macos_defaults:
   - {domain: com.apple.finder, key: AppleShowAllFiles, type: bool, value: true}
   - {domain: com.apple.finder, key: FXEnableExtensionChangeWarning, type: bool, value: false}
   - {domain: com.apple.finder, key: CreateDesktop, type: bool, value: false}
+  # Screen saver after the Linux idle lock timeout (a per-machine ByHost preference)
+  - domain: com.apple.screensaver
+    key: idleTime
+    type: int
+    value: "{{ desktop_macos_screensaver_idle_seconds }}"
+    host: currentHost
   # No .DS_Store files on network shares and USB drives
   - {domain: com.apple.desktopservices, key: DSDontWriteNetworkStores, type: bool, value: true}
   - {domain: com.apple.desktopservices, key: DSDontWriteUSBStores, type: bool, value: true}
 
 
 # Always-on Mac (a desktop that serves while unattended): never system or disk sleep, restart after a power
-# failure, wake for network access. Display sleep and the screen lock are untouched. Off by default.
+# failure, wake for network access. Display sleep follows desktop_macos_display_sleep_minutes either way. Off by
+# default.
 desktop_macos_always_on: false
 desktop_macos_always_on_pmset:
   sleep: 0
