@@ -1994,6 +1994,13 @@ EOF
   elif ${_csb_non_fedora:-false}; then
     record "dnf-automatic" "PASS" "not applied on RHEL CSB — IT manages updates (dnf_automatic.yml not run when csb_rhel)"
   else record "dnf-automatic" "WARN" "timer not enabled"; fi
+  # Flatpak update timer (dnf_automatic.yml; only where flatpak is installed, not on RHEL CSB)
+  if [[ -x /usr/bin/flatpak ]] && ! ${_csb_non_fedora:-false}; then
+    if systemctl is-failed --quiet flatpak-update.service; then
+      record "flatpak-update" "FAIL" "last run failed: journalctl -u flatpak-update"
+    elif systemctl is-enabled flatpak-update.timer &>/dev/null; then record "flatpak-update" "PASS"
+    else record "flatpak-update" "WARN" "flatpak-update.timer not enabled (make apply CHUNK=sys_time_dns)"; fi
+  fi
 
   # RPM Fusion free repo (Fedora only; mirrors repos_dnf not csb_rhel guard)
   if ! $_rpmfusion_free; then
@@ -2214,6 +2221,16 @@ EOF
   elif systemctl --user is-enabled podman.socket &>/dev/null; then
     record "podman-socket-enabled" "PASS"
   else record "podman-socket-enabled" "FAIL" "podman.socket not enabled — socket will not start on reboot; fix: systemctl --user enable podman.socket"; fi
+  # Daily user-space updater (packages role; docs/auto-updates.md)
+  if grep -qiE '^packages_user_updates_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "${_cfg:-/dev/null}" 2>/dev/null; then
+    record "user-updates" "PASS" "disabled in config"
+  elif $SYSTEM_ONLY || [[ "$EUID" -eq 0 && -n "${SUDO_USER:-}" ]]; then
+    record "user-updates" "SKIP" "user-scope systemd is unreachable here; re-run: make smoke-test-user"
+  elif systemctl --user is-failed --quiet laptop-user-update.service; then
+    record "user-updates" "FAIL" "last run failed: journalctl --user -u laptop-user-update"
+  elif systemctl --user is-enabled laptop-user-update.timer &>/dev/null; then
+    record "user-updates" "PASS"
+  else record "user-updates" "WARN" "laptop-user-update.timer not enabled (make packages)"; fi
 
   _sysctl_check "kernel.kptr_restrict"               "2" "sysctl-kptr-restrict"
   # kexec: read expected value from deployed config (system_kexec_load_disabled defaults to 1 in roles/system/defaults)

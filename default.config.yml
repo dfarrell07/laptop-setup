@@ -40,6 +40,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   packages_user_updates_enabled: true (roles/packages/defaults) — daily user timer: npm globals, pipx, dev container
 #   packages_user_updates_calendar: daily (roles/packages/defaults) — systemd OnCalendar for laptop-user-update.timer
 #   packages_user_updates_container: fedora-dev (roles/packages/defaults) — distrobox to upgrade; '' skips it
+#   packages_user_updates_npm: ['@openai/codex'] (roles/packages/defaults) — npm globals the updater moves to latest
+#   packages_user_updates_pipx_skip: [yamllint, ansible-lint] (roles/packages/defaults) — role-pinned pipx apps it skips
 #   packages_bpfman_enabled: false     (roles/packages/defaults) — bpfman eBPF program manager daemon; opt-in only;
 #     WARNING: bpfman requires CAP_SYS_ADMIN (kernel-level privilege) to load eBPF programs. Fedora 44 ships NO
 #     SELinux policy for bpfman, so the daemon runs unconfined despite SELinux Enforcing mode. Without Mandatory
