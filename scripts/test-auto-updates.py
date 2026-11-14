@@ -230,20 +230,22 @@ class AutoUpdateTests(unittest.TestCase):
         start = next(l for l in unit if l.startswith('ExecStart='))[len('ExecStart='):]
         self.assertIn('ConditionPathExists=/var/lib/aide/aide.db.gz', unit)  # no baseline yet: skip, don't fail
         self.assertIn('After=aide-rebaseline.service', check)
+        self.assertIn('After=dnf5-automatic.service dnf-automatic.service', check)
         for aide_rc, during, marker, ok, pending in [
                 (0, False, 'rebaseline-pending', True, False), (4, False, 'rebaseline-pending', True, False),
                 (9, False, 'rebaseline-pending', False, True),
                 (0, True, 'rebaseline-pending', True, True),  # a dnf run during the scan leaves a new marker
                 (0, False, 'rebaseline-pending.run', True, False),  # a run that shutdown interrupted resumes
-                (0, 'dnf', 'rebaseline-pending', False, True)]:  # skipped while a dnf transaction runs
+                (0, 'dnf', 'rebaseline-pending', False, True),  # skipped while a dnf transaction runs
+                (0, 'dnf-ending', 'rebaseline-pending', True, False)]:  # runs when dnf's ExecStopPost starts it
             with self.subTest(aide_rc=aide_rc, during=during, marker=marker), tempfile.TemporaryDirectory() as name:
                 d = Path(name)
                 (d / marker).touch()
                 again = f'touch {d}/rebaseline-pending; ' if during is True else ''
-                state = 'activating' if during == 'dnf' else 'inactive'
+                state = {'dnf': 'activating', 'dnf-ending': 'deactivating'}.get(during, 'inactive')
                 cmd = (start.replace('$$', '$').replace('/var/lib/aide', str(d)).replace('/usr/bin/bash', 'bash')
                        .replace('systemctl show -P ActiveState dnf5-automatic.service dnf-automatic.service',
-                                f'echo inactive {state}')
+                                f'printf "inactive\\n{state}\\n"')
                        .replace('aide --update', f'{again}touch {d}/aide.db.new.gz; (exit {aide_rc})'))
                 rc = subprocess.run(cmd, shell=True, check=False).returncode
                 self.assertEqual(rc == 0, ok or during == 'dnf')  # skipping is not a failure
