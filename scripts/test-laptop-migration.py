@@ -346,6 +346,31 @@ class MigrationTests(unittest.TestCase):
             self.assertRegex(package['version'], '^' + re.escape(version) + '(-[a-z0-9-]+)?$')
         self.assertEqual(len(packages), 8)  # root, launcher, six platform archives
 
+    def test_display_hostname_replaces_the_host_in_prompt_and_titles(self):
+        for display in ['', 'p16v']:
+            with self.subTest(display=display), tempfile.TemporaryDirectory() as name:
+                directory = Path(name)
+                variables = yaml.safe_load((ROOT / 'roles/dotfiles/defaults/main.yml').read_text())
+                variables.update({'ansible_managed': 'test', 'ansible_facts': {'user_dir': name, 'system': 'Linux'},
+                                  'profile': 'work', 'packages_gotoolchain': 'local', 'notes_repo_path': name + '/notes',
+                                  'claude_runtime_config_dir': name + '/rt', 'claude_work_config_dir': name + '/w',
+                                  'dotfiles_display_hostname': display})
+                run_play(directory, variables=variables, tasks=[
+                    {'name': 'Render ' + rc, 'ansible.builtin.template': {
+                        'src': str(ROOT / f'roles/dotfiles/templates/{rc}.j2'), 'dest': str(directory / rc)}}
+                    for rc in ['zshrc', 'bashrc']])
+                zshrc, bashrc = (directory / 'zshrc').read_text(), (directory / 'bashrc').read_text()
+                self.assertEqual('ZSH_THEME_TERM_TITLE_IDLE="%n@p16v:%~"' in zshrc, bool(display))
+                self.assertEqual("PROMPT_USERHOST='\\u@p16v'" in bashrc, bool(display))
+                if shutil.which('zsh'):
+                    subprocess.run(['zsh', '-n', str(directory / 'zshrc')], check=True)
+                subprocess.run(['bash', '-n', str(directory / 'bashrc')], check=True)
+        with tempfile.TemporaryDirectory() as name:
+            assert_task = next(t for t in yaml.safe_load((ROOT / 'roles/dotfiles/tasks/main.yml').read_text())
+                               if t.get('name') == 'Assert dotfiles_display_hostname is a plain short name')
+            with self.assertRaisesRegex(AssertionError, 'at most 32'):
+                run_play(Path(name), tasks=[assert_task], variables={'dotfiles_display_hostname': 'a;b'})
+
     @unittest.skipUnless(shutil.which('zsh'), 'zsh required for launcher regression')
     def test_rendered_shell_accounts_arguments_and_environment(self):
         with tempfile.TemporaryDirectory() as name:
