@@ -143,10 +143,16 @@ USER="${USER:-$(id -un)}"  # cron/env -i runs leave USER unset; later checks use
 unset _cfg
 # Check tools as the login shell finds them: make verify runs with make's PATH, which lacks the user bin
 # directories the dotfiles PATH puts first (the claude, codex and agy CLIs live there).
-for _user_bin in "$HOME/.npm-global/bin" "$HOME/.local/bin"; do
-  [[ -d "$_user_bin" && ":$PATH:" != *":$_user_bin:"* ]] && PATH="$_user_bin:$PATH"
-done
-unset _user_bin
+# Never as root (sudo may keep the user's HOME), and only directories this user owns that group and others
+# cannot write, so a planted binary cannot shadow the tools the checks run.
+if [[ $EUID -ne 0 ]]; then
+  for _user_bin in "$HOME/.npm-global/bin" "$HOME/.local/bin"; do
+    [[ -d "$_user_bin" && ! -L "$_user_bin" && -O "$_user_bin" && ":$PATH:" != *":$_user_bin:"* ]] || continue
+    _user_bin_mode=$(ls -ld "$_user_bin")  # drwxr-xr-x...: group write at 5, other write at 8
+    [[ "${_user_bin_mode:5:1}" != w && "${_user_bin_mode:8:1}" != w ]] && PATH="$_user_bin:$PATH"
+  done
+  unset _user_bin _user_bin_mode
+fi
 
 exec_cmd() { # execute locally or inside container
   if [[ -n "$CONTAINER" ]]; then
