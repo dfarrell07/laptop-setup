@@ -272,6 +272,28 @@
       tags: [become]
       when: _packages_tailscaled_unit.stdout == 'loaded'
 
+# macOS: the formula's tailscaled is a root launchd daemon that nothing else starts (Linux enables it above).
+- name: Start installed Tailscale daemon (macOS)
+  when: is_macos
+  block:
+    - name: Check for the Tailscale daemon in the system launchd domain (macOS)  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        argv: [launchctl, print, system/homebrew.mxcl.tailscale]
+      register: _packages_tailscaled_launchd
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Start the Tailscale daemon at boot (macOS)
+      ansible.builtin.command:
+        argv: ["{{ dotfiles_homebrew_prefix }}/bin/brew", services, start, tailscale]
+      become: true
+      tags: [become]
+      changed_when: true
+      when:
+        - _packages_tailscaled_launchd.rc != 0
+        - "'tailscale' in packages_brew + packages_extra_brew"
+
 - name: Install binary downloads
   ansible.builtin.import_tasks: install_binary_downloads.yml
 
