@@ -199,6 +199,35 @@
          | rejectattr('failed', 'equalto', true)
          | map(attribute='item.dest') | list }}
 
+# A repo whose entry dropped `depth` (it became one you push to) keeps its shallow, single-branch clone, since the
+# clone task never updates existing checkouts: deepen it and track every branch, as a fresh full clone would.
+- name: Check full-history repos for a shallow clone  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    argv: [git, -C, "{{ git_repos_base_dir }}/{{ item.dest }}", rev-parse, --is-shallow-repository]
+  loop: "{{ git_repos_filtered | rejectattr('depth', 'defined') | selectattr('dest', 'in', git_repos_available_dests) | list }}"
+  loop_control:
+    label: "{{ item.dest }}"
+  register: _git_repos_shallow
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Fetch full history and all branches for formerly shallow clones  # noqa: command-instead-of-module
+  ansible.builtin.shell:
+    cmd: >-
+      git remote set-branches origin '*' &&
+      git -c core.hooksPath=/dev/null fetch --quiet --unshallow origin
+    chdir: "{{ git_repos_base_dir }}/{{ item.item.dest }}"
+  environment:
+    GIT_TERMINAL_PROMPT: "0"
+    GIT_CONFIG_NOSYSTEM: "1"
+  loop: "{{ _git_repos_shallow.results | default([]) | selectattr('stdout', 'defined') | selectattr('stdout', 'equalto', 'true') | list }}"
+  loop_control:
+    label: "{{ item.item.dest }}"
+  changed_when: true
+  ignore_errors: true  # noqa: ignore-errors — offline or auth failure must not stop the other repos
+  timeout: 600
+
 - name: Warn when all clones failed
   ansible.builtin.debug:
     msg: >-
