@@ -1991,8 +1991,8 @@ EOF
     record "dnf-automatic" "WARN" "timer enabled but not active (reboot or: systemctl start $timer)"
   elif ! command -v rpm &>/dev/null; then
     record "dnf-automatic" "SKIP" "dnf-automatic is installed on dnf hosts only"
-  elif $CSB_HOST; then
-    record "dnf-automatic" "PASS" "not applied on CSB — IT manages updates (dnf_automatic.yml not run when csb_detected)"
+  elif ${_csb_non_fedora:-false}; then
+    record "dnf-automatic" "PASS" "not applied on RHEL CSB — IT manages updates (dnf_automatic.yml not run when csb_rhel)"
   else record "dnf-automatic" "WARN" "timer not enabled"; fi
 
   # RPM Fusion free repo (Fedora only; mirrors repos_dnf not csb_rhel guard)

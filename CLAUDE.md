@@ -146,9 +146,9 @@ runs `git_repos` for one `repo_category`. `make help` lists everything; scenario
 - **CSB detection**: `csb_detect.yml` sets `csb_detected` (RHEL: fapolicyd and internal CA; Fedora: `.csb` FQDN or fapolicyd, and internal
   CA) and `needs_container_tier`: `host-only` (standard Fedora/macOS), `hybrid` (RHEL or CSB Fedora: basics on host, dev tools in
   container), `container` (CSB with fapolicyd enforcing). `csb_detected` with fapolicyd inactive is `hybrid`.
-- **csb_rhel** (`vars.yml`): `csb_detected` and RHEL. `not csb_rhel` guards harden Fedora hybrid but skip RHEL CSB (IT owns it);
-  `not csb_detected` guards skip every CSB tier (chrony, dnf-automatic and the NM `99-dns.conf` override use this). Tasks that may fail on
-  CSB use block/rescue to feed the CSB report.
+- **csb_rhel** (`vars.yml`): `csb_detected` and RHEL. `not csb_rhel` guards harden Fedora hybrid but skip RHEL CSB (IT owns it); `not
+  csb_detected` guards skip every CSB tier (chrony and the NM `99-dns.conf` override use this; dnf-automatic uses `not csb_rhel`). Tasks
+  that may fail on CSB use block/rescue to feed the CSB report.
 - **Variable visibility**: role defaults are invisible to other plays; variables read outside their role live in `vars.yml` with mirrors
   checked by `make check-vars-sync`.
 - **Local repo list**: repos on internal hosts go in gitignored `group_vars/all/local_repos.yml` (`git_repos_local`; copy

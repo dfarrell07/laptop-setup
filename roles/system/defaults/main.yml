@@ -642,8 +642,11 @@ system_dbus_system_d_allowlist: []
 # false: dnf-automatic downloads and stages updates but waits for manual `dnf upgrade`.
 # For dev laptops, set false in config.yml to prevent auto-installation of potentially
 # disruptive kernel/driver updates. Pre-reboot window: downloaded updates do not take effect
-# until the next `dnf upgrade` or system reboot. Applies to standard (non-CSB) hosts only:
-# on any CSB host the corporate build manages updates (RHSM/Satellite on RHEL CSB), so the import is skipped.
+# until the next `dnf upgrade` or system reboot. Skipped on RHEL CSB, where IT manages updates (RHSM/Satellite);
+# CSB Fedora runs it, since IT's playbooks there apply no OS updates.
 system_dnf_automatic_apply_updates: true
+# Which updates dnf-automatic applies: 'default' (everything Fedora ships) or 'security' (security advisories only;
+# Fedora tags few updates as security, so most fixes would wait). Kernel updates take effect at the next reboot.
+system_dnf_automatic_upgrade_type: default
 # systemd error text for a unit that is not installed (tolerated by masking/disable tasks)
 _system_unit_absent_re: 'Could not find the requested service|not found|does not exist'

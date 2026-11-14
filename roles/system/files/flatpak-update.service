@@ -1,0 +1,15 @@
+# Ansible managed
+[Unit]
+Description=Update system Flatpak apps and runtimes
+Documentation=man:flatpak-update(1)
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/usr/bin/flatpak
+
+[Service]
+Type=oneshot
+# Logs: journalctl -u flatpak-update.service; the status bar shows UPD when this unit fails.
+ExecStart=/usr/bin/flatpak update --system --noninteractive --assumeyes
+Nice=15
+IOSchedulingClass=idle
+SyslogIdentifier=flatpak-update
