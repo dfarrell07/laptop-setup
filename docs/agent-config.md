@@ -26,7 +26,8 @@ stay private; what the automation does is in the roles and [migration-checklist.
    provision", "Internal SSH git hosts" and the Codex pin-bump procedure. Make, `preflight.sh`, `vault-init.sh`
    and `setup-yubikeys.sh` send humans to that section by name or step number.
 7. **Codex seeding is skipped by a full restore.** `config.toml` is seeded with `force: false`, so restoring the
-   backed-up file first keeps old project trust and marketplace paths.
+   backed-up file first keeps old project trust and marketplace paths; only `approval_policy` and
+   `sandbox_mode` are reapplied.
 8. **Launcher loose ends.** The `claude()` guard named `cw`/`ccp`. Done: the guard names `cwork`/`cper`/`cper2`,
    and `ccp` with its `~/.claude-personal` home is retired; `cls`, `ca` and `cstatus` now cover `cw`/`cwt` sessions
    on the work profile only.

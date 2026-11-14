@@ -204,6 +204,8 @@ class MigrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as name:
             directory = Path(name)
             variables = {'ansible_facts': {'user_dir': name}, 'packages_install_binaries': False}
+            run_play(directory, variables=variables, roles=['codex'], extra_args=['--check'])
+            self.assertFalse((directory / '.codex').exists())
             run_play(directory, variables=variables, roles=['codex'])
             config = directory / '.codex/config.toml'
             seeded = tomllib.loads(config.read_text())
@@ -215,12 +217,13 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(managed, (directory / '.codex-personal/AGENTS.md').read_text())
             self.assertIn('changed=0', run_play(directory, variables=variables, roles=['codex']))
             # config.toml keeps user keys and tables; approval and sandbox are reapplied; agreements re-render.
-            config.write_text('approval_policy = "on-request"\nmodel = "user-model"\n\n[projects."/x"]\ntrust_level = "trusted"\n')
+            config.write_text('approval_policy = "on-request"\nmodel = "user-model"\n\n[projects."/x"]\ntrust_level = "trusted"\n'
+                              '\n[profiles.careful]\napproval_policy = "untrusted"\n')
             instructions.write_text('User-owned working agreements\n')
             run_play(directory, variables=variables, roles=['codex'])
             self.assertEqual(tomllib.loads(config.read_text()), {
                 'approval_policy': 'never', 'sandbox_mode': 'danger-full-access', 'model': 'user-model',
-                'projects': {'/x': {'trust_level': 'trusted'}}})
+                'projects': {'/x': {'trust_level': 'trusted'}}, 'profiles': {'careful': {'approval_policy': 'untrusted'}}})
             self.assertEqual(instructions.read_text(), managed)
             self.assertFalse((directory / '.local/share/codex-cli').exists())
             self.assertEqual((directory / '.codex').stat().st_mode & 0o777, 0o700)

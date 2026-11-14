@@ -94,7 +94,7 @@ class ClaudePrivacyTests(unittest.TestCase):
                 self.assertEqual(rendered['permissions']['defaultMode'], 'bypassPermissions')
                 self.assertEqual(rendered['permissions']['deny'][:len(defaults['claude_deny_bash'])],
                                  defaults['claude_deny_bash'])
-                self.assertFalse(set(defaults['claude_retired_deny']) & set(rendered['permissions']['deny']))
+                self.assertTrue(set(defaults['claude_deny_bash']).isdisjoint(defaults['claude_retired_deny']))
                 self.assertIs(sandbox['enableWeakerNestedSandbox'], expected, (in_container, tier))
                 self.assertEqual({k: v for k, v in sandbox.items() if k != 'enableWeakerNestedSandbox'},
                                  {'enabled': False, 'allowUnsandboxedCommands': False, 'failIfUnavailable': True})

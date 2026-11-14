@@ -160,7 +160,8 @@ class MergeTests(unittest.TestCase):
         perms = self.load()['permissions']
         self.assertEqual(perms['deny'], ['Bash(curl *)', 'Bash(sudo *)'])
         self.assertEqual(perms['defaultMode'], 'bypassPermissions')
-        self.assertNotEqual(run(self.path, POLICY, '--retire', '{}').returncode, 0)
+        for bad in (['--retire', '{}'], ['--retire', 'not-json'], ['--retire', '["x", 1]'], ['--retire']):
+            self.assertNotEqual(run(self.path, POLICY, *bad).returncode, 0, bad)
 
     def test_defaults_must_be_an_object(self):
         self.assertNotEqual(run(self.path, POLICY, '--defaults', '[]').returncode, 0)
