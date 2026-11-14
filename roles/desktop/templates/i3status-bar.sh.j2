@@ -48,7 +48,8 @@ agent_sessions() {
 }
 
 # Automatic update jobs; UPD shows while any of them is in the failed state (journalctl -u / --user -u <unit>).
-update_units=(dnf5-automatic.service dnf-automatic.service flatpak-update.service fwupd-refresh.service)
+update_units=(dnf5-automatic.service dnf-automatic.service flatpak-update.service fwupd-refresh.service
+  aide-rebaseline.service)
 user_update_units=(laptop-user-update.service)
 updates_failed() {
   systemctl is-failed --quiet "${update_units[@]}" 2>/dev/null ||

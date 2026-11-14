@@ -52,6 +52,7 @@ if ((${#npm_allow[@]})) && command -v npm >/dev/null && [[ -d $prefix/lib/node_m
       # Never move back: a prerelease (codex@alpha) newer than `latest` stays (sort -V ranks it above its release),
       # except that a prerelease moves to its own final release.
       cur=${current##*@} lat=${latest##*@}
+      [[ $lat == *-* && $cur != *-* ]] && continue  # a mis-tagged prerelease `latest` never replaces a release
       if [[ ! ($lat != *-* && $cur == "$lat"-*) ]]; then
         [[ $(printf '%s\n' "$cur" "$lat" | sort -V | tail -1) == "$cur" ]] && continue
       fi
@@ -79,7 +80,10 @@ if command -v pipx >/dev/null; then
 fi
 
 if [[ -n $container ]] && command -v distrobox >/dev/null && podman container exists "$container" 2>/dev/null; then
+  was_running=$(podman container inspect --format '{{.State.Running}}' "$container" 2>/dev/null)
   step distrobox distrobox upgrade "$container"
+  # The upgrade starts a stopped container; leave it as it was.
+  [[ $was_running == true ]] || podman stop --time 10 "$container" >/dev/null 2>&1 || true
 fi
 
 if ((${#failed[@]})); then
