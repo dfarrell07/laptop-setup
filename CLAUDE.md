@@ -107,6 +107,7 @@ make usb-add                # allow blocked USB devices, save rules to config.ym
 make aide-rebaseline        # accept current files as the AIDE baseline
 make smoke-test | smoke-test-user | smoke-test-container   # host | no sudo | distrobox
 make ssh-keys | github-ssh-keys | vault-init | vault-edit | vault-view  # github-ssh-keys: add missing YubiKey keys to GitHub
+make vault-import FROM=host:path  # new machine, existing vault: writes vault-pass.sh, fetches the encrypted vault, tests a key
 make migration-inventory | workstation-audit  # private reports for a laptop move
 make lint                   # ansible-lint, yamllint, shellcheck, markdownlint, check-vars-sync, script integrity
 make syntax-check | shellcheck | markdownlint | commitlint | check-vars-sync
