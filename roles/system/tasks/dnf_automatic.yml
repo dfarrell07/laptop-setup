@@ -1,9 +1,14 @@
 ---
 # roles/system/tasks/dnf_automatic.yml
 # --- dnf-automatic ---
-# CSB machines are managed by Red Hat IT via RHSM/Satellite with their own
-# maintenance windows. Running dnf-automatic in parallel could install packages
-# ahead of IT's approval cycle or outside maintenance windows.
+# Skipped on RHEL CSB, where IT applies updates via RHSM/Satellite in its own maintenance windows. CSB Fedora
+# (hybrid) runs it: IT's playbooks there update only their own package, so nothing else would update the OS.
+# Logs: journalctl -u dnf5-automatic.service (dnf-automatic.service on dnf4); the status bar shows UPD on failure.
+- name: Validate dnf-automatic upgrade type
+  ansible.builtin.assert:
+    that: system_dnf_automatic_upgrade_type in ['default', 'security']
+    fail_msg: system_dnf_automatic_upgrade_type must be 'default' (all updates) or 'security'.
+
 - name: Install and enable dnf-automatic
   when:
     - is_dnf
@@ -86,3 +91,33 @@
     - not (system_dnf_automatic_apply_updates | bool)
     - not system_is_container
   notify: Restart dnf-automatic timer
+
+# --- Flatpak: daily update of system apps and runtimes (no reboot involved) ---
+- name: Check for Flatpak
+  ansible.builtin.stat:
+    path: /usr/bin/flatpak
+  register: _system_flatpak_bin
+  when: not system_is_container
+
+- name: Install the daily Flatpak update timer
+  when:
+    - not system_is_container
+    - _system_flatpak_bin.stat.exists | default(false)
+  block:
+    - name: Deploy Flatpak update service and timer
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "/etc/systemd/system/{{ item }}"
+        mode: "0644"
+      loop:
+        - flatpak-update.service
+        - flatpak-update.timer
+      register: _system_flatpak_units
+
+    - name: Enable the Flatpak update timer
+      ansible.builtin.systemd:
+        name: flatpak-update.timer
+        enabled: true
+        state: started
+        daemon_reload: "{{ _system_flatpak_units is changed }}"
+      when: not (ansible_check_mode and _system_flatpak_units is changed)
