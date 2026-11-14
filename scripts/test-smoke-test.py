@@ -2,6 +2,7 @@
 """Check real Git reads, seeded files and personal-profile JSON without provisioning."""
 import json
 import os
+import platform
 from pathlib import Path
 import subprocess
 import sys
@@ -71,7 +72,7 @@ class SmokeTests(unittest.TestCase):
             tools = home / 'tools'
             tools.mkdir()
             copier = tools / 'cp'
-            copier.write_text('#!/bin/sh\n[ "$1" = /bin/true ] && exit 1\nexec /usr/bin/cp "$@"\n')
+            copier.write_text('#!/bin/sh\n[ "$1" = /bin/true ] && exit 1\nexec /bin/cp "$@"\n')  # /bin/cp: macOS has no /usr/bin/cp
             copier.chmod(0o755)
             result = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c',
                                      'record() { printf "%s %s\\n" "$1" "$2"; };\n' + source[start:end]],
@@ -257,11 +258,13 @@ class SmokeTests(unittest.TestCase):
                     checks = {item['name']: item['status'] for item in data['results']}
                     for name in ['git-core.fsmonitor', 'git-safe.bareRepository', 'dotfile-.vimrc', 'dotfile-ripgreprc', 'git-hooks-path']:
                         self.assertEqual(checks[name], 'PASS', data)
-                    for name in ['env-d-containers', 'env-d-ssh-agent']:
-                        self.assertEqual(checks[name], 'SKIP', data)
+                    for name in ['env-d-containers', 'env-d-ssh-agent'] if platform.system() == 'Linux' else []:
+                        self.assertEqual(checks[name], 'SKIP', data)  # environment.d checks run only on Linux
                     if profile == 'personal':
                         self.assertEqual(checks['gitconfig-includeif'], 'SKIP', data)
-                    self.assertEqual(checks['home-dir-perms'], 'PASS' if mode in [0o700, 0o550] else 'FAIL', data)
+                    # macOS: the system role that sets home permissions is Linux-only, so any mode passes
+                    strict = platform.system() == 'Linux'
+                    self.assertEqual(checks['home-dir-perms'], 'PASS' if mode in [0o700, 0o550] or not strict else 'FAIL', data)
                     home.chmod(0o700)
                     self.assertEqual(data['failures'], sum(status == 'FAIL' for status in checks.values()))
 
