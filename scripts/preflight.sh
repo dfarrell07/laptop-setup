@@ -316,7 +316,10 @@ fi
 
 # --- keyscan fingerprint guard (mirrors roles/ssh/tasks/keyscan_host.yml; warns before the sudo prompt) ---
 if [[ -f "$CONFIG_FILE" ]]; then
-  _bad_fp=$(python3 -I -c '
+  # .venv has PyYAML; a bare python3 (Homebrew's on macOS) usually does not
+  _fp_python=python3
+  [[ -x "$SCRIPT_DIR/../.venv/bin/python3" ]] && _fp_python="$SCRIPT_DIR/../.venv/bin/python3"
+  _bad_fp=$("$_fp_python" -I -c '
 import re, sys, yaml
 class L(yaml.SafeLoader): pass
 L.add_multi_constructor("!", lambda loader, tag, node: loader.construct_scalar(node) if isinstance(node, yaml.ScalarNode) else loader.construct_mapping(node, deep=True) if isinstance(node, yaml.MappingNode) else loader.construct_sequence(node, deep=True))
@@ -332,7 +335,7 @@ for h in hosts:
   else
     record "config_keyscan_fingerprints" "pass" "keyscan fingerprints well-formed or unset"
   fi
-  unset _bad_fp _fp_unchecked
+  unset _bad_fp _fp_unchecked _fp_python
 fi
 
 # --- Network connectivity ---
