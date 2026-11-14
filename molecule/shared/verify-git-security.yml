@@ -136,7 +136,10 @@
     - {key: fetch.fsckObjects, value: 'true'}
     - {key: receive.fsckObjects, value: 'true'}
     - {key: protocol.file.allow, value: user}
-    - {key: 'credential.https://github.com.helper', value: '!gh auth git-credential'}
+    - key: 'credential.https://github.com.helper'
+      value: >-
+        !{{ (('/usr/local' if ansible_facts['architecture'] == 'x86_64' else '/opt/homebrew') ~ '/bin/')
+            if ansible_facts['system'] == 'Darwin' else '' }}gh auth git-credential
     - {key: 'url.ssh://git@github.com/.pushinsteadof', value: 'https://github.com/'}
   loop_control:
     label: "{{ item.key }}"
