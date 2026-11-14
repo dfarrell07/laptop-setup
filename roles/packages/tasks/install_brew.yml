@@ -147,25 +147,75 @@
             remote_src: true
 
         # /Applications is group-writable by admin, so an admin user installs without sudo
-        - name: Check whether /Applications is writable without sudo
+        # An admin user can write /Applications, so AeroSpace installs without sudo. A copy an earlier run made as
+        # root (or a /Applications the user cannot write) needs the become-tagged tasks, which NOSUDO=1 skips.
+        - name: Check /Applications and the installed AeroSpace.app
           ansible.builtin.stat:
-            path: /Applications
-          register: _aerospace_apps_dir
+            path: "{{ item }}"
+          loop: [/Applications, /Applications/AeroSpace.app]
+          register: _aerospace_paths
 
-        - name: Remove existing AeroSpace.app (version update)
+        - name: Remove a root-owned AeroSpace.app (version update)
           ansible.builtin.file:
             path: /Applications/AeroSpace.app
             state: absent
-          become: "{{ not (_aerospace_apps_dir.stat.writeable | default(false)) }}"
+          become: true
+          tags: [become]
+          when:
+            - _aerospace_paths.results[1].stat.exists
+            - _aerospace_paths.results[1].stat.uid != ansible_facts['user_uid'] | int
 
-        - name: Install AeroSpace.app to /Applications  # noqa: command-instead-of-module
+        - name: Remove the user-owned AeroSpace.app (version update)
+          ansible.builtin.file:
+            path: /Applications/AeroSpace.app
+            state: absent
+          when:
+            - _aerospace_paths.results[1].stat.exists
+            - _aerospace_paths.results[1].stat.uid == ansible_facts['user_uid'] | int
+
+        - name: Check whether AeroSpace.app is gone
+          ansible.builtin.stat:
+            path: /Applications/AeroSpace.app
+          register: _aerospace_app_after
+
+        - name: Install AeroSpace.app to /Applications as the user  # noqa: command-instead-of-module
           # cp -r used instead of copy module to preserve symlinks inside the .app bundle
           ansible.builtin.command:
-            cmd: >-
-              cp -r {{ _aerospace_tmpdir.path }}/AeroSpace-v{{ packages_aerospace_version }}/AeroSpace.app
-              /Applications/
-          become: "{{ not (_aerospace_apps_dir.stat.writeable | default(false)) }}"
+            argv: [cp, -r, "{{ _aerospace_tmpdir.path }}/AeroSpace-v{{ packages_aerospace_version }}/AeroSpace.app", /Applications/]
           changed_when: true
+          when:
+            - not _aerospace_app_after.stat.exists
+            - _aerospace_paths.results[0].stat.writeable | default(false)
+
+        - name: Install AeroSpace.app to /Applications with sudo  # noqa: command-instead-of-module
+          ansible.builtin.command:
+            argv: [cp, -r, "{{ _aerospace_tmpdir.path }}/AeroSpace-v{{ packages_aerospace_version }}/AeroSpace.app", /Applications/]
+          become: true
+          tags: [become]
+          changed_when: true
+          when:
+            - not _aerospace_app_after.stat.exists
+            - not (_aerospace_paths.results[0].stat.writeable | default(false))
+
+        - name: Note a root-owned AeroSpace.app left in place
+          ansible.builtin.debug:
+            msg: >-
+              /Applications/AeroSpace.app is root-owned and was not updated without sudo; run
+              make apply CHUNK=packages (with sudo) to replace it.
+          when: _aerospace_app_after.stat.exists
+
+        - name: Check for the CLI an earlier run put in /usr/local/bin
+          ansible.builtin.stat:
+            path: /usr/local/bin/aerospace
+          register: _aerospace_legacy_cli
+
+        - name: Remove the earlier root-owned /usr/local/bin/aerospace
+          ansible.builtin.file:
+            path: /usr/local/bin/aerospace
+            state: absent
+          become: true
+          tags: [become]
+          when: _aerospace_legacy_cli.stat.exists
 
         # ~/.local/bin is first on PATH (dotfiles), so the CLI needs no root-owned directory
         - name: Ensure ~/.local/bin exists (packages may run before dotfiles)
