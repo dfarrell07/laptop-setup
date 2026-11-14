@@ -118,9 +118,12 @@ dotfiles_codex_launcher_args: []
 dotfiles_gemini_launcher_args: []
 ```
 
-Codex config and `AGENTS.md` are seeded once, and Claude preferences (fullscreen UI, mobile notifications) are seeded once;
-existing user files are kept and not merged with new defaults. Managed Claude `settings.json` is reapplied every run, so put
-policy changes in Ansible config. Repository marketplace and plugin declarations
+Codex config and Claude preferences (fullscreen UI, mobile notifications) are seeded once; existing user files are
+kept and not merged with new defaults. The global working agreements (Claude `CLAUDE.md`, Codex `AGENTS.md`,
+Antigravity `GEMINI.md`) are rendered from the shared [baseline](../roles/common/files/agent-baseline.md) on every
+run (`AGENTS.md` and `GEMINI.md` only while `codex_enabled` / `antigravity_enabled`), so hand edits are overwritten:
+move rules from restored copies into the baseline or a project's own instructions first. Managed Claude
+`settings.json` is reapplied every run, so put policy changes in Ansible config. Repository marketplace and plugin declarations
 (`claude_personal_plugin_settings`, plus `claude_work_plugin_settings` in the work home) are added when missing
 and never change an entry already there. To opt out, disable the plugin (`claude plugin disable` writes
 `"name@marketplace": false`); `claude plugin uninstall` and `claude plugin marketplace remove` delete the entry,
@@ -129,9 +132,7 @@ Declarations do not vouch for a downloaded plugin or its hooks: review and insta
 (`CLAUDE_CONFIG_DIR=<home> claude plugin install <name@marketplace>`), and run `claude plugin update` there after
 a release. Old cached plugin registrations are references, not portable installs.
 
-The shared [working agreements](../roles/common/files/agent-baseline.md) are copied into Codex homes and rendered
-into the managed Claude instructions; keep project facts in project instructions, not machine-specific memory
-folders. Review MCP and trusted-project paths in anything restored.
+Keep project facts in project instructions, not machine-specific memory folders. Review MCP and trusted-project paths in anything restored.
 
 Put hardware commands and personal aliases in `~/.config/zsh/local.zsh` (seeded once, sourced last); `gi` keeps
 forgit's meaning and `gri` is the old grep helper. Review old login-shell wake commands, display connectors,

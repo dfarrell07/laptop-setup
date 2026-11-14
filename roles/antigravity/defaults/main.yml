@@ -6,3 +6,7 @@ antigravity_enabled: true
 packages_install_binaries: true  # shared offline switch
 antigravity_manifest_base: https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests
 antigravity_bin_dir: "{{ ansible_facts['user_dir'] }}/.local/bin"
+# Homes that get the managed GEMINI.md (shared agent baseline): gper's, and gper2's on Linux (zshrc.j2).
+antigravity_gemini_homes: >-
+  {{ [ansible_facts['user_dir'] ~ '/.gemini']
+     + ([ansible_facts['user_dir'] ~ '/.gemini-per2'] if ansible_facts['system'] == 'Linux' else []) }}

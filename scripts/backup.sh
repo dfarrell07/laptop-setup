@@ -138,6 +138,7 @@ DOTFILES=(
   .gemini/config/config.json
   .gemini/config/mcp_config.json
   .gemini/antigravity-cli/settings.json
+  .gemini-per2/GEMINI.md
   .gemini-per2/config/mcp_config.json
   .gemini-per2/antigravity-cli/settings.json
   .config/.jira/.config.yml

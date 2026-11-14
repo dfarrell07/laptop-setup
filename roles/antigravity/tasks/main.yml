@@ -126,3 +126,17 @@
   loop: "{{ _agy_old.files }}"
   loop_control:
     label: "{{ item.path | basename }}"
+
+- name: Ensure Antigravity launcher homes exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop: "{{ antigravity_gemini_homes }}"
+
+- name: Deploy global Antigravity working agreements (managed by Ansible; edits are overwritten each run)
+  ansible.builtin.template:
+    src: "{{ role_path }}/../common/templates/agent-baseline.md.j2"
+    dest: "{{ item }}/GEMINI.md"
+    mode: "0600"
+  loop: "{{ antigravity_gemini_homes }}"
