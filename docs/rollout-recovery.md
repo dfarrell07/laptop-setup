@@ -3,7 +3,7 @@
 <!-- markdownlint-disable MD013 -->
 
 Companion to [rollout-plan.md](rollout-plan.md). Print it or keep it on another device: after the agent chunk Claude's deny rules
-block its Read and Edit tools on `~/.ssh`, shell rc files and sudoers paths, `sudo` is denied and it cannot supply the sudo password, so recovery from system chunks is human-only.
+block its Read and Edit tools on `~/.ssh`, shell rc files and sudoers paths; `sudo` commands are denied and it cannot supply the sudo password, so recovery from system chunks is human-only.
 One `##` section per chunk, named exactly like `group_vars/all/rollout.yml` (a test checks this), in registry order. Each lists why the
 chunk exists, how it breaks, how to verify it and how to undo it. Replace `<...>` placeholders.
 

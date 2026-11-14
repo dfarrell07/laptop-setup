@@ -235,10 +235,15 @@ class MigrationTests(unittest.TestCase):
         keys = ['approval_policy="never"', 'sandbox_mode="danger-full-access"']
         with tempfile.TemporaryDirectory() as name:
             config = Path(name) / 'config.toml'
-            config.write_text('model = "m"\n\n[profiles.careful]\napproval_policy = "untrusted"\n')
-            run = lambda: subprocess.run([sys.executable, '-I', str(helper), str(config), *keys],
-                                         capture_output=True, text=True)
+            original = '# header\nmodel = "m"\n\n[profiles.careful]\napproval_policy = "untrusted"\n'
+            config.write_text(original)
+            run = lambda *extra: subprocess.run([sys.executable, '-I', str(helper), str(config), *keys, *extra],
+                                                capture_output=True, text=True)
+            self.assertEqual(run('--check').stdout.strip(), 'changed')
+            self.assertEqual(config.read_text(), original)
             self.assertEqual(run().stdout.strip(), 'changed')
+            self.assertTrue(config.read_text().startswith(
+                '# header\nmodel = "m"\napproval_policy = "never"\nsandbox_mode = "danger-full-access"\n\n[profiles'))
             self.assertEqual(tomllib.loads(config.read_text()), {
                 'approval_policy': 'never', 'sandbox_mode': 'danger-full-access', 'model': 'm',
                 'profiles': {'careful': {'approval_policy': 'untrusted'}}})
