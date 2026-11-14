@@ -4,6 +4,7 @@ import atexit
 import importlib.util
 import json
 import os
+import platform
 import pty
 import re
 import shutil
@@ -21,7 +22,7 @@ rollout = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(rollout)
 
 CATALOG, DEFAULT = rollout.load_catalog()
-# In-process tests model a Linux host unless they pass linux=False, so they pass on a Mac too
+# In-process tests model a Linux host unless they pass linux=False; subprocess tests of system chunks need Linux
 rollout.host_is_linux = lambda: True
 
 
@@ -311,6 +312,7 @@ class ChunkArgsTests(unittest.TestCase):
             self.args('dotfils')
         self.assertIn("did you mean 'dotfiles'", str(ctx.exception))
 
+    @unittest.skipUnless(platform.system() == 'Linux', 'system chunks are linux_only: refused before the prompt elsewhere')
     def test_high_risk_chunk_needs_a_terminal_unless_previewing(self):
         base = [sys.executable, str(ROOT / 'scripts/rollout.py'), 'chunk-args', '--config', config('')]
         refused = subprocess.run(base + ['sys_signin'], capture_output=True, text=True, stdin=subprocess.DEVNULL)
@@ -407,6 +409,7 @@ class MakeInjectionTests(unittest.TestCase):
                 self.assertFalse(created, 'CHUNK was executed as shell text')
 
 
+@unittest.skipUnless(platform.system() == 'Linux', 'system chunks are linux_only: refused before the prompt elsewhere')
 class ConfirmationTests(unittest.TestCase):
     """The high-risk prompt must reach the terminal (stderr), never the arguments make captures (stdout)."""
 
@@ -465,7 +468,6 @@ class UxTests(unittest.TestCase):
                 self.assertLess(line.index('rollout-banner'), line.index('preflight'))
         self.assertIn('rollout-banner', re.search(r'(?m)^system: (.*)$', makefile).group(1))
         self.assertIn('rollout-banner', re.search(r'(?m)^plan: (.*)$', makefile).group(1))
-
 
 
 class LinuxOnlyTests(unittest.TestCase):
