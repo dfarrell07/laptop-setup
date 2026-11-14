@@ -275,26 +275,41 @@
 # macOS: the formula's tailscaled needs a root launchd daemon that nothing else installs (Linux enables it above).
 # tailscaled's own installer writes /Library/LaunchDaemons/com.tailscale.tailscaled.plist and loads it at boot;
 # `sudo brew services` is avoided because Homebrew refuses to refresh its API cache as root.
+# The installer copies the binary to /usr/local/bin/tailscaled, so it is re-run when Homebrew upgrades tailscale.
+# Apple Silicon only: on Intel the Homebrew link is that same path, which the installer would overwrite.
 - name: Start installed Tailscale daemon (macOS)
   when:
     - is_macos
+    - dotfiles_homebrew_prefix != '/usr/local'
     - "'tailscale' in packages_brew + packages_extra_brew"
   block:
-    - name: Check for the Tailscale daemon in the system launchd domain (macOS)  # noqa: command-instead-of-module
+    - name: Check for Tailscale daemons in the system launchd domain (macOS)  # noqa: command-instead-of-module
       ansible.builtin.command:
-        argv: [launchctl, print, system/com.tailscale.tailscaled]
+        argv: [launchctl, print, "system/{{ item }}"]
+      loop: [com.tailscale.tailscaled, homebrew.mxcl.tailscale]
       register: _packages_tailscaled_launchd
       changed_when: false
       failed_when: false
       check_mode: false
 
+    - name: Compare the installed daemon with the Homebrew tailscaled (macOS)
+      ansible.builtin.command:
+        argv: [cmp, -s, /usr/local/bin/tailscaled, "{{ dotfiles_homebrew_prefix }}/bin/tailscaled"]
+      register: _packages_tailscaled_cmp
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    # Skipped when a `brew services` daemon (homebrew.mxcl.tailscale) is already loaded: two would share one state dir
     - name: Install and start the Tailscale system daemon (macOS)
       ansible.builtin.command:
         argv: ["{{ dotfiles_homebrew_prefix }}/bin/tailscaled", install-system-daemon]
       become: true
       tags: [become]
       changed_when: true
-      when: _packages_tailscaled_launchd.rc != 0
+      when:
+        - _packages_tailscaled_launchd.results[1].rc != 0
+        - _packages_tailscaled_launchd.results[0].rc != 0 or _packages_tailscaled_cmp.rc != 0
   rescue:
     - name: Warn the Tailscale daemon did not start (macOS)
       ansible.builtin.debug:
