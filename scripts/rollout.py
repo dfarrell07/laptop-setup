@@ -142,12 +142,18 @@ def require_enabled(catalog, enabled, name):
         raise RolloutError(f"chunk '{name}' is not enabled; add it to rollout_enable in config.yml (make status shows the list)")
 
 
-def chunk_args(catalog, enabled, name, linux=None):
-    """Extra ansible-playbook arguments that apply exactly one enabled chunk."""
+def chunk_args(catalog, enabled, name, linux=None, no_sudo=False):
+    """Extra ansible-playbook arguments that apply exactly one enabled chunk.
+
+    no_sudo (make NOSUDO=1): run a sudo chunk without a password, skipping its become-tagged (root-only)
+    tasks. Everything else applies; a later run with sudo applies the rest.
+    """
     require_enabled(catalog, enabled, name)
     if not_here(catalog, [name], linux):
         raise RolloutError(f"'{name}' is Linux-only: its roles do nothing on this OS, so there is nothing to plan or apply")
     system = name.startswith('sys_')
+    if no_sudo and system:
+        raise RolloutError(f"'{name}' is a system chunk: every task needs root, so NOSUDO=1 would apply nothing")
     # System sub-chunks share the `system` role tag (its untagged prerequisites must run), so they are
     # selected by complement; every other chunk is selected by its own tag. Required chunks stay unskipped:
     # intra-role features inherit their parent's tag (login_shell inside desktop) and a system chunk must still
@@ -156,7 +162,7 @@ def chunk_args(catalog, enabled, name, linux=None):
     required = closure(catalog, name)
     keep = {name} | (required if not system else {n for n in required if not n.startswith('sys_')})
     skip = [n for n in catalog if n not in keep]
-    sudo = catalog[name].get('sudo', True)
+    sudo = catalog[name].get('sudo', True) and not no_sudo
     if not sudo:
         skip.append('become')
     args = ['--tags', f"common,{'system' if system else name}"]
@@ -237,6 +243,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('command', choices=['skip-tags', 'status', 'chunk-args', 'banner', 'verify', 'next-step'])
     parser.add_argument('chunk', nargs='?', default='')
+    parser.add_argument('--no-sudo', action='store_true', help='chunk-args without sudo: skip root-only (become) tasks')
     parser.add_argument('--preview', action='store_true', help='chunk-args for a read-only preview: skip the high-risk confirmation')
     parser.add_argument('--config', default=str(CONFIG))
     args = parser.parse_args(argv)
@@ -271,7 +278,11 @@ def main(argv=None):
             if args.command == 'chunk-args':
                 if not name:
                     raise RolloutError('chunk-args needs a chunk name')
-                result = chunk_args(catalog, enabled, name)
+                result = chunk_args(catalog, enabled, name, no_sudo=args.no_sudo)
+                if args.no_sudo and catalog[name].get('sudo', True):
+                    # stderr, never stdout: make captures stdout as ansible-playbook arguments
+                    print(f"NOSUDO: root-only tasks of '{name}' are skipped (shown as skipping); "
+                          f"apply them later with: make apply CHUNK={name}", file=sys.stderr)
                 if not args.preview:
                     confirm_high_risk(catalog, name)
                 print(' '.join(result))
