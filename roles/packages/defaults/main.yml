@@ -369,7 +369,8 @@ packages_brew_update: false  # launchd refreshes metadata; updating on every pro
 packages_brew_autoupdate_interval: 86400  # seconds per metadata refresh; 0 disables the background job
 
 # Alacritty's cask is disabled by Homebrew Gatekeeper policy; do not bypass it.
-packages_brew_cask: "{{ ['ghostty'] if desktop_terminal | default('ghostty') == 'ghostty' else [] }}"
+# font-dejavu: the Linux terminal font (desktop_alacritty_font_family), so Ghostty matches Alacritty.
+packages_brew_cask: "{{ ['font-dejavu'] + (['ghostty'] if desktop_terminal | default('ghostty') == 'ghostty' else []) }}"
 
 packages_brew_cask_work:
   - google-chrome
