@@ -3,14 +3,13 @@
 # Overrides vendor defaults at /usr/share/dnf5/dnf5-plugins/automatic.conf
 
 [commands]
-# Apply updates (not just download); upgrade_type below limits them to security advisories
+# Apply updates (not just download)
 apply_updates = {{ 'yes' if system_dnf_automatic_apply_updates else 'no' }}
 download_updates = yes
 
-# Security advisories only — applies kernel, container runtime, and compiler security updates.
-# Note: kernel security updates ARE included; if mid-session kernel updates are disruptive,
-# disable auto-apply (apply_updates = no) to download only.
-upgrade_type = security
+# default: all updates; security: security advisories only (system_dnf_automatic_upgrade_type).
+# Kernel updates are included and take effect at the next reboot; reboot = never below.
+upgrade_type = {{ system_dnf_automatic_upgrade_type }}
 
 # Wait up to 60s for network
 network_online_timeout = 60

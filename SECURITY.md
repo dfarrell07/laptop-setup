@@ -18,8 +18,8 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   DNS-over-TLS/DNSSEC, core dump disable, io_uring restricted, kernel module blacklist, mount options
   (`/tmp`, `/dev/shm`, `/home`, `/boot`), 0700 home directories, `pam_wheel` for `su`, root account locked, inactive account lockout,
   cups-browsed/avahi/NFS masking, optional AIDE and weekly setuid scan, chrony NTS, dnf-automatic. Corporate-managed (CSB-detected)
-  hosts skip chrony time sync, the DNS-over-TLS drop-in and dnf-automatic updates; RHEL CSB also skips boot config and firewall zones
-  (Fedora hybrid CSB keeps them).
+  hosts skip chrony time sync and the DNS-over-TLS drop-in; RHEL CSB also skips dnf-automatic (IT applies updates there), boot config
+  and firewall zones (Fedora hybrid CSB keeps them).
   Opportunistic DoT with `allow-downgrade` DNSSEC lets an on-path attacker force plain DNS; set `system_dot_mode: yes` and
   `system_dnssec_mode: yes` for strict enforcement (breaks captive portals)
 - **Git security** — `core.fsmonitor=false`, `safe.bareRepository=explicit`, `transfer.fsckObjects=true`, `protocol.file.allow=user`,
