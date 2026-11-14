@@ -75,6 +75,7 @@
     regexp: '^{{ item.1.key }}\s*='
     line: "{{ item.1.key }} = {{ item.1.value | to_json }}"
     insertbefore: BOF
+    create: true  # check mode on a fresh home: the seed task has not written config.toml yet
     mode: "0600"
   loop: "{{ [codex_work_config_dir, codex_personal_config_dir]
             | product([{'key': 'approval_policy', 'value': codex_approval_policy},
