@@ -425,7 +425,7 @@ print -r -- "PARENT:$CLAUDE_CODE_USE_VERTEX:$CODEX_HOME:$ANTHROPIC_API_KEY:${DBU
                     dev = subprocess.run(['zsh', '-f', str(probe)], cwd=cwd, env=git_env,
                                          capture_output=True, text=True, check=True)
                     for line in dev.stdout.splitlines():
-                        self.assertEqual(json.loads(line)['args'], ['--dangerously-skip-permissions', *expected])
+                        self.assertEqual(json.loads(line)['args'], ['--remote-control', '--dangerously-skip-permissions', *expected])
             # Exercise the extra shell parsing level used by tmux with the same custom paths.
             tmux = binary_dir / 'tmux'
             tmux.write_text('#!/usr/bin/env python3\nimport os,sys,subprocess\n'
