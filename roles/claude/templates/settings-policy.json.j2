@@ -6,9 +6,11 @@
   },
   "sandbox": {"enabled": {{ claude_sandbox_enabled | bool | lower }}, "allowUnsandboxedCommands": false, "failIfUnavailable": true, "enableWeakerNestedSandbox": {{ claude_nested_sandbox | bool | lower }}},
   "enableAllProjectMcpServers": {{ claude_enable_all_project_mcp_servers | to_json }},
+  "skipDangerousModePermissionPrompt": true,
   "permissions": {
+    "defaultMode": {{ claude_default_mode | to_json }},
     "deny": [
-{% set deny_entries = [] %}
+{% set deny_entries = claude_deny_bash | list %}
 {# Isolate the other instances entirely; this instance keeps access to its own memory and plans. #}
 {% for instance_dir in _claude_instances if instance_dir != item %}
 {% set _path = (instance_dir | replace(ansible_facts['user_dir'], '~')) + '/**' %}

@@ -253,7 +253,7 @@
           item ~ '/settings.json', '--remove-legacy', item ~ '/settings.local.json', '--defaults',
           claude_personal_plugin_settings
           | combine(claude_work_plugin_settings if item == claude_work_config_dir else {}, recursive=true)
-          | to_json]
+          | to_json, '--retire', claude_retired_deny | to_json]
          + (['--check'] if ansible_check_mode else []) }}
     stdin: "{{ lookup('ansible.builtin.template', 'settings-policy.json.j2') }}"
   register: _claude_settings_merge

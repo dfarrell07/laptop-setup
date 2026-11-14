@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Merge the Ansible-managed Claude Code security policy into a user settings.json.
 
-Usage: merge-claude-settings.py SETTINGS_JSON [--check] [--remove-legacy LOCAL_JSON] [--defaults JSON] < policy.json
+Usage: merge-claude-settings.py SETTINGS_JSON [--check] [--remove-legacy LOCAL_JSON] [--defaults JSON]
+       [--retire JSON_LIST] < policy.json
 
 Prints "changed" or "unchanged". Exits non-zero (and leaves the file alone) when
 the existing file or the policy is not a JSON object.
@@ -11,7 +12,8 @@ Merge rules: user keys are kept; permissions.deny is the de-duplicated union
 key (sandbox, enableAllProjectMcpServers, env keys) overrides
 the user's value, merging dictionaries recursively. --defaults (plugin declarations)
 only adds absent keys and absent marketplace or plugin entries, so a user's entry,
-including a disabled plugin, is never changed.
+including a disabled plugin, is never changed. --retire names further deny entries to drop
+(claude_retired_deny) unless the policy itself still denies them.
 """
 import json
 import os
@@ -61,14 +63,15 @@ def fill_missing(base, defaults):
     return result
 
 
-def merge(existing, policy):
+def merge(existing, policy, retire=()):
     policy = dict(policy)
     perms = policy.pop('permissions', {})
     merged = deep_merge(existing, policy)
     current = merged.get('permissions', {})
     if not isinstance(current, dict):
         fail('existing "permissions" is not an object; refusing to overwrite it')
-    deny = [d for d in dict.fromkeys(list(perms.get('deny', [])) + list(current.get('deny', []))) if d not in RETIRED_DENY]
+    retired = (RETIRED_DENY | set(retire)) - set(perms.get('deny', []))
+    deny = [d for d in dict.fromkeys(list(perms.get('deny', [])) + list(current.get('deny', []))) if d not in retired]
     out_perms = deep_merge(current, {k: v for k, v in perms.items() if k not in ('deny', 'allow', 'ask')})
     for key in ('allow', 'ask'):
         if key not in current and key in perms:
@@ -88,7 +91,7 @@ def main(argv):
     args = argv[1:]
     check = '--check' in args
     options = {}
-    for name in ('--remove-legacy', '--defaults'):
+    for name in ('--remove-legacy', '--defaults', '--retire'):
         if name in args:
             index = args.index(name)
             if index + 1 >= len(args):
@@ -97,9 +100,15 @@ def main(argv):
             del args[index:index + 2]
     legacy = options.get('--remove-legacy')
     defaults = load_object(options.get('--defaults', '{}'), '--defaults')
+    try:
+        retire = json.loads(options.get('--retire', '[]'))
+    except ValueError as exc:
+        fail('--retire is not valid JSON (%s)' % exc)
+    if not isinstance(retire, list) or not all(isinstance(entry, str) for entry in retire):
+        fail('--retire must be a JSON list of strings')
     args = [a for a in args if a != '--check']
     if len(args) != 1:
-        fail('usage: SETTINGS_JSON [--check] [--remove-legacy LOCAL_JSON] [--defaults JSON] < policy.json')
+        fail('usage: SETTINGS_JSON [--check] [--remove-legacy LOCAL_JSON] [--defaults JSON] [--retire JSON_LIST] < policy.json')
     # Write through a symlinked settings.json instead of replacing the link.
     path = os.path.realpath(args[0])
     policy = load_object(sys.stdin.read(), 'policy')
@@ -109,7 +118,7 @@ def main(argv):
         with open(path, encoding='utf-8') as handle:
             old_text = handle.read()
         existing = load_object(old_text, path) if old_text else {}
-    new_text = json.dumps(fill_missing(merge(existing, policy), defaults), indent=2) + '\n'
+    new_text = json.dumps(fill_missing(merge(existing, policy, retire), defaults), indent=2) + '\n'
     changed = old_text is None or existing != json.loads(new_text) or \
         (os.stat(path).st_mode & 0o777) != 0o600
     if changed and not check:
