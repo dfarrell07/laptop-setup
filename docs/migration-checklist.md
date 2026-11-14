@@ -105,8 +105,11 @@ repository, RHEL CSB or hybrid Fedora CSB); other Linux hosts use the
 
 The launchers keep their old bypass arguments: Claude `--dangerously-skip-permissions`, Codex
 `--ask-for-approval=never --sandbox=danger-full-access`, gper and gper2
-`--mode=accept-edits --dangerously-skip-permissions`. Do not treat the managed sandbox and deny config as an
-enforcement guarantee while they are in place. The old `--plugin-dir .` is gone: a session started in any other
+`--mode=accept-edits --dangerously-skip-permissions`. The same settings are also applied without the launchers:
+Claude `permissions.defaultMode: bypassPermissions` (`claude_default_mode`) and Codex `approval_policy`/`sandbox_mode`
+in `config.toml`, so cross-session messages are not held between modes. Each run also drops stale deny rules that
+blocked routine commands (`claude_retired_deny`: `rm -rf /*`, `curl`, `wget`, `dd`). Do not treat the managed
+sandbox and deny config as an enforcement guarantee while they are in place. The old `--plugin-dir .` is gone: a session started in any other
 directory no longer loads it as a plugin (skills, hooks, MCP servers, `bin/` on PATH). Inside a repository listed
 in `dotfiles_claude_plugin_dev_dirs`, or a worktree of one, the launchers pass `--plugin-dir <its top level>`;
 the default lists only `claude-skills` under `git_repos_base_dir`, so add other plugin checkouts you develop

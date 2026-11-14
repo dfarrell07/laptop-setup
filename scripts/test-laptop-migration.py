@@ -206,17 +206,21 @@ class MigrationTests(unittest.TestCase):
             variables = {'ansible_facts': {'user_dir': name}, 'packages_install_binaries': False}
             run_play(directory, variables=variables, roles=['codex'])
             config = directory / '.codex/config.toml'
-            self.assertEqual(tomllib.loads(config.read_text())['model'], 'gpt-6.1-sol')
+            seeded = tomllib.loads(config.read_text())
+            self.assertEqual((seeded['model'], seeded['approval_policy'], seeded['sandbox_mode']),
+                             ('gpt-6.1-sol', 'never', 'danger-full-access'))
             instructions = directory / '.codex/AGENTS.md'
             managed = instructions.read_text()
             self.assertIn(BASELINE, managed)
             self.assertEqual(managed, (directory / '.codex-personal/AGENTS.md').read_text())
             self.assertIn('changed=0', run_play(directory, variables=variables, roles=['codex']))
-            # config.toml is seed-only; the working agreements are managed and re-rendered.
-            config.write_text('model = "user-model"\n')
+            # config.toml keeps user keys and tables; approval and sandbox are reapplied; agreements re-render.
+            config.write_text('approval_policy = "on-request"\nmodel = "user-model"\n\n[projects."/x"]\ntrust_level = "trusted"\n')
             instructions.write_text('User-owned working agreements\n')
             run_play(directory, variables=variables, roles=['codex'])
-            self.assertEqual(config.read_text(), 'model = "user-model"\n')
+            self.assertEqual(tomllib.loads(config.read_text()), {
+                'approval_policy': 'never', 'sandbox_mode': 'danger-full-access', 'model': 'user-model',
+                'projects': {'/x': {'trust_level': 'trusted'}}})
             self.assertEqual(instructions.read_text(), managed)
             self.assertFalse((directory / '.local/share/codex-cli').exists())
             self.assertEqual((directory / '.codex').stat().st_mode & 0o777, 0o700)
