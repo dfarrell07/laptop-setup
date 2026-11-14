@@ -34,7 +34,9 @@ export TMUX_TMPDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tmux"
 export KIND_EXPERIMENTAL_PROVIDER=podman  # use rootless Podman provider (not docker-provider-via-socket)
 export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ssh-agent.socket}"
 {% else %}
-export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$HOME/.ssh/ssh-agent.socket}"
+# Apple's launchd agent (no FIDO2 support) sets SSH_AUTH_SOCK until it is disabled and you log in again; use the
+# Homebrew agent instead, but keep a forwarded agent (ssh -A)
+[[ -z "${SSH_AUTH_SOCK:-}" || "$SSH_AUTH_SOCK" == */com.apple.launchd.*/Listeners ]] && export SSH_AUTH_SOCK="$HOME/.ssh/ssh-agent.socket"
 {% endif %}
 {% if profile == 'work' %}
 {% if dotfiles_aws_profile %}
