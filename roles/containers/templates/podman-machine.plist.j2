@@ -17,6 +17,9 @@
   <dict>
     <key>PATH</key>
     <string>{{ dotfiles_homebrew_prefix | e }}/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <!-- podman keeps the machine's runtime files under $TMPDIR/podman, where the login shell's podman looks -->
+    <key>TMPDIR</key>
+    <string>{{ _containers_tmpdir.stdout | trim | e }}</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>
