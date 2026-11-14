@@ -10,6 +10,13 @@
 {% endif %}
 {% if _system == 'Darwin' %}
 export PATH="{{ dotfiles_homebrew_prefix | trim }}/bin:$PATH"
+{% if dotfiles_macos_gnu_tools | bool %}
+# GNU coreutils, sed, grep, find, awk and tar ahead of the BSD tools, so commands behave as on Linux
+for _gnubin in coreutils gnu-sed grep findutils gawk gnu-tar; do
+  [[ -d "{{ dotfiles_homebrew_prefix | trim }}/opt/$_gnubin/libexec/gnubin" ]] && PATH="{{ dotfiles_homebrew_prefix | trim }}/opt/$_gnubin/libexec/gnubin:$PATH"
+done
+unset _gnubin
+{% endif %}
 {% endif %}
 export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/go/bin:$HOME/bin:$HOME/.cargo/bin:$HOME/.krew/bin:$PATH"
 export GOPATH="$HOME/go"
