@@ -303,7 +303,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Verify:** `make verify CHUNK=sys_time_dns` (`llmnr-disabled`, `chronyd-service`, `dnf-automatic`).
 - **Undo:** on a CSB host (`csb_detected`) delete `/etc/systemd/resolved.conf.d/98-llmnr.conf` and run
   `sudo systemctl restart systemd-resolved`. On hybrid CSB Fedora also: `sudo systemctl disable --now dnf5-automatic.timer
-  flatpak-update.timer`, delete `/etc/dnf/automatic.conf`, `/etc/systemd/system/dnf5-automatic.service.d/aide-update.conf` and
+  flatpak-update.timer`, delete `/etc/dnf/automatic.conf`, `/etc/systemd/system/dnf5-automatic.service.d/aide-update.conf`,
+  `/etc/systemd/system/aide-rebaseline.service` (after `sudo systemctl disable aide-rebaseline`) and
   `/etc/systemd/system/flatpak-update.{service,timer}`, and optionally `sudo dnf remove dnf5-plugin-automatic`. On other hosts:
   restore `/etc/chrony.conf` and `/etc/dnf/automatic.conf` from the snapshot (the role keeps no backup); delete
   `/usr/local/bin/laptop-setup-validate-chrony` and `/etc/systemd/resolved.conf.d/{98-llmnr,99-dot}.conf`, then

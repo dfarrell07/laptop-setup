@@ -246,7 +246,9 @@ fi
 # Daily user-space updater (packages role; docs/auto-updates.md): Linux host only
 if $IS_LINUX && [[ -z "$CONTAINER" ]]; then
   if grep -qiE '^packages_user_updates_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "${_cfg:-/dev/null}" 2>/dev/null; then
-    record "user-updates" "PASS" "disabled in config"
+    if [[ ! ("$EUID" -eq 0 && -n "${SUDO_USER:-}") ]] && systemctl --user is-enabled laptop-user-update.timer &>/dev/null; then
+      record "user-updates" "WARN" "disabled in config but the timer is still enabled (make packages removes it)"
+    else record "user-updates" "PASS" "disabled in config"; fi
   elif [[ "$EUID" -eq 0 && -n "${SUDO_USER:-}" ]]; then
     record "user-updates" "SKIP" "user-scope systemd is unreachable under sudo; re-run: make smoke-test-user"
   elif systemctl --user is-failed --quiet laptop-user-update.service; then

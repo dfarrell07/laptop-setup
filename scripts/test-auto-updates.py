@@ -102,13 +102,15 @@ class AutoUpdateTests(unittest.TestCase):
              f'  echo "{home}/.npm-global/lib/node_modules/inherits:inherits@2.0.4:inherits@2.0.3:inherits@2.0.4:global"\n'
              f'  echo "{home}/.npm-global/lib/node_modules/ms:ms@2.1.3:ms@3.0.0-beta.2:ms@2.1.3:global"\n'
              f'  echo "{home}/.npm-global/lib/node_modules/rc:rc@1.4.0:rc@1.4.0-alpha.2:rc@1.4.0:global"\n'
+             f'  echo "{home}/.npm-global/lib/node_modules/tag:tag@0.2.0-alpha.2:tag@0.2.0:tag@0.2.0-alpha.2:global"\n'
              '  exit 1\nfi\n'
              f'exit {npm_rc}')
-        stub(bin_dir, 'podman', 'exit ' + ('0' if container_exists else '1'))
+        stub(bin_dir, 'podman', f'echo "podman $*" >> {log}; ' + ('[ "$2" = inspect ] && echo false; exit 0'
+                                                                    if container_exists else 'exit 1'))
         result = subprocess.run(['bash', str(ROOT / 'roles/packages/files/laptop-user-update.sh'), 'fedora-dev'],
                                 env={'HOME': str(home), 'PATH': '/usr/bin:/bin', 'LAPTOP_UPDATE_PATH': f'{bin_dir}:/usr/bin:/bin',
                                      'LAPTOP_UPDATE_PIPX_SKIP': 'yamllint ansible-lint',
-                                     'LAPTOP_UPDATE_NPM': '@openai/codex ms rc'},
+                                     'LAPTOP_UPDATE_NPM': '@openai/codex ms rc tag'},
                                 capture_output=True, text=True,
                                 timeout=30)
         return result, (log.read_text() if log.exists() else '')
@@ -127,6 +129,8 @@ class AutoUpdateTests(unittest.TestCase):
             self.assertNotIn('inherits', installed)  # not allowlisted (may come from git or a private registry)
             self.assertNotIn('ms@', installed)  # a newer prerelease is never moved back to latest
             self.assertIn('rc@1.4.0', installed)  # a prerelease moves to its own final release
+            self.assertNotIn('tag@', installed)  # a mis-tagged prerelease latest never replaces a release
+            self.assertIn('podman stop --time 10 fedora-dev', calls)  # the stopped container is stopped again
             self.assertIn('pipx upgrade-all --skip yamllint ansible-lint', calls)
             self.assertIn('distrobox upgrade fedora-dev', calls)
         with tempfile.TemporaryDirectory() as name:
@@ -134,7 +138,7 @@ class AutoUpdateTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertIn('== npm: FAILED (exit 3)', result.stdout)
             self.assertIn('pipx upgrade-all', calls)  # later steps still run
-            self.assertNotIn('distrobox', calls)
+            self.assertNotIn('distrobox upgrade', calls)
         with tempfile.TemporaryDirectory() as name:
             result, calls = self.run_updater(Path(name), outdated_fails=True)
             self.assertEqual(result.returncode, 1)
@@ -146,12 +150,18 @@ class AutoUpdateTests(unittest.TestCase):
         start = source.index('# Daily user-space updater')
         end = source.index('\nfi\n', source.index('record "user-updates" "WARN"')) + 4
         # systemctl is a shell function, not a PATH stub: a temp dir may be mounted noexec.
-        for state, body, expected in [('failed', 'return 0', 'user-updates FAIL'),
-                                      ('enabled', '[ "$2" = is-enabled ]', 'user-updates PASS'),
-                                      ('off', 'return 1', 'user-updates WARN')]:
+        disabled = tempfile.NamedTemporaryFile('w', suffix='.yml', delete=False)
+        disabled.write('packages_user_updates_enabled: false\n')
+        disabled.close()
+        self.addCleanup(os.unlink, disabled.name)
+        for state, body, cfg, expected in [('failed', 'return 0', '/dev/null', 'user-updates FAIL'),
+                                           ('enabled', '[ "$2" = is-enabled ]', '/dev/null', 'user-updates PASS'),
+                                           ('off', 'return 1', '/dev/null', 'user-updates WARN'),
+                                           ('disabled-clean', 'return 1', disabled.name, 'user-updates PASS'),
+                                           ('disabled-left', '[ "$2" = is-enabled ]', disabled.name, 'user-updates WARN')]:
             with self.subTest(state=state):
                 run = subprocess.run(['bash', '-c', 'record() { printf "%s %s\\n" "$1" "$2"; }; IS_LINUX=true; CONTAINER=; '
-                                      '_cfg=/dev/null; systemctl() { ' + body + '; };\n' + source[start:end]],
+                                      f'_cfg={cfg}; systemctl() {{ ' + body + '; };\n' + source[start:end]],
                                      capture_output=True, text=True)
                 self.assertEqual(run.stdout.strip(), expected, run.stderr)
 
@@ -184,11 +194,11 @@ class AutoUpdateTests(unittest.TestCase):
         lines = hook['ansible.builtin.copy']['content'].splitlines()
         post = next(l for l in lines if l.startswith('ExecStopPost=-'))[len('ExecStopPost=-'):]
         self.assertIn('ExecStartPre=-/usr/bin/touch /run/dnf-automatic-aide.stamp', lines)
-        self.assertIn('TimeoutStopSec=30min', lines)  # stop-phase commands are killed after 45s by default
+        self.assertFalse([l for l in lines if l.startswith('TimeoutStopSec')])  # the scan is not in the stop phase
         self.assertNotRegex(post.replace('$$', ''), r'\$')  # systemd would expand a single $
-        for touched, aide_rc, expect in [(None, 0, False), ('rpmdb.sqlite-shm', 0, False), ('rpmdb.sqlite', 0, True),
-                                         ('rpmdb.sqlite-wal', 1, True), ('rpmdb.sqlite', 9, False)]:
-            with self.subTest(touched=touched, aide_rc=aide_rc), tempfile.TemporaryDirectory() as name:
+        for touched, expect in [(None, False), ('rpmdb.sqlite-shm', False), ('rpmdb.sqlite', True),
+                                ('rpmdb.sqlite-wal', True)]:
+            with self.subTest(touched=touched), tempfile.TemporaryDirectory() as name:
                 d = Path(name)
                 (d / 'rpm').mkdir()
                 for f in ['rpmdb.sqlite', 'rpmdb.sqlite-shm', 'rpmdb.sqlite-wal']:
@@ -199,15 +209,30 @@ class AutoUpdateTests(unittest.TestCase):
                 os.utime(stamp, (1000, 1000))
                 if touched:
                     os.utime(d / 'rpm' / touched, None)
-                bin_dir = d / 'bin'
-                bin_dir.mkdir()
-                stub(bin_dir, 'aide', f'touch {d}/aide.db.new.gz; exit {aide_rc}')
                 cmd = (post.replace('$$', '$').replace('/usr/lib/sysimage/rpm /var/lib/rpm', str(d / 'rpm'))
-                       .replace('/run/dnf-automatic-aide.stamp', str(stamp))
-                       .replace('/var/lib/aide', str(d)).replace('/usr/bin/bash', 'bash'))
-                subprocess.run(cmd, shell=True, check=False, env={'PATH': f'{bin_dir}:/usr/bin:/bin'})
-                self.assertEqual((d / 'aide.db.gz').exists(), expect)  # installed only after a clean update
-                self.assertFalse((d / 'aide.db.new.gz').exists())  # an errored update's output is discarded
+                       .replace('/run/dnf-automatic-aide.stamp', str(stamp)).replace('/var/lib/aide', str(d))
+                       .replace('systemctl start --no-block aide-rebaseline.service', f'touch {d}/started')
+                       .replace('/usr/bin/bash', 'bash'))
+                subprocess.run(cmd, shell=True, check=False)
+                self.assertEqual((d / 'rebaseline-pending').exists(), expect)
+                self.assertEqual((d / 'started').exists(), expect)
+
+    def test_aide_rebaseline_service_installs_only_a_clean_update(self):
+        unit = (ROOT / 'roles/system/files/aide-rebaseline.service').read_text().splitlines()
+        self.assertIn('ConditionPathExists=/var/lib/aide/rebaseline-pending', unit)
+        self.assertIn('WantedBy=multi-user.target', unit)  # retries at boot after an interrupted run
+        start = next(l for l in unit if l.startswith('ExecStart='))[len('ExecStart='):]
+        for aide_rc, ok in [(0, True), (4, True), (9, False)]:
+            with self.subTest(aide_rc=aide_rc), tempfile.TemporaryDirectory() as name:
+                d = Path(name)
+                (d / 'rebaseline-pending').touch()
+                cmd = (start.replace('$$', '$').replace('/var/lib/aide', str(d)).replace('/usr/bin/bash', 'bash')
+                       .replace('aide --update', f'touch {d}/aide.db.new.gz; (exit {aide_rc})'))
+                rc = subprocess.run(cmd, shell=True, check=False).returncode
+                self.assertEqual(rc == 0, ok)
+                self.assertEqual((d / 'aide.db.gz').exists(), ok)
+                self.assertFalse((d / 'aide.db.new.gz').exists())
+                self.assertEqual((d / 'rebaseline-pending').exists(), not ok)  # kept for a retry
 
 if __name__ == '__main__':
     unittest.main()
