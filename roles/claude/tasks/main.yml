@@ -278,6 +278,14 @@
   loop_control:
     label: "{{ item | basename }}"
 
+# Each instance keeps its project trust in <dir>/.claude.json; a plain `claude` (no CLAUDE_CONFIG_DIR) uses ~/.claude.json.
+- name: Pre-trust managed repos in every Claude Code instance
+  ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/agent_trust.yml"
+  vars:
+    _agent_trust_kind: claude
+    _agent_trust_files: >-
+      {{ [ansible_facts['user_dir'] ~ '/.claude.json'] + (_claude_instances | map('regex_replace', '$', '/.claude.json') | list) }}
+
 # --- Security: ~/.claude permissions ---
 # Claude Code resets ~/.claude to 0755 on every launch, defeating a one-time
 # chmod.  Use systemd-tmpfiles to re-apply 0700 at each boot instead.
