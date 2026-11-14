@@ -484,10 +484,21 @@
 - name: SSH agent launchd setup (macOS)
   when: is_macos
   block:
+    # Apple's agent runs in the per-login gui/<uid> domain (user/<uid> alone left it running). disable persists
+    # across logins; bootout stops the running copy. Its SSH_AUTH_SOCK stays in this login's environment until
+    # logout, so the shell rc files switch away from it meanwhile.
     - name: Disable Apple built-in ssh-agent (macOS)  # noqa: command-instead-of-module
       ansible.builtin.command:
-        cmd: "launchctl disable user/{{ ansible_facts['user_uid'] }}/com.openssh.ssh-agent"
+        cmd: "launchctl disable {{ item }}/{{ ansible_facts['user_uid'] }}/com.openssh.ssh-agent"
+      loop: [gui, user]
       changed_when: false
+      failed_when: false
+
+    - name: Stop Apple built-in ssh-agent (macOS)  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        cmd: "launchctl bootout gui/{{ ansible_facts['user_uid'] }}/com.openssh.ssh-agent"
+      register: _dotfiles_apple_agent_bootout
+      changed_when: _dotfiles_apple_agent_bootout.rc == 0
       failed_when: false
 
     - name: Ensure SSH agent support directories exist (macOS)
