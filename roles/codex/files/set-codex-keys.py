@@ -33,11 +33,10 @@ def main(argv):
     lines = old.splitlines()
     head_end = next((i for i, line in enumerate(lines) if re.match(r'\s*\[', line)), len(lines))
     head, tail = lines[:head_end], lines[head_end:]
-    # A duplicate key would not parse, so the first match is the only one. Missing keys go at the end of the
-    # top-level section, before any trailing blank lines. Line endings become LF.
-    end = len(head)
-    while end and not head[end - 1].strip():
-        end -= 1
+    # A duplicate key would not parse, so the first match is the only one. Missing keys go after the leading comment
+    # and blank lines: that point is always top level, even when a later multi-line value has a line starting with
+    # "[". Line endings become LF.
+    end = next((i for i, line in enumerate(head) if line.strip() and not line.lstrip().startswith('#')), len(head))
     for key, line in wanted.items():
         pattern = re.compile(r'\s*%s\s*=' % re.escape(key))
         match = next((i for i, existing in enumerate(head) if pattern.match(existing)), None)

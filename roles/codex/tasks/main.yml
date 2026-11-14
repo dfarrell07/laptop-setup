@@ -43,6 +43,13 @@
       - codex_work_reasoning_effort in ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']
       - codex_personal_reasoning_effort in ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']
 
+- name: Assert Codex approval and sandbox settings are known values
+  ansible.builtin.assert:
+    that:
+      - codex_approval_policy in ['untrusted', 'on-request', 'never']
+      - codex_sandbox_mode in ['read-only', 'workspace-write', 'danger-full-access']
+    fail_msg: codex_approval_policy or codex_sandbox_mode has an unknown value.
+
 - name: Create private Codex account directories
   ansible.builtin.file:
     path: "{{ item }}"
@@ -62,13 +69,6 @@
     - "{{ codex_work_config_dir }}"
     - "{{ codex_personal_config_dir }}"
 
-- name: Assert Codex approval and sandbox settings are known values
-  ansible.builtin.assert:
-    that:
-      - codex_approval_policy in ['untrusted', 'on-request', 'never']
-      - codex_sandbox_mode in ['read-only', 'workspace-write', 'danger-full-access']
-    fail_msg: codex_approval_policy or codex_sandbox_mode has an unknown value.
-
 # Top-level keys only: a same-named key inside a [table] (for example [profiles.x]) is left alone.
 - name: Apply Codex approval and sandbox settings (top-level config.toml keys)
   ansible.builtin.command:
@@ -79,12 +79,27 @@
          + (['--check'] if ansible_check_mode else []) }}
   register: _codex_keys
   changed_when: _codex_keys.stdout | trim == 'changed'
+  # Codex is optional: a config.toml the helper cannot edit safely must not stop the remaining user-play roles. A
+  # request for stricter settings than the no-prompt defaults still fails, so turning prompts back on never silently
+  # does nothing.
+  failed_when: >-
+    _codex_keys.rc != 0 and (codex_approval_policy != 'never' or codex_sandbox_mode != 'danger-full-access')
   check_mode: false
   loop:
     - "{{ codex_work_config_dir }}"
     - "{{ codex_personal_config_dir }}"
   loop_control:
     label: "{{ item | basename }}"
+
+- name: Warn when Codex approval and sandbox settings could not be applied
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: {{ item.item }}/config.toml was left unchanged ({{ item.stderr | default('') | trim }}). Set
+      approval_policy = {{ codex_approval_policy | to_json }} and sandbox_mode = {{ codex_sandbox_mode | to_json }}
+      near the top of the file, before any [table], by hand.
+  loop: "{{ _codex_keys.results | selectattr('rc', 'defined') | rejectattr('rc', 'equalto', 0) | list }}"
+  loop_control:
+    label: "{{ item.item | basename }}"
 
 - name: Deploy global Codex working agreements (managed by Ansible; edits are overwritten each run)
   ansible.builtin.template:

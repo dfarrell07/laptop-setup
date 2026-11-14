@@ -243,11 +243,17 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(config.read_text(), original)
             self.assertEqual(run().stdout.strip(), 'changed')
             self.assertTrue(config.read_text().startswith(
-                '# header\nmodel = "m"\napproval_policy = "never"\nsandbox_mode = "danger-full-access"\n\n[profiles'))
+                '# header\napproval_policy = "never"\nsandbox_mode = "danger-full-access"\nmodel = "m"\n\n[profiles'))
             self.assertEqual(tomllib.loads(config.read_text()), {
                 'approval_policy': 'never', 'sandbox_mode': 'danger-full-access', 'model': 'm',
                 'profiles': {'careful': {'approval_policy': 'untrusted'}}})
             self.assertEqual(run().stdout.strip(), 'unchanged')
+            # A line starting with "[" inside a multi-line value is not a table header for insertion.
+            for original in ['m = """\n[link](x)\n"""\n', 'notify = [\n  ["a", "b"],\n]\n# Profiles\n[p]\nx = 1\n']:
+                config.write_text(original)
+                self.assertEqual(run().returncode, 0, original)
+                self.assertEqual(tomllib.loads(config.read_text()),
+                                 dict(tomllib.loads(original), approval_policy='never', sandbox_mode='danger-full-access'))
             # A key-like line inside a multi-line string must not be rewritten.
             original = 'notes = """\napproval_policy = "x"\n"""\n'
             config.write_text(original)
