@@ -23,13 +23,14 @@ sharing a machine use separate worktrees (see "Testing and CI" in [CLAUDE.md](..
 Refer to each session by role with a number unique among the peers (`provisioning`, `provisioned-1`,
 `provisioned-2`; with several provisioning machines `provisioning-1`, `provisioning-2`, or the platform, as in
 `provisioning-mac`) and use that name in every message. Session listings are not identities: a Remote Control
-session may show up unnamed or under its hostname, so match peers by their handshake. The provisioning session
-numbers the others in the order their handshakes reach it; without one, the owner assigns them. Until it has a
-number, a session handshakes as `provisioned-?`; a number, once given, is kept. Talk through the agent's
-cross-session messages where it has them (Claude Code: `SendMessage`; sessions on other machines are reachable over
-Remote Control). A session without them (Codex) opens a draft PR first (an empty signed-off commit is enough) and
-handshakes there; peers answer on that PR (until the provisioning session has `gh`, a provisioned session relays
-for it). PR comments are public: never put hostnames or other host facts in them.
+session may show up unnamed or under its hostname, so match peers by their handshake. The first provisioning
+session (with several, the owner numbers them `provisioning-1`, `-2`, or names them by platform; the owner also
+says which is first) numbers the others in the order their handshakes reach it; without one, the owner assigns
+them. Until it has a number, a session handshakes as `provisioned-?`; a number, once given, is kept. Talk through
+the agent's cross-session messages where it has them (Claude Code: `SendMessage`; sessions on other machines are
+reachable over Remote Control). A session without them (Codex) opens a draft PR first (an empty signed-off commit
+is enough) and handshakes there; peers answer on that PR (until the provisioning session has `gh`, a provisioned
+session relays for it). PR comments are public: never put hostnames or other host facts in them.
 
 ## Confirming identity
 
