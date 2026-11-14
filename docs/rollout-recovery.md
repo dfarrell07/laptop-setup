@@ -65,7 +65,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 
 ## packages
 
-- **Why:** CLI tools, pinned binaries, Go tools, pipx, krew, Tailscale package, virtualization (libvirt, qemu).
+- **Why:** CLI tools, pinned binaries, Go tools, pipx, krew, Tailscale package, virtualization (libvirt, qemu), and the daily
+  user-space updater (`laptop-user-update.timer`: npm globals, pipx, dev container; see [auto-updates](auto-updates.md)).
 - **Breaks if wrong:** a pinned-binary download can fail (the run warns and goes on). System-level effects: starts and enables `tailscaled`;
   adds you to the `libvirt` and `kvm` groups (`libvirt` membership is root-equivalent; active after the next login); enables
   `virtqemud.socket` and `virtnetworkd.socket`; overwrites same-named files in `/usr/local/bin` with no backup.
@@ -82,7 +83,9 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   `sudo systemctl disable --now tailscaled virtqemud.socket virtnetworkd.socket`, and delete what the role placed outside dnf:
   the pinned files in `/usr/local/bin` (oc, kubectl, opm, kind, helm, kustomize, k9s, transcrypt, sops, gitleaks, actionlint, zizmor,
   operator-sdk, cosign, tkn, ec), `/var/lib/ansible-packages`, the Go tools it installed in `~/go/bin`, `~/.local/bin/subctl*`,
-  `pipx uninstall yamllint ansible-lint`, and `~/.krew` (this also removes krew plugins you added yourself).
+  `pipx uninstall yamllint ansible-lint`, and `~/.krew` (this also removes krew plugins you added yourself). Stop the updater with
+  `systemctl --user disable --now laptop-user-update.timer`, then delete `~/.local/bin/laptop-user-update` and
+  `~/.config/systemd/user/laptop-user-update.{service,timer}` (or set `packages_user_updates_enabled: false`).
 
 ## ssh_client
 
@@ -289,18 +292,21 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 
 ## sys_time_dns
 
-- **Why:** chrony NTS, DNS-over-TLS, dnf-automatic.
-- **Breaks if wrong:** DoT fails on restricted networks (see `references/troubleshooting.md` § DNS). On a CSB host (`csb_detected`)
-  chrony NTS, dnf-automatic and the DoT drop-in are not applied (an existing `99-dot.conf` is removed), so the chunk does not add chrony
-  or dnf-automatic there. On hybrid CSB it still enables systemd-resolved and writes `98-llmnr.conf`, which `llmnr-disabled` checks.
-  `make verify` passes `dnf-automatic` by design and FAILs `chronyd-service` unless IT already runs chronyd. IT-owned time, update and
-  DNS config is never replaced.
+- **Why:** chrony NTS, DNS-over-TLS, dnf-automatic, the daily Flatpak update timer.
+- **Breaks if wrong:** DoT fails on restricted networks (see `references/troubleshooting.md` § DNS). dnf-automatic applies all updates
+  daily (`system_dnf_automatic_upgrade_type`), never reboots; a bad update lands without a prompt (`sudo dnf history undo last`).
+  On a CSB host (`csb_detected`) chrony NTS and the DoT drop-in are not applied (an existing `99-dot.conf` is removed); dnf-automatic is
+  skipped only on RHEL CSB (IT applies updates there) and runs on hybrid CSB Fedora, where IT's playbooks apply no OS updates. On hybrid
+  CSB the chunk still enables systemd-resolved and writes `98-llmnr.conf`, which `llmnr-disabled` checks. `make verify` passes
+  `dnf-automatic` by design on RHEL CSB and FAILs `chronyd-service` unless IT already runs chronyd. IT-owned time and DNS config is never
+  replaced.
 - **Verify:** `make verify CHUNK=sys_time_dns` (`llmnr-disabled`, `chronyd-service`, `dnf-automatic`).
-- **Undo:** on a CSB host (`csb_detected`) delete only `/etc/systemd/resolved.conf.d/98-llmnr.conf` and run
-  `sudo systemctl restart systemd-resolved`; the rest applies elsewhere: restore `/etc/chrony.conf` and `/etc/dnf/automatic.conf` from the
+- **Undo:** on a CSB host (`csb_detected`) delete `/etc/systemd/resolved.conf.d/98-llmnr.conf`, run
+  `sudo systemctl restart systemd-resolved`, and on hybrid CSB Fedora `sudo systemctl disable --now dnf5-automatic.timer`; the rest applies elsewhere: restore `/etc/chrony.conf` and `/etc/dnf/automatic.conf` from the
   snapshot (the role keeps no backup); delete
   `/usr/local/bin/laptop-setup-validate-chrony` and `/etc/systemd/resolved.conf.d/{98-llmnr,99-dot}.conf`, then
-  `sudo systemctl restart systemd-resolved`; `sudo systemctl disable --now dnf5-automatic.timer` (`dnf-automatic.timer` on dnf4).
+  `sudo systemctl restart systemd-resolved`; `sudo systemctl disable --now dnf5-automatic.timer` (`dnf-automatic.timer` on dnf4);
+  `sudo systemctl disable --now flatpak-update.timer` and delete `/etc/systemd/system/flatpak-update.{service,timer}`.
 
 ## sys_optional
 
