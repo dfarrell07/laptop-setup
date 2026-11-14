@@ -512,9 +512,22 @@ class NoSudoTests(unittest.TestCase):
         self.assertIn('become', args[args.index('--skip-tags') + 1].split(','))
         self.assertIn('--ask-become-pass', rollout.chunk_args(CATALOG, list(CATALOG), 'packages'))
 
-    def test_no_sudo_refuses_system_chunks(self):
-        with self.assertRaisesRegex(rollout.RolloutError, 'NOSUDO=1 would apply nothing'):
-            rollout.chunk_args(CATALOG, list(CATALOG), 'sys_auditd', no_sudo=True)
+    def test_no_sudo_refuses_chunks_where_every_task_needs_root(self):
+        for name in ['sys_auditd', 'repos_dnf', 'login_shell']:
+            with self.subTest(chunk=name), self.assertRaisesRegex(rollout.RolloutError, 'NOSUDO=1 would apply nothing'):
+                rollout.chunk_args(CATALOG, list(CATALOG), name, no_sudo=True)
+
+    def test_no_sudo_cli_keeps_stdout_to_the_arguments(self):
+        # make captures stdout as ansible-playbook arguments: the NOSUDO note must go to stderr only
+        base = [sys.executable, str(ROOT / 'scripts/rollout.py'), 'chunk-args', '--config', config('')]
+        for extra in ([], ['--preview']):
+            with self.subTest(extra=extra):
+                result = subprocess.run(base + extra + ['--no-sudo', 'packages'], capture_output=True, text=True,
+                                        stdin=subprocess.DEVNULL, env=dict(os.environ, **ANSIBLE_ENV))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(result.stdout.startswith('--tags common,packages --skip-tags '), result.stdout)
+                self.assertNotIn('--ask-become-pass', result.stdout)
+                self.assertIn('NOSUDO: root-only tasks', result.stderr)
 
     def test_no_sudo_leaves_no_sudo_chunks_unchanged(self):
         self.assertEqual(rollout.chunk_args(CATALOG, list(CATALOG), 'dotfiles', no_sudo=True),

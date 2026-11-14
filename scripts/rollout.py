@@ -66,8 +66,9 @@ def load_catalog(registry=REGISTRY):
             value = entry.get(field, [])
             if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
                 raise RolloutError(f'chunk {name}: {field} must be a list of strings')
-        if not isinstance(entry.get('linux_only', False), bool):
-            raise RolloutError(f'chunk {name}: linux_only must be true or false')
+        for flag in ('linux_only', 'nosudo'):
+            if not isinstance(entry.get(flag, flag == 'nosudo'), bool):
+                raise RolloutError(f'chunk {name}: {flag} must be true or false')
         for need in entry.get('requires', []):
             if need not in seen:
                 raise RolloutError(f'chunk {name}: requires {need}, which must be listed earlier')
@@ -152,8 +153,8 @@ def chunk_args(catalog, enabled, name, linux=None, no_sudo=False):
     if not_here(catalog, [name], linux):
         raise RolloutError(f"'{name}' is Linux-only: its roles do nothing on this OS, so there is nothing to plan or apply")
     system = name.startswith('sys_')
-    if no_sudo and system:
-        raise RolloutError(f"'{name}' is a system chunk: every task needs root, so NOSUDO=1 would apply nothing")
+    if no_sudo and (system or not catalog[name].get('nosudo', True)):
+        raise RolloutError(f"'{name}': every task needs root, so NOSUDO=1 would apply nothing; run it with sudo")
     # System sub-chunks share the `system` role tag (its untagged prerequisites must run), so they are
     # selected by complement; every other chunk is selected by its own tag. Required chunks stay unskipped:
     # intra-role features inherit their parent's tag (login_shell inside desktop) and a system chunk must still
@@ -281,7 +282,8 @@ def main(argv=None):
                 result = chunk_args(catalog, enabled, name, no_sudo=args.no_sudo)
                 if args.no_sudo and catalog[name].get('sudo', True):
                     # stderr, never stdout: make captures stdout as ansible-playbook arguments
-                    print(f"NOSUDO: root-only tasks of '{name}' are skipped (shown as skipping); "
+                    print(f"NOSUDO: root-only tasks of '{name}' are skipped (shown as skipping), including any "
+                          f"security settings among them (macOS: application firewall, pmset, tailscaled daemon); "
                           f"apply them later with: make apply CHUNK={name}", file=sys.stderr)
                 if not args.preview:
                     confirm_high_risk(catalog, name)
