@@ -14,7 +14,7 @@
         name: "{{ item }}"
         state: stopped
         enabled: false
-      loop: [aide-check.timer, aide-rebaseline.service]
+      loop: [aide-check.timer, aide-rebaseline.timer, aide-rebaseline.service]
       failed_when: false
 
     - name: Remove AIDE systemd unit files when disabled
@@ -30,7 +30,9 @@
         - /etc/systemd/system/dnf-automatic.service.d/aide-update.conf
         - /etc/systemd/system/dnf5-automatic.service.d/aide-update.conf
         - /etc/systemd/system/aide-rebaseline.service
+        - /etc/systemd/system/aide-rebaseline.timer
         - /var/lib/aide/rebaseline-pending
+        - /var/lib/aide/rebaseline-pending.run
       loop_control:
         label: "{{ item }}"
       register: system_aide_unit_removal

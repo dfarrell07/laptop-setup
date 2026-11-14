@@ -25,7 +25,8 @@ The dnf update set is `system_dnf_automatic_upgrade_type` (`default`: all update
 - On CSB Fedora, IT's compliance run also uses dnf. If it starts while dnf-automatic holds the dnf lock it can fail once; the
   bar then shows CSB FAIL until IT's next run (about four hours later).
 - With AIDE on, a dnf-automatic run that installed packages queues `aide-rebaseline.service`, which accepts the package
-  changes into the baseline in the background (`journalctl -u aide-rebaseline`); an interrupted run retries at boot.
+  changes into the baseline in the background (`journalctl -u aide-rebaseline`); an interrupted run retries 10 min
+  after boot.
 - Codex lives in `~/.npm-global` (codex role), so its own update prompt and this timer update the copy the launchers run.
 - npm: only `packages_user_updates_npm` (default `@openai/codex`) is updated, so a package installed from git or an
   internal registry is never replaced by a same-named public one; a newer prerelease is left alone.
