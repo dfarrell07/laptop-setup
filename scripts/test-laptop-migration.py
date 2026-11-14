@@ -311,9 +311,9 @@ class MigrationTests(unittest.TestCase):
                     '#!/bin/sh\n'
                     'if [ "$1" = --version ]; then echo codex-cli 999.0.0; exit 0; fi\n'
                     'if [ "$1 $2" = "login status" ]; then\n'
-                    '  grep -q apikey "$CODEX_HOME/auth.json" 2>/dev/null && { echo "API key configured - sk-***"; exit 0; }\n'
-                    '  grep -q chatgpt "$CODEX_HOME/auth.json" 2>/dev/null && { echo "Logged in using ChatGPT"; exit 0; }\n'
-                    '  echo "Not logged in"; exit 1\n'
+                    '  grep -q apikey "$CODEX_HOME/auth.json" 2>/dev/null && { echo "API key configured - sk-***" >&2; exit 0; }\n'
+                    '  grep -q chatgpt "$CODEX_HOME/auth.json" 2>/dev/null && { echo "Logged in using ChatGPT" >&2; exit 0; }\n'
+                    '  echo "Not logged in" >&2; exit 1\n'
                     'fi\n'
                     'printf "%s|%s|" "$CODEX_HOME" "$*" > ' + shlex.quote(str(record)) + '\n'
                     'cat >> ' + shlex.quote(str(record)) + '\n'
@@ -333,6 +333,10 @@ class MigrationTests(unittest.TestCase):
                 self.assertEqual((directory / '.codex-personal/auth.json').read_text(), personal_login)
                 if expect_login:
                     self.assertEqual(record.read_text(), name + '/.codex|login --with-api-key|' + key)
+                    if not extra:
+                        record.unlink()
+                        self.assertRegex(run_play(directory, variables=variables, roles=['codex']), r'changed=0\b')
+                        self.assertFalse(record.exists())
                     self.assertEqual((directory / '.codex/auth.json').stat().st_mode & 0o777, 0o600)
         with tempfile.TemporaryDirectory() as name:
             result = run_play(Path(name), variables={'ansible_facts': {'user_dir': name},
