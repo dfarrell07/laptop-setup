@@ -90,6 +90,11 @@
 	hooksPath = ~/.config/git/template/hooks
 	excludesfile = ~/.config/git/ignore
 	fsmonitor = false
+	# Git's default (committed,-loose-object) skips fsync for loose objects, so a power loss or crash can leave
+	# zero-byte objects that `git add` then trusts as stored, breaking later commits and tree reads. batch keeps the
+	# cost to one flush per add or commit (macOS otherwise defaults to writeout-only, not durable).
+	fsync = committed
+	fsyncMethod = batch
 
 [safe]
 	bareRepository = explicit

@@ -922,6 +922,15 @@ else
 fi
 unset _expected_hooks
 
+# Loose objects fsynced (core.fsync committed): Git's default skips them, and a crash then leaves zero-byte objects
+_fs=$(exec_cmd git config --global --get core.fsync 2>/dev/null || echo "")
+if [[ ",$_fs," == *",committed,"* || ",$_fs," == *",all,"* ]]; then
+  record "git-fsync" "PASS"
+else
+  record "git-fsync" "WARN" "core.fsync='${_fs:-<unset>}' (default skips loose objects; a crash can corrupt repos) — run: make dotfiles"
+fi
+unset _fs
+
 for _hook in pre-commit commit-msg prepare-commit-msg pre-push; do
   if [[ -x "$HOME/.config/git/template/hooks/$_hook" ]]; then
     record "git-hooks-$_hook" "PASS"
