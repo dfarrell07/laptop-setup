@@ -37,6 +37,11 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     (Vagrant is not installed here; make bootstrap-test installs it)
 #   packages_yubikey_enabled: true     (roles/packages/defaults) — yubikey-manager + pcsc-lite on Fedora/RHEL;
 #     set false on machines without a YubiKey
+#   packages_user_updates_enabled: true (roles/packages/defaults) — daily user timer: npm globals, pipx, dev container
+#   packages_user_updates_calendar: daily (roles/packages/defaults) — systemd OnCalendar for laptop-user-update.timer
+#   packages_user_updates_container: fedora-dev (roles/packages/defaults) — distrobox to upgrade; '' skips it
+#   packages_user_updates_npm: ['@openai/codex'] (roles/packages/defaults) — npm globals the updater moves to latest
+#   packages_user_updates_pipx_skip: [yamllint, ansible-lint] (roles/packages/defaults) — role-pinned pipx apps it skips
 #   packages_bpfman_enabled: false     (roles/packages/defaults) — bpfman eBPF program manager daemon; opt-in only;
 #     WARNING: bpfman requires CAP_SYS_ADMIN (kernel-level privilege) to load eBPF programs. Fedora 44 ships NO
 #     SELinux policy for bpfman, so the daemon runs unconfined despite SELinux Enforcing mode. Without Mandatory
@@ -272,6 +277,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #                                        true regardless of this flag); use only when /home is btrfs/ext4 under your control
 #   system_iommu_passthrough: false    (roles/system/defaults) — set true only for VFIO/libvirt PCI passthrough; enables
 #                                        iommu=pt which bypasses DMA remapping for non-VM devices (trades isolation for perf)
+#   system_dnf_automatic_apply_updates: true  (roles/system/defaults) — false: download only; skipped on RHEL CSB
+#   system_dnf_automatic_upgrade_type: default (roles/system/defaults) — default: all updates daily; security: advisories only
 #   system_wifi_powersave_disabled: "{{ not csb_detected }}"  (roles/system/defaults) — defaults true
 #                                        (disable powersave, wifi.powersave=2) on non-CSB hosts;
 #                                        set false in config.yml to allow power saving on power-critical machines

@@ -243,6 +243,20 @@ elif exec_cmd codex --version &>/dev/null; then
 else
   record "codex" "$_tool_absent" "not found — run: make codex"
 fi
+# Daily user-space updater (packages role; docs/auto-updates.md): Linux host only
+if $IS_LINUX && [[ -z "$CONTAINER" ]]; then
+  if grep -qiE '^packages_user_updates_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "${_cfg:-/dev/null}" 2>/dev/null; then
+    if [[ ! ("$EUID" -eq 0 && -n "${SUDO_USER:-}") ]] && systemctl --user is-enabled laptop-user-update.timer &>/dev/null; then
+      record "user-updates" "WARN" "disabled in config but the timer is still enabled (make packages removes it)"
+    else record "user-updates" "PASS" "disabled in config"; fi
+  elif [[ "$EUID" -eq 0 && -n "${SUDO_USER:-}" ]]; then
+    record "user-updates" "SKIP" "user-scope systemd is unreachable under sudo; re-run: make smoke-test-user"
+  elif systemctl --user is-failed --quiet laptop-user-update.service; then
+    record "user-updates" "FAIL" "last run failed: journalctl --user -u laptop-user-update"
+  elif systemctl --user is-enabled laptop-user-update.timer &>/dev/null; then
+    record "user-updates" "PASS"
+  else record "user-updates" "WARN" "laptop-user-update.timer not enabled (make packages)"; fi
+fi
 unset _tool_absent _tools
 
 _is_x() { # executable where exec_cmd runs it: inside the container with --container
@@ -1991,9 +2005,16 @@ EOF
     record "dnf-automatic" "WARN" "timer enabled but not active (reboot or: systemctl start $timer)"
   elif ! command -v rpm &>/dev/null; then
     record "dnf-automatic" "SKIP" "dnf-automatic is installed on dnf hosts only"
-  elif $CSB_HOST; then
-    record "dnf-automatic" "PASS" "not applied on CSB — IT manages updates (dnf_automatic.yml not run when csb_detected)"
+  elif ${_csb_non_fedora:-false}; then
+    record "dnf-automatic" "PASS" "not applied on RHEL CSB — IT manages updates (dnf_automatic.yml not run when csb_rhel)"
   else record "dnf-automatic" "WARN" "timer not enabled"; fi
+  # Flatpak update timer (dnf_automatic.yml; only where flatpak is installed, not on RHEL CSB)
+  if [[ -x /usr/bin/flatpak ]] && ! ${_csb_non_fedora:-false}; then
+    if systemctl is-failed --quiet flatpak-update.service; then
+      record "flatpak-update" "FAIL" "last run failed: journalctl -u flatpak-update"
+    elif systemctl is-enabled flatpak-update.timer &>/dev/null; then record "flatpak-update" "PASS"
+    else record "flatpak-update" "WARN" "flatpak-update.timer not enabled (make apply CHUNK=sys_time_dns)"; fi
+  fi
 
   # RPM Fusion free repo (Fedora only; mirrors repos_dnf not csb_rhel guard)
   if ! $_rpmfusion_free; then

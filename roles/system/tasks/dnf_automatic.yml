@@ -1,9 +1,14 @@
 ---
 # roles/system/tasks/dnf_automatic.yml
 # --- dnf-automatic ---
-# CSB machines are managed by Red Hat IT via RHSM/Satellite with their own
-# maintenance windows. Running dnf-automatic in parallel could install packages
-# ahead of IT's approval cycle or outside maintenance windows.
+# Skipped on RHEL CSB, where IT applies updates via RHSM/Satellite in its own maintenance windows. CSB Fedora
+# (hybrid) runs it: IT's playbooks there update only their own package, so nothing else would update the OS.
+# Logs: journalctl -u dnf5-automatic.service (dnf-automatic.service on dnf4); the status bar shows UPD on failure.
+- name: Validate dnf-automatic upgrade type
+  ansible.builtin.assert:
+    that: system_dnf_automatic_upgrade_type in ['default', 'security']
+    fail_msg: system_dnf_automatic_upgrade_type must be 'default' (all updates) or 'security'.
+
 - name: Install and enable dnf-automatic
   when:
     - is_dnf
@@ -60,12 +65,19 @@
     # yamllint disable rule:line-length
     content: |
       # {{ ansible_managed }}
-      # Run aide --update after dnf-automatic applies security updates.
-      # Without this, every update causes AIDE false-positive alerts that
-      # train operators to ignore them, defeating the purpose of AIDE.
-      # The '-' prefix makes this advisory — AIDE failures won't block updates.
+      # Rebaseline AIDE after dnf-automatic applies updates. Without this, every update causes AIDE false-positive
+      # alerts that train operators to ignore them, defeating the purpose of AIDE. Only when a transaction wrote the
+      # RPM database during this run (rpmdb.sqlite or its WAL, or a bdb Packages file; readers touch only -shm), so a run
+      # that installed nothing cannot absorb unrelated changes; ExecStopPost also covers a run that failed part-way.
+      # The scan itself runs in aide-rebaseline.service, started without waiting: here it would hold the unit (and a
+      # reboot) for minutes. '-' makes both lines advisory; '$$' is a literal '$' for bash.
+      [Unit]
+      # A rebaseline still scanning would read files mid-transaction: start after it.
+      After=aide-rebaseline.service
+
       [Service]
-      ExecStartPost=-/usr/bin/bash -c 'aide --update; [ -f /var/lib/aide/aide.db.new.gz ] && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz'
+      ExecStartPre=-/usr/bin/touch /run/dnf-automatic-aide.stamp
+      ExecStopPost=-/usr/bin/bash -c 'S=/run/dnf-automatic-aide.stamp; find /usr/lib/sysimage/rpm /var/lib/rpm -name rpmdb.sqlite -newer $$S -print -o -name rpmdb.sqlite-wal -newer $$S -print -o -name Packages -newer $$S -print 2>/dev/null | grep -q . || exit 0; touch /var/lib/aide/rebaseline-pending; systemctl start --no-block aide-rebaseline.service'
     dest: "/etc/systemd/system/{{ _dnf_auto_svc }}.d/aide-update.conf"
     # yamllint enable rule:line-length
     mode: "0644"
@@ -75,6 +87,30 @@
     - system_dnf_automatic_apply_updates | bool  # hook only meaningful when packages are applied
     - not system_is_container
   notify: Restart dnf-automatic timer
+
+- name: Install the AIDE rebaseline service the dnf-automatic hook starts
+  when:
+    - is_dnf
+    - system_aide_enabled | bool
+    - system_dnf_automatic_apply_updates | bool
+    - not system_is_container
+  block:
+    - name: Deploy aide-rebaseline.service and its boot retry timer
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "/etc/systemd/system/{{ item }}"
+        mode: "0644"
+      loop:
+        - aide-rebaseline.service
+        - aide-rebaseline.timer
+      register: _aide_rebaseline_unit
+
+    - name: Enable aide-rebaseline.timer (retries a pending rebaseline after boot)
+      ansible.builtin.systemd:
+        name: aide-rebaseline.timer
+        enabled: true
+        daemon_reload: "{{ _aide_rebaseline_unit is changed }}"
+      when: not (ansible_check_mode and _aide_rebaseline_unit is changed)
 
 - name: Remove AIDE update hook when dnf-automatic is download-only
   ansible.builtin.file:
@@ -86,3 +122,33 @@
     - not (system_dnf_automatic_apply_updates | bool)
     - not system_is_container
   notify: Restart dnf-automatic timer
+
+# --- Flatpak: daily update of system apps and runtimes (no reboot involved) ---
+- name: Check for Flatpak
+  ansible.builtin.stat:
+    path: /usr/bin/flatpak
+  register: _system_flatpak_bin
+  when: not system_is_container
+
+- name: Install the daily Flatpak update timer
+  when:
+    - not system_is_container
+    - _system_flatpak_bin.stat.exists | default(false)
+  block:
+    - name: Deploy Flatpak update service and timer
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "/etc/systemd/system/{{ item }}"
+        mode: "0644"
+      loop:
+        - flatpak-update.service
+        - flatpak-update.timer
+      register: _system_flatpak_units
+
+    - name: Enable the Flatpak update timer
+      ansible.builtin.systemd:
+        name: flatpak-update.timer
+        enabled: true
+        state: started
+        daemon_reload: "{{ _system_flatpak_units is changed }}"
+      when: not (ansible_check_mode and _system_flatpak_units is changed)

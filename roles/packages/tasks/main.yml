@@ -312,6 +312,38 @@
     - is_dnf or is_apt or is_macos
     - packages_install_binaries | bool
 
+- name: Daily user-space updates (npm globals, pipx, dev container)
+  ansible.builtin.include_tasks: user_updates.yml
+  when:
+    - packages_user_updates_enabled | bool
+    - is_linux
+    - not system_is_container | default(false)
+
+# Turning the updater off must stop one an earlier run installed, not just skip deploying it.
+- name: Remove the daily user-space updater when disabled
+  when:
+    - not (packages_user_updates_enabled | bool)
+    - is_linux
+    - not system_is_container | default(false)
+  block:
+    - name: Stop and disable laptop-user-update.timer
+      ansible.builtin.systemd:
+        name: laptop-user-update.timer
+        scope: user
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: Remove the user updater script and units
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/{{ item }}"
+        state: absent
+      loop:
+        - .local/bin/laptop-user-update
+        - .config/systemd/user/laptop-user-update.service
+        - .config/systemd/user/laptop-user-update.timer
+        - .config/systemd/user/timers.target.wants/laptop-user-update.timer  # left if the user manager was unreachable
+
 - name: Install krew
   ansible.builtin.include_tasks: install_krew.yml
   when: _packages_linux_x86_work

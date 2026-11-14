@@ -235,7 +235,7 @@
       ansible.builtin.shell:  # noqa: command-instead-of-module
         cmd: >-
           aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
-          && rm -f /var/lib/aide/.rebaseline-pending
+          && rm -f /var/lib/aide/.rebaseline-pending /var/lib/aide/rebaseline-pending /var/lib/aide/rebaseline-pending.run
       become: true
       timeout: 1800
       changed_when: true

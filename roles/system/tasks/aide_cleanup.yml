@@ -9,11 +9,12 @@
     - not csb_rhel  # RHEL CSB: IT manages the AIDE baseline; don't interfere
     - not system_is_container  # daemon_reload: true always runs systemctl daemon-reload, crashing privileged Podman container PID 1
   block:
-    - name: Disable and stop aide-check.timer when AIDE disabled
+    - name: Disable and stop aide-check.timer and aide-rebaseline.service when AIDE disabled
       ansible.builtin.systemd:
-        name: aide-check.timer
+        name: "{{ item }}"
         state: stopped
         enabled: false
+      loop: [aide-check.timer, aide-rebaseline.timer, aide-rebaseline.service]
       failed_when: false
 
     - name: Remove AIDE systemd unit files when disabled
@@ -28,6 +29,10 @@
         # Both the dnf and dnf5 unit paths are listed; state: absent is idempotent when only one exists.
         - /etc/systemd/system/dnf-automatic.service.d/aide-update.conf
         - /etc/systemd/system/dnf5-automatic.service.d/aide-update.conf
+        - /etc/systemd/system/aide-rebaseline.service
+        - /etc/systemd/system/aide-rebaseline.timer
+        - /var/lib/aide/rebaseline-pending
+        - /var/lib/aide/rebaseline-pending.run
       loop_control:
         label: "{{ item }}"
       register: system_aide_unit_removal

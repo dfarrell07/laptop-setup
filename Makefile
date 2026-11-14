@@ -322,6 +322,7 @@ aide-rebaseline: guard-not-root
 		if [ $$rc -ge 8 ]; then rm -f aide.db.new.gz; echo "aide --update failed (exit $$rc); baseline unchanged" >&2; exit 1; fi; \
 		printf "Accept the changes above as the new baseline? [y/N] "; read -r a; \
 		case "$$a" in y|Y) cp -p aide.db.gz aide.db.gz.prev && mv aide.db.new.gz aide.db.gz \
+			&& rm -f rebaseline-pending rebaseline-pending.run \
 			&& echo "Baseline updated (previous kept as /var/lib/aide/aide.db.gz.prev).";; \
 		*) rm -f aide.db.new.gz; echo "Baseline unchanged." >&2; exit 1;; esac'
 
@@ -452,7 +453,7 @@ syntax-check: .venv
 	$(VERIFY_AND_RUN) .venv/bin/ansible-playbook site.yml --syntax-check
 
 shellcheck:
-	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh .githooks/pre-commit .githooks/commit-msg .githooks/prepare-commit-msg .githooks/pre-push roles/dotfiles/files/git-template-*
+	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh roles/packages/files/*.sh .githooks/pre-commit .githooks/commit-msg .githooks/prepare-commit-msg .githooks/pre-push roles/dotfiles/files/git-template-*
 
 markdownlint:
 	@if [ -d node_modules ]; then npm run lint:markdown; \
@@ -475,6 +476,7 @@ test-scripts: .venv
 	.venv/bin/python3 scripts/test-vault-stub.py
 	.venv/bin/python3 scripts/test-workflow-guards.py
 	.venv/bin/python3 scripts/test-pinned-git.py
+	.venv/bin/python3 scripts/test-auto-updates.py
 	.venv/bin/python3 scripts/test-hook-baselines.py
 	.venv/bin/python3 scripts/test-commit-message.py
 	.venv/bin/python3 scripts/test-bootstrap-hooks.py

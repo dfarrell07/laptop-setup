@@ -2,8 +2,9 @@
 # {{ ansible_managed }}
 # Bar status_command: runs i3status and rewrites each update. Drops the GiB unit from RAM, shortens disk units
 # (893.1G), adds watts to the battery while discharging, and adds fields i3status cannot produce: REBOOT (a core
-# package is newer than the boot), CSB FAIL (IT's last compliance run failed), STALL (memory pressure), CTR
-# (running rootless Podman containers), AI (interactive agent sessions) and, with desktop_i3status_vpn, VPN (active VPN names).
+# package is newer than the boot), UPD (an automatic update job failed), CSB FAIL (IT's last compliance run failed),
+# STALL (memory pressure), CTR (running rootless Podman containers), AI (interactive agent sessions) and, with
+# desktop_i3status_vpn, VPN (active VPN names).
 set -u
 show_vpn={{ desktop_i3status_vpn | bool | ternary('1', '0') }}
 battery=/sys/class/power_supply/BAT{{ desktop_i3status_battery_num | string | regex_replace('[^0-9]', '') }}
@@ -46,6 +47,15 @@ agent_sessions() {
   ps -eo tty=,comm= 2>/dev/null | awk '$1 != "?" && $2 ~ /^(claude|codex|agy)$/ {n++} END {print n + 0}'
 }
 
+# Automatic update jobs; UPD shows while any of them is in the failed state (journalctl -u / --user -u <unit>).
+update_units=(dnf5-automatic.service dnf-automatic.service flatpak-update.service fwupd-refresh.service
+  aide-rebaseline.service)
+user_update_units=(laptop-user-update.service)
+updates_failed() {
+  systemctl is-failed --quiet "${update_units[@]}" 2>/dev/null ||
+    systemctl --user is-failed --quiet "${user_update_units[@]}" 2>/dev/null
+}
+
 reboot_needed() {
   command -v rpm >/dev/null || return 1
   local newest
@@ -61,6 +71,7 @@ bat_re='\{"name":"battery"[^}]*"full_text":"([^"]*)"[^}]*\}'
 tick=0
 containers=
 reboot=
+upd_failed=
 i3status --config "$HOME/.config/i3status/config" | {
   # i3bar protocol: a version header and the opening "[", then one JSON array per update (every 5 s)
   IFS= read -r line && printf '%s\n' "$line"
@@ -76,12 +87,15 @@ i3status --config "$HOME/.config/i3status/config" | {
     if ((tick % 12 == 0)); then
       reboot=
       reboot_needed && reboot=1
+      upd_failed=
+      updates_failed && upd_failed=1
     fi
     tick=$((tick + 1))
 
     # Alerts first, shown only when something needs attention
     lead=
     [[ -n $reboot ]] && lead+="$(field reboot REBOOT "$red"),"
+    [[ -n $upd_failed ]] && lead+="$(field updates UPD "$red"),"
     grep -qs '"status": "failed"' /run/csb_ansible_compliance.json && lead+="$(field csb 'CSB FAIL' "$red"),"
     [[ -n $lead ]] && line="[${lead}${line#[}"
 

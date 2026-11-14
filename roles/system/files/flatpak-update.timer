@@ -1,0 +1,12 @@
+# Ansible managed
+[Unit]
+Description=Daily system Flatpak update
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=1h
+# Run a missed update after boot or resume
+Persistent=true
+
+[Install]
+WantedBy=timers.target

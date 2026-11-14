@@ -15,7 +15,7 @@ rollout_enable: all
 
 rollout_catalog:
   packages:
-    desc: Packages, pinned binaries, Go tools, pipx, krew
+    desc: Packages, pinned binaries, Go tools, pipx, krew, daily user-space updater
     risk: low
   ssh_client:
     desc: Pinned known_hosts and vault-backed SSH and signing keys
@@ -73,7 +73,7 @@ rollout_catalog:
     risk: medium
     verify: [coredump-configured, modprobe-hardening, sysctl-ptrace-scope, sysctl-no-accept-ra]
   sys_time_dns:
-    desc: chrony NTS, DNS-over-TLS, dnf-automatic
+    desc: chrony NTS, DNS-over-TLS, dnf-automatic, Flatpak update timer
     risk: medium
     verify: [llmnr-disabled, chronyd-service, dnf-automatic]
   sys_optional:

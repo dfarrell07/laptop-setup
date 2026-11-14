@@ -329,7 +329,7 @@
 
 - name: Dnf-automatic
   ansible.builtin.import_tasks: dnf_automatic.yml
-  when: not csb_detected  # IT owns update policy on CSB (RHEL and hybrid Fedora)
+  when: not csb_rhel  # RHEL CSB: IT owns updates (RHSM/Satellite); CSB Fedora: IT's playbooks apply no OS updates
   tags: [sys_time_dns]
 
 - name: DNS-over-TLS

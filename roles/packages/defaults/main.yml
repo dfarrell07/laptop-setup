@@ -58,6 +58,18 @@ packages_brew_cask_lulu_enabled: false
 # machines where eBPF development requires the daemon; prefer manual bpftool for one-off tasks.
 packages_bpfman_enabled: false
 
+# Daily user-space updates (Linux): laptop-user-update.timer runs ~/.local/bin/laptop-user-update, which updates npm
+# global packages (Codex), pipx apps and the distrobox dev container's packages. Logs: journalctl --user -u
+# laptop-user-update; a failed run shows as UPD in the status bar. Pinned tools are not touched.
+packages_user_updates_enabled: true
+packages_user_updates_calendar: daily
+packages_user_updates_container: "{{ container_name | default('fedora-dev') }}"  # '' skips the container step
+# npm global packages (in ~/.npm-global) the updater moves to their latest public-registry release. Only these: a
+# package installed from git or an internal registry must not be swapped for a same-named public one.
+packages_user_updates_npm: ['@openai/codex']
+# pipx apps the updater leaves alone: the role pins these (install_pipx.yml) and would reinstall the pin each run.
+packages_user_updates_pipx_skip: [yamllint, ansible-lint]
+
 packages_security_yubikey:
   - yubikey-manager
   - pcsc-lite  # pcscd smart-card daemon; ykman PIV/OATH talk to the key through it

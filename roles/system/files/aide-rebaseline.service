@@ -1,0 +1,23 @@
+# Ansible managed
+[Unit]
+Description=Accept package changes into the AIDE baseline after dnf-automatic
+Documentation=man:aide(1)
+# dnf-automatic leaves rebaseline-pending when a run wrote the RPM database; a run in progress holds it as .run.
+# aide-rebaseline.timer starts this after boot too, so a run that shutdown interrupted (normal stop timeout: shutdown
+# never waits minutes for AIDE) retries. '|' makes the two marker conditions alternatives.
+ConditionPathExists=|/var/lib/aide/rebaseline-pending
+ConditionPathExists=|/var/lib/aide/rebaseline-pending.run
+# No baseline yet (aide comes with the sys_optional chunk): nothing to update, skip instead of failing.
+ConditionPathExists=/var/lib/aide/aide.db.gz
+After=local-fs.target
+
+[Service]
+Type=oneshot
+# The run takes the marker first (or resumes an interrupted .run), so a dnf run that lands meanwhile leaves a fresh
+# one for the next pass (the next dnf run, or the boot timer).
+# Exit 8 or more is an AIDE error (as in `make aide-rebaseline`): discard its output, restore the marker, fail the
+# unit (the status bar shows UPD). '$$' is a literal '$' for bash.
+ExecStart=/usr/bin/bash -c 'cd /var/lib/aide || exit 1; mv rebaseline-pending rebaseline-pending.run 2>/dev/null || [ -e rebaseline-pending.run ] || exit 0; aide --update; rc=$$?; if [ $$rc -lt 8 ] && [ -f aide.db.new.gz ]; then mv aide.db.new.gz aide.db.gz && rm -f rebaseline-pending.run; else rm -f aide.db.new.gz; mv rebaseline-pending.run rebaseline-pending; exit 1; fi'
+Nice=15
+IOSchedulingClass=idle
+SyslogIdentifier=aide-rebaseline

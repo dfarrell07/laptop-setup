@@ -1,0 +1,10 @@
+# Ansible managed
+[Unit]
+Description=Retry a pending AIDE package rebaseline after boot
+
+[Timer]
+# After boot settles, so a pending scan never holds multi-user.target.
+OnBootSec=10min
+
+[Install]
+WantedBy=timers.target
