@@ -73,8 +73,11 @@ class ClaudePrivacyTests(unittest.TestCase):
         ansible = ROOT / '.venv/bin/ansible'
         if not ansible.exists():
             self.skipTest('no .venv ansible')
-        for in_container, tier, expected in [(False, 'host-only', False), (False, 'hybrid', False),
-                                             (True, 'host-only', True), (False, 'container', True)]:
+        for in_container, tier, expected, mode in [(False, 'host-only', False, 'bypassPermissions'),
+                                                   (False, 'hybrid', False, 'default'),
+                                                   (True, 'host-only', True, 'bypassPermissions'),
+                                                   (False, 'container', True, 'bypassPermissions')]:
+            defaults['claude_default_mode'] = mode
             with tempfile.TemporaryDirectory() as tmp:
                 vars_file = Path(tmp) / 'v.json'
                 vars_file.write_text(json.dumps({
@@ -90,8 +93,9 @@ class ClaudePrivacyTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 rendered = json.loads(out.read_text())
                 sandbox = rendered['sandbox']
-                self.assertIs(rendered['skipDangerousModePermissionPrompt'], True)
-                self.assertEqual(rendered['permissions']['defaultMode'], 'bypassPermissions')
+                bypass = defaults['claude_default_mode'] == 'bypassPermissions'
+                self.assertEqual(rendered.get('skipDangerousModePermissionPrompt'), True if bypass else None)
+                self.assertEqual(rendered['permissions']['defaultMode'], defaults['claude_default_mode'])
                 self.assertEqual(rendered['permissions']['deny'][:len(defaults['claude_deny_bash'])],
                                  defaults['claude_deny_bash'])
                 self.assertTrue(set(defaults['claude_deny_bash']).isdisjoint(defaults['claude_retired_deny']))

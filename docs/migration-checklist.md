@@ -114,16 +114,21 @@ permanent settings, so do not treat the managed sandbox and deny config as an en
 MCP servers, `bin/` on PATH). Inside a repository listed in `dotfiles_claude_plugin_dev_dirs`, or a worktree of
 one, the launchers pass `--plugin-dir <its top level>`; the default lists only `claude-skills` under
 `git_repos_base_dir`, so add other plugin checkouts you develop (absolute paths; a checkout left at an old location
-does not match). To drop the bypass arguments:
+does not match). To be asked for approval again, set all of these (the launcher flags alone are not enough):
 
 ```yaml
 dotfiles_claude_launcher_args: []
 dotfiles_codex_launcher_args: []
 dotfiles_gemini_launcher_args: []
+claude_default_mode: default
+codex_approval_policy: on-request
+codex_sandbox_mode: workspace-write
 ```
 
 Codex config and Claude preferences (fullscreen UI, mobile notifications) are seeded once; existing user files are
-kept and not merged with new defaults. The global working agreements (Claude `CLAUDE.md`, Codex `AGENTS.md`,
+kept and not merged with new defaults, except Codex `approval_policy` and `sandbox_mode`, which are reapplied every
+run. A repository's own `.claude/settings.json` or `.codex/config.toml`, or a Codex `profile`, can still override the
+mode for sessions started without a launcher. The global working agreements (Claude `CLAUDE.md`, Codex `AGENTS.md`,
 Antigravity `GEMINI.md`) are rendered from the shared [baseline](../roles/common/files/agent-baseline.md) on every
 run (`AGENTS.md` and `GEMINI.md` only while `codex_enabled` / `antigravity_enabled`), so hand edits are overwritten:
 move rules from restored copies into the baseline or a project's own instructions first. Managed Claude

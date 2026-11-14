@@ -13,7 +13,7 @@ import re
 import sys
 import tempfile
 
-import tomllib  # Ansible's own Python (3.12+) runs this helper
+import tomllib  # Python 3.11+; Ansible's own Python runs this helper
 
 
 def main(argv):
@@ -33,15 +33,19 @@ def main(argv):
     lines = old.splitlines()
     head_end = next((i for i, line in enumerate(lines) if re.match(r'\s*\[', line)), len(lines))
     head, tail = lines[:head_end], lines[head_end:]
+    # A duplicate key would not parse, so the first match is the only one. Missing keys go at the end of the
+    # top-level section, before any trailing blank lines. Line endings become LF.
+    end = len(head)
+    while end and not head[end - 1].strip():
+        end -= 1
     for key, line in wanted.items():
         pattern = re.compile(r'\s*%s\s*=' % re.escape(key))
-        matches = [i for i, existing in enumerate(head) if pattern.match(existing)]
-        if matches:
-            head[matches[0]] = line
-            for i in reversed(matches[1:]):
-                del head[i]
+        match = next((i for i, existing in enumerate(head) if pattern.match(existing)), None)
+        if match is None:
+            head.insert(end, line)
+            end += 1
         else:
-            head.insert(0, line)
+            head[match] = line
     new = '\n'.join(head + tail) + '\n'
     # The edit must change exactly these keys: a key-like line inside a multi-line string, a quoted or dotted key,
     # or a table header inside an array would otherwise slip through a parse-only check.
