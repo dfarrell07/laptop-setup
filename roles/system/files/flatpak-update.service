@@ -8,6 +8,8 @@ ConditionPathExists=/usr/bin/flatpak
 
 [Service]
 Type=oneshot
+# A timer that came due during suspend fires on resume, before Wi-Fi is back; wait up to 2 min for it.
+ExecStartPre=-/usr/bin/nm-online -q -t 120
 # Logs: journalctl -u flatpak-update.service; the status bar shows UPD when this unit fails.
 ExecStart=/usr/bin/flatpak update --system --noninteractive --assumeyes
 Nice=15

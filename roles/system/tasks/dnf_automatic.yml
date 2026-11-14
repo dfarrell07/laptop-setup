@@ -69,11 +69,14 @@
       # alerts that train operators to ignore them, defeating the purpose of AIDE. Only when a transaction wrote the
       # RPM database during this run (rpmdb.sqlite or its WAL, or a bdb Packages file; readers touch only -shm), so a run
       # that installed nothing cannot absorb unrelated changes. ExecStopPost also covers a run that failed part-way.
-      # aide --update lists every difference it accepts in the journal. '-' makes both lines advisory; '$$' is a literal
+      # aide --update lists every difference it accepts in the journal; exit 8 or more is an error (as in
+      # `make aide-rebaseline`), and its output is discarded instead of installed. '-' makes both lines advisory; '$$' is a literal
       # '$' for bash (systemd expands a single '$').
       [Service]
       ExecStartPre=-/usr/bin/touch /run/dnf-automatic-aide.stamp
-      ExecStopPost=-/usr/bin/bash -c 'S=/run/dnf-automatic-aide.stamp; find /usr/lib/sysimage/rpm /var/lib/rpm -name rpmdb.sqlite -newer $$S -print -o -name rpmdb.sqlite-wal -newer $$S -print -o -name Packages -newer $$S -print 2>/dev/null | grep -q . && { aide --update; [ -f /var/lib/aide/aide.db.new.gz ] && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz; }; true'
+      # Stop-phase commands obey TimeoutStopSec (45s by default); an AIDE update takes minutes.
+      TimeoutStopSec=30min
+      ExecStopPost=-/usr/bin/bash -c 'S=/run/dnf-automatic-aide.stamp; find /usr/lib/sysimage/rpm /var/lib/rpm -name rpmdb.sqlite -newer $$S -print -o -name rpmdb.sqlite-wal -newer $$S -print -o -name Packages -newer $$S -print 2>/dev/null | grep -q . || exit 0; aide --update; rc=$$?; if [ $$rc -lt 8 ] && [ -f /var/lib/aide/aide.db.new.gz ]; then mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz; else rm -f /var/lib/aide/aide.db.new.gz; fi; true'
     dest: "/etc/systemd/system/{{ _dnf_auto_svc }}.d/aide-update.conf"
     # yamllint enable rule:line-length
     mode: "0644"

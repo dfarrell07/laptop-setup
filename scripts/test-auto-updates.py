@@ -59,6 +59,7 @@ class AutoUpdateTests(unittest.TestCase):
         self.assertIn('ExecStart=/usr/bin/flatpak update --system --noninteractive --assumeyes', service)
         self.assertIn('OnCalendar=daily', timer)
         self.assertIn('Persistent=true', timer)
+        self.assertIn('ExecStartPre=-/usr/bin/nm-online -q -t 120', service)
 
     def test_user_update_units_deploy_and_validate(self):
         tasks = yaml.safe_load((ROOT / 'roles/packages/tasks/user_updates.yml').read_text())
@@ -80,6 +81,7 @@ class AutoUpdateTests(unittest.TestCase):
             self.assertIn('ExecStart=%h/.local/bin/laptop-user-update fedora-dev', service)
             self.assertIn('Environment="LAPTOP_UPDATE_PIPX_SKIP=yamllint ansible-lint"', service)
             self.assertIn('Environment="LAPTOP_UPDATE_NPM=@openai/codex"', service)
+            self.assertIn('ExecStartPre=-/usr/bin/nm-online -q -t 120', service)
             self.assertIn('OnCalendar=daily', (home / '.config/systemd/user/laptop-user-update.timer').read_text())
             with self.assertRaisesRegex(AssertionError, 'container name'):
                 run_play(home, tasks, {**variables, 'packages_user_updates_container': 'x;rm'})
@@ -99,13 +101,14 @@ class AutoUpdateTests(unittest.TestCase):
              f'  echo "{home}/.npm-global/lib/node_modules/semver:semver@7.8.6:semver@7.8.6:semver@7.8.6:global"\n'
              f'  echo "{home}/.npm-global/lib/node_modules/inherits:inherits@2.0.4:inherits@2.0.3:inherits@2.0.4:global"\n'
              f'  echo "{home}/.npm-global/lib/node_modules/ms:ms@2.1.3:ms@3.0.0-beta.2:ms@2.1.3:global"\n'
+             f'  echo "{home}/.npm-global/lib/node_modules/rc:rc@1.4.0:rc@1.4.0-alpha.2:rc@1.4.0:global"\n'
              '  exit 1\nfi\n'
              f'exit {npm_rc}')
         stub(bin_dir, 'podman', 'exit ' + ('0' if container_exists else '1'))
         result = subprocess.run(['bash', str(ROOT / 'roles/packages/files/laptop-user-update.sh'), 'fedora-dev'],
                                 env={'HOME': str(home), 'PATH': '/usr/bin:/bin', 'LAPTOP_UPDATE_PATH': f'{bin_dir}:/usr/bin:/bin',
                                      'LAPTOP_UPDATE_PIPX_SKIP': 'yamllint ansible-lint',
-                                     'LAPTOP_UPDATE_NPM': '@openai/codex ms'},
+                                     'LAPTOP_UPDATE_NPM': '@openai/codex ms rc'},
                                 capture_output=True, text=True,
                                 timeout=30)
         return result, (log.read_text() if log.exists() else '')
@@ -115,7 +118,7 @@ class AutoUpdateTests(unittest.TestCase):
             result, calls = self.run_updater(Path(name))
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertIn('npm install --global --prefix=' + name + '/.npm-global --registry=https://registry.npmjs.org '
-                          '--ignore-scripts --no-audit --no-fund @openai/codex@0.170.0 user=/dev/null global=/', calls)
+                          '--ignore-scripts --no-audit --no-fund @openai/codex@0.170.0 rc@1.4.0 user=/dev/null global=/', calls)
             global_config = calls.split('global=')[1].split()[0]
             self.assertNotEqual(global_config, '/dev/null')
             self.assertFalse(Path(global_config).exists())  # temp config removed
@@ -123,6 +126,7 @@ class AutoUpdateTests(unittest.TestCase):
             self.assertNotIn('semver', installed)  # current
             self.assertNotIn('inherits', installed)  # not allowlisted (may come from git or a private registry)
             self.assertNotIn('ms@', installed)  # a newer prerelease is never moved back to latest
+            self.assertIn('rc@1.4.0', installed)  # a prerelease moves to its own final release
             self.assertIn('pipx upgrade-all --skip yamllint ansible-lint', calls)
             self.assertIn('distrobox upgrade fedora-dev', calls)
         with tempfile.TemporaryDirectory() as name:
@@ -139,14 +143,14 @@ class AutoUpdateTests(unittest.TestCase):
 
     def test_smoke_user_updates_check(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
-        start = source.index('  # Daily user-space updater')
-        end = source.index('\n', source.index('record "user-updates" "WARN"'))
+        start = source.index('# Daily user-space updater')
+        end = source.index('\nfi\n', source.index('record "user-updates" "WARN"')) + 4
         # systemctl is a shell function, not a PATH stub: a temp dir may be mounted noexec.
         for state, body, expected in [('failed', 'return 0', 'user-updates FAIL'),
                                       ('enabled', '[ "$2" = is-enabled ]', 'user-updates PASS'),
                                       ('off', 'return 1', 'user-updates WARN')]:
             with self.subTest(state=state):
-                run = subprocess.run(['bash', '-c', 'record() { printf "%s %s\\n" "$1" "$2"; }; SYSTEM_ONLY=false; '
+                run = subprocess.run(['bash', '-c', 'record() { printf "%s %s\\n" "$1" "$2"; }; IS_LINUX=true; CONTAINER=; '
                                       '_cfg=/dev/null; systemctl() { ' + body + '; };\n' + source[start:end]],
                                      capture_output=True, text=True)
                 self.assertEqual(run.stdout.strip(), expected, run.stderr)
@@ -180,10 +184,11 @@ class AutoUpdateTests(unittest.TestCase):
         lines = hook['ansible.builtin.copy']['content'].splitlines()
         post = next(l for l in lines if l.startswith('ExecStopPost=-'))[len('ExecStopPost=-'):]
         self.assertIn('ExecStartPre=-/usr/bin/touch /run/dnf-automatic-aide.stamp', lines)
+        self.assertIn('TimeoutStopSec=30min', lines)  # stop-phase commands are killed after 45s by default
         self.assertNotRegex(post.replace('$$', ''), r'\$')  # systemd would expand a single $
-        for touched, expect in [(None, False), ('rpmdb.sqlite-shm', False), ('rpmdb.sqlite', True),
-                                ('rpmdb.sqlite-wal', True)]:
-            with self.subTest(touched=touched), tempfile.TemporaryDirectory() as name:
+        for touched, aide_rc, expect in [(None, 0, False), ('rpmdb.sqlite-shm', 0, False), ('rpmdb.sqlite', 0, True),
+                                         ('rpmdb.sqlite-wal', 1, True), ('rpmdb.sqlite', 9, False)]:
+            with self.subTest(touched=touched, aide_rc=aide_rc), tempfile.TemporaryDirectory() as name:
                 d = Path(name)
                 (d / 'rpm').mkdir()
                 for f in ['rpmdb.sqlite', 'rpmdb.sqlite-shm', 'rpmdb.sqlite-wal']:
@@ -196,13 +201,13 @@ class AutoUpdateTests(unittest.TestCase):
                     os.utime(d / 'rpm' / touched, None)
                 bin_dir = d / 'bin'
                 bin_dir.mkdir()
-                stub(bin_dir, 'aide', f'touch {d}/updated {d}/aide.db.new.gz')
+                stub(bin_dir, 'aide', f'touch {d}/aide.db.new.gz; exit {aide_rc}')
                 cmd = (post.replace('$$', '$').replace('/usr/lib/sysimage/rpm /var/lib/rpm', str(d / 'rpm'))
                        .replace('/run/dnf-automatic-aide.stamp', str(stamp))
                        .replace('/var/lib/aide', str(d)).replace('/usr/bin/bash', 'bash'))
                 subprocess.run(cmd, shell=True, check=False, env={'PATH': f'{bin_dir}:/usr/bin:/bin'})
-                self.assertEqual((d / 'updated').exists(), expect)
-                self.assertEqual((d / 'aide.db.gz').exists(), expect)
+                self.assertEqual((d / 'aide.db.gz').exists(), expect)  # installed only after a clean update
+                self.assertFalse((d / 'aide.db.new.gz').exists())  # an errored update's output is discarded
 
 if __name__ == '__main__':
     unittest.main()
