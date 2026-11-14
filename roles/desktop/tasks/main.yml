@@ -423,6 +423,30 @@
     label: "{{ item.domain }} {{ item.key }}"
   when: is_macos
 
+# --- macOS: always-on power settings (opt-in) ---
+- name: Read macOS power settings
+  ansible.builtin.command:
+    argv: [pmset, -g, custom]
+  register: _desktop_pmset
+  changed_when: false
+  check_mode: false  # read-only probe
+  when: is_macos and desktop_macos_always_on | bool
+
+- name: Apply macOS always-on power settings
+  ansible.builtin.command:
+    argv: [pmset, -a, "{{ item.key }}", "{{ item.value | string }}"]
+  become: true
+  tags: [become]
+  changed_when: true
+  loop: "{{ desktop_macos_always_on_pmset | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}={{ item.value }}"
+  when:
+    - is_macos and desktop_macos_always_on | bool
+    - >-
+      (_desktop_pmset.stdout | regex_findall('(?m)^\s*' ~ item.key ~ '\s+(\d+)') | unique)
+      != [item.value | string]
+
 # --- macOS: firewall ---
 - name: Check macOS firewall settings
   ansible.builtin.command:
