@@ -418,10 +418,12 @@
     key: "{{ item.key }}"
     type: "{{ item.type }}"
     value: "{{ item.value }}"
+    check_type: false  # a value stored with another type (e.g. autohide-delay -int 0) is compared, not a failure
   loop: "{{ desktop_macos_defaults }}"
   loop_control:
     label: "{{ item.domain }} {{ item.key }}"
-  when: is_macos
+  register: _desktop_macos_defaults
+  when: is_macos and item.manage | default(true) | bool
 
 # --- macOS: always-on power settings (opt-in) ---
 - name: Read macOS power settings
@@ -451,6 +453,41 @@
     - is_macos and desktop_macos_always_on | bool
     - _desktop_pmset_now | length > 0
     - _desktop_pmset_now != [item.value | string]
+
+# The Dock and the screenshot service cache their settings; restarting them (no sudo) applies the change now.
+- name: Restart macOS UI services whose defaults changed
+  ansible.builtin.command:
+    argv: [killall, "{{ item.service }}"]
+  changed_when: true
+  failed_when: false  # not running is fine: it reads the new value when it starts
+  loop:
+    - {service: Dock, domains: [com.apple.dock]}
+    - {service: SystemUIServer, domains: [com.apple.screencapture]}
+  loop_control:
+    label: "{{ item.service }}"
+  when:
+    - is_macos
+    - not ansible_check_mode
+    - >-
+      _desktop_macos_defaults.results | default([]) | selectattr('changed')
+      | map(attribute='item.domain') | select('in', item.domains) | list | length > 0
+
+# --- macOS: Ghostty config ---
+- name: Deploy Ghostty configuration (macOS)
+  when: is_macos and desktop_terminal == 'ghostty'
+  block:
+    - name: Ensure Ghostty config directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/ghostty"
+        state: directory
+        mode: "0755"
+
+    - name: Deploy Ghostty config
+      ansible.builtin.template:
+        src: ghostty.config.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/ghostty/config"
+        mode: "0644"
+        backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
 
 # --- macOS: firewall ---
 - name: Check macOS firewall settings

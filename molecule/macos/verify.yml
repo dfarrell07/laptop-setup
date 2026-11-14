@@ -145,6 +145,33 @@
           - "{{ ansible_user_dir }}/.config/aerospace/aerospace.toml"
       changed_when: false
 
+    - name: Verify Ghostty config uses the Linux terminal font
+      ansible.builtin.command:
+        argv: [grep, -Fx, "font-family = {{ desktop_alacritty_font_family }}", "{{ ansible_user_dir }}/.config/ghostty/config"]
+      changed_when: false
+      when: desktop_terminal == 'ghostty'
+
+    - name: Read macOS user defaults set by the desktop role
+      ansible.builtin.command:
+        argv: [defaults, read, "{{ item.domain }}", "{{ item.key }}"]
+      register: verify_macos_defaults
+      changed_when: false
+      loop:
+        - {domain: NSGlobalDomain, key: AppleInterfaceStyle, want: Dark}
+        - {domain: NSGlobalDomain, key: ApplePressAndHoldEnabled, want: '0'}
+        - {domain: com.apple.dock, key: autohide, want: '1'}
+        - {domain: com.apple.screencapture, key: type, want: png}
+      loop_control:
+        label: "{{ item.domain }} {{ item.key }}"
+
+    - name: Assert macOS user defaults match the Linux-like settings
+      ansible.builtin.assert:
+        that: item.stdout | trim == item.item.want
+        fail_msg: "{{ item.item.domain }} {{ item.item.key }} is {{ item.stdout }}, expected {{ item.item.want }}"
+      loop: "{{ verify_macos_defaults.results }}"
+      loop_control:
+        label: "{{ item.item.domain }} {{ item.item.key }}"
+
     # --- launchd services (macOS) ---
     - name: Verify SSH agent launchd plist deployed
       ansible.builtin.stat:
