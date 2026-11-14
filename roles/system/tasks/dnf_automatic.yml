@@ -71,6 +71,10 @@
       # that installed nothing cannot absorb unrelated changes; ExecStopPost also covers a run that failed part-way.
       # The scan itself runs in aide-rebaseline.service, started without waiting: here it would hold the unit (and a
       # reboot) for minutes. '-' makes both lines advisory; '$$' is a literal '$' for bash.
+      [Unit]
+      # A rebaseline still scanning would read files mid-transaction: start after it.
+      After=aide-rebaseline.service
+
       [Service]
       ExecStartPre=-/usr/bin/touch /run/dnf-automatic-aide.stamp
       ExecStopPost=-/usr/bin/bash -c 'S=/run/dnf-automatic-aide.stamp; find /usr/lib/sysimage/rpm /var/lib/rpm -name rpmdb.sqlite -newer $$S -print -o -name rpmdb.sqlite-wal -newer $$S -print -o -name Packages -newer $$S -print 2>/dev/null | grep -q . || exit 0; touch /var/lib/aide/rebaseline-pending; systemctl start --no-block aide-rebaseline.service'

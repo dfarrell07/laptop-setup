@@ -82,8 +82,10 @@ fi
 if [[ -n $container ]] && command -v distrobox >/dev/null && podman container exists "$container" 2>/dev/null; then
   was_running=$(podman container inspect --format '{{.State.Running}}' "$container" 2>/dev/null)
   step distrobox distrobox upgrade "$container"
-  # The upgrade starts a stopped container; leave it as it was.
-  [[ $was_running == true ]] || podman stop --time 10 "$container" >/dev/null 2>&1 || true
+  # The upgrade starts a stopped container; stop it again unless someone entered it meanwhile.
+  if [[ $was_running != true && $(podman container inspect --format '{{len .ExecIDs}}' "$container" 2>/dev/null) == 0 ]]; then
+    podman stop --time 10 "$container" >/dev/null 2>&1 || true
+  fi
 fi
 
 if ((${#failed[@]})); then

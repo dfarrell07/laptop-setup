@@ -2,6 +2,8 @@
 [Unit]
 Description=AIDE file integrity check
 ConditionPathExists=/var/lib/aide/aide.db.gz
+# A pending package rebaseline goes first, so a check never reports the update it is about to accept.
+After=aide-rebaseline.service
 OnFailure=aide-notify@%n.service
 
 [Service]
