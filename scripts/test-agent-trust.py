@@ -69,8 +69,18 @@ class HelperTests(unittest.TestCase):
         broken.write_text('{not json')
         self.assertNotEqual(helper('claude', broken, '/a').returncode, 0)
         self.assertEqual(broken.read_text(), '{not json')
-        for bad in ['relative', '/a/../b', '/a\nb']:
+        for bad in ['relative', '/a\nb']:
             self.assertNotEqual(helper('agy', broken, bad).returncode, 0, bad)
+
+    def test_paths_are_normalized_and_symlinks_trusted_under_both_spellings(self):
+        real = self.dir / 'real'
+        (real / 'repo').mkdir(parents=True)
+        (self.dir / 'link').symlink_to(real)
+        state = self.dir / 'settings.json'
+        state.write_text('{"trustedWorkspaces": []}')
+        self.assertEqual(helper('agy', state, f'{self.dir}/link//repo/', '/x/./y').stdout.strip(), 'changed')
+        self.assertEqual(json.loads(state.read_text())['trustedWorkspaces'],
+                         [f'{self.dir}/link/repo', '/x/y', f'{real}/repo'])
 
 
 @unittest.skipUnless(ANSIBLE.exists(), 'needs ansible-playbook')
