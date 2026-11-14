@@ -257,6 +257,13 @@
         - _codex_login_bin.stat.exists
         - _codex_work_auth_mode.stdout != 'apikey' or codex_api_key_rotate | bool
 
+    - name: Warn that the vault API key is set but Codex is not installed
+      ansible.builtin.debug:
+        msg: "WARNING: vault_codex_api_key is set but Codex is not installed, so the work home was not logged in; run: make codex"
+      when:
+        - not ansible_check_mode
+        - not _codex_login_bin.stat.exists
+
     - name: Keep the work Codex login private
       ansible.builtin.file:
         path: "{{ codex_work_config_dir }}/auth.json"

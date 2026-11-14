@@ -322,6 +322,12 @@ class MigrationTests(unittest.TestCase):
                 if expect_login:
                     self.assertEqual(record.read_text(), name + '/.codex|login --with-api-key|' + key)
                     self.assertEqual((directory / '.codex/auth.json').stat().st_mode & 0o777, 0o600)
+        with tempfile.TemporaryDirectory() as name:
+            result = run_play(Path(name), variables={'ansible_facts': {'user_dir': name},
+                                                     'packages_install_binaries': False, 'codex_api_key': key},
+                              roles=['codex'])
+            self.assertIn('vault_codex_api_key is set but Codex is not installed', result)
+            self.assertNotIn(key, result)
         tasks = yaml.safe_load((ROOT / 'roles/codex/tasks/main.yml').read_text())
         login = next(t for t in tasks if t.get('name') == 'Log the work Codex home in with the vault API key')
         run = next(t for t in login['block'] if t.get('name') == 'Run codex login --with-api-key for the work home')
