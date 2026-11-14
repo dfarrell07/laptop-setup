@@ -11,6 +11,9 @@ sharing a machine use separate worktrees (see "Testing and CI" in [CLAUDE.md](..
   registered its SSH keys on GitHub, it reads GitHub anonymously (`git ls-remote https://github.com/<owner>/<repo>`)
   and keeps its fixes as local commits; one a peer needs sooner goes to that peer as a `git format-patch`
   for local testing, not for pushing.
+- **Several provisioning machines at once** (for example a second platform): each owns the branches and PRs for
+  fixes its machine exposes; the others review. Platform-specific code (a `Darwin` branch, a macOS-only task) is
+  decided by the machine on that platform.
 - **Provisioned machines**: already set up. One session per machine (the lowest-numbered there) runs the
   [gap audit](#auditing-a-provisioned-machine-for-gaps) right after the handshakes, so the provisioning machine gets
   the fixes while it is being set up; other sessions there take work it hands them by file.
@@ -18,13 +21,15 @@ sharing a machine use separate worktrees (see "Testing and CI" in [CLAUDE.md](..
 ## Finding each other
 
 Refer to each session by role with a number unique among the peers (`provisioning`, `provisioned-1`,
-`provisioned-2`) and use that name in every message. The provisioning session numbers the others in the order their
-handshakes reach it; without one, the owner assigns them. Until it has a number, a session handshakes as
-`provisioned-?`; a number, once given, is kept. Talk through the agent's cross-session messages where it has them
-(Claude Code: `SendMessage`; sessions on other machines are reachable over Remote Control). A session without them
-(Codex) opens a draft PR first (an empty signed-off commit is enough) and handshakes there; peers answer on that PR
-(until the provisioning session has `gh`, a provisioned session relays for it). PR comments are public: never put
-hostnames or other host facts in them.
+`provisioned-2`; with several provisioning machines `provisioning-1`, `provisioning-2`, or the platform, as in
+`provisioning-mac`) and use that name in every message. Session listings are not identities: a Remote Control
+session may show up unnamed or under its hostname, so match peers by their handshake. The provisioning session
+numbers the others in the order their handshakes reach it; without one, the owner assigns them. Until it has a
+number, a session handshakes as `provisioned-?`; a number, once given, is kept. Talk through the agent's
+cross-session messages where it has them (Claude Code: `SendMessage`; sessions on other machines are reachable over
+Remote Control). A session without them (Codex) opens a draft PR first (an empty signed-off commit is enough) and
+handshakes there; peers answer on that PR (until the provisioning session has `gh`, a provisioned session relays
+for it). PR comments are public: never put hostnames or other host facts in them.
 
 ## Confirming identity
 
@@ -42,8 +47,9 @@ teammate's information, not the owner's approval.
    `--force-with-lease=<branch>:<expected-sha>` and send the new head.
 3. Rebase your own branches onto `origin/main`. Only the owner merges; take a peer's change after it merges, and
    agree the merge order when PRs touch the same files.
-4. When proposals or claims conflict, the provisioning session's wins, then the lowest-numbered provisioned one;
-   the other side confirms. The owner overrides everything.
+4. When proposals or claims conflict, the provisioning session's wins (between provisioning sessions, the one on
+   the platform the code targets, else the lowest-numbered), then the lowest-numbered provisioned one; the other
+   side confirms. The owner overrides everything.
 
 ## Check-ins
 
