@@ -205,9 +205,11 @@
     path: "{{ codex_legacy_install_dir }}"
     state: absent
 
-# Work profile: log the owork home in with the vault API key. Codex writes auth.json itself (its format is Codex's);
-# the key goes only over stdin, and no_log keeps it out of output and logs. A home already in API-key mode is left
-# alone unless codex_api_key_rotate is set; a ChatGPT-mode home is switched to the key.
+# Work profile only: log the work Codex home (owork) in with the vault API key. The personal home (oper) keeps its
+# ChatGPT subscription login and is never touched here. Codex writes the credentials itself, to auth.json or the
+# keyring per its cli_auth_credentials_store setting; the key goes only over stdin, and no_log keeps it and the
+# masked key that `codex login status` prints out of output and logs. A work home already using an API key is left
+# alone unless codex_api_key_rotate is set; a work home with any other login is switched to the key.
 - name: Log the work Codex home in with the vault API key
   when:
     - profile | default('work') == 'work'
@@ -215,33 +217,45 @@
   vars:
     _codex_bin: "{{ codex_npm_prefix }}/bin/codex"
   block:
-    - name: Read the work Codex auth mode (the mode only, never the credentials)
-      ansible.builtin.command:
-        argv:
-          - "{{ ansible_facts.get('python', {}).get('executable', 'python3') }}"
-          - -c
-          - |
-            import json, sys
-            try:
-                print(json.load(open(sys.argv[1])).get('auth_mode') or 'none')
-            except (OSError, ValueError):
-                print('none')
-          - "{{ codex_work_config_dir }}/auth.json"
-      register: _codex_work_auth_mode
-      changed_when: false
-      check_mode: false
+    - name: SECURITY assert the API key targets only the work Codex home
+      ansible.builtin.assert:
+        that:
+          - (codex_work_config_dir | realpath) != (codex_personal_config_dir | realpath)
+        fail_msg: codex_work_config_dir and codex_personal_config_dir must differ; the API key is for the work home only.
 
     - name: Check that the Codex binary is installed
       ansible.builtin.stat:
         path: "{{ _codex_bin }}"
       register: _codex_login_bin
 
+    - name: Warn that the vault API key is set but Codex is not installed
+      ansible.builtin.debug:
+        msg: "WARNING: vault_codex_api_key is set but Codex is not installed, so the work home was not logged in; run: make codex"
+      when: not _codex_login_bin.stat.exists
+
+    - name: Read the work Codex login method
+      ansible.builtin.command:
+        argv: ["{{ _codex_bin }}", login, status]
+      environment:
+        CODEX_HOME: "{{ codex_work_config_dir }}"
+      register: _codex_work_login_status
+      no_log: true
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      when: _codex_login_bin.stat.exists
+
+    - name: Decide whether the work Codex home needs the API key
+      ansible.builtin.set_fact:
+        _codex_work_needs_key: >-
+          {{ _codex_login_bin.stat.exists and (codex_api_key_rotate | bool
+             or _codex_work_login_status.rc | default(1) != 0
+             or not (_codex_work_login_status.stdout | default('')).startswith('API key')) }}
+
     - name: Report Codex API-key login not simulated in check mode
       ansible.builtin.debug:
         msg: "CHECK MODE: the work Codex home ({{ codex_work_config_dir }}) would log in with the vault API key; not simulated."
-      when:
-        - ansible_check_mode
-        - _codex_work_auth_mode.stdout != 'apikey' or codex_api_key_rotate | bool
+      when: ansible_check_mode and _codex_work_needs_key | bool
 
     - name: Run codex login --with-api-key for the work home
       ansible.builtin.command:
@@ -252,23 +266,18 @@
         CODEX_HOME: "{{ codex_work_config_dir }}"
       no_log: true
       changed_when: true
-      when:
-        - not ansible_check_mode
-        - _codex_login_bin.stat.exists
-        - _codex_work_auth_mode.stdout != 'apikey' or codex_api_key_rotate | bool
+      when: not ansible_check_mode and _codex_work_needs_key | bool
 
-    - name: Warn that the vault API key is set but Codex is not installed
-      ansible.builtin.debug:
-        msg: "WARNING: vault_codex_api_key is set but Codex is not installed, so the work home was not logged in; run: make codex"
-      when:
-        - not ansible_check_mode
-        - not _codex_login_bin.stat.exists
+    - name: Check for a file-stored work Codex login
+      ansible.builtin.stat:
+        path: "{{ codex_work_config_dir }}/auth.json"
+      register: _codex_work_auth_file
 
-    - name: Keep the work Codex login private
+    - name: Keep the work Codex login file private
       ansible.builtin.file:
         path: "{{ codex_work_config_dir }}/auth.json"
         mode: "0600"
-      when: not ansible_check_mode and _codex_login_bin.stat.exists
+      when: _codex_work_auth_file.stat.exists
 
   rescue:
     - name: Warn that the Codex API-key login failed
