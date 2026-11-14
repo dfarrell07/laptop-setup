@@ -311,6 +311,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #                                           the CIS 6.2.x GID-0 primary-group assert; add custom service accounts here
 #                                           if they legitimately use GID 0
 #   system_logind_idle_sec: 900           (roles/system/defaults) — seconds idle before logind locks screen
+#   containers_macos_machine_enabled: true  (roles/containers/defaults) — macOS: podman machine VM, started at login;
+#     size with containers_macos_machine_cpus / _memory_mb / _disk_gb (4 / 4096 / 60)
 #   containers_log_driver: k8s-file  (roles/containers/defaults) — log driver (global; set for kind compatibility)
 #   containers_pids_limit: 65536  (roles/containers/defaults) — global pids limit (required by kind nodes)
 #   containers_nofile_limit: 65536  (roles/containers/defaults) — global soft open-file limit

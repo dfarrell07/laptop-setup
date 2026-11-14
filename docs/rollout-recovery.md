@@ -196,6 +196,10 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Verify:** `make verify CHUNK=containers` (`fqin-enforcement`, `containers-policy`). With the stock Fedora
   `/etc/containers/registries.conf` (it lists unqualified search registries) and `containers_enforce_fqin_override: false` (the default),
   the drop-in is skipped, `fqin-enforcement` is WARN and the command exits 1; that is expected. Set the override to `true` to enforce.
+- **macOS:** the chunk creates the podman machine VM (`containers_macos_machine_*`), starts it and loads
+  `~/Library/LaunchAgents/com.laptop-setup.podman-machine.plist`, which starts it at each login. Undo:
+  `launchctl bootout gui/$(id -u)/com.laptop-setup.podman-machine`, delete the plist, then `podman machine rm`. A VM
+  whose first boot was interrupted lands in emergency mode: `podman machine rm -f`, then re-run the chunk.
 - **Undo:** if `distrobox` is enabled, remove it from `rollout_enable` as well (it requires `containers`; `make containers` refuses the
   config otherwise). Then set `containers_policy_enabled: false` and/or `containers_enforce_fqin: false` (and
   `containers_environment_d_enabled: false` to remove
