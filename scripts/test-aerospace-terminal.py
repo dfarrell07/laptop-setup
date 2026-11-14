@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 ANSIBLE = ROOT / '.venv/bin/ansible-playbook'
 if not ANSIBLE.exists():
     ANSIBLE = Path(shutil.which('ansible-playbook'))
+TEST_TIMEOUT = int(os.environ.get('LAPTOP_SETUP_TEST_TIMEOUT', '0'))
 
 
 class AeroSpaceTests(unittest.TestCase):
@@ -79,6 +80,71 @@ class AeroSpaceTests(unittest.TestCase):
             result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(play)], cwd=ROOT,
                                     env=dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
                                     capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_ghostty_config_matches_alacritty_and_is_idempotent(self):
+        production = yaml.safe_load((ROOT / 'roles/desktop/tasks/main.yml').read_text())
+        tasks = copy.deepcopy(next(task['block'] for task in production if task['name'] == 'Deploy Ghostty configuration (macOS)'))
+        for task in tasks:
+            if 'ansible.builtin.template' in task:
+                task['ansible.builtin.template']['src'] = str(ROOT / 'roles/desktop/templates/ghostty.config.j2')
+        defaults = yaml.safe_load((ROOT / 'roles/desktop/defaults/main.yml').read_text())
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            play = home / 'test.yml'
+            play.write_text(yaml.safe_dump([{'hosts': 'localhost', 'gather_facts': False,
+                'vars_files': [str(ROOT / 'roles/desktop/defaults/main.yml')],
+                'vars': {'ansible_facts': {'user_dir': str(home), 'system': 'Darwin'}}, 'tasks': tasks}]))
+            def run():
+                result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(play)], cwd=ROOT,
+                    env=dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
+                    capture_output=True, text=True, timeout=max(60, TEST_TIMEOUT))
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                return result.stdout
+            run()
+            lines = (home / '.config/ghostty/config').read_text().splitlines()
+            settings = [line.split(' = ', 1) for line in lines if line and not line.startswith('#')]
+            self.assertTrue(all(len(pair) == 2 for pair in settings), lines)
+            values = dict(settings)
+            self.assertEqual(values['font-family'], defaults['desktop_alacritty_font_family'])
+            self.assertEqual(values['background'], defaults['desktop_alacritty_color_bg'])
+            self.assertEqual(values['clipboard-read'], 'deny')  # Alacritty osc52 = OnlyCopy
+            self.assertEqual(values['term'], 'xterm-256color')
+            palette = [value for key, value in settings if key == 'palette']
+            self.assertEqual([entry.split('=')[0] for entry in palette], [str(n) for n in range(16)])
+            self.assertTrue(all(re.fullmatch(r'\d+=#[0-9a-f]{6}', entry) for entry in palette), palette)
+            self.assertEqual(re.findall(r'changed=(\d+)', run())[-1], '0')
+
+    def test_macos_defaults_are_user_space_and_restart_their_service(self):
+        defaults = yaml.safe_load((ROOT / 'roles/desktop/defaults/main.yml').read_text())
+        production = yaml.safe_load((ROOT / 'roles/desktop/tasks/main.yml').read_text())
+        task = next(task for task in production if task['name'] == 'Set macOS defaults')
+        self.assertNotIn('become', task)
+        restart = next(task for task in production if task['name'] == 'Restart macOS UI services whose defaults changed')
+        self.assertNotIn('become', restart)
+        restarted = {domain for item in restart['loop'] for domain in item['domains']}
+        keys = set()
+        for item in defaults['desktop_macos_defaults']:
+            self.assertIn(item['type'], {'bool', 'int', 'float', 'string'}, item)
+            self.assertNotIn((item['domain'], item['key']), keys, 'duplicate default')
+            keys.add((item['domain'], item['key']))
+        self.assertIn(('NSGlobalDomain', 'ApplePressAndHoldEnabled'), keys)
+        for domain in ('com.apple.dock', 'com.apple.screencapture'):
+            self.assertIn(domain, {domain for domain, _ in keys})
+            self.assertIn(domain, restarted)
+        condition = restart['when'][2]
+        results = {'results': [{'changed': True, 'item': {'domain': 'com.apple.dock'}},
+                               {'changed': False, 'item': {'domain': 'com.apple.screencapture'}}]}
+        cases = [({'service': 'Dock', 'domains': ['com.apple.dock']}, True),
+                 ({'service': 'SystemUIServer', 'domains': ['com.apple.screencapture']}, False)]
+        tasks = [{'ansible.builtin.assert': {'that': f'({condition}) == {str(want).lower()}'},
+                  'vars': {'item': item, '_desktop_macos_defaults': results}} for item, want in cases]
+        with tempfile.TemporaryDirectory() as directory:
+            play = Path(directory) / 'test.yml'
+            play.write_text(yaml.safe_dump([{'hosts': 'localhost', 'gather_facts': False, 'tasks': tasks}]))
+            result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(play)], cwd=ROOT,
+                                    env=dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
+                                    capture_output=True, text=True, timeout=max(60, TEST_TIMEOUT))
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
