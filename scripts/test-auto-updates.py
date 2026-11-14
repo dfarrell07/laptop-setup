@@ -71,35 +71,41 @@ class AutoUpdateTests(unittest.TestCase):
             home = Path(name)
             variables = {'ansible_facts': {'user_dir': name, 'user_uid': '4294967294'}, 'ansible_managed': 'test',
                          'packages_user_updates_calendar': 'daily', 'packages_user_updates_container': 'fedora-dev',
-                         'packages_user_updates_pipx_skip': ['yamllint', 'ansible-lint']}
+                         'packages_user_updates_pipx_skip': ['yamllint', 'ansible-lint'],
+                         'packages_user_updates_npm': ['@openai/codex']}
             run_play(home, tasks, variables)
             script = home / '.local/bin/laptop-user-update'
             self.assertEqual(script.stat().st_mode & 0o777, 0o755)
             service = (home / '.config/systemd/user/laptop-user-update.service').read_text()
             self.assertIn('ExecStart=%h/.local/bin/laptop-user-update fedora-dev', service)
             self.assertIn('Environment="LAPTOP_UPDATE_PIPX_SKIP=yamllint ansible-lint"', service)
+            self.assertIn('Environment="LAPTOP_UPDATE_NPM=@openai/codex"', service)
             self.assertIn('OnCalendar=daily', (home / '.config/systemd/user/laptop-user-update.timer').read_text())
             with self.assertRaisesRegex(AssertionError, 'container name'):
                 run_play(home, tasks, {**variables, 'packages_user_updates_container': 'x;rm'})
 
-    def run_updater(self, home, npm_rc=0, container_exists=True):
+    def run_updater(self, home, npm_rc=0, container_exists=True, outdated_fails=False):
         bin_dir = home / '.local/bin'
         bin_dir.mkdir(parents=True)
         (home / '.npm-global/lib/node_modules').mkdir(parents=True)
         log = home / 'calls'
         for command, rc in [('pipx', 0), ('distrobox', 0)]:
             stub(bin_dir, command, f'echo "{command} $*" >> {log}; exit {rc}')
-        stub(bin_dir, 'npm', f'echo "npm $* user=$NPM_CONFIG_USERCONFIG" >> {log}\n'
-             'if [ "$1" = outdated ]; then\n'
+        stub(bin_dir, 'npm', f'echo "npm $* user=$NPM_CONFIG_USERCONFIG global=$NPM_CONFIG_GLOBALCONFIG" >> {log}\n'
+             + ('if [ "$1" = outdated ]; then echo "registry unreachable" >&2; exit 1; fi\n' if outdated_fails else '')
+             + 'if [ "$1" = outdated ]; then\n'
              f'  echo "{home}/.npm-global/lib/node_modules/@openai/codex:@openai/codex@0.170.0:@openai/codex@0.169.0:'
              '@openai/codex@0.170.0:global"\n'
              f'  echo "{home}/.npm-global/lib/node_modules/semver:semver@7.8.6:semver@7.8.6:semver@7.8.6:global"\n'
+             f'  echo "{home}/.npm-global/lib/node_modules/inherits:inherits@2.0.4:inherits@2.0.3:inherits@2.0.4:global"\n'
+             f'  echo "{home}/.npm-global/lib/node_modules/ms:ms@2.1.3:ms@3.0.0-beta.2:ms@2.1.3:global"\n'
              '  exit 1\nfi\n'
              f'exit {npm_rc}')
         stub(bin_dir, 'podman', 'exit ' + ('0' if container_exists else '1'))
         result = subprocess.run(['bash', str(ROOT / 'roles/packages/files/laptop-user-update.sh'), 'fedora-dev'],
                                 env={'HOME': str(home), 'PATH': '/usr/bin:/bin', 'LAPTOP_UPDATE_PATH': f'{bin_dir}:/usr/bin:/bin',
-                                     'LAPTOP_UPDATE_PIPX_SKIP': 'yamllint ansible-lint'},
+                                     'LAPTOP_UPDATE_PIPX_SKIP': 'yamllint ansible-lint',
+                                     'LAPTOP_UPDATE_NPM': '@openai/codex ms'},
                                 capture_output=True, text=True,
                                 timeout=30)
         return result, (log.read_text() if log.exists() else '')
@@ -109,8 +115,14 @@ class AutoUpdateTests(unittest.TestCase):
             result, calls = self.run_updater(Path(name))
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertIn('npm install --global --prefix=' + name + '/.npm-global --registry=https://registry.npmjs.org '
-                          '--ignore-scripts --no-audit --no-fund @openai/codex@0.170.0 user=/dev/null', calls)
-            self.assertNotIn('semver', calls.split('npm install')[1])  # current packages are not reinstalled
+                          '--ignore-scripts --no-audit --no-fund @openai/codex@0.170.0 user=/dev/null global=/', calls)
+            global_config = calls.split('global=')[1].split()[0]
+            self.assertNotEqual(global_config, '/dev/null')
+            self.assertFalse(Path(global_config).exists())  # temp config removed
+            installed = calls.split('npm install')[1]
+            self.assertNotIn('semver', installed)  # current
+            self.assertNotIn('inherits', installed)  # not allowlisted (may come from git or a private registry)
+            self.assertNotIn('ms@', installed)  # a newer prerelease is never moved back to latest
             self.assertIn('pipx upgrade-all --skip yamllint ansible-lint', calls)
             self.assertIn('distrobox upgrade fedora-dev', calls)
         with tempfile.TemporaryDirectory() as name:
@@ -119,6 +131,25 @@ class AutoUpdateTests(unittest.TestCase):
             self.assertIn('== npm: FAILED (exit 3)', result.stdout)
             self.assertIn('pipx upgrade-all', calls)  # later steps still run
             self.assertNotIn('distrobox', calls)
+        with tempfile.TemporaryDirectory() as name:
+            result, calls = self.run_updater(Path(name), outdated_fails=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('== npm: FAILED to check for updates (exit 1): registry unreachable', result.stdout)
+            self.assertNotIn('npm install', calls)
+
+    def test_smoke_user_updates_check(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('  # Daily user-space updater')
+        end = source.index('\n', source.index('record "user-updates" "WARN"'))
+        # systemctl is a shell function, not a PATH stub: a temp dir may be mounted noexec.
+        for state, body, expected in [('failed', 'return 0', 'user-updates FAIL'),
+                                      ('enabled', '[ "$2" = is-enabled ]', 'user-updates PASS'),
+                                      ('off', 'return 1', 'user-updates WARN')]:
+            with self.subTest(state=state):
+                run = subprocess.run(['bash', '-c', 'record() { printf "%s %s\\n" "$1" "$2"; }; SYSTEM_ONLY=false; '
+                                      '_cfg=/dev/null; systemctl() { ' + body + '; };\n' + source[start:end]],
+                                     capture_output=True, text=True)
+                self.assertEqual(run.stdout.strip(), expected, run.stderr)
 
     def test_bar_shows_upd_only_when_an_update_unit_failed(self):
         defaults = yaml.safe_load((ROOT / 'roles/desktop/defaults/main.yml').read_text())
@@ -147,27 +178,31 @@ class AutoUpdateTests(unittest.TestCase):
         tasks = yaml.safe_load((ROOT / 'roles/system/tasks/dnf_automatic.yml').read_text())
         hook = next(t for t in tasks if t.get('name') == 'Deploy AIDE update hook for dnf-automatic')
         lines = hook['ansible.builtin.copy']['content'].splitlines()
-        post = next(l for l in lines if l.startswith('ExecStartPost=-'))[len('ExecStartPost=-'):]
+        post = next(l for l in lines if l.startswith('ExecStopPost=-'))[len('ExecStopPost=-'):]
         self.assertIn('ExecStartPre=-/usr/bin/touch /run/dnf-automatic-aide.stamp', lines)
-        for transaction in [False, True]:
-            with self.subTest(transaction=transaction), tempfile.TemporaryDirectory() as name:
+        self.assertNotRegex(post.replace('$$', ''), r'\$')  # systemd would expand a single $
+        for touched, expect in [(None, False), ('rpmdb.sqlite-shm', False), ('rpmdb.sqlite', True),
+                                ('rpmdb.sqlite-wal', True)]:
+            with self.subTest(touched=touched), tempfile.TemporaryDirectory() as name:
                 d = Path(name)
                 (d / 'rpm').mkdir()
+                for f in ['rpmdb.sqlite', 'rpmdb.sqlite-shm', 'rpmdb.sqlite-wal']:
+                    (d / 'rpm' / f).touch()
+                    os.utime(d / 'rpm' / f, (500, 500))
                 stamp = d / 'stamp'
                 stamp.touch()
                 os.utime(stamp, (1000, 1000))
-                os.utime(d / 'rpm', (500, 500))
-                if transaction:
-                    (d / 'rpm/rpmdb.sqlite').touch()
+                if touched:
+                    os.utime(d / 'rpm' / touched, None)
                 bin_dir = d / 'bin'
                 bin_dir.mkdir()
-                stub(bin_dir, 'aide', f'touch {d}/updated')
-                cmd = (post.replace('/usr/lib/sysimage/rpm /var/lib/rpm', str(d / 'rpm'))
+                stub(bin_dir, 'aide', f'touch {d}/updated {d}/aide.db.new.gz')
+                cmd = (post.replace('$$', '$').replace('/usr/lib/sysimage/rpm /var/lib/rpm', str(d / 'rpm'))
                        .replace('/run/dnf-automatic-aide.stamp', str(stamp))
                        .replace('/var/lib/aide', str(d)).replace('/usr/bin/bash', 'bash'))
                 subprocess.run(cmd, shell=True, check=False, env={'PATH': f'{bin_dir}:/usr/bin:/bin'})
-                self.assertEqual((d / 'updated').exists(), transaction)
-
+                self.assertEqual((d / 'updated').exists(), expect)
+                self.assertEqual((d / 'aide.db.gz').exists(), expect)
 
 if __name__ == '__main__':
     unittest.main()
