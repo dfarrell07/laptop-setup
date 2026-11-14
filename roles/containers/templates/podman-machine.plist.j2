@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- {{ ansible_managed }} -->
+<!-- Starts the podman machine at login; `podman machine start` exits once the VM runs, so no KeepAlive. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{{ containers_macos_machine_label | e }}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{ containers_podman_bin | e }}</string>
+    <string>machine</string>
+    <string>start</string>
+    <string>{{ containers_macos_machine_name | e }}</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>{{ dotfiles_homebrew_prefix | e }}/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <!-- the VM process outlives `podman machine start`; without this launchd kills it when the job exits -->
+  <key>AbandonProcessGroup</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>{{ ansible_facts['user_dir'] }}/.local/state/log/podman-machine.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{ ansible_facts['user_dir'] }}/.local/state/log/podman-machine.log</string>
+</dict>
+</plist>

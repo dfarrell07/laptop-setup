@@ -13,8 +13,18 @@ containers_nofile_limit: 65536
 # If overriding this, ensure it is >= containers_nofile_limit or Podman will reject the config.
 containers_nofile_hard_limit: "{{ containers_nofile_limit | int * 8 }}"
 
+# macOS: podman runs containers in a Linux VM. Sized for a 16 GB Mac; the disk grows on demand up to the limit.
+containers_macos_machine_enabled: true
+containers_macos_machine_name: podman-machine-default
+containers_macos_machine_cpus: 4
+containers_macos_machine_memory_mb: 4096
+containers_macos_machine_disk_gb: 60
+containers_macos_machine_label: com.laptop-setup.podman-machine
+containers_podman_bin: "{{ dotfiles_homebrew_prefix | default('/opt/homebrew') }}/bin/podman"
+
 system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml
 is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml
+is_macos: false  # fallback; authoritative value in group_vars/all/vars.yml
 
 # WARNING: overriding this in config.yml REPLACES the full list (drops quay.io and registry.redhat.io).
 # Use containers_registries_extra to append instead.

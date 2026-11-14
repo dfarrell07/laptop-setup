@@ -44,12 +44,11 @@ rollout_catalog:
     sudo: false
     requires: [packages]
   containers:
-    desc: Podman config, pull policy and registries
+    desc: Podman config, pull policy and registries; the podman machine VM on macOS
     risk: medium
-    linux_only: true
     sudo: false
     requires: [packages]
-    verify: [fqin-enforcement, containers-policy]
+    verify: [podman-machine, fqin-enforcement, containers-policy]
   distrobox:
     desc: Dev container provisioning
     risk: low

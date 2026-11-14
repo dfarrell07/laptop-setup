@@ -455,6 +455,15 @@ elif exec_cmd tailscale status &>/dev/null; then record "tailscale" "PASS" "tail
 elif $IS_LINUX; then record "tailscale" "WARN" "tailscaled not running or VPN not established (check: systemctl status tailscaled)"
 else record "tailscale" "WARN" "tailscaled not running or not logged in (check: sudo launchctl print system/com.tailscale.tailscaled, then tailscale up)"; fi
 
+# macOS: containers run in the podman machine VM, which the containers chunk creates and starts at login
+if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
+  if ! command -v podman &>/dev/null; then record "podman-machine" "FAIL" "podman not installed — run: make apply CHUNK=packages"
+  elif [[ "$(podman machine inspect --format '{{.State}}' 2>/dev/null)" != running ]]; then
+    record "podman-machine" "FAIL" "podman machine not running — run: make apply CHUNK=containers (or podman machine start)"
+  elif podman info &>/dev/null; then record "podman-machine" "PASS"
+  else record "podman-machine" "FAIL" "podman machine running but unreachable — check ~/.local/state/log/podman-machine.log"; fi
+fi
+
 # ssh-agent has a FIDO2 sk-ssh-ed25519 key loaded (use -L for full pubkey: -l shows ED25519-SK not sk-ssh-ed25519)
 _ssh_add_rc=0
 # a stalled agent socket must not hang the whole run: bound the call when a timeout tool exists
@@ -2563,6 +2572,11 @@ if [[ -n "$ONLY" ]]; then
     # Linux-only checks (tmpfiles, podman registries, getent login shell, distrobox) have nothing to verify on macOS
     if ! $IS_LINUX && [[ " claude-privacy-tmpfiles fqin-enforcement containers-policy login-shell-zsh distrobox-container " == *" $_only_name "* ]]; then
       $JSON || printf 'N/A   %s (Linux-only check; nothing to verify on macOS)\n' "$_only_name"
+      continue
+    fi
+    # macOS-only checks have nothing to verify on Linux
+    if $IS_LINUX && [[ " podman-machine " == *" $_only_name "* ]]; then
+      $JSON || printf 'N/A   %s (macOS-only check; nothing to verify on Linux)\n' "$_only_name"
       continue
     fi
     record "$_only_name" "SKIP" "check did not run on this box (not applicable, or needs root)"

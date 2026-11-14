@@ -578,3 +578,7 @@
       'make kind' run from non-interactive shells cannot find Podman. To keep them, set
       containers_environment_d_enabled: true in config.yml and re-run make containers.
   when: _containers_envd_removed is changed
+
+- name: Podman machine (macOS)
+  ansible.builtin.include_tasks: macos.yml
+  when: is_macos and containers_macos_machine_enabled | bool
