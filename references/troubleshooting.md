@@ -123,7 +123,7 @@ skipped on CSB hosts. Diagnose with `resolvectl status` and `resolvectl query ex
 - **`resolv.conf` symlink task fails:** NetworkManager owns `/etc/resolv.conf`. Check `readlink /etc/resolv.conf` is
   `/run/systemd/resolve/stub-resolv.conf`; on hybrid Fedora CSB `make system` only enforces that symlink (RHEL CSB skips it). On a non-CSB
   host `make system` also deploys `/etc/NetworkManager/conf.d/99-dns.conf` (`dns=systemd-resolved`); restart NetworkManager from the
-  console or tmux afterwards. Chrony NTS and dnf-automatic are likewise not applied on CSB.
+  console or tmux afterwards. Chrony NTS is likewise not applied on CSB; dnf-automatic is skipped only on RHEL CSB.
 
 ## Containers and OVN-K / Submariner
 
