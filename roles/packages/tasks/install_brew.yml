@@ -39,7 +39,7 @@
              + (packages_brew_personal if profile != 'work' else []) }}
         state: present
         update_homebrew: "{{ packages_brew_update }}"
-      async: 600
+      async: 1800  # a fresh Mac builds/pours ~35 formulas in this one call
       poll: 10
       register: _packages_brew_formulas
   rescue:
