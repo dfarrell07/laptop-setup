@@ -3,7 +3,7 @@
 # password stops the run with a plain message instead of failing mid-role (where rescue
 # blocks would otherwise treat the auth error as a task-specific failure).
 - name: Verify sudo authentication before privileged tasks
-  ansible.builtin.command: /bin/true
+  ansible.builtin.command: /usr/bin/true  # /bin/true does not exist on macOS
   become: true
   changed_when: false
   check_mode: false  # authentication must be proven in dry runs too
