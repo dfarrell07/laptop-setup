@@ -92,6 +92,7 @@ and `make apply CHUNK=repos`; until then those hosts and their repos are skipped
 make status                 # chunks on/off (rollout_enable); list: group_vars/all/rollout.yml
 make plan CHUNK=x           # preview one chunk (--check --diff); whole enabled list: make check
 make apply CHUNK=x          # apply one enabled chunk (high-risk ones need a typed name and a terminal)
+make apply CHUNK=x NOSUDO=1 # same, no sudo prompt: skips root-only (become) tasks; a later sudo run applies them
 make verify CHUNK=x         # smoke checks for that chunk (all enabled if no CHUNK); fails on WARN/SKIP; sys_* need sudo; exits 1 for chunks with no check (packages desktop repos redhat repos_dnf): use make plan
 make all | offline | minimal  # full / no binary downloads / dotfiles+ssh+repos only, no sudo
 make update                 # reinstall vendored collections + full run with git_repos_pull=true
