@@ -14,11 +14,12 @@ After=local-fs.target
 
 [Service]
 Type=oneshot
-# While a dnf-automatic transaction runs it does nothing (that run starts it again when it ends). It takes the marker
+# While a dnf-automatic transaction runs (activating; not deactivating, its ExecStopPost) it does nothing: that run
+# starts it again when it ends. It takes the marker
 # first (or resumes an interrupted .run), so a dnf run that lands meanwhile leaves a fresh one for the next pass.
 # Exit 8 or more is an AIDE error (as in `make aide-rebaseline`): discard its output, restore the marker, fail the
 # unit (the status bar shows UPD). '$$' is a literal '$' for bash.
-ExecStart=/usr/bin/bash -c 'cd /var/lib/aide || exit 1; case $$(systemctl show -P ActiveState dnf5-automatic.service dnf-automatic.service) in *activating*) exit 0;; esac; mv rebaseline-pending rebaseline-pending.run 2>/dev/null || [ -e rebaseline-pending.run ] || exit 0; aide --update; rc=$$?; if [ $$rc -lt 8 ] && [ -f aide.db.new.gz ]; then mv aide.db.new.gz aide.db.gz && rm -f rebaseline-pending.run; else rm -f aide.db.new.gz; mv rebaseline-pending.run rebaseline-pending; exit 1; fi'
+ExecStart=/usr/bin/bash -c 'cd /var/lib/aide || exit 1; systemctl show -P ActiveState dnf5-automatic.service dnf-automatic.service | grep -qx activating && exit 0; mv rebaseline-pending rebaseline-pending.run 2>/dev/null || [ -e rebaseline-pending.run ] || exit 0; aide --update; rc=$$?; if [ $$rc -lt 8 ] && [ -f aide.db.new.gz ]; then mv aide.db.new.gz aide.db.gz && rm -f rebaseline-pending.run; else rm -f aide.db.new.gz; mv rebaseline-pending.run rebaseline-pending; exit 1; fi'
 Nice=15
 IOSchedulingClass=idle
 SyslogIdentifier=aide-rebaseline
