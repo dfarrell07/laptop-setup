@@ -6,6 +6,7 @@ names; every other chunk is skipped with --skip-tags. Exit status 2 means invali
 """
 import argparse
 import difflib
+import platform
 import re
 import subprocess
 import sys
@@ -65,6 +66,8 @@ def load_catalog(registry=REGISTRY):
             value = entry.get(field, [])
             if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
                 raise RolloutError(f'chunk {name}: {field} must be a list of strings')
+        if not isinstance(entry.get('linux_only', False), bool):
+            raise RolloutError(f'chunk {name}: linux_only must be true or false')
         for need in entry.get('requires', []):
             if need not in seen:
                 raise RolloutError(f'chunk {name}: requires {need}, which must be listed earlier')
@@ -106,6 +109,17 @@ def resolve(registry=REGISTRY, config=CONFIG):
     return catalog, enabled_chunks(catalog, setting)
 
 
+def host_is_linux():
+    return platform.system() == 'Linux'
+
+
+def not_here(catalog, chunks, linux=None):
+    """Chunks among `chunks` whose roles do nothing on this OS (linux_only on macOS)."""
+    if host_is_linux() if linux is None else linux:
+        return []
+    return [n for n in chunks if catalog[n].get('linux_only')]
+
+
 def skip_tags(catalog, enabled):
     return [n for n in catalog if n not in enabled]
 
@@ -128,9 +142,11 @@ def require_enabled(catalog, enabled, name):
         raise RolloutError(f"chunk '{name}' is not enabled; add it to rollout_enable in config.yml (make status shows the list)")
 
 
-def chunk_args(catalog, enabled, name):
+def chunk_args(catalog, enabled, name, linux=None):
     """Extra ansible-playbook arguments that apply exactly one enabled chunk."""
     require_enabled(catalog, enabled, name)
+    if not_here(catalog, [name], linux):
+        raise RolloutError(f"'{name}' is Linux-only: its roles do nothing on this OS, so there is nothing to plan or apply")
     system = name.startswith('sys_')
     # System sub-chunks share the `system` role tag (its untagged prerequisites must run), so they are
     # selected by complement; every other chunk is selected by its own tag. Required chunks stay unskipped:
@@ -207,11 +223,11 @@ def next_hint(catalog, enabled):
     return f'Start with: make plan CHUNK={first}, then the other ON chunks in table order'
 
 
-def status_table(catalog, enabled):
+def status_table(catalog, enabled, linux=None):
     width = max(len(n) for n in catalog)
     lines = [f'{"#":>2}  {"chunk":<{width}}  {"risk":<6}  {"state":<5}  {"sudo":<4}  description']
     for i, (name, entry) in enumerate(catalog.items(), 1):
-        state = 'ON' if name in enabled else 'off'
+        state = 'n/a' if not_here(catalog, [name], linux) else 'ON' if name in enabled else 'off'
         sudo = 'yes' if entry.get('sudo', True) else 'no'
         lines.append(f'{i:>2}  {name:<{width}}  {entry["risk"]:<6}  {state:<5}  {sudo:<4}  {entry["desc"]}')
     return lines
@@ -238,6 +254,8 @@ def main(argv=None):
                   f'Skipped: {", ".join(off)}. (make status lists them)', file=sys.stderr)
     elif args.command == 'status':
         print('\n'.join(status_table(catalog, enabled)))
+        if not_here(catalog, list(catalog)):
+            print('\nn/a: Linux-only chunk; its roles do nothing on this OS, so make all and make verify pass over it.')
         if off:
             print(f'\nmake all applies only the ON chunks ({len(enabled)} of {len(catalog)}).')
             print(next_hint(catalog, enabled))
@@ -263,6 +281,14 @@ def main(argv=None):
         except RolloutError as error:
             print(f'ERROR: {error}', file=sys.stderr)
             return 2
+        targets = [name] if name else enabled
+        skipped = not_here(catalog, targets)
+        for chunk in skipped:
+            print(f'N/A   {chunk} (Linux-only chunk; nothing to verify on this OS)')
+        if name and skipped:
+            return 0
+        if skipped:
+            enabled = [c for c in enabled if c not in skipped]
         command = verify_command(catalog, enabled, name or None)
         if command is None:
             print(f"no smoke check is mapped to {name or 'the enabled chunks'} yet, so its state is unknown; "
