@@ -342,6 +342,7 @@
         - .local/bin/laptop-user-update
         - .config/systemd/user/laptop-user-update.service
         - .config/systemd/user/laptop-user-update.timer
+        - .config/systemd/user/timers.target.wants/laptop-user-update.timer  # left if the user manager was unreachable
 
 - name: Install krew
   ansible.builtin.include_tasks: install_krew.yml

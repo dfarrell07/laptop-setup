@@ -304,11 +304,13 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Undo:** on a CSB host (`csb_detected`) delete `/etc/systemd/resolved.conf.d/98-llmnr.conf` and run
   `sudo systemctl restart systemd-resolved`. On hybrid CSB Fedora also: `sudo systemctl disable --now dnf5-automatic.timer
   flatpak-update.timer`, delete `/etc/dnf/automatic.conf`, `/etc/systemd/system/dnf5-automatic.service.d/aide-update.conf`,
-  `/etc/systemd/system/aide-rebaseline.service` (after `sudo systemctl disable aide-rebaseline`) and
+  `/etc/systemd/system/aide-rebaseline.service` (after `sudo systemctl disable aide-rebaseline`), `/var/lib/aide/rebaseline-pending` and
   `/etc/systemd/system/flatpak-update.{service,timer}`, and optionally `sudo dnf remove dnf5-plugin-automatic`. On other hosts:
   restore `/etc/chrony.conf` and `/etc/dnf/automatic.conf` from the snapshot (the role keeps no backup); delete
   `/usr/local/bin/laptop-setup-validate-chrony` and `/etc/systemd/resolved.conf.d/{98-llmnr,99-dot}.conf`, then
   `sudo systemctl restart systemd-resolved`; `sudo systemctl disable --now dnf5-automatic.timer` (`dnf-automatic.timer` on dnf4);
+  with AIDE on, `sudo systemctl disable aide-rebaseline` and delete `/etc/systemd/system/aide-rebaseline.service`,
+  `/etc/systemd/system/dnf5-automatic.service.d/aide-update.conf` and `/var/lib/aide/rebaseline-pending`;
   `sudo systemctl disable --now flatpak-update.timer` and delete `/etc/systemd/system/flatpak-update.{service,timer}`.
 
 ## sys_optional

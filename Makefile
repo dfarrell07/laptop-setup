@@ -323,7 +323,7 @@ aide-rebaseline: guard-not-root
 		printf "Accept the changes above as the new baseline? [y/N] "; read -r a; \
 		case "$$a" in y|Y) cp -p aide.db.gz aide.db.gz.prev && mv aide.db.new.gz aide.db.gz \
 			&& echo "Baseline updated (previous kept as /var/lib/aide/aide.db.gz.prev).";; \
-		*) rm -f aide.db.new.gz; echo "Baseline unchanged." >&2; exit 1;; esac'
+		*) rm -f aide.db.new.gz; echo "Baseline unchanged." >&2; exit 1;; esac; rm -f rebaseline-pending'
 
 update: guard-not-root rollout-banner preflight
 	$(MAKE) npm

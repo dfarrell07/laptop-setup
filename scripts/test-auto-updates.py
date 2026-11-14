@@ -105,8 +105,9 @@ class AutoUpdateTests(unittest.TestCase):
              f'  echo "{home}/.npm-global/lib/node_modules/tag:tag@0.2.0-alpha.2:tag@0.2.0:tag@0.2.0-alpha.2:global"\n'
              '  exit 1\nfi\n'
              f'exit {npm_rc}')
-        stub(bin_dir, 'podman', f'echo "podman $*" >> {log}; ' + ('[ "$2" = inspect ] && echo false; exit 0'
-                                                                    if container_exists else 'exit 1'))
+        stub(bin_dir, 'podman', f'echo "podman $*" >> {log}; ' + (
+            'case "$*" in *ExecIDs*) echo 0;; *State.Running*) echo false;; esac; exit 0'
+            if container_exists else 'exit 1'))
         result = subprocess.run(['bash', str(ROOT / 'roles/packages/files/laptop-user-update.sh'), 'fedora-dev'],
                                 env={'HOME': str(home), 'PATH': '/usr/bin:/bin', 'LAPTOP_UPDATE_PATH': f'{bin_dir}:/usr/bin:/bin',
                                      'LAPTOP_UPDATE_PIPX_SKIP': 'yamllint ansible-lint',
@@ -194,6 +195,7 @@ class AutoUpdateTests(unittest.TestCase):
         lines = hook['ansible.builtin.copy']['content'].splitlines()
         post = next(l for l in lines if l.startswith('ExecStopPost=-'))[len('ExecStopPost=-'):]
         self.assertIn('ExecStartPre=-/usr/bin/touch /run/dnf-automatic-aide.stamp', lines)
+        self.assertIn('After=aide-rebaseline.service', lines)
         self.assertFalse([l for l in lines if l.startswith('TimeoutStopSec')])  # the scan is not in the stop phase
         self.assertNotRegex(post.replace('$$', ''), r'\$')  # systemd would expand a single $
         for touched, expect in [(None, False), ('rpmdb.sqlite-shm', False), ('rpmdb.sqlite', True),
@@ -222,17 +224,22 @@ class AutoUpdateTests(unittest.TestCase):
         self.assertIn('ConditionPathExists=/var/lib/aide/rebaseline-pending', unit)
         self.assertIn('WantedBy=multi-user.target', unit)  # retries at boot after an interrupted run
         start = next(l for l in unit if l.startswith('ExecStart='))[len('ExecStart='):]
-        for aide_rc, ok in [(0, True), (4, True), (9, False)]:
-            with self.subTest(aide_rc=aide_rc), tempfile.TemporaryDirectory() as name:
+        self.assertIn('ConditionPathExists=/var/lib/aide/aide.db.gz', unit)  # no baseline yet: skip, don't fail
+        self.assertIn('After=aide-rebaseline.service', (ROOT / 'roles/system/files/aide-check.service').read_text())
+        for aide_rc, during, ok, pending in [(0, False, True, False), (4, False, True, False), (9, False, False, True),
+                                             (0, True, True, True)]:  # a dnf run during the scan leaves a new marker
+            with self.subTest(aide_rc=aide_rc, during=during), tempfile.TemporaryDirectory() as name:
                 d = Path(name)
                 (d / 'rebaseline-pending').touch()
+                again = f'touch {d}/rebaseline-pending; ' if during else ''
                 cmd = (start.replace('$$', '$').replace('/var/lib/aide', str(d)).replace('/usr/bin/bash', 'bash')
-                       .replace('aide --update', f'touch {d}/aide.db.new.gz; (exit {aide_rc})'))
+                       .replace('aide --update', f'{again}touch {d}/aide.db.new.gz; (exit {aide_rc})'))
                 rc = subprocess.run(cmd, shell=True, check=False).returncode
                 self.assertEqual(rc == 0, ok)
                 self.assertEqual((d / 'aide.db.gz').exists(), ok)
                 self.assertFalse((d / 'aide.db.new.gz').exists())
-                self.assertEqual((d / 'rebaseline-pending').exists(), not ok)  # kept for a retry
+                self.assertFalse((d / 'rebaseline-pending.run').exists())
+                self.assertEqual((d / 'rebaseline-pending').exists(), pending)
 
 if __name__ == '__main__':
     unittest.main()

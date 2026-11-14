@@ -5,13 +5,16 @@ Documentation=man:aide(1)
 # dnf-automatic leaves this marker when a run wrote the RPM database. Enabled at boot too, so a run that shutdown
 # interrupted (normal stop timeout: shutdown never waits minutes for AIDE) retries.
 ConditionPathExists=/var/lib/aide/rebaseline-pending
+# No baseline yet (aide comes with the sys_optional chunk): nothing to update, skip instead of failing.
+ConditionPathExists=/var/lib/aide/aide.db.gz
 After=local-fs.target
 
 [Service]
 Type=oneshot
-# Exit 8 or more is an AIDE error (as in `make aide-rebaseline`): discard its output, keep the marker, fail the unit
-# (the status bar shows UPD). '$$' is a literal '$' for bash.
-ExecStart=/usr/bin/bash -c 'aide --update; rc=$$?; if [ $$rc -lt 8 ] && [ -f /var/lib/aide/aide.db.new.gz ]; then mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz && rm -f /var/lib/aide/rebaseline-pending; else rm -f /var/lib/aide/aide.db.new.gz; exit 1; fi'
+# The run takes the marker first, so a dnf run that lands meanwhile leaves a fresh one and queues another pass.
+# Exit 8 or more is an AIDE error (as in `make aide-rebaseline`): discard its output, restore the marker, fail the
+# unit (the status bar shows UPD). '$$' is a literal '$' for bash.
+ExecStart=/usr/bin/bash -c 'cd /var/lib/aide || exit 1; mv rebaseline-pending rebaseline-pending.run 2>/dev/null || exit 0; aide --update; rc=$$?; if [ $$rc -lt 8 ] && [ -f aide.db.new.gz ]; then mv aide.db.new.gz aide.db.gz && rm -f rebaseline-pending.run; else rm -f aide.db.new.gz; mv rebaseline-pending.run rebaseline-pending; exit 1; fi'
 Nice=15
 IOSchedulingClass=idle
 SyslogIdentifier=aide-rebaseline
