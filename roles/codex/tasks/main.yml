@@ -233,6 +233,7 @@
         msg: "WARNING: vault_codex_api_key is set but Codex is not installed, so the work home was not logged in; run: make codex"
       when: not _codex_login_bin.stat.exists
 
+    # codex login status reports on stderr (stdout is empty); both streams are checked.
     - name: Read the work Codex login method
       ansible.builtin.command:
         argv: ["{{ _codex_bin }}", login, status]
@@ -250,7 +251,8 @@
         _codex_work_needs_key: >-
           {{ _codex_login_bin.stat.exists and (codex_api_key_rotate | bool
              or _codex_work_login_status.rc | default(1) != 0
-             or not (_codex_work_login_status.stdout | default('')).startswith('API key')) }}
+             or not ((_codex_work_login_status.stderr | default('')).startswith('API key')
+                     or (_codex_work_login_status.stdout | default('')).startswith('API key'))) }}
 
     - name: Report Codex API-key login not simulated in check mode
       ansible.builtin.debug:
