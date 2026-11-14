@@ -94,8 +94,8 @@ Homes below are defaults; substitute configured paths and transfer custom homes 
 | `cper2` | `.claude-per2`, personal | Sign in separately |
 | `owork` (work profile) | `.codex` | `vault_codex_api_key` then `make codex`, or `CODEX_HOME="$HOME/.codex" codex login` |
 | `oper` | `.codex-personal` | `CODEX_HOME="$HOME/.codex-personal" codex login` |
-| `gper` | Separate `agy` CLI | Vendor install and login |
-| `gper2` (Linux) | `agy`, `.gemini-per2`, login kept out of the desktop keyring | Sign in separately |
+| `gper` | `agy`, `.gemini`, login in the desktop keyring | Run `gper` and finish the browser sign-in |
+| `gper2` (Linux) | `agy`, `.gemini-per2`, login in a 0600 file, not the keyring | Run `gper2` and finish the browser sign-in |
 
 `cwork` sources the managed `~/.config/claude/work-env`, which sources a restored
 `~/.config/claude-code-vertex/env.sh` when present and forces Vertex. For GCP, macOS work provisioning installs

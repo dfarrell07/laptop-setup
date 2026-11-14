@@ -127,6 +127,20 @@
   loop_control:
     label: "{{ item.path | basename }}"
 
+- name: Validate Antigravity account settings
+  ansible.builtin.assert:
+    that:
+      - antigravity_model is string and antigravity_model | length > 0
+      - antigravity_model is not search('[\x00-\x1f\x7f]')
+      - antigravity_verbosity is string and antigravity_verbosity is match('^[a-z]+$')
+      - antigravity_trusted_workspaces is sequence and antigravity_trusted_workspaces is not string
+      - antigravity_trusted_workspaces | reject('match', '^/[^\x00-\x1f\x7f]*$') | list | length == 0
+      - item is match('^' ~ (ansible_facts['user_dir'] | regex_escape) ~ '/[a-zA-Z0-9._-]+$')
+    fail_msg: >-
+      antigravity_model and antigravity_verbosity must be plain strings, antigravity_trusted_workspaces a list of
+      absolute paths, and each Antigravity home a directory directly inside the user home.
+  loop: "{{ antigravity_gemini_homes }}"
+
 - name: Ensure Antigravity launcher homes exist
   ansible.builtin.file:
     path: "{{ item }}"
@@ -139,4 +153,21 @@
     src: "{{ role_path }}/../common/templates/agent-baseline.md.j2"
     dest: "{{ item }}/GEMINI.md"
     mode: "0600"
+  loop: "{{ antigravity_gemini_homes }}"
+
+- name: Create private agy settings directories
+  ansible.builtin.file:
+    path: "{{ item }}/antigravity-cli"
+    state: directory
+    mode: "0700"
+  loop: "{{ antigravity_gemini_homes }}"
+
+- name: Seed Antigravity settings without replacing agy's own edits
+  ansible.builtin.copy:
+    content: >-
+      {{ {'model': antigravity_model, 'trustedWorkspaces': antigravity_trusted_workspaces,
+          'verbosity': antigravity_verbosity} | to_nice_json(indent=2) }}
+    dest: "{{ item }}/antigravity-cli/settings.json"
+    mode: "0600"
+    force: false
   loop: "{{ antigravity_gemini_homes }}"

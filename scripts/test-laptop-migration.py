@@ -357,6 +357,35 @@ class MigrationTests(unittest.TestCase):
         text = (ROOT / 'roles/codex/tasks/main.yml').read_text()
         self.assertEqual(text.count('codex_api_key }}'), 1)
 
+    def test_antigravity_account_homes_and_seed_only_settings(self):
+        for system, homes in [('Linux', ['.gemini', '.gemini-per2']), ('Darwin', ['.gemini'])]:
+            with self.subTest(system=system), tempfile.TemporaryDirectory() as name:
+                directory = Path(name)
+                variables = {'ansible_facts': {'user_dir': name, 'system': system},
+                             'packages_install_binaries': False,
+                             'antigravity_trusted_workspaces': [name + '/src/work repo']}
+                run_play(directory, variables=variables, roles=['antigravity'])
+                self.assertEqual(sorted(p.name for p in directory.glob('.gemini*')), homes)
+                for home in homes:
+                    settings = directory / home / 'antigravity-cli/settings.json'
+                    self.assertEqual(json.loads(settings.read_text()), {
+                        'model': 'Gemini 3.8 Flash (High)', 'trustedWorkspaces': [name + '/src/work repo'],
+                        'verbosity': 'low'})
+                    self.assertEqual(settings.stat().st_mode & 0o777, 0o600)
+                    self.assertEqual((directory / home).stat().st_mode & 0o777, 0o700)
+                    self.assertEqual((directory / home / 'antigravity-cli').stat().st_mode & 0o777, 0o700)
+                user_edit = directory / '.gemini/antigravity-cli/settings.json'
+                user_edit.write_text('{"model": "user choice"}')
+                self.assertIn('changed=0', run_play(directory, variables=variables, roles=['antigravity']))
+                self.assertEqual(user_edit.read_text(), '{"model": "user choice"}')
+        with tempfile.TemporaryDirectory() as name:
+            with self.assertRaisesRegex(AssertionError, 'absolute paths'):
+                run_play(Path(name), variables={'ansible_facts': {'user_dir': name, 'system': 'Linux'},
+                                                'packages_install_binaries': False,
+                                                'antigravity_trusted_workspaces': ['relative/path']},
+                         roles=['antigravity'])
+            self.assertFalse((Path(name) / '.gemini').exists())
+
     def test_claude_baseline_scopes_plugins_and_preserves_cli_preferences(self):
         production = yaml.safe_load((ROOT / 'roles/claude/tasks/main.yml').read_text())
         selected = [task for task in production if task.get('name') in [
