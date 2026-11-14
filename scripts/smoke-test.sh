@@ -389,7 +389,8 @@ fi
 if ! command -v tailscale &>/dev/null; then
   record "tailscale" "WARN" "tailscale not installed (run: make packages)"
 elif exec_cmd tailscale status &>/dev/null; then record "tailscale" "PASS" "tailscaled running (VPN/auth state not verified)"
-else record "tailscale" "WARN" "tailscaled not running or VPN not established (check: systemctl status tailscaled)"; fi
+elif $IS_LINUX; then record "tailscale" "WARN" "tailscaled not running or VPN not established (check: systemctl status tailscaled)"
+else record "tailscale" "WARN" "tailscaled not running or not logged in (check: sudo launchctl print system/com.tailscale.tailscaled, then tailscale up)"; fi
 
 # ssh-agent has a FIDO2 sk-ssh-ed25519 key loaded (use -L for full pubkey: -l shows ED25519-SK not sk-ssh-ed25519)
 _ssh_add_rc=0
