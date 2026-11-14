@@ -117,8 +117,20 @@
       failed_when: false
       check_mode: false
 
+    # The app is checked too: an update that could not replace a root-owned app (NOSUDO=1) still installs the
+    # new CLI, so the CLI alone would hide the old app from every later run
+    - name: Version check — AeroSpace.app
+      ansible.builtin.command:
+        argv: [plutil, -extract, CFBundleShortVersionString, raw, /Applications/AeroSpace.app/Contents/Info.plist]
+      register: _aerospace_app_version_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
     - name: AeroSpace present at {{ packages_aerospace_version }}
-      when: packages_aerospace_version not in (_aerospace_version_check.stdout + _aerospace_version_check.stderr)
+      when: >-
+        packages_aerospace_version not in (_aerospace_version_check.stdout + _aerospace_version_check.stderr)
+        or _aerospace_app_version_check.stdout | trim != packages_aerospace_version
       block:
         - name: Create secure AeroSpace temp directory (TOCTOU guard)
           ansible.builtin.tempfile:
@@ -197,12 +209,15 @@
             - not _aerospace_app_after.stat.exists
             - not (_aerospace_paths.results[0].stat.writeable | default(false))
 
-        - name: Note a root-owned AeroSpace.app left in place
+        - name: Note an AeroSpace.app that needs sudo to install
           ansible.builtin.debug:
             msg: >-
-              /Applications/AeroSpace.app is root-owned and was not updated without sudo; run
-              make apply CHUNK=packages (with sudo) to replace it.
-          when: _aerospace_app_after.stat.exists
+              AeroSpace.app {{ packages_aerospace_version }} was not installed without sudo (an earlier root-owned
+              copy, or /Applications not writable); run make apply CHUNK=packages with sudo to install it.
+          when: >-
+            _aerospace_app_after.stat.exists
+            or (not (_aerospace_paths.results[0].stat.writeable | default(false))
+                and 'become' in ansible_skip_tags | default([]))
 
         - name: Check for the CLI an earlier run put in /usr/local/bin
           ansible.builtin.stat:
