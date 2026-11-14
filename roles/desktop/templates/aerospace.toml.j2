@@ -1,5 +1,6 @@
 # Seeded once by Ansible; edit freely (re-runs do not overwrite this file)
-# AeroSpace — i3-inspired tiling WM for macOS
+# AeroSpace — i3-inspired tiling WM for macOS. Bindings follow the sway config (sway.config.j2) with
+# alt as the mod key: focus/move on hjkl, workspaces 1-10, i3 splits and layouts, no gaps.
 
 config-version = 2
 
@@ -9,45 +10,72 @@ start-at-login = true
 after-login-command = []
 after-startup-command = []
 
-enable-normalization-flatten-containers = true
-enable-normalization-opposite-orientation-for-nested-containers = true
+# Off, as in AeroSpace's i3-like preset: with flattening on, alt-b/alt-v splits have no effect
+enable-normalization-flatten-containers = false
+enable-normalization-opposite-orientation-for-nested-containers = false
 
 accordion-padding = 30
 default-root-container-layout = 'tiles'
 default-root-container-orientation = 'auto'
 
+# sway: gaps inner/outer {{ desktop_sway_gaps_inner | int }}/{{ desktop_sway_gaps_outer | int }}
 [gaps]
-inner.horizontal = 8
-inner.vertical = 8
-outer.left = 8
-outer.bottom = 8
-outer.top = 8
-outer.right = 8
+inner.horizontal = {{ desktop_sway_gaps_inner | int }}
+inner.vertical = {{ desktop_sway_gaps_inner | int }}
+outer.left = {{ desktop_sway_gaps_outer | int }}
+outer.bottom = {{ desktop_sway_gaps_outer | int }}
+outer.top = {{ desktop_sway_gaps_outer | int }}
+outer.right = {{ desktop_sway_gaps_outer | int }}
 
 [mode.main.binding]
 alt-enter = 'exec-and-forget open -na {{ desktop_macos_terminal_app }}'
-alt-h = 'focus left'
-alt-j = 'focus down'
-alt-k = 'focus up'
-alt-l = 'focus right'
+alt-shift-q = 'close'
+alt-shift-c = 'reload-config'
+
+# Focus wraps at the workspace edge, as in sway
+alt-h = 'focus --boundaries-action wrap-around-the-workspace left'
+alt-j = 'focus --boundaries-action wrap-around-the-workspace down'
+alt-k = 'focus --boundaries-action wrap-around-the-workspace up'
+alt-l = 'focus --boundaries-action wrap-around-the-workspace right'
 alt-shift-h = 'move left'
 alt-shift-j = 'move down'
 alt-shift-k = 'move up'
 alt-shift-l = 'move right'
+
+# i3/sway splits and layouts: b/v split, s stacking, w tabbed, e toggle split
+alt-b = 'split horizontal'
+alt-v = 'split vertical'
+alt-s = 'layout v_accordion'
+alt-w = 'layout h_accordion'
+alt-e = 'layout tiles horizontal vertical'
 alt-f = 'fullscreen'
 alt-shift-space = 'layout floating tiling'
-alt-slash = 'layout tiles horizontal vertical'
-alt-comma = 'layout accordion horizontal vertical'
+
 alt-1 = 'workspace 1'
 alt-2 = 'workspace 2'
 alt-3 = 'workspace 3'
 alt-4 = 'workspace 4'
 alt-5 = 'workspace 5'
+alt-6 = 'workspace 6'
+alt-7 = 'workspace 7'
+alt-8 = 'workspace 8'
+alt-9 = 'workspace 9'
+alt-0 = 'workspace 10'
 alt-shift-1 = 'move-node-to-workspace 1'
 alt-shift-2 = 'move-node-to-workspace 2'
 alt-shift-3 = 'move-node-to-workspace 3'
 alt-shift-4 = 'move-node-to-workspace 4'
 alt-shift-5 = 'move-node-to-workspace 5'
+alt-shift-6 = 'move-node-to-workspace 6'
+alt-shift-7 = 'move-node-to-workspace 7'
+alt-shift-8 = 'move-node-to-workspace 8'
+alt-shift-9 = 'move-node-to-workspace 9'
+alt-shift-0 = 'move-node-to-workspace 10'
+
+# Scratchpad stand-in: a workspace named S (AeroSpace has no floating scratchpad)
+alt-minus = 'workspace S'
+alt-shift-minus = 'move-node-to-workspace S'
+
 alt-tab = 'workspace-back-and-forth'
 alt-shift-tab = 'move-workspace-to-monitor --wrap-around next'
 alt-r = 'mode resize'
