@@ -10,3 +10,8 @@ antigravity_bin_dir: "{{ ansible_facts['user_dir'] }}/.local/bin"
 antigravity_gemini_homes: >-
   {{ [ansible_facts['user_dir'] ~ '/.gemini']
      + ([ansible_facts['user_dir'] ~ '/.gemini-per2'] if ansible_facts['system'] == 'Linux' else []) }}
+# Seeded once into each home's antigravity-cli/settings.json (agy owns the file afterwards). Logins are browser OAuth
+# per account and machine: no token is seeded, stored in the vault or committed.
+antigravity_model: Gemini 3.8 Flash (High)
+antigravity_verbosity: low
+antigravity_trusted_workspaces: []  # absolute paths; per machine in config.yml (agy appends as you trust workspaces)
