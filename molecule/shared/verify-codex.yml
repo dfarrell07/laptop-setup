@@ -34,13 +34,13 @@
   block:
     - name: Read installed Codex version
       ansible.builtin.command:
-        argv: ["{{ ansible_user_dir }}/.local/bin/codex", --version]
+        argv: ["{{ ansible_user_dir }}/.npm-global/bin/codex", --version]
       register: verify_codex_version
       changed_when: false
 
     - name: Assert installed Codex matches the committed pin
       ansible.builtin.assert:
         that: >-
-          verify_codex_version.stdout | trim == 'codex-cli ' ~
+          verify_codex_version.stdout | trim | regex_replace('^codex-cli ', '') is version(
           (lookup('file', lookup('env', 'MOLECULE_PROJECT_DIRECTORY') ~
-           '/roles/codex/files/package.json') | from_json).dependencies['@openai/codex']
+           '/roles/codex/files/package.json') | from_json).dependencies['@openai/codex'], '>=')

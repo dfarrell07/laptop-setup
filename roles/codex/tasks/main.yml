@@ -6,7 +6,8 @@
       - item is match('^' ~ (ansible_facts['user_dir'] | regex_escape) ~ '/[a-zA-Z0-9/._-]+$')
     fail_msg: Codex paths must be simple absolute paths within the user home.
   loop:
-    - "{{ codex_install_dir }}"
+    - "{{ codex_npm_prefix }}"
+    - "{{ codex_legacy_install_dir }}"
     - "{{ codex_work_config_dir }}"
     - "{{ codex_personal_config_dir }}"
 
@@ -25,7 +26,8 @@
         if not inside or not separate:
             sys.exit('Codex paths must resolve to separate, non-overlapping directories strictly within the user home.')
       - "{{ ansible_facts['user_dir'] }}"
-      - "{{ codex_install_dir }}"
+      - "{{ codex_npm_prefix }}"
+      - "{{ codex_legacy_install_dir }}"
       - "{{ codex_work_config_dir }}"
       - "{{ codex_personal_config_dir }}"
   changed_when: false
@@ -69,92 +71,112 @@
     - "{{ codex_work_config_dir }}"
     - "{{ codex_personal_config_dir }}"
 
-- name: Install integrity-locked Codex CLI as the user
+# One Codex install: the npm global prefix (~/.npm-global, which the dotfiles role sets in ~/.npmrc and puts on PATH).
+# Codex's own update prompt suggests `npm install -g @openai/codex`, which lands in the same prefix, so the launchers
+# always run the copy that was updated. The role installs the committed pin only when Codex is missing or older,
+# and leaves a newer, user-updated copy in place.
+- name: Install the pinned Codex CLI into the npm global prefix
   when:
     - codex_install_method == 'npm'
     - packages_install_binaries | bool
+  vars:
+    _codex_pin: "{{ (lookup('file', role_path ~ '/files/package.json') | from_json).dependencies['@openai/codex'] }}"
+    _codex_lock: "{{ (lookup('file', role_path ~ '/files/package-lock.json') | from_json).packages }}"
+    _codex_bin: "{{ codex_npm_prefix }}/bin/codex"
   block:
-    - name: Create Codex installation and launcher directories
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: directory
-        mode: "0755"
-      loop:
-        - "{{ codex_install_dir }}"
-        - "{{ ansible_facts['user_dir'] }}/.local/bin"
-
-    - name: Deploy pinned Codex npm manifest and integrity lock
-      ansible.builtin.copy:
-        src: "{{ item }}"
-        dest: "{{ codex_install_dir }}/{{ item }}"
-        mode: "0644"
-      loop:
-        - package.json
-        - package-lock.json
-      register: _codex_manifest
-
-    - name: Isolate npm global configuration
-      ansible.builtin.copy:
-        content: "# Managed empty npm configuration.\n"
-        dest: "{{ codex_install_dir }}/global.npmrc"
-        mode: "0644"
-
     - name: Read installed Codex version
       ansible.builtin.command:
-        argv:
-          - "{{ codex_install_dir }}/node_modules/.bin/codex"
-          - --version
+        argv: ["{{ _codex_bin }}", --version]
       register: _codex_version
       changed_when: false
       failed_when: false
       check_mode: false
 
-    - name: Install Codex from locked npm archives without lifecycle scripts
-      ansible.builtin.command:
-        argv:
-          - npm
-          - ci
-          - --ignore-scripts
-          - --include=optional
-          - --no-audit
-          - --no-fund
-          - --registry=https://registry.npmjs.org
-        chdir: "{{ codex_install_dir }}"
-      environment:
-        NPM_CONFIG_USERCONFIG: /dev/null
-        NPM_CONFIG_GLOBALCONFIG: "{{ codex_install_dir }}/global.npmrc"
-      timeout: 300
-      changed_when: true
-      when:
-        - not ansible_check_mode
-        - >-
-          _codex_manifest.changed or _codex_version.rc != 0 or
-          _codex_version.stdout | trim != 'codex-cli ' ~
-          (lookup('file', role_path ~ '/files/package.json') | from_json).dependencies['@openai/codex']
+    - name: Decide whether Codex needs the pinned release
+      ansible.builtin.set_fact:
+        _codex_needs_install: >-
+          {{ _codex_version.rc != 0
+             or (_codex_version.stdout | trim | regex_replace('^codex-cli ', '')) is not version(_codex_pin, '>=') }}
+
+    - name: Report Codex install not simulated in check mode
+      ansible.builtin.debug:
+        msg: "CHECK MODE: Codex {{ _codex_pin }} would be installed into {{ codex_npm_prefix }}; not simulated."
+      when: ansible_check_mode and _codex_needs_install | bool
+
+    - name: Install Codex {{ _codex_pin }} after checking the registry against the committed integrity lock
+      when: _codex_needs_install | bool and not ansible_check_mode
+      vars:
+        _codex_platform: >-
+          {{ {'Linux': 'linux', 'Darwin': 'darwin'}[ansible_facts['system']] }}-{{
+          {'x86_64': 'x64', 'amd64': 'x64', 'aarch64': 'arm64', 'arm64': 'arm64'}[ansible_facts['architecture']] }}
+      block:
+        # npm verifies each downloaded archive against the registry's dist.integrity. Matching that value to the
+        # committed lock first pins the install to the reviewed archives, which `npm install -g` cannot do itself.
+        - name: Fetch registry metadata for the pinned Codex packages
+          ansible.builtin.uri:
+            url: "https://registry.npmjs.org/@openai/codex/{{ item }}"
+            return_content: true
+          loop:
+            - "{{ _codex_pin }}"
+            - "{{ _codex_pin }}-{{ _codex_platform }}"
+          register: _codex_registry
+
+        - name: SECURITY assert the registry integrity matches the committed lock
+          ansible.builtin.assert:
+            that:
+              - (_codex_registry.results[0].content | from_json).dist.integrity
+                == _codex_lock['node_modules/@openai/codex'].integrity
+              - (_codex_registry.results[1].content | from_json).dist.integrity
+                == _codex_lock['node_modules/@openai/codex-' ~ _codex_platform].integrity
+            fail_msg: The npm registry integrity for Codex {{ _codex_pin }} differs from roles/codex/files/package-lock.json.
+
+        - name: Install Codex into the npm global prefix without lifecycle scripts
+          ansible.builtin.command:
+            argv:
+              - npm
+              - install
+              - --global
+              - --prefix={{ codex_npm_prefix }}
+              - --ignore-scripts
+              - --no-audit
+              - --no-fund
+              - --registry=https://registry.npmjs.org
+              - "@openai/codex@{{ _codex_pin }}"
+          timeout: 300
+          changed_when: true
 
     - name: Verify the installed Codex launcher and native binary
       ansible.builtin.command:
-        argv:
-          - "{{ codex_install_dir }}/node_modules/.bin/codex"
-          - --version
+        argv: ["{{ _codex_bin }}", --version]
       register: _codex_installed_version
       changed_when: false
       failed_when: >-
         _codex_installed_version.rc != 0 or
-        _codex_installed_version.stdout | trim != 'codex-cli ' ~
-        (lookup('file', role_path ~ '/files/package.json') | from_json).dependencies['@openai/codex']
+        (_codex_installed_version.stdout | trim | regex_replace('^codex-cli ', '')) is not version(_codex_pin, '>=')
       when: not ansible_check_mode
 
-    - name: Link Codex CLI into user PATH
-      ansible.builtin.file:
-        src: "{{ codex_install_dir }}/node_modules/.bin/codex"
-        dest: "{{ ansible_facts['user_dir'] }}/.local/bin/codex"
-        state: link
-        force: false
-      when: not ansible_check_mode
+    # A `npm install -g` that Codex suggests uses the user's npm prefix; if that is not codex_npm_prefix, the update
+    # would land in a copy the launchers never run.
+    - name: Read the user's npm global prefix
+      ansible.builtin.command:
+        argv: [npm, config, get, prefix]
+      register: _codex_user_prefix
+      changed_when: false
+      failed_when: false
+      check_mode: false
 
-  # Codex is optional: a failed npm ci (npm missing after a failed dnf transaction, or a
-  # registry error) must not stop the remaining user-play roles and post tasks.
+    - name: Warn when Codex's suggested update would land outside the managed prefix
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: npm's global prefix is {{ _codex_user_prefix.stdout | trim }}, not {{ codex_npm_prefix }}, so
+          `npm install -g @openai/codex` would not update the Codex the launchers run. Set prefix=${HOME}/.npm-global in
+          ~/.npmrc.
+      when:
+        - _codex_user_prefix.rc == 0
+        - (_codex_user_prefix.stdout | trim) != codex_npm_prefix
+
+  # Codex is optional: a failed npm install (npm missing after a failed dnf transaction, or a registry error) must not
+  # stop the remaining user-play roles and post tasks.
   rescue:
     - name: Warn that the Codex CLI install failed
       ansible.builtin.debug:
@@ -162,3 +184,23 @@
           WARNING: Codex CLI install failed and was skipped:
           {{ ansible_failed_result.stderr | default(ansible_failed_result.msg | default('unknown error'), true) | truncate(300) }}.
           Check that npm is installed (dnf install npm) and re-run: make codex
+
+# Earlier releases of this role installed a second, lock-only copy here and linked it first on PATH, so the update Codex
+# suggests never reached the binary the launchers ran. Remove it; the symlink only if it points into that copy.
+- name: Check for the retired lock-only Codex install
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.local/bin/codex"
+  register: _codex_legacy_link
+
+- name: Remove the retired Codex symlink
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.local/bin/codex"
+    state: absent
+  when:
+    - _codex_legacy_link.stat.islnk | default(false)
+    - _codex_legacy_link.stat.lnk_target.startswith(codex_legacy_install_dir ~ '/')
+
+- name: Remove the retired lock-only Codex install
+  ansible.builtin.file:
+    path: "{{ codex_legacy_install_dir }}"
+    state: absent
