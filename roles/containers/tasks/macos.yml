@@ -3,86 +3,128 @@
 # macOS: podman is a client for a Linux VM (podman machine). Create the VM once, start it, and start it at every
 # login with a user LaunchAgent, so `podman` works like the rootless Podman on Linux. No sudo.
 
-- name: List podman machines (macOS)
-  ansible.builtin.command:
-    argv: ["{{ containers_podman_bin }}", machine, list, --format, json]
-  register: _containers_machines
-  changed_when: false
-  check_mode: false  # read-only probe
+# Homebrew podman arrives with the packages chunk: without it (a plan before packages ran) there is nothing to do yet.
+- name: Check for Homebrew podman (macOS)
+  ansible.builtin.stat:
+    path: "{{ containers_podman_bin }}"
+  register: _containers_podman
 
-- name: Create the podman machine (macOS; downloads the VM image once)
-  ansible.builtin.command:
-    argv:
-      - "{{ containers_podman_bin }}"
-      - machine
-      - init
-      - --cpus
-      - "{{ containers_macos_machine_cpus | string }}"
-      - --memory
-      - "{{ containers_macos_machine_memory_mb | string }}"
-      - --disk-size
-      - "{{ containers_macos_machine_disk_gb | string }}"
-      - "{{ containers_macos_machine_name }}"
-  async: 1800
-  poll: 15
-  changed_when: true
-  when: containers_macos_machine_name not in (_containers_machines.stdout | from_json | map(attribute='Name') | list)
+- name: Note that podman is not installed yet (macOS)
+  ansible.builtin.debug:
+    msg: "{{ containers_podman_bin }} not found: run make apply CHUNK=packages, then this chunk again."
+  when: not _containers_podman.stat.exists
 
-# The first boot provisions the VM (ignition); interrupting it leaves Fedora CoreOS in emergency mode, so the play
-# starts the machine itself and waits, and the LaunchAgent only starts an already provisioned machine at login.
-- name: Read the podman machine state (macOS)
+# launchd and the Ansible wrapper (verify-ansible-args.sh) leave TMPDIR unset, but podman keeps the machine's runtime
+# files (gvproxy, API socket) under $TMPDIR/podman: pin it to the user's temp dir, as in a login shell.
+- name: Read the user temp directory (macOS)
   ansible.builtin.command:
-    argv: ["{{ containers_podman_bin }}", machine, inspect, --format, "{{ '{{' }}.State{{ '}}' }}", "{{ containers_macos_machine_name }}"]
-  register: _containers_machine_state
+    argv: [getconf, DARWIN_USER_TEMP_DIR]
+  register: _containers_tmpdir
   changed_when: false
-  failed_when: false
   check_mode: false
+  when: _containers_podman.stat.exists
 
-- name: Start the podman machine (macOS)
-  ansible.builtin.command:
-    argv: ["{{ containers_podman_bin }}", machine, start, "{{ containers_macos_machine_name }}"]
-  async: 900
-  poll: 10
-  changed_when: true
-  when: _containers_machine_state.stdout | trim != 'running'
+- name: Podman machine (macOS)
+  when: _containers_podman.stat.exists
+  environment:
+    TMPDIR: "{{ _containers_tmpdir.stdout | trim }}"
+  block:
+    - name: List podman machines (macOS)
+      ansible.builtin.command:
+        argv: ["{{ containers_podman_bin }}", machine, list, --format, json]
+      register: _containers_machines
+      changed_when: false
+      check_mode: false  # read-only probe
 
-- name: Ensure LaunchAgents and log directories exist (macOS)
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: directory
-    mode: "0755"
-  loop:
-    - "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents"
-    - "{{ ansible_facts['user_dir'] }}/.local/state/log"
+    - name: Create the podman machine (macOS; downloads the VM image once)
+      ansible.builtin.command:
+        argv:
+          - "{{ containers_podman_bin }}"
+          - machine
+          - init
+          - --cpus
+          - "{{ containers_macos_machine_cpus | string }}"
+          - --memory
+          - "{{ containers_macos_machine_memory_mb | string }}"
+          - --disk-size
+          - "{{ containers_macos_machine_disk_gb | string }}"
+          - "{{ containers_macos_machine_name }}"
+      async: 1800
+      poll: 15
+      changed_when: true
+      when: containers_macos_machine_name not in (_containers_machines.stdout | from_json | map(attribute='Name') | list)
 
-- name: Deploy the podman machine LaunchAgent (macOS)
-  ansible.builtin.template:
-    src: podman-machine.plist.j2
-    dest: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/{{ containers_macos_machine_label }}.plist"
-    mode: "0644"
-  register: _containers_machine_plist
+    # The first boot provisions the VM (ignition); interrupting it leaves Fedora CoreOS in emergency mode, so the play
+    # starts the machine itself and waits, and the LaunchAgent only starts an already provisioned machine at login.
+    - name: Read the podman machine state (macOS)
+      ansible.builtin.command:
+        argv:
+          - "{{ containers_podman_bin }}"
+          - machine
+          - inspect
+          - --format
+          - "{{ '{{' }}.State{{ '}}' }}"
+          - "{{ containers_macos_machine_name }}"
+      register: _containers_machine_state
+      changed_when: false
+      failed_when: false
+      check_mode: false
 
-- name: Check the podman machine LaunchAgent (macOS)  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    argv: [launchctl, print, "gui/{{ ansible_facts['user_uid'] }}/{{ containers_macos_machine_label }}"]
-  register: _containers_machine_agent
-  changed_when: false
-  failed_when: false
-  check_mode: false
+    - name: Start the podman machine (macOS)
+      ansible.builtin.command:
+        argv: ["{{ containers_podman_bin }}", machine, start, "{{ containers_macos_machine_name }}"]
+      async: 900
+      poll: 10
+      changed_when: true
+      # the login agent may be starting it at the same moment
+      failed_when:
+        - _containers_machine_start.rc != 0
+        - "'already running' not in _containers_machine_start.stderr"
+      register: _containers_machine_start
+      when: _containers_machine_state.stdout | trim not in ['running', 'starting']
 
-- name: Unload the changed podman machine LaunchAgent (macOS)  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    argv: [launchctl, bootout, "gui/{{ ansible_facts['user_uid'] }}/{{ containers_macos_machine_label }}"]
-  changed_when: true
-  when: _containers_machine_agent.rc == 0 and _containers_machine_plist is changed
+    - name: Ensure LaunchAgents and log directories exist (macOS)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents"
+        - "{{ ansible_facts['user_dir'] }}/.local/state/log"
 
-# bootstrap runs the agent now (RunAtLoad), which starts the machine
-- name: Load the podman machine LaunchAgent (macOS)  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    argv:
-      - launchctl
-      - bootstrap
-      - "gui/{{ ansible_facts['user_uid'] }}"
-      - "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/{{ containers_macos_machine_label }}.plist"
-  changed_when: true
-  when: _containers_machine_agent.rc != 0 or _containers_machine_plist is changed
+    - name: Deploy the podman machine LaunchAgent (macOS)
+      ansible.builtin.template:
+        src: podman-machine.plist.j2
+        dest: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/{{ containers_macos_machine_label }}.plist"
+        mode: "0644"
+      register: _containers_machine_plist
+
+    - name: Check the podman machine LaunchAgent (macOS)  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        argv: [launchctl, print, "gui/{{ ansible_facts['user_uid'] }}/{{ containers_macos_machine_label }}"]
+      register: _containers_machine_agent
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Unload the changed podman machine LaunchAgent (macOS)  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        argv: [launchctl, bootout, "gui/{{ ansible_facts['user_uid'] }}/{{ containers_macos_machine_label }}"]
+      changed_when: true
+      when: _containers_machine_agent.rc == 0 and _containers_machine_plist is changed
+
+    # bootstrap runs the agent now (RunAtLoad), which starts the machine
+    - name: Load the podman machine LaunchAgent (macOS)  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        argv:
+          - launchctl
+          - bootstrap
+          - "gui/{{ ansible_facts['user_uid'] }}"
+          - "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/{{ containers_macos_machine_label }}.plist"
+      changed_when: true
+      # bootout returns before launchd finishes tearing the job down ("Bootstrap failed: 5")
+      register: _containers_machine_bootstrap
+      retries: 5
+      delay: 2
+      until: _containers_machine_bootstrap.rc == 0
+      when: _containers_machine_agent.rc != 0 or _containers_machine_plist is changed
