@@ -21,6 +21,8 @@ rollout = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(rollout)
 
 CATALOG, DEFAULT = rollout.load_catalog()
+# In-process tests model a Linux host unless they pass linux=False, so they pass on a Mac too
+rollout.host_is_linux = lambda: True
 
 
 def closure_of(name):
@@ -463,6 +465,39 @@ class UxTests(unittest.TestCase):
                 self.assertLess(line.index('rollout-banner'), line.index('preflight'))
         self.assertIn('rollout-banner', re.search(r'(?m)^system: (.*)$', makefile).group(1))
         self.assertIn('rollout-banner', re.search(r'(?m)^plan: (.*)$', makefile).group(1))
+
+
+
+class LinuxOnlyTests(unittest.TestCase):
+    """linux_only chunks: n/a in status, passed over by verify and refused by plan/apply on macOS."""
+
+    LINUX_ROLES = {'containers', 'distrobox', 'login_shell', 'redhat', 'repos_dnf'}
+
+    def test_linux_only_marks_exactly_the_roles_gated_to_linux(self):
+        marked = {n for n, e in CATALOG.items() if e.get('linux_only')}
+        self.assertEqual(marked, self.LINUX_ROLES | {n for n in CATALOG if n.startswith('sys_')})
+
+    def test_linux_only_must_be_a_bool(self):
+        broken = config('rollout_catalog:\n  a: {desc: x, risk: low, linux_only: "yes"}\n')
+        with self.assertRaisesRegex(rollout.RolloutError, 'linux_only must be true or false'):
+            rollout.load_catalog(Path(broken))
+
+    def test_nothing_is_not_here_on_linux(self):
+        self.assertEqual(rollout.not_here(CATALOG, list(CATALOG), linux=True), [])
+
+    def test_status_shows_na_on_macos_only(self):
+        mac = rollout.status_table(CATALOG, list(CATALOG), linux=False)
+        linux = rollout.status_table(CATALOG, list(CATALOG), linux=True)
+        row = next(line for line in mac if ' sys_auditd ' in line)
+        self.assertIn(' n/a ', row)
+        self.assertIn(' ON ', next(line for line in mac if ' dotfiles ' in line))
+        self.assertFalse(any(' n/a ' in line for line in linux))
+
+    def test_plan_and_apply_refuse_linux_only_chunks_on_macos(self):
+        with self.assertRaisesRegex(rollout.RolloutError, 'Linux-only'):
+            rollout.chunk_args(CATALOG, list(CATALOG), 'sys_mounts', linux=False)
+        self.assertIn('--tags', rollout.chunk_args(CATALOG, list(CATALOG), 'dotfiles', linux=False))
+        self.assertIn('--tags', rollout.chunk_args(CATALOG, list(CATALOG), 'sys_mounts', linux=True))
 
 
 if __name__ == '__main__':

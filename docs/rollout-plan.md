@@ -18,7 +18,9 @@ constraints: [design-principles.md](design-principles.md). Undo steps: [rollout-
   `ansible_skip_tags`, so a bare `ansible-playbook` run cannot apply one. Before any sudo prompt, a pre-check
   rejects unknown names (with a "did you mean"), duplicates and unmet `requires`; the wrapper rejects `-e` overrides.
 - **Box type** is the facts the repo already computes (`profile`, `csb_detected`, `is_apt`, `is_macos`, the
-  container group); roles already no-op where they do not apply.
+  container group); roles already no-op where they do not apply. Chunks whose roles only run on Linux carry
+  `linux_only: true`: on macOS `make status` shows them `n/a`, `make verify` passes over them and `make plan`/`apply`
+  refuse them, so the default `rollout_enable: all` works there unchanged.
 - **Commands**: `make status`, `make plan CHUNK=x`, `make apply CHUNK=x`, `make verify [CHUNK=x]`. Existing targets
   keep working; `make minimal` and `make container` are tag-based aliases and the enabled list applies on top.
 - **Sshd lockout guard**: the Play 0 pre-flight check (`pre-flight.yml`) blocks, over SSH, unless an ed25519 or

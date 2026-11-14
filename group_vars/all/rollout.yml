@@ -9,7 +9,8 @@
 #
 # Fields: desc, risk (low|medium|high), sudo (default true; false = needs no sudo), requires (chunks
 # that must also be enabled; listed earlier in this file), verify (scripts/smoke-test.sh check names
-# proving the chunk applied).
+# proving the chunk applied), linux_only (default false; true = its roles do nothing on macOS, so make status
+# shows it n/a, make verify passes over it and make plan/apply refuse it there).
 # Undo notes and decision records live in docs/rollout-recovery.md, one heading per chunk.
 rollout_enable: all
 
@@ -44,62 +45,76 @@ rollout_catalog:
   containers:
     desc: Podman config, pull policy and registries
     risk: medium
+    linux_only: true
     sudo: false
     requires: [packages]
     verify: [fqin-enforcement, containers-policy]
   distrobox:
     desc: Dev container provisioning
     risk: low
+    linux_only: true
     sudo: false
     requires: [containers]
     verify: [distrobox-container]
   login_shell:
     desc: zsh as the login shell (usermod or SSSD override)
     risk: medium
+    linux_only: true
     requires: [packages, desktop, dotfiles]
     verify: [login-shell-zsh]
   redhat:
     desc: Red Hat IT tooling (VPN client; RHEL CSB also certificates, splunk shell)
     risk: medium
+    linux_only: true
   repos_dnf:
     desc: Third-party dnf repositories
     risk: medium
+    linux_only: true
   sys_baseline:
     desc: Baseline settings (SELinux, masking, logind, journald, cron, dconf, firmware, timezone)
     risk: medium
+    linux_only: true
     verify: [selinux, login-banner, cron-allow-root, journald-persistent, ctrl-alt-del-masked, logind-idle-sec, fwupd-refresh-timer]
   sys_sysctl:
     desc: sysctl hardening, core dumps, module blacklist, kind kernel modules
     risk: medium
+    linux_only: true
     verify: [coredump-configured, modprobe-hardening, sysctl-ptrace-scope, sysctl-no-accept-ra]
   sys_time_dns:
     desc: chrony NTS, DNS-over-TLS, dnf-automatic
     risk: medium
+    linux_only: true
     verify: [llmnr-disabled, chronyd-service, dnf-automatic]
   sys_optional:
     desc: Session timeout, AIDE, setuid scan, GRUB password, module-load lock
     risk: medium
+    linux_only: true
     requires: [sys_sysctl]
     verify: [setuid-scan-timer]
   sys_mounts:
     desc: Mount hardening (tmpfs and fstab options)
     risk: high
+    linux_only: true
     verify: [tmp-hardening, shm-hardening, home-nosuid, boot-hardening, boot-efi-hardening]
   sys_lockdown:
     desc: Kernel lockdown and boot arguments (needs a reboot)
     risk: high
+    linux_only: true
     verify: [kernel-lockdown, kernel-cmdline]
   sys_auditd:
     desc: auditd rules
     risk: high
+    linux_only: true
     verify: [auditd-service, auditd-rules]
   sys_usbguard:
     desc: USBGuard (blocks unlisted USB devices)
     risk: high
+    linux_only: true
     verify: [usbguard, usbguard-implicit-policy, usbguard-yubikey-rule]
   sys_signin:
     desc: Sudoers defaults, account hardening, authselect and PAM
     risk: high
+    linux_only: true
     verify: [authselect-check, authselect-faillock, authselect-pwhistory, sudoers-hardening, pam-wheel]
   ssh_authorized_keys:
     desc: Exclusive authorized_keys from the vault (can lock out remote access)
@@ -110,5 +125,6 @@ rollout_catalog:
   sys_remote_access:
     desc: Firewall, NetworkManager zones, sshd (port 722, Tailscale inbound SSH)
     risk: high
+    linux_only: true
     requires: [sys_baseline, ssh_authorized_keys]
     verify: [sshd-hardening, sshd-port, sshd-port-bound, firewall-ssh-port, firewall-tailscale-permanent]
