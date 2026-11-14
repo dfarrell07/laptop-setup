@@ -49,8 +49,12 @@ if ((${#npm_allow[@]})) && command -v npm >/dev/null && [[ -d $prefix/lib/node_m
       name=${latest%@*}
       [[ -n $latest && $current != "$latest" ]] || continue
       [[ " ${npm_allow[*]} " == *" $name "* ]] || continue
-      # Never move back: a prerelease (codex@alpha) is newer than `latest` (sort -V ranks it above its release).
-      [[ $(printf '%s\n' "${current##*@}" "${latest##*@}" | sort -V | tail -1) == "${current##*@}" ]] && continue
+      # Never move back: a prerelease (codex@alpha) newer than `latest` stays (sort -V ranks it above its release),
+      # except that a prerelease moves to its own final release.
+      cur=${current##*@} lat=${latest##*@}
+      if [[ ! ($lat != *-* && $cur == "$lat"-*) ]]; then
+        [[ $(printf '%s\n' "$cur" "$lat" | sort -V | tail -1) == "$cur" ]] && continue
+      fi
       npm_updates+=("$latest")
     done <<<"$outdated"
     if ((${#npm_updates[@]})); then

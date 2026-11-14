@@ -243,6 +243,18 @@ elif exec_cmd codex --version &>/dev/null; then
 else
   record "codex" "$_tool_absent" "not found — run: make codex"
 fi
+# Daily user-space updater (packages role; docs/auto-updates.md): Linux host only
+if $IS_LINUX && [[ -z "$CONTAINER" ]]; then
+  if grep -qiE '^packages_user_updates_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "${_cfg:-/dev/null}" 2>/dev/null; then
+    record "user-updates" "PASS" "disabled in config"
+  elif [[ "$EUID" -eq 0 && -n "${SUDO_USER:-}" ]]; then
+    record "user-updates" "SKIP" "user-scope systemd is unreachable under sudo; re-run: make smoke-test-user"
+  elif systemctl --user is-failed --quiet laptop-user-update.service; then
+    record "user-updates" "FAIL" "last run failed: journalctl --user -u laptop-user-update"
+  elif systemctl --user is-enabled laptop-user-update.timer &>/dev/null; then
+    record "user-updates" "PASS"
+  else record "user-updates" "WARN" "laptop-user-update.timer not enabled (make packages)"; fi
+fi
 unset _tool_absent _tools
 
 _is_x() { # executable where exec_cmd runs it: inside the container with --container
@@ -2221,16 +2233,6 @@ EOF
   elif systemctl --user is-enabled podman.socket &>/dev/null; then
     record "podman-socket-enabled" "PASS"
   else record "podman-socket-enabled" "FAIL" "podman.socket not enabled — socket will not start on reboot; fix: systemctl --user enable podman.socket"; fi
-  # Daily user-space updater (packages role; docs/auto-updates.md)
-  if grep -qiE '^packages_user_updates_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "${_cfg:-/dev/null}" 2>/dev/null; then
-    record "user-updates" "PASS" "disabled in config"
-  elif $SYSTEM_ONLY || [[ "$EUID" -eq 0 && -n "${SUDO_USER:-}" ]]; then
-    record "user-updates" "SKIP" "user-scope systemd is unreachable here; re-run: make smoke-test-user"
-  elif systemctl --user is-failed --quiet laptop-user-update.service; then
-    record "user-updates" "FAIL" "last run failed: journalctl --user -u laptop-user-update"
-  elif systemctl --user is-enabled laptop-user-update.timer &>/dev/null; then
-    record "user-updates" "PASS"
-  else record "user-updates" "WARN" "laptop-user-update.timer not enabled (make packages)"; fi
 
   _sysctl_check "kernel.kptr_restrict"               "2" "sysctl-kptr-restrict"
   # kexec: read expected value from deployed config (system_kexec_load_disabled defaults to 1 in roles/system/defaults)
