@@ -189,6 +189,29 @@ processes can use `bpf()` (including package-manager dependencies) once unprivil
 - **Files in `~/notes` are ciphertext (`U2FsdGVkX1...`):** set `vault_notes_transcrypt_password` in `group_vars/all/vault.yml`,
   `make packages` if transcrypt is missing, then `make notes`.
 
+## Agent sessions ask before every step
+
+The launchers pass `--dangerously-skip-permissions`; everything else relies on `claude_default_mode` (default
+`bypassPermissions`) in each instance's `settings.json`. In order of likelihood:
+
+- **The agents chunk was never applied on this machine.** `make verify CHUNK=agents` WARNs `claude-default-mode`
+  with the instances whose `permissions.defaultMode` differs. Fix: `make apply CHUNK=agents`, then `make dotfiles`
+  for the launchers. The mode is chosen at session start, so restart sessions that were already running.
+- **The repository sets its own mode.** A project's `.claude/settings.json` or `.claude/settings.local.json`
+  `defaultMode` outranks the user setting, and only the command line (or root-owned managed settings) outranks
+  the project. A session started without a launcher in such a repository keeps that repository's mode. Start it
+  with `--dangerously-skip-permissions`, or for an autostarted unit put the flag in its `ExecStart` (the health
+  repository does this per person through `policy.toml` `[sessions] skip_permissions`, then `make up` and a restart
+  of that session's unit). Check a unit with `systemctl --user cat <unit> | grep ExecStart`; the session's footer
+  shows `bypass permissions on`.
+- **Deny rules still apply in bypass mode.** A matching rule refuses outright rather than asking; hand-written rules
+  from before the agents chunk (`rm -rf /*`, `curl *`, ...) are removed by `claude_retired_deny` on the next apply.
+
+Timers or sessions that fail right after a crash or power loss with `object file .git/objects/... is empty`: the
+unclean shutdown left zero-byte loose objects, and `git add` treats them as already stored. Back up `.git`, move the
+empty files out (`find .git/objects -type f -empty`), then run `git fsck --full` and `git fetch`; if fsck still
+reports a missing object, recover it from the remote or another clone before committing.
+
 ## Makefile refuses to run as root
 
 `ERROR: Do not run as root. Run make as your own user; targets that need root ask for your sudo password.` (`guard-not-root`): run
