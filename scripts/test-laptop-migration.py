@@ -2,6 +2,7 @@
 """Exercise account isolation, preservation, backup and migration metadata."""
 import json
 import os
+import platform
 from pathlib import Path
 import shlex
 import shutil
@@ -187,7 +188,7 @@ class MigrationTests(unittest.TestCase):
                 elif case == 'symlink':
                     (directory / '.codex-personal').symlink_to(directory / '.codex')
                 elif case == 'nested-install':
-                    variables['codex_install_dir'] = personal + '/cli'
+                    variables['codex_npm_prefix'] = personal + '/npm'
                 elif case == 'nested-account':
                     variables['codex_work_config_dir'] = name + '/.local/share/codex-cli/node_modules/work'
                 elif case == 'home':
@@ -245,6 +246,117 @@ class MigrationTests(unittest.TestCase):
                     self.assertEqual(agreements.stat().st_mode & 0o777, 0o600)
                     self.assertEqual((directory / home).stat().st_mode & 0o777, 0o700)
 
+    def test_codex_removes_only_the_retired_lock_install(self):
+        for target in ['legacy', 'other']:
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as name:
+                directory = Path(name)
+                legacy = directory / '.local/share/codex-cli/node_modules/.bin'
+                legacy.mkdir(parents=True)
+                (legacy / 'codex').write_text('#!/bin/sh\n')
+                other = directory / 'elsewhere/codex'
+                other.parent.mkdir()
+                other.write_text('#!/bin/sh\n')
+                link = directory / '.local/bin/codex'
+                link.parent.mkdir(parents=True)
+                link.symlink_to(legacy / 'codex' if target == 'legacy' else other)
+                run_play(directory, variables={'ansible_facts': {'user_dir': name},
+                                               'packages_install_binaries': False}, roles=['codex'])
+                self.assertFalse((directory / '.local/share/codex-cli').exists())
+                self.assertEqual(link.is_symlink(), target == 'other')
+
+    def test_codex_keeps_a_newer_user_update_and_the_install_matches_codex_update_hint(self):
+        pin = json.loads((ROOT / 'roles/codex/files/package.json').read_text())['dependencies']['@openai/codex']
+        major, minor, patch = (int(part) for part in pin.split('.'))
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            stub_bin = directory / 'stub-bin'
+            stub_bin.mkdir()
+            calls = directory / 'npm-calls'
+            npm = stub_bin / 'npm'
+            npm.write_text('#!/bin/sh\necho "$*" >> ' + shlex.quote(str(calls)) + '\n'
+                           'if [ "$1 $2 $3" = "config get prefix" ]; then echo ' + shlex.quote(name + '/.npm-global') + '; fi\n')
+            npm.chmod(0o755)
+            codex = directory / '.npm-global/bin/codex'
+            codex.parent.mkdir(parents=True)
+            codex.write_text(f'#!/bin/sh\necho codex-cli {major}.{minor + 1}.{patch}\n')
+            codex.chmod(0o755)
+            old_path = os.environ['PATH']
+            os.environ['PATH'] = f'{stub_bin}:{old_path}'
+            try:
+                result = run_play(directory, variables={'ansible_facts': {'user_dir': name}}, roles=['codex'])
+            finally:
+                os.environ['PATH'] = old_path
+            self.assertNotIn('install', calls.read_text())
+            self.assertNotIn('WARNING', result)
+        tasks = (ROOT / 'roles/codex/tasks/main.yml').read_text()
+        self.assertIn('"@openai/codex@{{ _codex_pin }}"', tasks)
+        self.assertIn('--global', tasks)
+        self.assertIn('--ignore-scripts', tasks)
+        self.assertIn("codex_npm_prefix: \"{{ ansible_facts['user_dir'] }}/.npm-global\"",
+                      (ROOT / 'roles/codex/defaults/main.yml').read_text())
+        self.assertIn('prefix=${HOME}/.npm-global', (ROOT / 'roles/dotfiles/tasks/main.yml').read_text())
+
+    def test_codex_vault_api_key_logs_in_only_the_work_home_over_stdin(self):
+        key = 'fixture-key-' + 'x' * 24
+        personal_login = json.dumps({'auth_mode': 'chatgpt', 'tokens': {'refresh_token': 'fixture'}})
+        cases = [('missing', {}, True), ('chatgpt', {}, True), ('apikey', {}, False),
+                 ('apikey', {'codex_api_key_rotate': True}, True), ('missing', {'profile': 'personal'}, False)]
+        for mode, extra, expect_login in cases:
+            with self.subTest(mode=mode, extra=extra), tempfile.TemporaryDirectory() as name:
+                directory = Path(name)
+                record = directory / 'login-record'
+                codex = directory / '.npm-global/bin/codex'
+                codex.parent.mkdir(parents=True)
+                codex.write_text(
+                    '#!/bin/sh\n'
+                    'if [ "$1" = --version ]; then echo codex-cli 999.0.0; exit 0; fi\n'
+                    'if [ "$1 $2" = "login status" ]; then\n'
+                    '  grep -q apikey "$CODEX_HOME/auth.json" 2>/dev/null && { echo "API key configured - sk-***" >&2; exit 0; }\n'
+                    '  grep -q chatgpt "$CODEX_HOME/auth.json" 2>/dev/null && { echo "Logged in using ChatGPT" >&2; exit 0; }\n'
+                    '  echo "Not logged in" >&2; exit 1\n'
+                    'fi\n'
+                    'printf "%s|%s|" "$CODEX_HOME" "$*" > ' + shlex.quote(str(record)) + '\n'
+                    'cat >> ' + shlex.quote(str(record)) + '\n'
+                    'printf \'{"auth_mode":"apikey"}\' > "$CODEX_HOME/auth.json"\n')
+                codex.chmod(0o755)
+                if mode != 'missing':
+                    (directory / '.codex').mkdir(mode=0o700)
+                    (directory / '.codex/auth.json').write_text(json.dumps({'auth_mode': mode}))
+                (directory / '.codex-personal').mkdir(mode=0o700)
+                (directory / '.codex-personal/auth.json').write_text(personal_login)
+                variables = {'ansible_facts': {'user_dir': name}, 'packages_install_binaries': False,
+                             'codex_api_key': key, **extra}
+                result = run_play(directory, variables=variables, roles=['codex'], extra_args=['-vvv'])
+                self.assertNotIn(key, result)
+                self.assertNotIn('sk-***', result)
+                self.assertEqual(record.exists(), expect_login)
+                self.assertEqual((directory / '.codex-personal/auth.json').read_text(), personal_login)
+                if expect_login:
+                    self.assertEqual(record.read_text(), name + '/.codex|login --with-api-key|' + key)
+                    if not extra:
+                        record.unlink()
+                        self.assertRegex(run_play(directory, variables=variables, roles=['codex']), r'changed=0\b')
+                        self.assertFalse(record.exists())
+                    self.assertEqual((directory / '.codex/auth.json').stat().st_mode & 0o777, 0o600)
+        with tempfile.TemporaryDirectory() as name:
+            result = run_play(Path(name), variables={'ansible_facts': {'user_dir': name},
+                                                     'packages_install_binaries': False, 'codex_api_key': key},
+                              roles=['codex'])
+            self.assertIn('vault_codex_api_key is set but Codex is not installed', result)
+            self.assertNotIn(key, result)
+        tasks = yaml.safe_load((ROOT / 'roles/codex/tasks/main.yml').read_text())
+        login = next(t for t in tasks if t.get('name') == 'Log the work Codex home in with the vault API key')
+        by_name = {t['name']: t for t in login['block']}
+        run = by_name['Run codex login --with-api-key for the work home']
+        self.assertIs(run['no_log'], True)
+        self.assertIs(by_name['Read the work Codex login method']['no_log'], True)
+        self.assertEqual(run['ansible.builtin.command']['stdin'], '{{ codex_api_key }}')
+        self.assertEqual(run['environment'], {'CODEX_HOME': '{{ codex_work_config_dir }}'})
+        self.assertNotIn('codex_api_key', json.dumps(run['ansible.builtin.command']['argv']))
+        self.assertNotIn('codex_personal_config_dir }}', json.dumps(login['block'][1:]))
+        text = (ROOT / 'roles/codex/tasks/main.yml').read_text()
+        self.assertEqual(text.count('codex_api_key }}'), 1)
+
     def test_claude_baseline_scopes_plugins_and_preserves_cli_preferences(self):
         production = yaml.safe_load((ROOT / 'roles/claude/tasks/main.yml').read_text())
         selected = [task for task in production if task.get('name') in [
@@ -300,9 +412,10 @@ class MigrationTests(unittest.TestCase):
         # Native archives are large; avoid /tmp tmpfs space/quota pressure on laptop hosts.
         with tempfile.TemporaryDirectory(prefix='laptop-setup-codex-test-', dir=Path.home()) as name:
             directory = Path(name)
-            variables = {'ansible_facts': {'user_dir': name}}
+            variables = {'ansible_facts': {'user_dir': name, 'system': platform.system(),
+                                           'architecture': platform.machine()}}
             run_play(directory, variables=variables, roles=['codex'])
-            executable = directory / '.local/bin/codex'
+            executable = directory / '.npm-global/bin/codex'
             self.assertEqual(subprocess.check_output([str(executable), '--version'], text=True).strip(),
                              'codex-cli ' + json.loads((ROOT / 'roles/codex/files/package.json').read_text())['dependencies']['@openai/codex'])
             checks = yaml.safe_load((ROOT / 'molecule/shared/verify-codex.yml').read_text())

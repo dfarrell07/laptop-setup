@@ -200,9 +200,11 @@ runs `git_repos` for one `repo_category`. `make help` lists everything; scenario
 See the [transfer checklist](docs/migration-checklist.md). Direct launchers `cwork`, `cper`, `cper2`, `owork`, `oper`, `gper` and
 `gper2` keep the old workflow (`gper*` need the separate Antigravity CLI); `~/.config/zsh/local.zsh` is preserved.
 
-Codex installs in user space from a committed npm integrity lock with lifecycle scripts disabled; `packages_install_binaries: false` skips
-the download and `codex_enabled: false` skips the role. `config.toml` is seed-only. To bump the pin, edit `roles/codex/files/package.json`,
-run `npm install --package-lock-only --ignore-scripts --prefix roles/codex/files`, review every archive URL and integrity value, and run
-the migration tests (optional download test: `CODEX_INSTALL_TEST=1 .venv/bin/python3 scripts/test-laptop-migration.py`).
-Power-stack (TLP) logic lives in `roles/system/tasks/power_management.yml`; native package and service behavior needs validation on the
-destination.
+Codex has one install, the user's npm global prefix `~/.npm-global` (set in `~/.npmrc` by dotfiles, on `PATH`), so the `npm install -g
+@openai/codex` that Codex suggests updates the binary the launchers run. The role installs the committed pin only when Codex is missing or
+older, after matching the registry integrity to the committed lock, with lifecycle scripts disabled; `packages_install_binaries: false`
+skips the download and `codex_enabled: false` skips the role. `config.toml` is seed-only. To bump the pin, edit
+`roles/codex/files/package.json`, run `npm install --package-lock-only --ignore-scripts --prefix roles/codex/files`, review every archive
+URL and integrity value, and run the migration tests (optional download test: `CODEX_INSTALL_TEST=1 .venv/bin/python3
+scripts/test-laptop-migration.py`). Power-stack (TLP) logic lives in `roles/system/tasks/power_management.yml`; native package and service
+behavior needs validation on the destination.

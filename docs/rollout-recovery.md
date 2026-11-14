@@ -155,8 +155,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Undo:** per instance, restore the oldest `~/.claude*/settings.json.bak-<timestamp>` (written by the merge, which keeps every backup);
   if the instance had no `settings.json` before the chunk, delete `settings.json` instead (the backup then holds only the seeded file),
   and delete instance directories the chunk created (for example `~/.claude-per2`). The replaced `CLAUDE.md`, `AGENTS.md`, `GEMINI.md` and
-  legacy `settings.local.json` are only in the `make backup` directory if you ran it before the chunk. Delete `~/.local/share/codex-cli`,
-  `~/.local/bin/codex`, the seeded `config.toml` and managed `AGENTS.md` in `~/.codex` and `~/.codex-personal` (keep the directories: they
+  legacy `settings.local.json` are only in the `make backup` directory if you ran it before the chunk. Uninstall Codex with
+  `npm uninstall -g @openai/codex` (from `~/.npm-global`), delete the seeded `config.toml` and managed `AGENTS.md` in `~/.codex` and `~/.codex-personal` (keep the directories: they
   also hold the Codex login and history), `~/.gemini*/GEMINI.md`, `~/.local/bin/agy` if the chunk installed it, `~/.gemini-per2` if the
   chunk created it (keep `~/.gemini`: it holds the login), `~/.config/claude/` and `~/.config/user-tmpfiles.d/claude-privacy.conf`. If
   `claude_queue_enabled` was on: `systemctl --user disable --now claude-queue.timer`, delete

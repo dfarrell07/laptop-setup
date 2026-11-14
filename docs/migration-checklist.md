@@ -92,7 +92,7 @@ Homes below are defaults; substitute configured paths and transfer custom homes 
 | `cwork` (work profile) | `.claude-work`, Vertex | Restore the Vertex env and authenticate GCP |
 | `cper` | `.claude`, personal | Sign in separately |
 | `cper2` | `.claude-per2`, personal | Sign in separately |
-| `owork` (work profile) | `.codex` | `CODEX_HOME="$HOME/.codex" codex login` |
+| `owork` (work profile) | `.codex` | `vault_codex_api_key` then `make codex`, or `CODEX_HOME="$HOME/.codex" codex login` |
 | `oper` | `.codex-personal` | `CODEX_HOME="$HOME/.codex-personal" codex login` |
 | `gper` | Separate `agy` CLI | Vendor install and login |
 | `gper2` (Linux) | `agy`, `.gemini-per2`, login kept out of the desktop keyring | Sign in separately |

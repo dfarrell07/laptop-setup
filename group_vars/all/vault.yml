@@ -12,6 +12,7 @@
 #   vault_ssh_signing_key, vault_ssh_signing_key_pub  (~/.ssh/id_ed25519_sk_signing and its .pub)
 #   vault_rh_git_key  (work profile only)
 #   vault_notes_transcrypt_password
+#   vault_codex_api_key  (work profile: the owork Codex home logs in with it; `make vault-edit`, then `make codex`)
 #   vault_grub_password_hash  (when system_grub_password_enabled: true)
 #
 # Key files span several lines: replace '' with | and indent every line of the file by two spaces:
@@ -25,6 +26,7 @@ vault_ssh_signing_key: ''
 vault_ssh_signing_key_pub: ''
 vault_rh_git_key: ''
 vault_notes_transcrypt_password: ''
+vault_codex_api_key: ''
 
 vault_registry_tokens: []  # list of {registry, username, token} dicts; encrypt before adding real secrets
 vault_placeholder: "encrypt-me"  # CI sentinel — checked by scripts/verify-vault-stub.py; do not reference in tasks
