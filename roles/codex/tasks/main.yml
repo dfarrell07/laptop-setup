@@ -101,6 +101,14 @@
   loop_control:
     label: "{{ item.item | basename }}"
 
+- name: Pre-trust managed repos in both Codex homes
+  ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/agent_trust.yml"
+  vars:
+    _agent_trust_kind: codex
+    _agent_trust_files:
+      - "{{ codex_work_config_dir }}/config.toml"
+      - "{{ codex_personal_config_dir }}/config.toml"
+
 - name: Deploy global Codex working agreements (managed by Ansible; edits are overwritten each run)
   ansible.builtin.template:
     src: "{{ role_path }}/../common/templates/agent-baseline.md.j2"

@@ -1,0 +1,41 @@
+---
+# Pre-trust agents_trusted_dirs in one agent CLI's state files (roles/common/files/agent-trust.py).
+# Params: _agent_trust_kind (claude|codex|agy), _agent_trust_files (state file paths).
+# Never fatal: trust only saves a "trust this folder?" prompt, so a file the helper cannot edit gets a warning.
+# The agents_* variables live in group_vars/all/vars.yml; a standalone role run without it trusts nothing.
+- name: Validate agent trust directories
+  ansible.builtin.assert:
+    that:
+      - agents_trust_repos | default('own') in ['own', 'all', 'none']
+      - agents_trusted_dirs_extra | default([]) is not string and agents_trusted_dirs_extra | default([]) is iterable
+      - _dirs | select('match', '^/') | list | length == _dirs | length
+    fail_msg: agents_trust_repos must be own, all or none, and agents_trusted_dirs_extra a list of absolute paths.
+  vars:
+    _dirs: "{{ agents_trusted_dirs | default([]) }}"
+
+- name: Pre-trust managed repos so the agent skips "trust this folder?" for {{ _agent_trust_kind }}
+  ansible.builtin.command:
+    argv: >-
+      {{ [ansible_facts.get('python', {}).get('executable', 'python3'), '-I', '-c',
+          lookup('ansible.builtin.file', role_path ~ '/../common/files/agent-trust.py'), _agent_trust_kind, item]
+         + (['--check'] if ansible_check_mode else []) + (agents_trusted_dirs | unique) }}
+  register: _agent_trust
+  changed_when: _agent_trust.stdout | trim == 'changed'
+  failed_when: false
+  check_mode: false
+  when: agents_trusted_dirs | default([]) | length > 0
+  loop: "{{ _agent_trust_files }}"
+
+- name: Warn when trust could not be added for {{ _agent_trust_kind }}
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: {{ item.item }}: {{ 'a running session rewrote it during the edit; re-run to add trust'
+      if item.stdout | trim == 'busy' else (item.stderr | default('') | trim) }}
+  loop: >-
+    {{ (_agent_trust.results | default([])) | selectattr('rc', 'defined')
+       | selectattr('stdout', 'defined') | list
+       | rejectattr('rc', 'equalto', 0) | list
+       + ((_agent_trust.results | default([])) | selectattr('stdout', 'defined')
+          | selectattr('stdout', 'equalto', 'busy') | list) }}
+  loop_control:
+    label: "{{ item.item }}"
