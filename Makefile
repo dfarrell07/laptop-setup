@@ -1,7 +1,7 @@
 .PHONY: status plan apply verify rollout-banner bootstrap-hooks help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check test smoke-test \
        dotfiles packages repos notes \
        ssh desktop system repos_dnf redhat containers claude codex container \
-       container-rebuild csb-audit ssh-keys github-ssh-keys vault-init vault-edit vault-view update hooks \
+       container-rebuild csb-audit ssh-keys github-ssh-keys vault-init vault-import vault-edit vault-view update hooks \
        smoke-test-container smoke-test-user \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
        test-scripts test-poller test-gitleaks test-% \
@@ -114,6 +114,7 @@ help:
 	@echo "  ssh-keys               Set each YubiKey's FIDO2 PIN and make its SSH key"
 	@echo "  github-ssh-keys        Add the YubiKey SSH keys GitHub lacks (asks gh for the key scope)"
 	@echo "  vault-init             Encrypt the vault stub with the SSH keys (after ssh-keys)"
+	@echo "  vault-import FROM=...  Reuse another machine's encrypted vault (file, backup dir or host:path) instead of setup-yubikeys"
 	@echo "  vault-edit             Edit the vault (vault-view: read only)"
 	@echo "  usb-add                Allow blocked USB devices (USBGuard) and save their rules to config.yml"
 	@echo "  preflight              Check prerequisites and CSB detection"
@@ -511,6 +512,7 @@ test-scripts: .venv
 	.venv/bin/python3 scripts/test-claude-privacy.py
 	.venv/bin/python3 scripts/test-ansible-input-guards.py
 	.venv/bin/python3 scripts/test-usb-add.py
+	.venv/bin/python3 scripts/test-vault-import.py
 	.venv/bin/python3 scripts/test-collection-source-verifier.py
 	.venv/bin/python3 scripts/test-rollout.py
 	bash test-var-override.sh
@@ -548,6 +550,12 @@ smoke-test-user:
 
 vault-init: guard-not-root
 	scripts/vault-init.sh
+
+# A new machine reusing another's encrypted vault (docs/migration-checklist.md); FROM reaches the script through the
+# environment, never as shell text.
+vault-import: guard-not-root
+	@[ "$(origin FROM)" = "command line" ] && [ -n "$$FROM" ] || { echo "usage: make vault-import FROM=PATH|HOST:PATH  (an encrypted vault.yml, or a directory with one)" >&2; exit 2; }
+	@scripts/vault-import.sh "$$FROM"
 
 vault-edit:
 	EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) ansible-vault edit group_vars/all/vault.yml
