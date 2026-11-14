@@ -82,6 +82,23 @@ Rejected alternatives:
   symlinked skills, and uncommitted edits would reach every session.
 - Re-enforcing the plugin keys on every run: that would reset a deliberate `/plugin disable`.
 
+## Startup context, measured
+
+First-request input tokens of a headless `claude -p` run (November 2026). Identical runs vary by about 3,000, so
+each saving below is an A/B of otherwise identical sessions, repeated.
+
+- Empty directory: about 21,700 in `~/.claude` and 19,300-22,200 in `~/.claude-per2`; Codex 13,000-14,400.
+- `claude-skills` costs 525. Release-management costs about 1,030 wherever it is enabled. The account-synced
+  `productivity` and `engineering` plugins together cost 1,522, and neither was used in 30 days. Release-management
+  and the two synced plugins are now disabled at user scope in the personal home. The release repository still
+  enables its plugins at project scope for sessions started at its root, and
+  `--settings '{"enabledPlugins":{"<plugin>": true}}'` turns one back on for a single session.
+- A repository's `CLAUDE.md` is the largest variable cost. `@path` imports inline whole files: 19 imported workflow
+  files add 24,600 to every session started in the release repository. They stay, by choice: sessions there get
+  the full release context up front, and only those sessions pay for it. This repository's `CLAUDE.md` costs about
+  7,900, of which the first-provision sections (proposal 3) are 2,186.
+- MCP tools and claude.ai connectors load on demand; only their names and server instructions count.
+
 ## Proposals
 
 1. **Migration checklist § 4**, three lines (findings 1-3, 7):
