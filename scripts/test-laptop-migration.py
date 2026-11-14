@@ -20,6 +20,7 @@ BASELINE = (ROOT / 'roles/common/files/agent-baseline.md').read_text().strip()
 ANSIBLE = ROOT / '.venv/bin/ansible-playbook'
 if not ANSIBLE.exists():
     ANSIBLE = Path(shutil.which('ansible-playbook'))
+TEST_TIMEOUT = int(os.environ.get('LAPTOP_SETUP_TEST_TIMEOUT', '0'))
 
 
 def run_play(directory, tasks=None, variables=None, roles=None, extra_args=()):
@@ -37,7 +38,7 @@ def run_play(directory, tasks=None, variables=None, roles=None, extra_args=()):
                ANSIBLE_ROLES_PATH=str(ROOT / 'roles'),
                ANSIBLE_COLLECTIONS_PATH=str(ROOT / 'collections'))
     result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(path), *extra_args],
-                            cwd=ROOT, env=env, capture_output=True, text=True, timeout=180)
+                            cwd=ROOT, env=env, capture_output=True, text=True, timeout=max(180, TEST_TIMEOUT))
     if result.returncode:
         raise AssertionError(result.stdout + result.stderr)
     return result.stdout
