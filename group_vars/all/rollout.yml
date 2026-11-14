@@ -10,7 +10,8 @@
 # Fields: desc, risk (low|medium|high), sudo (default true; false = needs no sudo), requires (chunks
 # that must also be enabled; listed earlier in this file), verify (scripts/smoke-test.sh check names
 # proving the chunk applied), linux_only (default false; true = its roles do nothing on macOS, so make status
-# shows it n/a, make verify passes over it and make plan/apply refuse it there).
+# shows it n/a, make verify passes over it and make plan/apply refuse it there),
+# nosudo (default true; false = every task needs root, so make apply NOSUDO=1 refuses it).
 # Undo notes and decision records live in docs/rollout-recovery.md, one heading per chunk.
 rollout_enable: all
 
@@ -59,6 +60,7 @@ rollout_catalog:
   login_shell:
     desc: zsh as the login shell (usermod or SSSD override)
     risk: medium
+    nosudo: false
     linux_only: true
     requires: [packages, desktop, dotfiles]
     verify: [login-shell-zsh]
@@ -69,6 +71,7 @@ rollout_catalog:
   repos_dnf:
     desc: Third-party dnf repositories
     risk: medium
+    nosudo: false
     linux_only: true
   sys_baseline:
     desc: Baseline settings (SELinux, masking, logind, journald, cron, dconf, firmware, timezone)
