@@ -296,8 +296,9 @@ class MigrationTests(unittest.TestCase):
                       (ROOT / 'roles/codex/defaults/main.yml').read_text())
         self.assertIn('prefix=${HOME}/.npm-global', (ROOT / 'roles/dotfiles/tasks/main.yml').read_text())
 
-    def test_codex_vault_api_key_logs_in_the_work_home_over_stdin_only(self):
+    def test_codex_vault_api_key_logs_in_only_the_work_home_over_stdin(self):
         key = 'fixture-key-' + 'x' * 24
+        personal_login = json.dumps({'auth_mode': 'chatgpt', 'tokens': {'refresh_token': 'fixture'}})
         cases = [('missing', {}, True), ('chatgpt', {}, True), ('apikey', {}, False),
                  ('apikey', {'codex_api_key_rotate': True}, True), ('missing', {'profile': 'personal'}, False)]
         for mode, extra, expect_login in cases:
@@ -306,19 +307,30 @@ class MigrationTests(unittest.TestCase):
                 record = directory / 'login-record'
                 codex = directory / '.npm-global/bin/codex'
                 codex.parent.mkdir(parents=True)
-                codex.write_text('#!/bin/sh\nif [ "$1" = --version ]; then echo codex-cli 999.0.0; exit 0; fi\n'
-                                 'printf "%s|%s|" "$CODEX_HOME" "$*" > ' + shlex.quote(str(record)) + '\n'
-                                 'cat >> ' + shlex.quote(str(record)) + '\n'
-                                 'printf \'{"auth_mode":"apikey"}\' > "$CODEX_HOME/auth.json"\n')
+                codex.write_text(
+                    '#!/bin/sh\n'
+                    'if [ "$1" = --version ]; then echo codex-cli 999.0.0; exit 0; fi\n'
+                    'if [ "$1 $2" = "login status" ]; then\n'
+                    '  grep -q apikey "$CODEX_HOME/auth.json" 2>/dev/null && { echo "API key configured - sk-***"; exit 0; }\n'
+                    '  grep -q chatgpt "$CODEX_HOME/auth.json" 2>/dev/null && { echo "Logged in using ChatGPT"; exit 0; }\n'
+                    '  echo "Not logged in"; exit 1\n'
+                    'fi\n'
+                    'printf "%s|%s|" "$CODEX_HOME" "$*" > ' + shlex.quote(str(record)) + '\n'
+                    'cat >> ' + shlex.quote(str(record)) + '\n'
+                    'printf \'{"auth_mode":"apikey"}\' > "$CODEX_HOME/auth.json"\n')
                 codex.chmod(0o755)
                 if mode != 'missing':
                     (directory / '.codex').mkdir(mode=0o700)
                     (directory / '.codex/auth.json').write_text(json.dumps({'auth_mode': mode}))
+                (directory / '.codex-personal').mkdir(mode=0o700)
+                (directory / '.codex-personal/auth.json').write_text(personal_login)
                 variables = {'ansible_facts': {'user_dir': name}, 'packages_install_binaries': False,
                              'codex_api_key': key, **extra}
-                result = run_play(directory, variables=variables, roles=['codex'], extra_args=['-v'])
+                result = run_play(directory, variables=variables, roles=['codex'], extra_args=['-vvv'])
                 self.assertNotIn(key, result)
+                self.assertNotIn('sk-***', result)
                 self.assertEqual(record.exists(), expect_login)
+                self.assertEqual((directory / '.codex-personal/auth.json').read_text(), personal_login)
                 if expect_login:
                     self.assertEqual(record.read_text(), name + '/.codex|login --with-api-key|' + key)
                     self.assertEqual((directory / '.codex/auth.json').stat().st_mode & 0o777, 0o600)
@@ -330,12 +342,16 @@ class MigrationTests(unittest.TestCase):
             self.assertNotIn(key, result)
         tasks = yaml.safe_load((ROOT / 'roles/codex/tasks/main.yml').read_text())
         login = next(t for t in tasks if t.get('name') == 'Log the work Codex home in with the vault API key')
-        run = next(t for t in login['block'] if t.get('name') == 'Run codex login --with-api-key for the work home')
+        by_name = {t['name']: t for t in login['block']}
+        run = by_name['Run codex login --with-api-key for the work home']
         self.assertIs(run['no_log'], True)
+        self.assertIs(by_name['Read the work Codex login method']['no_log'], True)
         self.assertEqual(run['ansible.builtin.command']['stdin'], '{{ codex_api_key }}')
+        self.assertEqual(run['environment'], {'CODEX_HOME': '{{ codex_work_config_dir }}'})
         self.assertNotIn('codex_api_key', json.dumps(run['ansible.builtin.command']['argv']))
-        self.assertNotIn('codex_api_key }}', (ROOT / 'roles/codex/tasks/main.yml').read_text().replace(
-            "stdin: \"{{ codex_api_key }}\"", ''))
+        self.assertNotIn('codex_personal_config_dir }}', json.dumps(login['block'][1:]))
+        text = (ROOT / 'roles/codex/tasks/main.yml').read_text()
+        self.assertEqual(text.count('codex_api_key }}'), 1)
 
     def test_claude_baseline_scopes_plugins_and_preserves_cli_preferences(self):
         production = yaml.safe_load((ROOT / 'roles/claude/tasks/main.yml').read_text())
