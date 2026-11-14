@@ -31,6 +31,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   rollout_enable: all                (group_vars/all/rollout.yml) — `all` (default) or a list of chunk names (make status
 #     lists them, in recommended order). Chunks not listed are skipped by every make run (the wrapper passes them as
 #     --skip-tags); a listed chunk's prerequisites must be listed too. Example: rollout_enable: [packages, ssh_client, dotfiles]
+#   desktop_macos_always_on: false     (roles/desktop/defaults) — macOS: pmset no system/disk sleep, restart after power
+#     loss, wake on network (desktop_macos_always_on_pmset); display sleep and screen lock untouched
 #   install_vpn: true                  (group_vars/all/vars.yml) — Mullvad (personal profile, non-CSB Fedora); corporate VPN client
 #     via the redhat chunk (work profile, CSB-detected hosts)
 #   install_virtualization: true       (group_vars/all/vars.yml) — libvirt, qemu-kvm, virt-install; set false to skip

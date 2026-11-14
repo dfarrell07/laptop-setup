@@ -266,8 +266,12 @@ _backup_array() {
       # keep rejecting symlinked credential files and links outside that tree.
       case "$f" in
         .zshrc|.zlogin|.gitconfig|.vimrc|.tmux.conf|.Xdefaults|.i3/config|.i3status.conf|.ssh/config)
-          local resolved
+          local resolved dotfiles_dir
+          # Resolve both sides: on macOS /var -> /private/var, so a home under a symlinked path never matched
           resolved=$(python3 -I -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$src")
+          dotfiles_dir=$(python3 -I -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$HOME/.dotfiles")
+          # Back to the $HOME spelling the helpers below compare against
+          [[ "$resolved" != "$dotfiles_dir/"* ]] || resolved="$HOME/.dotfiles/${resolved#"$dotfiles_dir"/}"
           if [[ "$resolved" == "$HOME/.dotfiles/"* ]]; then
             _assert_searchable_parents "$resolved"
           fi

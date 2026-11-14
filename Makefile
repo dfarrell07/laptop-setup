@@ -181,7 +181,8 @@ bootstrap-hooks: guard-not-root
 bootstrap: guard-not-root bootstrap-hooks
 	@# macOS: brew openssh links libfido2; system ssh (LibreSSL) lacks sk-ssh-ed25519/FIDO2 support
 	@if [ "$$(uname -s)" = "Darwin" ]; then \
-		brew install ansible git openssh libfido2 ykman make shellcheck coreutils node bash python3; \
+		command -v brew >/dev/null 2>&1 || { echo 'ERROR: Homebrew not found. Install it first (needs sudo, see https://brew.sh), run eval "$$(/opt/homebrew/bin/brew shellenv)", then re-run make bootstrap' >&2; exit 1; }; \
+		brew install ansible git openssh libfido2 ykman make shellcheck coreutils node bash python3 python@3.14; \
 	elif command -v apt-get >/dev/null 2>&1; then \
 		sudo apt-get update && sudo apt-get install -y ansible git yubikey-manager make shellcheck python3-venv python3-pip; \
 	else \
@@ -219,8 +220,13 @@ bootstrap: guard-not-root bootstrap-hooks
 	@echo "  Set .gpg-enforcement to enabled after key/signature setup; see SECURITY.md."
 	@echo ""
 	$(INSTALL_COLLECTIONS)
+	@# pre_flight_checks.yml requires vault.yml 0600; a umask-022 checkout leaves it 0644 until vault-init
+	@[ ! -f group_vars/all/vault.yml ] || chmod 600 group_vars/all/vault.yml
 	$(MAKE) npm
 	$(MAKE) hooks
+	@# make all/check/minimal need .venv for rollout.py; only status/plan/apply/verify build it themselves.
+	@# Last and non-fatal, so a PyPI outage or proxy still leaves the hooks installed.
+	@$(MAKE) .venv || echo "WARN: .venv not built (needs PyPI and Python 3.12-3.14); make status retries it"
 	@echo ""
 	@echo "Bootstrap complete. Git hooks active."
 	@echo ""
@@ -435,7 +441,12 @@ check-vars-sync: .venv
 	$(VERIFY_AND_RUN) .venv/bin/python3 scripts/check-vars-sync.py
 
 .venv: requirements-test.lock
-	@test -x .venv/bin/python || python3 -m venv .venv
+	@# Prefer python3.14: Homebrew python3 is 3.15, the lock has no cp315 wheels, ansible-core supports up to 3.14.
+	@# A venv already built on a newer Python is rebuilt; ensurepip is checked because Debian splits it out.
+	@if [ -x .venv/bin/python ] && ! .venv/bin/python -c 'import sys; sys.exit(sys.version_info[:2] > (3, 14))'; then \
+		echo "Rebuilding .venv: it was built on a Python newer than 3.14"; rm -rf .venv; fi
+	@test -x .venv/bin/python || { py=python3; python3.14 -c 'import ensurepip' >/dev/null 2>&1 && py=python3.14; \
+		$$py -m venv .venv || { rm -rf .venv; exit 1; }; }
 	@touch -t 197001010000 .venv  # stale until the final touch: a failed pip step is retried next run
 	.venv/bin/pip install --require-hashes -r requirements-test.lock
 	touch .venv

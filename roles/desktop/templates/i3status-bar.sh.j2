@@ -71,7 +71,7 @@ i3status --config "$HOME/.config/i3status/config" | {
 
     # Slower checks: containers every 30 s, reboot state every minute
     if ((tick % 6 == 0)) && command -v podman >/dev/null; then
-      containers=$(podman ps -q 2>/dev/null | wc -l)
+      containers=$(($(podman ps -q 2>/dev/null | wc -l)))  # arithmetic drops BSD wc padding
     fi
     if ((tick % 12 == 0)); then
       reboot=

@@ -304,6 +304,15 @@ desktop_macos_defaults:
     type: bool
     value: "{{ desktop_macos_finder_show_posix_path }}"
 
+# Always-on Mac (a desktop that serves while unattended): never system or disk sleep, restart after a power
+# failure, wake for network access. Display sleep and the screen lock are untouched. Off by default.
+desktop_macos_always_on: false
+desktop_macos_always_on_pmset:
+  sleep: 0
+  disksleep: 0
+  autorestart: 1
+  womp: 1
+
 desktop_macos_firewall_settings:
   - {name: global, check_cmd: --getglobalstate, set_cmd: --setglobalstate on, match_str: 'State = 1'}
   - name: stealth
