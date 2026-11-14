@@ -432,20 +432,25 @@
   check_mode: false  # read-only probe
   when: is_macos and desktop_macos_always_on | bool
 
+# -c (AC power) only, so a MacBook that opts in still sleeps on battery. Only the "AC Power:" section of
+# `pmset -g custom` is compared, and keys this Mac does not report are skipped, so re-runs stay unchanged.
 - name: Apply macOS always-on power settings
   ansible.builtin.command:
-    argv: [pmset, -a, "{{ item.key }}", "{{ item.value | string }}"]
+    argv: [pmset, -c, "{{ item.key }}", "{{ item.value | string }}"]
   become: true
   tags: [become]
   changed_when: true
   loop: "{{ desktop_macos_always_on_pmset | dict2items }}"
   loop_control:
     label: "{{ item.key }}={{ item.value }}"
+  vars:
+    _desktop_pmset_ac: >-
+      {{ _desktop_pmset.stdout | regex_search('(?s)AC Power:\n(.*?)(?:\n\S|$)', '\1') | default([''], true) | first }}
+    _desktop_pmset_now: "{{ _desktop_pmset_ac | regex_findall('(?m)^\\s*' ~ item.key ~ '\\s+(\\d+)') }}"
   when:
     - is_macos and desktop_macos_always_on | bool
-    - >-
-      (_desktop_pmset.stdout | regex_findall('(?m)^\s*' ~ item.key ~ '\s+(\d+)') | unique)
-      != [item.value | string]
+    - _desktop_pmset_now | length > 0
+    - _desktop_pmset_now != [item.value | string]
 
 # --- macOS: firewall ---
 - name: Check macOS firewall settings
