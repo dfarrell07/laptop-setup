@@ -60,12 +60,11 @@
     - "{{ codex_work_config_dir }}"
     - "{{ codex_personal_config_dir }}"
 
-- name: Seed global Codex working agreements without replacing user instructions
-  ansible.builtin.copy:
-    src: "{{ role_path }}/../common/files/agent-baseline.md"
+- name: Deploy global Codex working agreements (managed by Ansible; edits are overwritten each run)
+  ansible.builtin.template:
+    src: "{{ role_path }}/../common/templates/agent-baseline.md.j2"
     dest: "{{ item }}/AGENTS.md"
     mode: "0600"
-    force: false
   loop:
     - "{{ codex_work_config_dir }}"
     - "{{ codex_personal_config_dir }}"

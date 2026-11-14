@@ -14,9 +14,9 @@ stay private; what the automation does is in the roles and [migration-checklist.
 3. **`cper` stops reading `~/.claude.json`.** The managed launchers always export `CLAUDE_CONFIG_DIR`, and
    Claude then keeps account state in `$CLAUDE_CONFIG_DIR/.claude.json`. User-scope MCP servers and project trust
    restored to `~/.claude.json` do not apply to `cper`.
-4. **The managed `CLAUDE.md` replaces hand-written global instructions** (`force: true`). A rule that lives only
-   there is lost on the first `make claude`. On the source laptop that is the `rm` rule: literal absolute paths,
-   cleanup under `/tmp/claude-<uid>/`, because Claude Code's safety check rejects globs and variables.
+4. **The managed `CLAUDE.md`, `AGENTS.md` and `GEMINI.md` replace hand-written global instructions.** A rule that
+   lives only there is lost on the first agents run. On the source laptop that is the scratch half of the `rm`
+   rule (cleanup under `/tmp/claude-<uid>/`); the literal-path half is now managed.
 5. **`--plugin-dir .` loaded every start directory as a plugin while adding almost no context.** No manifest is
    needed: `skills/`, `commands/`, `agents/`, `hooks/hooks.json`, `.mcp.json`, `monitors/` and `bin/` (put on
    the Bash PATH) all load, and a same-named installed plugin is silently replaced. Measured below. Done: the
@@ -25,14 +25,13 @@ stay private; what the automation does is in the roles and [migration-checklist.
    first-provision material that agents never act on: "First time on a new machine" (4.3 KB), "USBGuard first
    provision", "Internal SSH git hosts" and the Codex pin-bump procedure. Make, `preflight.sh`, `vault-init.sh`
    and `setup-yubikeys.sh` send humans to that section by name or step number.
-7. **Codex seeding is skipped by a full restore.** `config.toml` and `AGENTS.md` are seeded with `force: false`,
-   so restoring the backed-up files first keeps old project trust and marketplace paths and leaves no
-   `AGENTS.md` where the old home had none.
+7. **Codex seeding is skipped by a full restore.** `config.toml` is seeded with `force: false`, so restoring the
+   backed-up file first keeps old project trust and marketplace paths.
 8. **Launcher loose ends.** The `claude()` guard named `cw`/`ccp`. Done: the guard names `cwork`/`cper`/`cper2`,
    and `ccp` with its `~/.claude-personal` home is retired; `cls`, `ca` and `cstatus` now cover `cw`/`cwt` sessions
    on the work profile only.
 
-Sound as is: one shared 1.4 KB baseline for both tools, policy re-merged every run, work plugins only in the
+Sound as is: one shared baseline for every agent tool, policy re-merged every run, work plugins only in the
 work home, MCP servers and hooks left to the user, memory indexes small, transcripts pruned after 30 days and
 excluded from migration.
 

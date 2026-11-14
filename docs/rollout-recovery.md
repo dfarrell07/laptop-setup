@@ -141,24 +141,28 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 
 ## agents
 
-- **Why:** Claude Code and Codex installs and settings.
-- **Breaks if wrong:** with `claude_sandbox_enabled: true` (default false) it installs `bubblewrap` and `socat` with dnf (Claude
-  Code refuses to start without them, `failIfUnavailable: true`); it overwrites each instance `CLAUDE.md` and deletes a legacy-shaped
-  `settings.local.json` with no backup of its own; settings merges can drop local edits. Run `make backup` right before `make apply CHUNK=agents` and check that `~/laptop-setup-backup-<timestamp>/` holds
-  `.claude*/CLAUDE.md` and `.claude*/settings.local.json`.
-- **Verify:** `make verify CHUNK=agents` (`claude-privacy-tmpfiles`: the tmpfiles file exists; `codex`: `codex --version` runs, so a failed
-  Codex npm install, which the role only warns about, shows up here). Claude's sandbox settings are not mapped: check
-  `jq .sandbox ~/.claude/settings.json` (`enabled` follows `claude_sandbox_enabled`).
-- **Undo:** per instance, restore the oldest `~/.claude*/settings.json.bak-<timestamp>` (written by the merge, which keeps every backup); if
-  the instance had no `settings.json` before the chunk, delete `settings.json` instead (the backup then holds only the seeded file), and
-  delete instance directories the chunk created (for example `~/.claude-per2`). The replaced `CLAUDE.md` and legacy
-  `settings.local.json` are only in the `make backup` directory if you ran it before the chunk. Delete `~/.local/share/codex-cli`,
-  `~/.local/bin/codex`, the seeded `config.toml` and `AGENTS.md` in `~/.codex` and `~/.codex-personal` (keep the directories: they also hold
-  the Codex login and history), `~/.config/claude/` and `~/.config/user-tmpfiles.d/claude-privacy.conf`. If `claude_queue_enabled` was on:
-  `systemctl --user disable --now claude-queue.timer`, delete `~/.config/systemd/user/claude-queue.{service,timer}` and
-  `~/.local/bin/claude-queue-poller.sh`, `systemctl --user daemon-reload`, and `sudo rm /etc/logrotate.d/claude-queue-poller`.
-  The `bubblewrap` and `socat` packages can stay (restoring `settings.json` removes the sandbox requirement); `sudo dnf remove socat` if
-  wanted.
+- **Why:** Claude Code, Codex and Antigravity installs, settings and global instructions.
+- **Breaks if wrong:** with `claude_sandbox_enabled: true` (default false) it installs `bubblewrap` and `socat` with dnf (Claude Code
+  refuses to start without them, `failIfUnavailable: true`); it overwrites each instance `CLAUDE.md`, Codex `AGENTS.md` and Antigravity
+  `GEMINI.md` (and sets `~/.gemini*` to 0700), and deletes a legacy-shaped `settings.local.json` with no backup of its own; settings
+  merges can drop local edits. Run `make backup` right before `make apply CHUNK=agents` and check that
+  `~/laptop-setup-backup-<timestamp>/` holds `.claude*/CLAUDE.md`, `.claude*/settings.local.json` and any hand-written `.codex*/AGENTS.md`
+  or `.gemini*/GEMINI.md`.
+- **Verify:** `make verify CHUNK=agents` (`claude-privacy-tmpfiles`: the tmpfiles file exists; `codex`: `codex --version` runs, so a
+  failed Codex npm install, which the role only warns about, shows up here). Claude's sandbox settings are not mapped: check `jq .sandbox
+  ~/.claude/settings.json` (`enabled` follows `claude_sandbox_enabled`). Antigravity has no mapped check: run `agy --version` and `ls -l
+  ~/.gemini*/GEMINI.md`.
+- **Undo:** per instance, restore the oldest `~/.claude*/settings.json.bak-<timestamp>` (written by the merge, which keeps every backup);
+  if the instance had no `settings.json` before the chunk, delete `settings.json` instead (the backup then holds only the seeded file),
+  and delete instance directories the chunk created (for example `~/.claude-per2`). The replaced `CLAUDE.md`, `AGENTS.md`, `GEMINI.md` and
+  legacy `settings.local.json` are only in the `make backup` directory if you ran it before the chunk. Delete `~/.local/share/codex-cli`,
+  `~/.local/bin/codex`, the seeded `config.toml` and managed `AGENTS.md` in `~/.codex` and `~/.codex-personal` (keep the directories: they
+  also hold the Codex login and history), `~/.gemini*/GEMINI.md`, `~/.local/bin/agy` if the chunk installed it, `~/.gemini-per2` if the
+  chunk created it (keep `~/.gemini`: it holds the login), `~/.config/claude/` and `~/.config/user-tmpfiles.d/claude-privacy.conf`. If
+  `claude_queue_enabled` was on: `systemctl --user disable --now claude-queue.timer`, delete
+  `~/.config/systemd/user/claude-queue.{service,timer}` and `~/.local/bin/claude-queue-poller.sh`, `systemctl --user daemon-reload`, and
+  `sudo rm /etc/logrotate.d/claude-queue-poller`. The `bubblewrap` and `socat` packages can stay (restoring `settings.json` removes the
+  sandbox requirement); `sudo dnf remove socat` if wanted.
 
 ## repos
 

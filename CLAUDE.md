@@ -201,7 +201,7 @@ See the [transfer checklist](docs/migration-checklist.md). Direct launchers `cwo
 `gper2` keep the old workflow (`gper*` need the separate Antigravity CLI); `~/.config/zsh/local.zsh` is preserved.
 
 Codex installs in user space from a committed npm integrity lock with lifecycle scripts disabled; `packages_install_binaries: false` skips
-the download and `codex_enabled: false` skips the role. Config files are seed-only. To bump the pin, edit `roles/codex/files/package.json`,
+the download and `codex_enabled: false` skips the role. `config.toml` is seed-only. To bump the pin, edit `roles/codex/files/package.json`,
 run `npm install --package-lock-only --ignore-scripts --prefix roles/codex/files`, review every archive URL and integrity value, and run
 the migration tests (optional download test: `CODEX_INSTALL_TEST=1 .venv/bin/python3 scripts/test-laptop-migration.py`).
 Power-stack (TLP) logic lives in `roles/system/tasks/power_management.yml`; native package and service behavior needs validation on the

@@ -15,6 +15,7 @@ import unittest
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
+BASELINE = (ROOT / 'roles/common/files/agent-baseline.md').read_text().strip()
 ANSIBLE = ROOT / '.venv/bin/ansible-playbook'
 if not ANSIBLE.exists():
     ANSIBLE = Path(shutil.which('ansible-playbook'))
@@ -198,7 +199,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertFalse((directory / '.local').exists())
                 self.assertFalse((directory / '.codex').exists())
 
-    def test_codex_offline_preserves_configs_and_is_idempotent(self):
+    def test_codex_offline_preserves_config_and_manages_agreements(self):
         with tempfile.TemporaryDirectory() as name:
             directory = Path(name)
             variables = {'ansible_facts': {'user_dir': name}, 'packages_install_binaries': False}
@@ -206,18 +207,43 @@ class MigrationTests(unittest.TestCase):
             config = directory / '.codex/config.toml'
             self.assertEqual(tomllib.loads(config.read_text())['model'], 'gpt-6.1-sol')
             instructions = directory / '.codex/AGENTS.md'
-            self.assertIn('--signoff', instructions.read_text())
-            self.assertEqual(instructions.read_text(), (directory / '.codex-personal/AGENTS.md').read_text())
+            managed = instructions.read_text()
+            self.assertIn(BASELINE, managed)
+            self.assertEqual(managed, (directory / '.codex-personal/AGENTS.md').read_text())
+            self.assertIn('changed=0', run_play(directory, variables=variables, roles=['codex']))
+            # config.toml is seed-only; the working agreements are managed and re-rendered.
             config.write_text('model = "user-model"\n')
             instructions.write_text('User-owned working agreements\n')
-            result = run_play(directory, variables=variables, roles=['codex'])
-            self.assertIn('changed=0', result)
+            run_play(directory, variables=variables, roles=['codex'])
             self.assertEqual(config.read_text(), 'model = "user-model"\n')
-            self.assertEqual(instructions.read_text(), 'User-owned working agreements\n')
+            self.assertEqual(instructions.read_text(), managed)
             self.assertFalse((directory / '.local/share/codex-cli').exists())
             self.assertEqual((directory / '.codex').stat().st_mode & 0o777, 0o700)
             self.assertEqual((directory / '.codex-personal/config.toml').stat().st_mode & 0o777, 0o600)
             self.assertEqual(instructions.stat().st_mode & 0o777, 0o600)
+
+    def test_antigravity_agreements_are_managed_per_home(self):
+        production = yaml.safe_load((ROOT / 'roles/antigravity/tasks/main.yml').read_text())
+        selected = [task for task in production if task.get('name') in [
+            'Ensure Antigravity launcher homes exist',
+            'Deploy global Antigravity working agreements (managed by Ansible; edits are overwritten each run)']]
+        self.assertEqual(len(selected), 2)
+        for system, homes in [('Linux', ['.gemini', '.gemini-per2']), ('Darwin', ['.gemini'])]:
+            with self.subTest(system=system), tempfile.TemporaryDirectory() as name:
+                directory = Path(name)
+                variables = yaml.safe_load((ROOT / 'roles/antigravity/defaults/main.yml').read_text())
+                variables.update({'ansible_facts': {'user_dir': name, 'system': system}, 'ansible_managed': 'test',
+                                  'role_path': str(ROOT / 'roles/antigravity')})
+                run_play(directory, tasks=selected, variables=variables, extra_args=['--check'])
+                self.assertEqual(list(directory.glob('.gemini*')), [])
+                run_play(directory, tasks=selected, variables=variables)
+                self.assertEqual(sorted(p.name for p in directory.glob('.gemini*')), homes)
+                self.assertIn('changed=0', run_play(directory, tasks=selected, variables=variables))
+                for home in homes:
+                    agreements = directory / home / 'GEMINI.md'
+                    self.assertIn(BASELINE, agreements.read_text())
+                    self.assertEqual(agreements.stat().st_mode & 0o777, 0o600)
+                    self.assertEqual((directory / home).stat().st_mode & 0o777, 0o700)
 
     def test_claude_baseline_scopes_plugins_and_preserves_cli_preferences(self):
         production = yaml.safe_load((ROOT / 'roles/claude/tasks/main.yml').read_text())
@@ -252,8 +278,8 @@ class MigrationTests(unittest.TestCase):
                                      'fixture-owner/claude-skills')
                     self.assertNotIn(name, json.dumps(settings))
                     agreements = (directory / instance / 'CLAUDE.md').read_text()
-                    self.assertIn('--signoff', agreements)
                     self.assertNotIn('~/laptop-setup', agreements)
+                    self.assertIn(BASELINE, agreements)
                     # A restored home without the declarations gets them; a disabled plugin stays disabled.
                     settings_file.write_text(json.dumps({'model': 'user-model', 'enabledPlugins': {
                         'claude-skills@claude-skills': False, 'other@market': True}}) + '\n')
