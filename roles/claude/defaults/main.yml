@@ -79,7 +79,8 @@ claude_deny_bash:
   - "Bash(su *)"
 # Deny entries removed from existing settings.json on every run. These hand-written rules blocked routine work even
 # with bypass: `rm -rf /*` matches every rm -rf of an absolute path (scratch cleanup included), and curl/wget/dd
-# rules block API checks and downloads. Set [] to keep them.
+# rules block API checks and downloads. Set [] before the first run to keep them; to restore removed rules, add them to
+# claude_deny_bash (a rule the policy denies is never retired).
 claude_retired_deny:
   - "Bash(rm -rf /*)"
   - "Bash(rm -rf ~*)"
