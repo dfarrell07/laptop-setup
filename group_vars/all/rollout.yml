@@ -19,6 +19,7 @@ rollout_catalog:
   packages:
     desc: Packages, pinned binaries, Go tools, pipx, krew
     risk: low
+    verify: [tailscaled-daemon]  # macOS-only checks; N/A on Linux
   ssh_client:
     desc: Pinned known_hosts and vault-backed SSH and signing keys
     risk: low
@@ -33,6 +34,7 @@ rollout_catalog:
   desktop:
     desc: GNOME, sway, i3 or AeroSpace configuration
     risk: low
+    verify: [macos-firewall, macos-always-on]  # macOS-only checks; N/A on Linux
   agents:
     desc: Claude Code, Codex and Antigravity CLI installs and settings
     risk: low

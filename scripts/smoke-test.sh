@@ -92,6 +92,8 @@ _mask_nfs=true
 grep -qiE '^system_mask_nfs_server:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_nfs=false
 _luks_discards=false
 grep -qiE '^system_luks_discards_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _luks_discards=true
+_macos_always_on=false
+grep -qiE '^desktop_macos_always_on:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_always_on=true
 _claude_sandbox=false
 grep -qiE '^claude_sandbox_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _claude_sandbox=true
 _mask_iscsi=true
@@ -397,6 +399,28 @@ if ! command -v tailscale &>/dev/null; then
 elif exec_cmd tailscale status &>/dev/null; then record "tailscale" "PASS" "tailscaled running (VPN/auth state not verified)"
 elif $IS_LINUX; then record "tailscale" "WARN" "tailscaled not running or VPN not established (check: systemctl status tailscaled)"
 else record "tailscale" "WARN" "tailscaled not running or not logged in (check: sudo launchctl print system/com.tailscale.tailscaled, then tailscale up)"; fi
+
+# macOS settings that need root to apply but not to read, so a no-sudo run (NOSUDO=1) shows what is left
+if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
+  _fw=/usr/libexec/ApplicationFirewall/socketfilterfw
+  if [[ "$("$_fw" --getglobalstate 2>/dev/null)" == *"State = 1"* || "$("$_fw" --getglobalstate 2>/dev/null)" == *enabled* ]] &&
+     [[ "$("$_fw" --getstealthmode 2>/dev/null)" =~ [Ss]tealth[[:space:]]+[Mm]ode.*(on|enabled|=[[:space:]]*1) ]]; then
+    record "macos-firewall" "PASS"
+  else record "macos-firewall" "FAIL" "application firewall or stealth mode off — run: make apply CHUNK=desktop (needs sudo)"; fi
+  unset _fw
+  if ! $_macos_always_on; then record "macos-always-on" "PASS" "desktop_macos_always_on is off"
+  else
+    _ac=$(pmset -g custom 2>/dev/null | awk '/^AC Power:/{ac=1; next} /^[^ \t]/{ac=0} ac')
+    if [[ "$_ac" =~ (^|$'\n')[[:space:]]*sleep[[:space:]]+0([^0-9]|$) ]] && ! [[ "$_ac" =~ autorestart[[:space:]]+0 ]]; then
+      record "macos-always-on" "PASS"
+    else record "macos-always-on" "FAIL" "AC power still sleeps or does not restart after a power loss — run: make apply CHUNK=desktop (needs sudo)"; fi
+    unset _ac
+  fi
+  if ! command -v tailscale &>/dev/null; then record "tailscaled-daemon" "PASS" "tailscale not installed"
+  elif launchctl print system/com.tailscale.tailscaled &>/dev/null || launchctl print system/homebrew.mxcl.tailscale &>/dev/null; then
+    record "tailscaled-daemon" "PASS"
+  else record "tailscaled-daemon" "FAIL" "tailscaled system daemon not installed — run: make apply CHUNK=packages (needs sudo)"; fi
+fi
 
 # macOS: containers run in the podman machine VM, which the containers chunk creates and starts at login
 if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
@@ -2491,7 +2515,7 @@ if [[ -n "$ONLY" ]]; then
       continue
     fi
     # macOS-only checks have nothing to verify on Linux
-    if $IS_LINUX && [[ " podman-machine " == *" $_only_name "* ]]; then
+    if $IS_LINUX && [[ " podman-machine macos-firewall macos-always-on tailscaled-daemon " == *" $_only_name "* ]]; then
       $JSON || printf 'N/A   %s (macOS-only check; nothing to verify on Linux)\n' "$_only_name"
       continue
     fi
