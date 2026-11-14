@@ -120,6 +120,9 @@ class AeroSpaceTests(unittest.TestCase):
         production = yaml.safe_load((ROOT / 'roles/desktop/tasks/main.yml').read_text())
         task = next(task for task in production if task['name'] == 'Set macOS defaults')
         self.assertNotIn('become', task)
+        self.assertEqual(task['register'], '_desktop_macos_defaults')  # the restart below reads it
+        self.assertIs(task['community.general.osx_defaults']['check_type'], False)
+        self.assertIn('item.manage', task['when'])
         restart = next(task for task in production if task['name'] == 'Restart macOS UI services whose defaults changed')
         self.assertNotIn('become', restart)
         restarted = {domain for item in restart['loop'] for domain in item['domains']}

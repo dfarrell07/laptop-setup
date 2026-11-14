@@ -140,6 +140,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   directory) and `~/.config/environment.d/terminal.conf`; `sudo rm /etc/X11/xorg.conf.d/90-trackpoint.conf` where present.
   Packages: `sudo dnf history list`, `sudo dnf history info <id>` for the one transaction the desktop run installed, then
   `sudo dnf history undo <id>`. Never `dnf remove` dconf or gnome-keyring by name: GDM and gnome-session depend on them.
+- **macOS undo:** `defaults delete <domain> <key>` for each entry in `desktop_macos_defaults` (macOS defaults return), then
+  `killall Dock SystemUIServer`; restore or delete `~/.config/ghostty/config` and `~/.config/aerospace/aerospace.toml`.
 
 ## agents
 
