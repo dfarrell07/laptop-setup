@@ -71,11 +71,9 @@ claude_work_plugin_settings:
 # between sessions in different modes. The queue poller pins its own --permission-mode dontAsk. Set "default" to
 # be asked again.
 claude_default_mode: bypassPermissions
-# Bash rules every instance denies outright (a denial never prompts): wiping / or ~ and switching user.
+# Bash rules every instance denies outright (a denial never prompts). Prefix rules on the command text: a wrapper
+# such as `env sudo` or `bash -c` is not caught, and sudo still needs a password the agent cannot type.
 claude_deny_bash:
-  - "Bash(rm -rf /)"
-  - "Bash(rm -rf ~)"
-  - "Bash(rm -rf ~/)"
   - "Bash(sudo *)"
   - "Bash(su *)"
 # Deny entries removed from existing settings.json on every run. These hand-written rules blocked routine work even

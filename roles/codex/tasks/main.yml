@@ -69,19 +69,22 @@
       - codex_sandbox_mode in ['read-only', 'workspace-write', 'danger-full-access']
     fail_msg: codex_approval_policy or codex_sandbox_mode has an unknown value.
 
+# Top-level keys only: a same-named key inside a [table] (for example [profiles.x]) is left alone.
 - name: Apply Codex approval and sandbox settings (top-level config.toml keys)
-  ansible.builtin.lineinfile:
-    path: "{{ item.0 }}/config.toml"
-    regexp: '^{{ item.1.key }}\s*='
-    line: "{{ item.1.key }} = {{ item.1.value | to_json }}"
-    insertbefore: BOF
-    create: true  # check mode on a fresh home: the seed task has not written config.toml yet
-    mode: "0600"
-  loop: "{{ [codex_work_config_dir, codex_personal_config_dir]
-            | product([{'key': 'approval_policy', 'value': codex_approval_policy},
-                       {'key': 'sandbox_mode', 'value': codex_sandbox_mode}]) | list }}"
+  ansible.builtin.command:
+    argv: >-
+      {{ [ansible_facts.get('python', {}).get('executable', 'python3'), '-I', '-c',
+          lookup('ansible.builtin.file', role_path ~ '/files/set-codex-keys.py'), item ~ '/config.toml',
+          'approval_policy=' ~ (codex_approval_policy | to_json), 'sandbox_mode=' ~ (codex_sandbox_mode | to_json)]
+         + (['--check'] if ansible_check_mode else []) }}
+  register: _codex_keys
+  changed_when: _codex_keys.stdout | trim == 'changed'
+  check_mode: false
+  loop:
+    - "{{ codex_work_config_dir }}"
+    - "{{ codex_personal_config_dir }}"
   loop_control:
-    label: "{{ item.0 | basename }} {{ item.1.key }}"
+    label: "{{ item | basename }}"
 
 - name: Deploy global Codex working agreements (managed by Ansible; edits are overwritten each run)
   ansible.builtin.template:

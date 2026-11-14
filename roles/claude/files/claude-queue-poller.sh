@@ -296,7 +296,8 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
     git checkout -B "$BRANCH_NAME" || exit 1
 
     set +e
-    # dontAsk: only --allowedTools run, whatever defaultMode the instance settings set.
+    # dontAsk denies instead of prompting and keeps a bypassPermissions defaultMode from widening this run. Settings
+    # allow rules (instance and the target repo's .claude/settings.json) still apply on top of --allowedTools.
     "$TIMEOUT_BIN" -k 30 "$TIMEOUT_SECONDS" "$CLAUDE_BIN" -p \
       --permission-mode dontAsk \
       --allowedTools "$TOOLS" \
