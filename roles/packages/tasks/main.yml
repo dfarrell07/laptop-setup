@@ -272,27 +272,36 @@
       tags: [become]
       when: _packages_tailscaled_unit.stdout == 'loaded'
 
-# macOS: the formula's tailscaled is a root launchd daemon that nothing else starts (Linux enables it above).
+# macOS: the formula's tailscaled needs a root launchd daemon that nothing else installs (Linux enables it above).
+# tailscaled's own installer writes /Library/LaunchDaemons/com.tailscale.tailscaled.plist and loads it at boot;
+# `sudo brew services` is avoided because Homebrew refuses to refresh its API cache as root.
 - name: Start installed Tailscale daemon (macOS)
-  when: is_macos
+  when:
+    - is_macos
+    - "'tailscale' in packages_brew + packages_extra_brew"
   block:
     - name: Check for the Tailscale daemon in the system launchd domain (macOS)  # noqa: command-instead-of-module
       ansible.builtin.command:
-        argv: [launchctl, print, system/homebrew.mxcl.tailscale]
+        argv: [launchctl, print, system/com.tailscale.tailscaled]
       register: _packages_tailscaled_launchd
       changed_when: false
       failed_when: false
       check_mode: false
 
-    - name: Start the Tailscale daemon at boot (macOS)
+    - name: Install and start the Tailscale system daemon (macOS)
       ansible.builtin.command:
-        argv: ["{{ dotfiles_homebrew_prefix }}/bin/brew", services, start, tailscale]
+        argv: ["{{ dotfiles_homebrew_prefix }}/bin/tailscaled", install-system-daemon]
       become: true
       tags: [become]
       changed_when: true
-      when:
-        - _packages_tailscaled_launchd.rc != 0
-        - "'tailscale' in packages_brew + packages_extra_brew"
+      when: _packages_tailscaled_launchd.rc != 0
+  rescue:
+    - name: Warn the Tailscale daemon did not start (macOS)
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: tailscaled install-system-daemon failed:
+          {{ ansible_failed_result.stderr | default(ansible_failed_result.msg | default('unknown')) | truncate(200) }}.
+          Run: sudo {{ dotfiles_homebrew_prefix }}/bin/tailscaled install-system-daemon
 
 - name: Install binary downloads
   ansible.builtin.import_tasks: install_binary_downloads.yml
