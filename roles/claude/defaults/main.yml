@@ -72,7 +72,8 @@ claude_work_plugin_settings:
 # be asked again.
 claude_default_mode: bypassPermissions
 # Bash rules every instance denies outright (a denial never prompts). Prefix rules on the command text: a wrapper
-# such as `env sudo` or `bash -c` is not caught, and sudo still needs a password the agent cannot type.
+# such as `env sudo` or `bash -c` is not caught, and sudo still needs a password the agent cannot type. Deny
+# lists are unioned: to drop an entry from existing settings, also add it to claude_retired_deny.
 claude_deny_bash:
   - "Bash(sudo *)"
   - "Bash(su *)"

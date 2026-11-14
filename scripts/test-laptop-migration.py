@@ -230,6 +230,26 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual((directory / '.codex-personal/config.toml').stat().st_mode & 0o777, 0o600)
             self.assertEqual(instructions.stat().st_mode & 0o777, 0o600)
 
+    def test_codex_key_helper_edits_only_top_level_keys(self):
+        helper = ROOT / 'roles/codex/files/set-codex-keys.py'
+        keys = ['approval_policy="never"', 'sandbox_mode="danger-full-access"']
+        with tempfile.TemporaryDirectory() as name:
+            config = Path(name) / 'config.toml'
+            config.write_text('model = "m"\n\n[profiles.careful]\napproval_policy = "untrusted"\n')
+            run = lambda: subprocess.run([sys.executable, '-I', str(helper), str(config), *keys],
+                                         capture_output=True, text=True)
+            self.assertEqual(run().stdout.strip(), 'changed')
+            self.assertEqual(tomllib.loads(config.read_text()), {
+                'approval_policy': 'never', 'sandbox_mode': 'danger-full-access', 'model': 'm',
+                'profiles': {'careful': {'approval_policy': 'untrusted'}}})
+            self.assertEqual(run().stdout.strip(), 'unchanged')
+            # A key-like line inside a multi-line string must not be rewritten.
+            original = 'notes = """\napproval_policy = "x"\n"""\n'
+            config.write_text(original)
+            result = run()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(config.read_text(), original)
+
     def test_antigravity_agreements_are_managed_per_home(self):
         production = yaml.safe_load((ROOT / 'roles/antigravity/tasks/main.yml').read_text())
         selected = [task for task in production if task.get('name') in [
