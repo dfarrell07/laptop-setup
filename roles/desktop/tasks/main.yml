@@ -411,6 +411,23 @@
           "alt-enter = 'exec-and-forget open -na Alacritty'" in
           (_desktop_aerospace_content.content | default('') | b64decode).splitlines()
 
+# --- macOS: Ghostty (same font, palette and behaviour as the Linux Alacritty config) ---
+- name: Deploy Ghostty config (macOS)
+  when: is_macos and desktop_terminal == 'ghostty'
+  block:
+    - name: Ensure Ghostty config directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/ghostty"
+        state: directory
+        mode: "0755"
+
+    - name: Deploy Ghostty config
+      ansible.builtin.template:
+        src: ghostty.config.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/ghostty/config"
+        mode: "0644"
+        backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
+
 # --- macOS: defaults ---
 - name: Set macOS defaults
   community.general.osx_defaults:
@@ -418,9 +435,28 @@
     key: "{{ item.key }}"
     type: "{{ item.type }}"
     value: "{{ item.value }}"
-  loop: "{{ desktop_macos_defaults }}"
+  loop: "{{ desktop_macos_defaults + desktop_macos_ui_defaults }}"
   loop_control:
     label: "{{ item.domain }} {{ item.key }}"
+  register: _desktop_macos_defaults_result
+  when: is_macos
+
+- name: Ensure the screenshot directory exists (macOS)
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/Pictures"
+    state: directory
+    mode: "0700"
+  when: is_macos
+
+# Dock, Finder and SystemUIServer read their defaults at launch; launchd restarts each one
+- name: Restart macOS UI processes whose defaults changed  # noqa: no-handler
+  ansible.builtin.command:
+    argv: [killall, "{{ item }}"]
+  loop: >-
+    {{ _desktop_macos_defaults_result.results | default([]) | selectattr('changed')
+       | map(attribute='item') | selectattr('restart', 'defined') | map(attribute='restart') | unique | list }}
+  changed_when: true
+  failed_when: false
   when: is_macos
 
 # --- macOS: always-on power settings (opt-in) ---

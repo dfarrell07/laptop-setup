@@ -1,0 +1,46 @@
+# {{ ansible_managed }}
+# Ghostty on macOS, matching the Linux Alacritty config (alacritty.toml.j2): same font, palette,
+# padding, no decorations, xterm-256color and copy-only OSC 52.
+
+font-family = {{ desktop_alacritty_font_family }}
+font-size = {{ desktop_ghostty_font_size | int }}
+
+window-padding-x = 4
+window-padding-y = 4
+window-decoration = none
+macos-titlebar-style = hidden
+confirm-close-surface = false
+
+# Ghostty counts scrollback in bytes; this keeps well over the Linux {{ desktop_alacritty_scrollback_lines | int }} lines
+scrollback-limit = {{ desktop_ghostty_scrollback_bytes | int }}
+
+# Remote SSH hosts rarely have xterm-ghostty terminfo; tmux.conf adds 256-color overrides for this TERM
+term = xterm-256color
+
+# OSC 52: programs may copy to the clipboard but never read it (Alacritty osc52 = "OnlyCopy")
+clipboard-write = allow
+clipboard-read = deny
+copy-on-select = clipboard
+
+# Option sends Alt, so readline, tmux and vim Alt bindings work as on Linux
+macos-option-as-alt = true
+
+background = {{ desktop_alacritty_color_bg }}
+foreground = {{ desktop_alacritty_color_fg }}
+cursor-color = {{ desktop_alacritty_color_fg }}
+palette = 0={{ desktop_alacritty_color_normal_black }}
+palette = 1={{ desktop_alacritty_color_normal_red }}
+palette = 2={{ desktop_alacritty_color_normal_green }}
+palette = 3={{ desktop_alacritty_color_normal_yellow }}
+palette = 4={{ desktop_alacritty_color_normal_blue }}
+palette = 5={{ desktop_alacritty_color_normal_magenta }}
+palette = 6={{ desktop_alacritty_color_normal_cyan }}
+palette = 7={{ desktop_alacritty_color_normal_white }}
+palette = 8={{ desktop_alacritty_color_bright_black }}
+palette = 9={{ desktop_alacritty_color_normal_red }}
+palette = 10={{ desktop_alacritty_color_normal_green }}
+palette = 11={{ desktop_alacritty_color_normal_yellow }}
+palette = 12={{ desktop_alacritty_color_normal_blue }}
+palette = 13={{ desktop_alacritty_color_normal_magenta }}
+palette = 14={{ desktop_alacritty_color_normal_cyan }}
+palette = 15={{ desktop_alacritty_color_bright_white }}

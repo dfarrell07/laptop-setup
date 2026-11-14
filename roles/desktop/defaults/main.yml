@@ -4,6 +4,9 @@ desktop_environment: CHANGE_ME  # sway, i3, gnome (Linux); aerospace (macOS); se
 desktop_alacritty_font_family: DejaVu Sans Mono
 desktop_alacritty_font_size: 9.0
 desktop_alacritty_scrollback_lines: 50000
+# macOS Ghostty (ghostty.config.j2) reuses the Alacritty font and palette; points, not the Linux scaled size
+desktop_ghostty_font_size: 13
+desktop_ghostty_scrollback_bytes: 100000000
 desktop_wm_font_family: DejaVu Sans Mono
 desktop_wm_font_size: 8
 desktop_terminal: "{{ 'ghostty' if ansible_facts['system'] | default('Linux') == 'Darwin' else 'alacritty' }}"
@@ -271,8 +274,10 @@ desktop_gnome_ui_dconf:
   - key: /org/gnome/settings-daemon/plugins/power/sleep-inactive-battery-timeout
     value: "3600"
 
-desktop_macos_key_repeat: 2          # macOS key repeat rate (lower = faster; macOS default 6)
-desktop_macos_initial_key_repeat: 15  # macOS delay before repeat starts (lower = shorter; macOS default 25)
+# Derived from the sway/i3 repeat settings (desktop_wm_repeat_delay/_rate) in macOS units of 15 ms: 200 ms at 50/s
+# gives 13 and 1 (below the System Settings slider limits of 15 and 2). Both apply at the next login.
+desktop_macos_key_repeat: "{{ [((1000 / (desktop_wm_repeat_rate | int)) / 15) | round | int, 1] | max }}"
+desktop_macos_initial_key_repeat: "{{ [((desktop_wm_repeat_delay | int) / 15) | round | int, 1] | max }}"
 desktop_macos_auto_quote_substitution: false  # NSAutomaticQuoteSubstitutionEnabled — disable smart quotes
 desktop_macos_auto_dash_substitution: false   # NSAutomaticDashSubstitutionEnabled — disable smart dashes
 desktop_macos_finder_show_all_extensions: true  # AppleShowAllExtensions — show all file extensions in Finder
@@ -312,6 +317,69 @@ desktop_macos_always_on_pmset:
   disksleep: 0
   autorestart: 1
   womp: 1
+
+# Linux-like macOS UI for a tiling (AeroSpace) user: everything here is a per-user default (no sudo).
+# restart: the process that reads the domain, restarted when a value changes. Set this list to [] to keep
+# the stock macOS behaviour; individual entries can be overridden by redefining the list in config.yml.
+desktop_macos_ui_defaults:
+  # Keyboard: held keys repeat (vim hjkl) instead of the accent popup; no autocorrect; Tab reaches all controls
+  - {domain: NSGlobalDomain, key: ApplePressAndHoldEnabled, type: bool, value: false}
+  - {domain: NSGlobalDomain, key: NSAutomaticSpellingCorrectionEnabled, type: bool, value: false}
+  - {domain: NSGlobalDomain, key: NSAutomaticCapitalizationEnabled, type: bool, value: false}
+  - {domain: NSGlobalDomain, key: NSAutomaticPeriodSubstitutionEnabled, type: bool, value: false}
+  - {domain: NSGlobalDomain, key: NSAutomaticInlinePredictionEnabled, type: bool, value: false}
+  - {domain: NSGlobalDomain, key: WebAutomaticSpellingCorrectionEnabled, type: bool, value: false}
+  - {domain: NSGlobalDomain, key: AppleKeyboardUIMode, type: int, value: 2}
+  # Scrolling as in sway (libinput default): not "natural"
+  - {domain: NSGlobalDomain, key: com.apple.swipescrolldirection, type: bool, value: false}
+  # No window open/resize animations
+  - {domain: NSGlobalDomain, key: NSAutomaticWindowAnimationsEnabled, type: bool, value: false}
+  - {domain: NSGlobalDomain, key: NSWindowResizeTime, type: float, value: 0.001}
+  # Spaces: fixed order, no jump to another Space when an app activates; one Space set across displays
+  # (AeroSpace recommends spans-displays; it takes effect at the next login)
+  - {domain: NSGlobalDomain, key: AppleSpacesSwitchOnActivate, type: bool, value: false}
+  - {domain: com.apple.dock, key: mru-spaces, type: bool, value: false, restart: Dock}
+  - {domain: com.apple.dock, key: expose-group-apps, type: bool, value: true, restart: Dock}
+  - {domain: com.apple.spaces, key: spans-displays, type: bool, value: true}
+  # Dock out of the way: hidden, instant, small, running apps only, no recents or launch bounce
+  - {domain: com.apple.dock, key: autohide, type: bool, value: true, restart: Dock}
+  - {domain: com.apple.dock, key: autohide-delay, type: float, value: 0, restart: Dock}
+  - {domain: com.apple.dock, key: autohide-time-modifier, type: float, value: 0.15, restart: Dock}
+  - {domain: com.apple.dock, key: tilesize, type: float, value: 36, restart: Dock}  # macOS stores it as a float
+  - {domain: com.apple.dock, key: show-recents, type: bool, value: false, restart: Dock}
+  - {domain: com.apple.dock, key: static-only, type: bool, value: true, restart: Dock}
+  - {domain: com.apple.dock, key: launchanim, type: bool, value: false, restart: Dock}
+  # No hot corners (1 = no action)
+  - {domain: com.apple.dock, key: wvous-tl-corner, type: int, value: 1, restart: Dock}
+  - {domain: com.apple.dock, key: wvous-tr-corner, type: int, value: 1, restart: Dock}
+  - {domain: com.apple.dock, key: wvous-bl-corner, type: int, value: 1, restart: Dock}
+  - {domain: com.apple.dock, key: wvous-br-corner, type: int, value: 1, restart: Dock}
+  # Stage Manager and the built-in window tiling fight AeroSpace
+  - {domain: com.apple.WindowManager, key: GloballyEnabled, type: bool, value: false}
+  - {domain: com.apple.WindowManager, key: EnableStandardClickToShowDesktop, type: bool, value: false}
+  - {domain: com.apple.WindowManager, key: EnableTilingByEdgeDrag, type: bool, value: false}
+  - {domain: com.apple.WindowManager, key: EnableTopTilingByEdgeDrag, type: bool, value: false}
+  - {domain: com.apple.WindowManager, key: EnableTilingOptionAccelerator, type: bool, value: false}
+  # Finder: list view, path and status bars, folders first, hidden files, home in new windows, search here
+  - {domain: com.apple.finder, key: FXPreferredViewStyle, type: string, value: Nlsv, restart: Finder}
+  - {domain: com.apple.finder, key: NewWindowTarget, type: string, value: PfHm, restart: Finder}
+  - {domain: com.apple.finder, key: FXDefaultSearchScope, type: string, value: SCcf, restart: Finder}
+  - {domain: com.apple.finder, key: ShowPathbar, type: bool, value: true, restart: Finder}
+  - {domain: com.apple.finder, key: ShowStatusBar, type: bool, value: true, restart: Finder}
+  - {domain: com.apple.finder, key: _FXSortFoldersFirst, type: bool, value: true, restart: Finder}
+  - {domain: com.apple.finder, key: AppleShowAllFiles, type: bool, value: true, restart: Finder}
+  - {domain: com.apple.finder, key: FXEnableExtensionChangeWarning, type: bool, value: false, restart: Finder}
+  - {domain: com.apple.finder, key: CreateDesktop, type: bool, value: false, restart: Finder}
+  - {domain: com.apple.desktopservices, key: DSDontWriteNetworkStores, type: bool, value: true}
+  - {domain: com.apple.desktopservices, key: DSDontWriteUSBStores, type: bool, value: true}
+  # Screenshots to ~/Pictures like the sway grim bindings, without shadows or the preview thumbnail
+  - domain: com.apple.screencapture
+    key: location
+    type: string
+    value: "{{ ansible_facts['user_dir'] }}/Pictures"
+    restart: SystemUIServer
+  - {domain: com.apple.screencapture, key: disable-shadow, type: bool, value: true, restart: SystemUIServer}
+  - {domain: com.apple.screencapture, key: show-thumbnail, type: bool, value: false, restart: SystemUIServer}
 
 desktop_macos_firewall_settings:
   - {name: global, check_cmd: --getglobalstate, set_cmd: --setglobalstate on, match_str: 'State = 1'}
