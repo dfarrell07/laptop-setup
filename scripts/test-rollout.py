@@ -502,5 +502,31 @@ class LinuxOnlyTests(unittest.TestCase):
         self.assertIn('--tags', rollout.chunk_args(CATALOG, list(CATALOG), 'sys_mounts', linux=True))
 
 
+
+class NoSudoTests(unittest.TestCase):
+    """make NOSUDO=1: a sudo chunk runs without a password and skips its root-only (become) tasks."""
+
+    def test_no_sudo_skips_become_and_drops_the_password_prompt(self):
+        args = rollout.chunk_args(CATALOG, list(CATALOG), 'packages', no_sudo=True)
+        self.assertNotIn('--ask-become-pass', args)
+        self.assertIn('become', args[args.index('--skip-tags') + 1].split(','))
+        self.assertIn('--ask-become-pass', rollout.chunk_args(CATALOG, list(CATALOG), 'packages'))
+
+    def test_no_sudo_refuses_system_chunks(self):
+        with self.assertRaisesRegex(rollout.RolloutError, 'NOSUDO=1 would apply nothing'):
+            rollout.chunk_args(CATALOG, list(CATALOG), 'sys_auditd', no_sudo=True)
+
+    def test_no_sudo_leaves_no_sudo_chunks_unchanged(self):
+        self.assertEqual(rollout.chunk_args(CATALOG, list(CATALOG), 'dotfiles', no_sudo=True),
+                         rollout.chunk_args(CATALOG, list(CATALOG), 'dotfiles'))
+
+    def test_makefile_passes_no_sudo_only_for_nosudo_1(self):
+        makefile = (ROOT / 'Makefile').read_text()
+        for target in ('plan', 'apply'):
+            with self.subTest(target=target):
+                recipe = re.search(rf'(?ms)^{target}: .*?(?=^\S)', makefile).group(0)
+                self.assertIn('$(if $(filter 1,$(NOSUDO)),--no-sudo)', recipe)
+
+
 if __name__ == '__main__':
     unittest.main()

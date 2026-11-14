@@ -92,6 +92,7 @@ help:
 	@echo "  status                 Show which chunks are on (rollout_enable)"
 	@echo "  plan CHUNK=<name>      Preview one chunk (--check --diff)"
 	@echo "  apply CHUNK=<name>     Apply one chunk"
+	@echo "    NOSUDO=1             plan/apply a sudo chunk without a password, skipping its root-only tasks"
 	@echo "  verify [CHUNK=<name>]  Run smoke checks for a chunk (all enabled if omitted)"
 	@echo
 	@echo "Provision:"
@@ -413,13 +414,13 @@ status: .venv
 
 plan: guard-not-root .venv rollout-banner
 	@[ -n "$$CHUNK" ] || { echo "usage: make plan CHUNK=<name>  (the whole enabled list: make check; names: make status)" >&2; exit 2; }
-	@args=$$(.venv/bin/python3 -I scripts/rollout.py chunk-args --preview "$$CHUNK") || exit 2; \
+	@args=$$(.venv/bin/python3 -I scripts/rollout.py chunk-args --preview $(if $(filter 1,$(NOSUDO)),--no-sudo) "$$CHUNK") || exit 2; \
 	  $(VERIFY_AND_RUN) ansible-playbook site.yml $$args --check --diff
 
 # CHUNK reaches each recipe through the environment, never as shell text (no injection via its value).
 apply: guard-not-root .venv
 	@[ "$(origin CHUNK)" = "command line" ] && [ -n "$$CHUNK" ] || { echo "usage: make apply CHUNK=<name>  (names: make status)" >&2; exit 2; }
-	@args=$$(.venv/bin/python3 -I scripts/rollout.py chunk-args "$$CHUNK") || exit 2; \
+	@args=$$(.venv/bin/python3 -I scripts/rollout.py chunk-args $(if $(filter 1,$(NOSUDO)),--no-sudo) "$$CHUNK") || exit 2; \
 	  $(VERIFY_AND_RUN) ansible-playbook site.yml $$args && .venv/bin/python3 -I scripts/rollout.py next-step "$$CHUNK"
 
 verify: .venv
