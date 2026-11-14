@@ -64,6 +64,8 @@ packages_bpfman_enabled: false
 packages_user_updates_enabled: true
 packages_user_updates_calendar: daily
 packages_user_updates_container: "{{ container_name | default('fedora-dev') }}"  # '' skips the container step
+# pipx apps the updater leaves alone: the role pins these (install_pipx.yml) and would reinstall the pin each run.
+packages_user_updates_pipx_skip: [yamllint, ansible-lint]
 
 packages_security_yubikey:
   - yubikey-manager

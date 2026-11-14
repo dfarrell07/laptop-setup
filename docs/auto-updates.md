@@ -11,19 +11,24 @@ The dnf update set is `system_dnf_automatic_upgrade_type` (`default`: all update
 | Software | Mechanism | Schedule | Logs |
 | --- | --- | --- | --- |
 | dnf/rpm packages (Firefox, Chrome, podman, ...) | `dnf5-automatic.timer`, all updates | daily | `journalctl -u dnf5-automatic` |
-| Flatpak apps and runtimes (system) | `flatpak-update.timer` | daily | `journalctl -u flatpak-update` |
-| Firmware metadata (LVFS) | `fwupd-refresh.timer` | daily | `journalctl -u fwupd-refresh` |
-| npm global packages, incl. Codex | `laptop-user-update.timer` (`npm update -g`) | daily | `journalctl --user -u laptop-user-update` |
-| pipx apps | `laptop-user-update.timer` (`pipx upgrade-all`) | daily | same |
+| Flatpak apps and runtimes (system installation) | `flatpak-update.timer` | daily | `journalctl -u flatpak-update` |
+| Firmware metadata (LVFS) | `fwupd-refresh.timer` (`sys_baseline` chunk) | daily | `journalctl -u fwupd-refresh` |
+| npm globals in `~/.npm-global`, incl. Codex | `laptop-user-update.timer`, latest | daily | `journalctl --user -u laptop-user-update` |
+| pipx apps you installed yourself | `laptop-user-update.timer` (`pipx upgrade-all`) | daily | same |
 | Dev container packages (distrobox) | `laptop-user-update.timer` (`distrobox upgrade`) | daily | same |
 | Claude Code | its own updater (native install) | on use | `claude doctor` |
-| Antigravity `agy` | its own updater | on use | agy's updater status |
+| Antigravity `agy` | its own updater | on use | `agy --version` |
 | Browser extensions | the browser | browser's schedule | browser |
 
-Codex also shows an update prompt; `npm install -g @openai/codex` updates the same install the launchers run.
-
-On RHEL CSB, IT applies OS updates (RHSM/Satellite) and dnf-automatic is not installed. On CSB Fedora it runs, because IT's
-playbooks there update only their own package.
+- RHEL CSB: IT applies OS updates (RHSM/Satellite), so dnf-automatic, the Flatpak timer and LVFS firmware are not set up.
+  CSB Fedora gets them: IT's playbooks there update only their own package.
+- On CSB Fedora, IT's compliance run also uses dnf. If it starts while dnf-automatic holds the dnf lock it can fail once; the
+  bar then shows CSB FAIL until IT's next run (about four hours later).
+- Codex lives in `~/.npm-global` (codex role), so its own update prompt and this timer update the copy the launchers run.
+- pipx apps the packages role pins (`packages_user_updates_pipx_skip`: yamllint, ansible-lint) are skipped.
+- Per-user Flatpak installations (`flatpak --user`) are not covered; the automation installs none.
+- GNOME Software also downloads updates in a GNOME session (`org.gnome.software download-updates`); it is not needed
+  alongside dnf-automatic and does not run in sway.
 
 ## Stays manual, and why
 
@@ -31,7 +36,9 @@ playbooks there update only their own package.
 | --- | --- | --- |
 | Firmware/BIOS | Flashing needs a reboot and can fail on battery or a dock; it must be attended | `sudo fwupdmgr update` |
 | Binaries in `/usr/local/bin` (oc, kubectl, helm, kind, ...) | SHA256-pinned; a new hash needs review | bump the pin, `make packages` |
-| Go tools in `~/go/bin`, `~/.local/bin/subctl*` | Version-pinned, `@latest` is forbidden | bump the pin, `make packages` |
+| Go tools in `~/go/bin`, `~/.local/bin/subctl*`, golangci-lint | Version-pinned, `@latest` is forbidden | bump the pin, `make packages` |
+| yamllint, ansible-lint (pipx) | Pinned to match CI's linters | bump the pin, `make packages` |
+| gitleaks in `~/.local/bin` | SHA256-pinned by `make bootstrap-hooks` | bump the pin, `make bootstrap-hooks` |
 | krew and its plugins | Pinned manifests; krew is kept from self-upgrading | bump the pin, `make packages` |
 | oh-my-zsh, forgit | Pinned to commit SHAs; oh-my-zsh's updater is disabled | bump the SHA, `make dotfiles` |
 | google-cloud-cli, acli | Held by `dnf versionlock` | bump the lock, `make repos_dnf` |
@@ -40,3 +47,4 @@ playbooks there update only their own package.
 | Ansible collections | Vendored with checksums | `make vendor-collections` |
 | Homebrew (macOS) | The LaunchAgent refreshes metadata only | `brew upgrade` |
 | Cloned git repos | Not software; pulling could disturb work in progress | `make update` |
+| IT's agents (Fleet `orbit`, Falcon, CSB playbooks) | IT-managed | IT's own update channels |

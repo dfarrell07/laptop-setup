@@ -65,12 +65,13 @@
     # yamllint disable rule:line-length
     content: |
       # {{ ansible_managed }}
-      # Run aide --update after dnf-automatic applies security updates.
-      # Without this, every update causes AIDE false-positive alerts that
-      # train operators to ignore them, defeating the purpose of AIDE.
-      # The '-' prefix makes this advisory — AIDE failures won't block updates.
+      # Run aide --update after dnf-automatic applies updates. Without this, every update causes AIDE false-positive
+      # alerts that train operators to ignore them, defeating the purpose of AIDE. Only when the RPM database changed
+      # during this run: rebaselining after a run that installed nothing would absorb unrelated changes unreported.
+      # aide --update still lists every difference it accepts in the journal. The '-' prefix makes this advisory.
       [Service]
-      ExecStartPost=-/usr/bin/bash -c 'aide --update; [ -f /var/lib/aide/aide.db.new.gz ] && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz'
+      ExecStartPre=-/usr/bin/touch /run/dnf-automatic-aide.stamp
+      ExecStartPost=-/usr/bin/bash -c 'if [ -n "$(find /usr/lib/sysimage/rpm /var/lib/rpm -newer /run/dnf-automatic-aide.stamp -print -quit 2>/dev/null)" ]; then aide --update; [ -f /var/lib/aide/aide.db.new.gz ] && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz; fi'
     dest: "/etc/systemd/system/{{ _dnf_auto_svc }}.d/aide-update.conf"
     # yamllint enable rule:line-length
     mode: "0644"
