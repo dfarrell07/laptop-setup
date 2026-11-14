@@ -452,7 +452,8 @@
       loop: "{{ _systemd_user_units.files }}"
       when: >-
         item.path | basename not in ['claude-queue.service', 'claude-queue.timer', 'ssh-agent.service', 'gcr-ssh-agent.service',
-                                      'podman-prune.service', 'podman-prune.timer']
+                                      'podman-prune.service', 'podman-prune.timer',
+                                      'laptop-user-update.service', 'laptop-user-update.timer']
         or (not item.isreg | default(false) and item.path | basename != 'gcr-ssh-agent.service')
 
     - name: Reload systemd user daemon after deploying queue units  # noqa: no-handler

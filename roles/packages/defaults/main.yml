@@ -58,6 +58,13 @@ packages_brew_cask_lulu_enabled: false
 # machines where eBPF development requires the daemon; prefer manual bpftool for one-off tasks.
 packages_bpfman_enabled: false
 
+# Daily user-space updates (Linux): laptop-user-update.timer runs ~/.local/bin/laptop-user-update, which updates npm
+# global packages (Codex), pipx apps and the distrobox dev container's packages. Logs: journalctl --user -u
+# laptop-user-update; a failed run shows as UPD in the status bar. Pinned tools are not touched.
+packages_user_updates_enabled: true
+packages_user_updates_calendar: daily
+packages_user_updates_container: "{{ container_name | default('fedora-dev') }}"  # '' skips the container step
+
 packages_security_yubikey:
   - yubikey-manager
   - pcsc-lite  # pcscd smart-card daemon; ykman PIV/OATH talk to the key through it

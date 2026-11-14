@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Daily user-space software updates (npm globals, pipx, dev container)
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/laptop-user-update {{ packages_user_updates_container | quote }}
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=1h
+SyslogIdentifier=laptop-user-update

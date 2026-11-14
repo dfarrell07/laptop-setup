@@ -312,6 +312,13 @@
     - is_dnf or is_apt or is_macos
     - packages_install_binaries | bool
 
+- name: Daily user-space updates (npm globals, pipx, dev container)
+  ansible.builtin.include_tasks: user_updates.yml
+  when:
+    - packages_user_updates_enabled | bool
+    - is_linux
+    - not system_is_container | default(false)
+
 - name: Install krew
   ansible.builtin.include_tasks: install_krew.yml
   when: _packages_linux_x86_work
