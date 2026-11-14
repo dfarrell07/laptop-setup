@@ -43,11 +43,11 @@ audits it for gaps the automation does not cover yet.
 1. Follow the README quick start through `make bootstrap`, then `cp default.config.yml config.yml`; merge reviewed
    source overrides into it. The Claude native install also needs a reviewed `claude_install_sha256` and
    `claude_pinned_version`; the pin does not freeze later auto-updates.
-2. Reuse the encrypted vault and a reviewed `scripts/vault-pass.sh` with your existing hardware keys. After
-   restoring the helper, `chmod 700 scripts/vault-pass.sh` and refresh its integrity file:
-   `(cd scripts && sha256sum vault-pass.sh > vault-pass.sh.sha256)`, then `make vault-init` (with an encrypted vault it only
-   marks it skip-worktree, so git never commits it). Check with `make vault-view` in a private
-   terminal. **Do not run `make setup-yubikeys` just to move laptops**: it generates a new secret and can
+2. Reuse the encrypted vault with your existing hardware keys: `make vault-import FROM=HOST:PATH` (or a local file, or
+   a `make backup` directory). It writes the standard `scripts/vault-pass.sh` (it holds no secret, so it is never
+   copied), fetches the vault, has you touch a YubiKey to prove it opens, then installs it 0600 and marks it
+   skip-worktree (`make vault-init`, so git never commits it). Nothing changes unless a key opens the vault. Check with
+   `make vault-view` in a private terminal. **Do not run `make setup-yubikeys` just to move laptops**: it generates a new secret and can
    overwrite slot 2, which locks you out of the existing vault. Keep `vault_*` values out of `config.yml`.
 3. Power: native management (tuned) is the baseline. TLP and charge thresholds need `system_tlp_enabled: true`;
    switching stacks is best effort and needs working repositories.

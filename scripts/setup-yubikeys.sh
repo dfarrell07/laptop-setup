@@ -331,34 +331,9 @@ if [[ -f "$VAULT_PASS_SH" ]] && grep -qE "^pass=['\"]CHANGE_ME['\"]|ci-dummy-vau
   info "Replacing placeholder stub with YubiKey implementation."
 fi
 
-# Write to temp file first (atomic: never a window where the real file
-# has wrong content or wrong permissions)
-_tmp=$(mktemp "${VAULT_PASS_SH}.XXXXXX")
-chmod 700 "$_tmp"
-cat > "$_tmp" << 'VAULTPASS'
-#!/bin/bash
-# scripts/vault-pass.sh — YubiKey HMAC-SHA1 vault password derivation
-# Requires: ykman (yubikey-manager)  Touch YubiKey when its light blinks.
-# ykman otp calculate requires hex-encoded challenge; pre-computed from ASCII.
-# SECURITY: this script prints the vault password; never let xtrace record it.
-unset BASH_ENV
-{ set +x; } 2>/dev/null
-set -euo pipefail
-_CHALRESP_HEX=$(printf '%s' 'ansible-vault-laptop-setup' | od -An -tx1 | tr -d ' \n')
-_to=timeout; command -v timeout >/dev/null 2>&1 || _to=gtimeout
-"$_to" 20 ykman otp calculate 2 "$_CHALRESP_HEX" || {
-  echo "ERROR: vault password unavailable: insert exactly one programmed YubiKey and touch it when it blinks (ykman message above)" >&2
-  exit 1
-}
-VAULTPASS
-mv "$_tmp" "$VAULT_PASS_SH"
-ok "vault-pass.sh written (mode 700, atomic rename)"
-
-# Update the SHA256 integrity reference to match the new YubiKey version
-# Use relative path (basename only) so sha256sum -c works from any clone location
-if command -v sha256sum &>/dev/null; then _sha256=(sha256sum); else _sha256=(shasum -a 256); fi
-(cd "$SCRIPT_DIR" && "${_sha256[@]}" "$(basename "$VAULT_PASS_SH")" > vault-pass.sh.sha256)
-ok "Updated vault-pass.sh.sha256 with new YubiKey version hash (relative path)"
+# The helper is the same on every machine (no secret in it): write-vault-pass.sh writes it and its baseline
+"$SCRIPT_DIR/write-vault-pass.sh" || die "writing vault-pass.sh failed"
+ok "vault-pass.sh written (mode 700, atomic rename) and vault-pass.sh.sha256 updated"
 
 # Verify vault-pass.sh works (requires a key still inserted)
 printf "       Touch YubiKey to verify vault-pass.sh (%ds)... " "$CHALRESP_TIMEOUT"
