@@ -104,6 +104,8 @@ grep -qiE '^containers_macos_machine_enabled:[[:space:]]*(false|no|off)([[:space
 _podman_machine_name=$(awk -F: '/^containers_macos_machine_name:/{sub(/#.*/, "", $2); gsub(/[[:space:]"'"'"']/, "", $2); print $2}' "$_cfg" 2>/dev/null || true)
 [[ "$_podman_machine_name" =~ ^[A-Za-z0-9._-]+$ ]] || _podman_machine_name=podman-machine-default
 grep -qiE '^desktop_macos_always_on:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_always_on=true
+_claude_mode=$(sed -nE 's/^claude_default_mode:[[:space:]]*["'\'']?([A-Za-z]+)["'\'']?.*/\1/p' "$_cfg" 2>/dev/null | tail -1)
+_claude_mode=${_claude_mode:-bypassPermissions}
 _claude_sandbox=false
 grep -qiE '^claude_sandbox_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _claude_sandbox=true
 _mask_iscsi=true
@@ -962,6 +964,28 @@ for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-per2"; do
     else record "sandbox($label)" "FAIL" "not enabled in $sec_file — run: make claude"; fi
   fi
 done
+
+# Claude approval mode (claude_default_mode, bypassPermissions by default) in every instance's user settings. A
+# missing or other mode means the agents chunk was not applied there: sessions not started with
+# --dangerously-skip-permissions (autostarted units, plain `claude`, IDEs) then ask before each step. A project's own
+# .claude/settings.json defaultMode still outranks this one; see docs/agent-config.md "Sessions that still prompt".
+_mode_bad=""
+_mode_seen=false
+for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-per2"; do
+  [[ -f "$d/settings.json" ]] || continue
+  _mode_seen=true
+  _mode_got=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("permissions",{}).get("defaultMode") or "unset")' \
+    "$d/settings.json" 2>/dev/null || echo unreadable)
+  [[ "$_mode_got" == "$_claude_mode" ]] || _mode_bad+=" ${d##*/}=$_mode_got"
+done
+if ! $_mode_seen; then
+  record "claude-default-mode" "SKIP" "no Claude settings.json yet — run: make apply CHUNK=agents"
+elif [[ -z "$_mode_bad" ]]; then
+  record "claude-default-mode" "PASS"
+else
+  record "claude-default-mode" "WARN" "permissions.defaultMode is not $_claude_mode in:$_mode_bad — run: make apply CHUNK=agents"
+fi
+unset _claude_mode _mode_bad _mode_seen _mode_got
 
 # Claude directory permissions
 for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-per2"; do
