@@ -141,6 +141,12 @@ _notes_repo_name=$(awk -F': ' '/^notes_repo_name:/{gsub(/[[:space:]"'"'"']/, "",
 _notes_dir="$HOME/$_notes_repo_name"
 USER="${USER:-$(id -un)}"  # cron/env -i runs leave USER unset; later checks use it under set -u
 unset _cfg
+# Check tools as the login shell finds them: make verify runs with make's PATH, which lacks the user bin
+# directories the dotfiles PATH puts first (the claude, codex and agy CLIs live there).
+for _user_bin in "$HOME/.npm-global/bin" "$HOME/.local/bin"; do
+  [[ -d "$_user_bin" && ":$PATH:" != *":$_user_bin:"* ]] && PATH="$_user_bin:$PATH"
+done
+unset _user_bin
 
 exec_cmd() { # execute locally or inside container
   if [[ -n "$CONTAINER" ]]; then
