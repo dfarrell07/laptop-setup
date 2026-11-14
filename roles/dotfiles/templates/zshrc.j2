@@ -96,7 +96,9 @@ command -v fzf &>/dev/null && [[ -f "{{ dotfiles_homebrew_prefix | trim }}/opt/f
 {% if _system == 'Linux' %}
 command -v vimx &>/dev/null && alias vim=vimx  # vimx (+clipboard) from vim-X11 package
 {% endif %}
-command -v bat &>/dev/null && export MANPAGER="sh -c 'col -bx | bat -l man -p'"  # syntax-highlighted man pages
+# syntax-highlighted man pages; the binary is batcat on Debian, where `bat` is only a shell alias sh cannot see
+_bat_bin=$(whence -p bat || whence -p batcat) && export MANPAGER="sh -c 'col -bx | ${_bat_bin:t} -l man -p'"
+unset _bat_bin
 
 # --- zsh quality-of-life plugins ---
 {% if _system == 'Linux' %}
