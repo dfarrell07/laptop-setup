@@ -9,6 +9,8 @@ codex_npm_prefix: "{{ ansible_facts['user_dir'] }}/.npm-global"
 codex_legacy_install_dir: "{{ ansible_facts['user_dir'] }}/.local/share/codex-cli"  # retired; removed by the role
 codex_work_config_dir: "{{ ansible_facts['user_dir'] }}/.codex"
 codex_personal_config_dir: "{{ ansible_facts['user_dir'] }}/.codex-personal"
+# Re-run `codex login --with-api-key` for the work home even when it is already in API-key mode (key rotation).
+codex_api_key_rotate: false
 codex_work_model: gpt-6.1-sol
 codex_work_reasoning_effort: medium
 codex_personal_model: gpt-6-luna
