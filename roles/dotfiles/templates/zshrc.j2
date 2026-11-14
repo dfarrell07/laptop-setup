@@ -10,6 +10,10 @@ zstyle ':omz:update' mode disabled
 plugins=({{ dotfiles_oh_my_zsh_plugins | map('regex_replace', '[^a-zA-Z0-9_-]', '') | join(' ') }})
 
 [[ -f "$ZSH/oh-my-zsh.sh" ]] && source "$ZSH/oh-my-zsh.sh"
+{% if dotfiles_display_hostname %}
+# Window titles show dotfiles_display_hostname; the real hostname stays as IT set it.
+ZSH_THEME_TERM_TITLE_IDLE="%n@{{ dotfiles_display_hostname }}:%~"
+{% endif %}
 
 # --- Environment ---
 export EDITOR=vim

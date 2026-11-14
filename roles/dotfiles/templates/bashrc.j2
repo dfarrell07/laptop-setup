@@ -3,6 +3,10 @@
 {% if _system == 'Linux' %}
 # Fedora/RHEL: /etc/bashrc runs /etc/profile.d (TMOUT, bash-completion) for non-login shells, as /etc/skel/.bashrc does
 [ -f /etc/bashrc ] && . /etc/bashrc
+{% if dotfiles_display_hostname %}
+# The prompt shows dotfiles_display_hostname; the real hostname stays as IT set it.
+[[ -n "${PROMPT_USERHOST:-}" ]] && PROMPT_USERHOST='\u@{{ dotfiles_display_hostname }}'
+{% endif %}
 {% endif %}
 {% if _system == 'Darwin' %}
 export PATH="{{ dotfiles_homebrew_prefix | trim }}/bin:$PATH"
