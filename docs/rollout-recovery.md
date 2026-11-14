@@ -107,6 +107,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Verify:** `make verify CHUNK=dotfiles` (`dotfile-gitconfig`, `git-hooks-path`, `ssh-config-hash-known-hosts`,
   `ssh-config-github-strict`). `make plan` shows only the creation of the quarantine directories; the moves of unmanaged
   `environment.d` files (with a SECURITY WARNING) and git template hooks (task output only) happen only in the real run.
+- **macOS:** the chunk disables and stops Apple's ssh-agent, so apps and tmux servers started before it keep a dead
+  `SSH_AUTH_SOCK` (and lose keys loaded in Apple's agent) until you log out and back in; new shells use the Homebrew agent.
 - **Undo:** run `make backup` BEFORE the chunk (an older backup predates earlier deploys), then restore the file from that
   `~/laptop-setup-backup-<timestamp>` directory. Replaced `.zshrc`, `.bashrc`, `.ssh/config`, `.config/git/config` and
   `.config/tmux/tmux.conf` also keep a copy beside them named `<file>.<pid>.<date>@<time>~`. Unmanaged git template hooks and
