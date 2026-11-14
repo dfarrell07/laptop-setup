@@ -88,7 +88,13 @@ class ClaudePrivacyTests(unittest.TestCase):
                     capture_output=True, text=True, timeout=120, cwd=tmp,
                     env={**os.environ, 'ANSIBLE_LOCAL_TEMP': tmp, 'ANSIBLE_REMOTE_TEMP': tmp, 'HOME': tmp})
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                sandbox = json.loads(out.read_text())['sandbox']
+                rendered = json.loads(out.read_text())
+                sandbox = rendered['sandbox']
+                self.assertIs(rendered['skipDangerousModePermissionPrompt'], True)
+                self.assertEqual(rendered['permissions']['defaultMode'], 'bypassPermissions')
+                self.assertEqual(rendered['permissions']['deny'][:len(defaults['claude_deny_bash'])],
+                                 defaults['claude_deny_bash'])
+                self.assertFalse(set(defaults['claude_retired_deny']) & set(rendered['permissions']['deny']))
                 self.assertIs(sandbox['enableWeakerNestedSandbox'], expected, (in_container, tier))
                 self.assertEqual({k: v for k, v in sandbox.items() if k != 'enableWeakerNestedSandbox'},
                                  {'enabled': False, 'allowUnsandboxedCommands': False, 'failIfUnavailable': True})

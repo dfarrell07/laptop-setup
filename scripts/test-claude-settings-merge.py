@@ -151,6 +151,17 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(data['extraKnownMarketplaces'], {'m': {'source': {'source': 'directory', 'path': '/src/m'}}})
         self.assertEqual(run(self.path, POLICY, '--defaults', json.dumps(defaults)).stdout.strip(), 'unchanged')
 
+    def test_retire_drops_stale_user_rules_unless_policy_denies_them(self):
+        self.path.write_text(json.dumps({'permissions': {'deny': ['Bash(rm -rf /*)', 'Bash(curl *)', 'Bash(sudo *)'],
+                                                         'defaultMode': 'default'}}))
+        policy = dict(POLICY, permissions={'defaultMode': 'bypassPermissions', 'deny': ['Bash(curl *)']})
+        result = run(self.path, policy, '--retire', json.dumps(['Bash(rm -rf /*)', 'Bash(curl *)']))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        perms = self.load()['permissions']
+        self.assertEqual(perms['deny'], ['Bash(curl *)', 'Bash(sudo *)'])
+        self.assertEqual(perms['defaultMode'], 'bypassPermissions')
+        self.assertNotEqual(run(self.path, POLICY, '--retire', '{}').returncode, 0)
+
     def test_defaults_must_be_an_object(self):
         self.assertNotEqual(run(self.path, POLICY, '--defaults', '[]').returncode, 0)
         self.assertNotEqual(run(self.path, POLICY, '--defaults').returncode, 0)
