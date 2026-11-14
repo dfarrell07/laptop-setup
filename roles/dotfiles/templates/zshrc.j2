@@ -10,10 +10,13 @@ zstyle ':omz:update' mode disabled
 plugins=({{ dotfiles_oh_my_zsh_plugins | map('regex_replace', '[^a-zA-Z0-9_-]', '') | join(' ') }})
 
 [[ -f "$ZSH/oh-my-zsh.sh" ]] && source "$ZSH/oh-my-zsh.sh"
-{% if dotfiles_display_hostname %}
-# Window titles show dotfiles_display_hostname; the real hostname stays as IT set it.
-ZSH_THEME_TERM_TITLE_IDLE="%n@{{ dotfiles_display_hostname }}:%~"
-{% endif %}
+# Window titles (sway title bars): the directory only, plus user@host over SSH. The host shown is
+# dotfiles_display_hostname when set; the real hostname stays as IT set it.
+if [[ -n "${SSH_CONNECTION:-}" ]]; then
+  ZSH_THEME_TERM_TITLE_IDLE="%n@{{ dotfiles_display_hostname or '%m' }}:%~"
+else
+  ZSH_THEME_TERM_TITLE_IDLE="%~"
+fi
 
 # --- Environment ---
 export EDITOR=vim
