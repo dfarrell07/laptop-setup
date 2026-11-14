@@ -3,7 +3,7 @@
 # Bar status_command: runs i3status and rewrites each update. Drops the GiB unit from RAM, shortens disk units
 # (893.1G), adds watts to the battery while discharging, and adds fields i3status cannot produce: REBOOT (a core
 # package is newer than the boot), CSB FAIL (IT's last compliance run failed), STALL (memory pressure), CTR
-# (running containers), AI (local agent CLIs) and, with desktop_i3status_vpn, VPN (active VPN names).
+# (running rootless Podman containers), AI (interactive agent sessions) and, with desktop_i3status_vpn, VPN (active VPN names).
 set -u
 show_vpn={{ desktop_i3status_vpn | bool | ternary('1', '0') }}
 battery=/sys/class/power_supply/BAT{{ desktop_i3status_battery_num | string | regex_replace('[^0-9]', '') }}
@@ -38,6 +38,12 @@ vpn_field() {
   else
     field vpn "VPN off"
   fi
+}
+
+# Interactive agent sessions: claude, codex and agy processes on a terminal. Codex leaves app-server daemons
+# running after a session ends; they have no terminal and are not sessions, so they are not counted.
+agent_sessions() {
+  ps -eo tty=,comm= 2>/dev/null | awk '$1 != "?" && $2 ~ /^(claude|codex|agy)$/ {n++} END {print n + 0}'
 }
 
 reboot_needed() {
@@ -113,7 +119,7 @@ i3status --config "$HOME/.config/i3status/config" | {
     # CTR, AI and VPN go before the Wi-Fi field (or at the end)
     tail_fields=
     [[ -n $containers ]] && tail_fields+="$(field containers "CTR $containers"),"
-    tail_fields+="$(field agents "AI $(pgrep -c -x 'claude|codex|agy')"),"
+    tail_fields+="$(field agents "AI $(agent_sessions)"),"
     ((show_vpn)) && tail_fields+="$(vpn_field),"
     if [[ $line == *'{"name":"wireless"'* ]]; then
       line=${line/'{"name":"wireless"'/"$tail_fields"'{"name":"wireless"'}

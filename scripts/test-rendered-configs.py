@@ -38,6 +38,7 @@ CASES = {
     'sway': ('roles/desktop/templates/sway.config.j2', {}),
     'i3': ('roles/desktop/templates/i3.config.j2', {}),
     'i3status': ('roles/desktop/templates/i3status.conf.j2', {}),
+    'bar_status': ('roles/desktop/templates/i3status-bar.sh.j2', {}),
     'audit': ('roles/system/templates/auditd-system.rules.j2', {}),
 }
 BASE = {'real_user_id': 'public-test-user', 'dotfiles_user_name': 'Test User',
@@ -145,6 +146,26 @@ class RenderedConfigTests(unittest.TestCase):
         self.assertGreaterEqual(len(order), 8)
         for line in order:
             self.assertRegex(line, r'^order \+= "[^"]+"$')
+
+    def test_bar_counts_rootless_containers_and_only_terminal_agent_sessions(self):
+        with tempfile.TemporaryDirectory() as name:
+            stubs = Path(name)
+            def stub(command, body):
+                (stubs / command).write_text('#!/bin/sh\n' + body + '\n')
+                (stubs / command).chmod(0o755)
+            stub('i3status', 'printf \'{"version":1}\\n[\\n[{"name":"wireless","full_text":"WIFI"}]\\n\'')
+            stub('podman', 'printf "a1\\nb2\\n"')
+            stub('ps', 'printf "pts/0    claude\\n?        codex\\n?        codex\\npts/3    codex\\n'
+                       '?        agy\\npts/4    node\\npts/5    zsh\\n"')
+            for quiet in ['nmcli', 'tailscale', 'rpm']:
+                stub(quiet, 'exit 1')
+            script = stubs / 'bar-status'
+            script.write_text(self.read('bar_status'))
+            result = subprocess.run(['bash', str(script)], capture_output=True, text=True, timeout=30,
+                                    env=dict(os.environ, PATH=f'{stubs}:/usr/bin:/bin', HOME=name))
+            update = result.stdout.splitlines()[-1]
+            self.assertIn('"full_text":"CTR 2"', update)
+            self.assertIn('"full_text":"AI 2"', update)
 
     def test_audit_rules_set_backlog_before_rules(self):
         lines = [l for l in self.read('audit').splitlines() if l and not l.startswith('#')]
