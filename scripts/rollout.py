@@ -62,7 +62,7 @@ def load_catalog(registry=REGISTRY):
             raise RolloutError(f'chunk {name}: desc is required')
         if entry.get('risk') not in RISKS:
             raise RolloutError(f'chunk {name}: risk must be one of {", ".join(RISKS)}')
-        for field in ('requires', 'verify'):
+        for field in ('requires', 'verify', 'verify_macos'):
             value = entry.get(field, [])
             if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
                 raise RolloutError(f'chunk {name}: {field} must be a list of strings')
@@ -108,6 +108,12 @@ def resolve(registry=REGISTRY, config=CONFIG):
     catalog, default = load_catalog(registry)
     setting = load_yaml(config).get('rollout_enable', default)
     return catalog, enabled_chunks(catalog, setting)
+
+
+def checks_for(entry, linux=None):
+    """Smoke checks proving a chunk applied on this OS: verify, plus verify_macos on macOS."""
+    linux = host_is_linux() if linux is None else linux
+    return entry.get('verify', []) + ([] if linux else entry.get('verify_macos', []))
 
 
 def host_is_linux():
@@ -200,7 +206,7 @@ def root_command(catalog, enabled, name=None):
 
 def next_step(catalog, name):
     """The hint after a successful make apply: verify only when a smoke check is mapped to it."""
-    if catalog.get(name, {}).get('verify'):
+    if checks_for(catalog.get(name, {})):
         if name.startswith('sys_'):
             return (f'Next: make verify CHUNK={name} (root-only checks WARN as a normal user; run them as root: sudo '
                     + ' '.join(root_command(catalog, [name])) + ')')
@@ -212,7 +218,7 @@ def next_step(catalog, name):
 def checks_command(catalog, chunks):
     checks = []
     for chunk in chunks:
-        for check in catalog[chunk].get('verify', []):
+        for check in checks_for(catalog[chunk]):
             if check not in checks:
                 checks.append(check)
     if not checks:

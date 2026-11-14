@@ -93,6 +93,10 @@ grep -qiE '^system_mask_nfs_server:[[:space:]]*(false|no|off)([[:space:]]|$)' "$
 _luks_discards=false
 grep -qiE '^system_luks_discards_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _luks_discards=true
 _macos_always_on=false
+_podman_machine=true
+grep -qiE '^containers_macos_machine_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _podman_machine=false
+_podman_machine_name=$(awk -F: '/^containers_macos_machine_name:/{gsub(/[[:space:]"'"'"']/, "", $2); print $2}' "$_cfg" 2>/dev/null || true)
+[[ "$_podman_machine_name" =~ ^[A-Za-z0-9._-]+$ ]] || _podman_machine_name=podman-machine-default
 grep -qiE '^desktop_macos_always_on:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_always_on=true
 _claude_sandbox=false
 grep -qiE '^claude_sandbox_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _claude_sandbox=true
@@ -481,8 +485,9 @@ fi
 
 # macOS: containers run in the podman machine VM, which the containers chunk creates and starts at login
 if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
-  if ! command -v podman &>/dev/null; then record "podman-machine" "FAIL" "podman not installed — run: make apply CHUNK=packages"
-  elif [[ "$(podman machine inspect --format '{{.State}}' 2>/dev/null)" != running ]]; then
+  if ! $_podman_machine; then record "podman-machine" "PASS" "containers_macos_machine_enabled is off"
+  elif ! command -v podman &>/dev/null; then record "podman-machine" "FAIL" "podman not installed — run: make apply CHUNK=packages"
+  elif [[ "$(podman machine inspect --format '{{.State}}' "$_podman_machine_name" 2>/dev/null)" != running ]]; then
     record "podman-machine" "FAIL" "podman machine not running — run: make apply CHUNK=containers (or podman machine start)"
   elif podman info &>/dev/null; then record "podman-machine" "PASS"
   else record "podman-machine" "FAIL" "podman machine running but unreachable — check ~/.local/state/log/podman-machine.log"; fi

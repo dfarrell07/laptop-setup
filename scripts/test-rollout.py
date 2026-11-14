@@ -64,7 +64,7 @@ class RegistryTests(unittest.TestCase):
     def test_verify_names_exist_in_smoke_test_and_can_pass(self):
         script = (ROOT / 'scripts/smoke-test.sh').read_text()
         for name, entry in CATALOG.items():
-            for check in entry.get('verify', []):
+            for check in entry.get('verify', []) + entry.get('verify_macos', []):
                 with self.subTest(chunk=name, check=check):
                     if re.search(r'^\s*_ug_chk ' + re.escape(check) + ' ', script, re.M):
                         continue  # recorded by the _ug_chk helper, which records PASS generically
@@ -483,6 +483,12 @@ class LinuxOnlyTests(unittest.TestCase):
         broken = config('rollout_catalog:\n  a: {desc: x, risk: low, linux_only: "yes"}\n')
         with self.assertRaisesRegex(rollout.RolloutError, 'linux_only must be true or false'):
             rollout.load_catalog(Path(broken))
+
+    def test_macos_only_checks_count_only_on_macos(self):
+        # on Linux a chunk with only verify_macos checks has no smoke check: make verify sends it to make plan
+        self.assertEqual(rollout.checks_for(CATALOG['desktop'], linux=True), [])
+        self.assertIn('macos-firewall', rollout.checks_for(CATALOG['desktop'], linux=False))
+        self.assertEqual(rollout.checks_for(CATALOG['containers'], linux=False)[-1], 'podman-machine')
 
     def test_nothing_is_not_here_on_linux(self):
         self.assertEqual(rollout.not_here(CATALOG, list(CATALOG), linux=True), [])
