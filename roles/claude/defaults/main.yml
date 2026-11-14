@@ -91,6 +91,13 @@ claude_retired_deny:
 claude_enable_all_project_mcp_servers: false  # true = auto-trust all project-local MCP servers; false = prompt (more secure)
 
 claude_queue_enabled: false
+
+# Session orchestrator at boot (Linux): a systemd user unit runs the claude-skills sessions launcher, which starts the
+# orchestrator in tmux with Remote Control on. Design: claude-skills plans/session-orchestrator.md, "Boot".
+claude_orchestrator_enabled: false
+# Physical path (no symlink) of a claude-skills checkout that has skills/sessions; it loads as the orchestrator's plugin
+claude_orchestrator_checkout: "{{ ansible_facts['user_dir'] }}/claude-skills"
+claude_orchestrator_name: orchestrator  # session personal-<name>: its tmux session and Remote Control name
 claude_queue_allowed_authors: []  # GitHub logins allowed to trigger queue; MUST set when enabled — empty makes the poller refuse to run
 claude_log_dir: "{{ ansible_facts['user_dir'] }}/.local/state/claude/logs"
 claude_runtime_config_dir: "{{ ansible_facts['user_dir'] }}/.config/claude"
