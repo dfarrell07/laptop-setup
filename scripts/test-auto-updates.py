@@ -196,6 +196,7 @@ class AutoUpdateTests(unittest.TestCase):
         post = next(l for l in lines if l.startswith('ExecStopPost=-'))[len('ExecStopPost=-'):]
         self.assertIn('ExecStartPre=-/usr/bin/touch /run/dnf-automatic-aide.stamp', lines)
         self.assertIn('After=aide-rebaseline.service', lines)
+        self.assertIn('Wants=aide-rebaseline.service', lines)
         self.assertFalse([l for l in lines if l.startswith('TimeoutStopSec')])  # the scan is not in the stop phase
         self.assertNotRegex(post.replace('$$', ''), r'\$')  # systemd would expand a single $
         for touched, expect in [(None, False), ('rpmdb.sqlite-shm', False), ('rpmdb.sqlite', True),
@@ -223,25 +224,29 @@ class AutoUpdateTests(unittest.TestCase):
         unit = (ROOT / 'roles/system/files/aide-rebaseline.service').read_text().splitlines()
         self.assertIn('ConditionPathExists=|/var/lib/aide/rebaseline-pending', unit)
         self.assertIn('ConditionPathExists=|/var/lib/aide/rebaseline-pending.run', unit)  # an interrupted run resumes
-        self.assertFalse([l for l in unit if l.startswith('WantedBy')])  # never holds multi-user.target
-        timer = (ROOT / 'roles/system/files/aide-rebaseline.timer').read_text().splitlines()
-        self.assertIn('OnBootSec=10min', timer)
+        self.assertFalse([l for l in unit if l.startswith('WantedBy')])  # static: pulled in, never holds boot
+        check = (ROOT / 'roles/system/files/aide-check.service').read_text().splitlines()
+        self.assertIn('Wants=aide-rebaseline.service', check)  # a pending rebaseline runs before every check
         start = next(l for l in unit if l.startswith('ExecStart='))[len('ExecStart='):]
         self.assertIn('ConditionPathExists=/var/lib/aide/aide.db.gz', unit)  # no baseline yet: skip, don't fail
-        self.assertIn('After=aide-rebaseline.service', (ROOT / 'roles/system/files/aide-check.service').read_text())
+        self.assertIn('After=aide-rebaseline.service', check)
         for aide_rc, during, marker, ok, pending in [
                 (0, False, 'rebaseline-pending', True, False), (4, False, 'rebaseline-pending', True, False),
                 (9, False, 'rebaseline-pending', False, True),
                 (0, True, 'rebaseline-pending', True, True),  # a dnf run during the scan leaves a new marker
-                (0, False, 'rebaseline-pending.run', True, False)]:  # a run that shutdown interrupted resumes
+                (0, False, 'rebaseline-pending.run', True, False),  # a run that shutdown interrupted resumes
+                (0, 'dnf', 'rebaseline-pending', False, True)]:  # skipped while a dnf transaction runs
             with self.subTest(aide_rc=aide_rc, during=during, marker=marker), tempfile.TemporaryDirectory() as name:
                 d = Path(name)
                 (d / marker).touch()
-                again = f'touch {d}/rebaseline-pending; ' if during else ''
+                again = f'touch {d}/rebaseline-pending; ' if during is True else ''
+                state = 'activating' if during == 'dnf' else 'inactive'
                 cmd = (start.replace('$$', '$').replace('/var/lib/aide', str(d)).replace('/usr/bin/bash', 'bash')
+                       .replace('systemctl show -P ActiveState dnf5-automatic.service dnf-automatic.service',
+                                f'echo inactive {state}')
                        .replace('aide --update', f'{again}touch {d}/aide.db.new.gz; (exit {aide_rc})'))
                 rc = subprocess.run(cmd, shell=True, check=False).returncode
-                self.assertEqual(rc == 0, ok)
+                self.assertEqual(rc == 0, ok or during == 'dnf')  # skipping is not a failure
                 self.assertEqual((d / 'aide.db.gz').exists(), ok)
                 self.assertFalse((d / 'aide.db.new.gz').exists())
                 self.assertFalse((d / 'rebaseline-pending.run').exists())
