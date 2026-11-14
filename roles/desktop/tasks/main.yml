@@ -418,6 +418,7 @@
     key: "{{ item.key }}"
     type: "{{ item.type }}"
     value: "{{ item.value }}"
+    host: "{{ item.host | default(omit) }}"  # currentHost: per-machine (ByHost) preferences such as the screen saver
     check_type: false  # a value stored with another type (e.g. autohide-delay -int 0) is compared, not a failure
   loop: "{{ desktop_macos_defaults }}"
   loop_control:
@@ -425,24 +426,26 @@
   register: _desktop_macos_defaults
   when: is_macos and item.manage | default(true) | bool
 
-# --- macOS: always-on power settings (opt-in) ---
+# --- macOS: display sleep as on Linux, plus the opt-in always-on power settings ---
 - name: Read macOS power settings
   ansible.builtin.command:
     argv: [pmset, -g, custom]
   register: _desktop_pmset
   changed_when: false
   check_mode: false  # read-only probe
-  when: is_macos and desktop_macos_always_on | bool
+  when: is_macos
 
 # -c (AC power) only, so a MacBook that opts in still sleeps on battery. Only the "AC Power:" section of
 # `pmset -g custom` is compared, and keys this Mac does not report are skipped, so re-runs stay unchanged.
-- name: Apply macOS always-on power settings
+- name: Apply macOS power settings (display sleep; always-on when enabled)
   ansible.builtin.command:
     argv: [pmset, -c, "{{ item.key }}", "{{ item.value | string }}"]
   become: true
   tags: [become]
   changed_when: true
-  loop: "{{ desktop_macos_always_on_pmset | dict2items }}"
+  loop: >-
+    {{ ({'displaysleep': desktop_macos_display_sleep_minutes | int}
+        | combine(desktop_macos_always_on_pmset if desktop_macos_always_on | bool else {})) | dict2items }}
   loop_control:
     label: "{{ item.key }}={{ item.value }}"
   vars:
@@ -450,7 +453,7 @@
       {{ _desktop_pmset.stdout | regex_search('(?s)AC Power:\n(.*?)(?:\n\S|$)', '\1') | default([''], true) | first }}
     _desktop_pmset_now: "{{ _desktop_pmset_ac | regex_findall('(?m)^\\s*' ~ item.key ~ '\\s+(\\d+)') }}"
   when:
-    - is_macos and desktop_macos_always_on | bool
+    - is_macos
     - _desktop_pmset_now | length > 0
     - _desktop_pmset_now != [item.value | string]
 
