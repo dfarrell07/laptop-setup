@@ -54,7 +54,11 @@ def codex(text, dirs):
     new = text if not text or text.endswith('\n') else text + '\n'
     new += tables
     expected = dict(old, projects=dict(projects, **{path: {'trust_level': 'trusted'} for path in missing}))
-    if tomllib.loads(new) != expected:
+    try:
+        ok = tomllib.loads(new) == expected
+    except tomllib.TOMLDecodeError:  # for example projects = {...} as an inline table
+        ok = False
+    if not ok:
         sys.exit('agent-trust: could not add project trust safely; add [projects."DIR"] tables by hand')
     return new
 
