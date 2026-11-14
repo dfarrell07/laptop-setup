@@ -418,13 +418,12 @@
     key: "{{ item.key }}"
     type: "{{ item.type }}"
     value: "{{ item.value }}"
-    state: "{{ item.state | default('present') }}"
-    host: "{{ item.host | default(omit) }}"
+    check_type: false  # a value stored with another type (e.g. autohide-delay -int 0) is replaced, not a failure
   loop: "{{ desktop_macos_defaults }}"
   loop_control:
     label: "{{ item.domain }} {{ item.key }}"
   register: _desktop_macos_defaults
-  when: is_macos
+  when: is_macos and item.manage | default(true) | bool
 
 # --- macOS: always-on power settings (opt-in) ---
 - name: Read macOS power settings

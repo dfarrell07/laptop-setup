@@ -1,11 +1,11 @@
 # {{ ansible_managed }}
 # Ghostty on macOS, matched to the Linux Alacritty config (alacritty.toml.j2): same font, palette,
-# no window chrome, xterm-256color for remote hosts, OSC 52 copy only.
+# no titlebar, xterm-256color for remote hosts, OSC 52 copy only.
 
 font-family = {{ desktop_alacritty_font_family }}
 font-size = {{ desktop_ghostty_font_size | float }}
 
-window-decoration = none
+# Hidden titlebar, not window-decoration = none: without a titled window AeroSpace floats or ignores Ghostty.
 macos-titlebar-style = hidden
 window-padding-x = 4
 window-padding-y = 4
@@ -19,6 +19,9 @@ clipboard-write = allow
 # Option is Alt in the shell (readline, tmux, vim), as on Linux; AeroSpace's alt bindings are global and still win.
 macos-option-as-alt = true
 confirm-close-surface = false
+# Steady block cursor like Alacritty (no blink, no bar at the prompt from shell integration).
+cursor-style-blink = false
+shell-integration-features = no-cursor
 
 background = {{ desktop_alacritty_color_bg }}
 foreground = {{ desktop_alacritty_color_fg }}
