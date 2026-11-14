@@ -67,10 +67,14 @@ def main(argv):
     check = '--check' in argv
     if len(args) < 2 or args[0] not in EDITORS:
         sys.exit('agent-trust: usage: claude|codex|agy STATE_FILE [--check] DIR...')
-    kind, path, dirs = args[0], os.path.realpath(args[1]), list(dict.fromkeys(args[2:]))
-    for d in dirs:
-        if not d.startswith('/') or re.search(r'[\x00-\x1f\x7f]', d) or d != os.path.normpath(d):
-            sys.exit('agent-trust: %r is not a normalized absolute path' % d)
+    kind, path = args[0], os.path.realpath(args[1])
+    for d in args[2:]:
+        if not d.startswith('/') or re.search(r'[\x00-\x1f\x7f]', d):
+            sys.exit('agent-trust: %r is not an absolute path' % d)
+    # The tools key trust by the resolved path, so a directory under a symlink (~/src -> /data/src) is trusted
+    # under both spellings.
+    normal = [os.path.normpath(d) for d in args[2:]]
+    dirs = list(dict.fromkeys(normal + [os.path.realpath(d) for d in normal]))
     if not os.path.exists(path):
         print('missing')
         return
