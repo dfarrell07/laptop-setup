@@ -28,6 +28,8 @@ args = sys.argv[1:]
 assert args[0] == '--nointeraction'  # never prompts on the captured stdout
 args = args[1:]
 if args[0] == 'sync':
+    if mode == 'fail-sync-after-import' and state['items']:
+        sys.exit(1)
     print('Syncing complete.')
 elif args[:2] == ['list', 'items']:
     print(json.dumps(state['items']))
@@ -162,6 +164,29 @@ class PwMigrateTests(unittest.TestCase):
                                 text=True, timeout=60)
         self.assertEqual(result.returncode, 0)
         self.assertIn('Not imported', result.stdout)
+        self.assertFalse(self.export.exists())
+
+    def test_failure_after_the_import_warns_about_duplicates(self):
+        result = self.run_migrate(FAKE_BW_MODE='fail-sync-after-import')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('a second import duplicates items', result.stderr)
+        self.assertFalse(self.export.exists())
+
+    def test_malformed_row_fails_without_printing_it(self):
+        with open(self.export, 'a', encoding='utf-8') as handle:
+            handle.write('https://x.example.test,hunter2-secret\n')
+        result = self.run_migrate()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('wrong number of fields', result.stderr)
+        self.assertFalse(self.export.exists())
+
+    def test_leftover_copy_from_a_killed_run_is_reported(self):
+        leftover = Path(str(self.export) + '.no-totp')
+        leftover.write_text('stale')
+        self.addCleanup(lambda: leftover.exists() and leftover.unlink())
+        result = self.run_migrate()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('left over from an earlier, killed run', result.stderr)
         self.assertFalse(self.export.exists())
 
     def test_empty_export_fails_before_bw_and_is_removed(self):

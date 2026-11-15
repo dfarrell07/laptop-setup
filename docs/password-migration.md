@@ -24,7 +24,7 @@ use encrypted swap or `sudo swapoff -a` for the run; the target warns).
    attachments) and keeps the file for the real run. It warns when disk swap is active (tmpfs can be swapped out).
 5. **Import**: `make pw-migrate EXPORT=$XDG_RUNTIME_DIR/lastpass.csv` prints the counts and the vault's current counts,
    asks before importing, runs `bw import lastpasscsv`, then verifies: the vault's item, login and TOTP counts
-   must grow by exactly the export's, and new folders must not exceed the export's. It removes the export (and the
+   must grow by exactly the export's (TOTP by 0 when stripped), and new folders must not exceed the export's. It removes the export (and the
    TOTP-stripped copy it made next to it) whether it succeeds, fails, is interrupted or you decline (add
    `KEEP_EXPORT=1` to keep it on decline).
 6. **You** check a few entries in the Bitwarden app, then finish the steps in the table below.

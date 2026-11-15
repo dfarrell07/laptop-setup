@@ -34,6 +34,8 @@ CLEANUP_SIGNALS = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP, signal.SIGQUIT)
 _to_delete = []
 _export_id = None  # (st_dev, st_ino) of the export check_export approved
 _import_started = False
+_left = []  # files a wipe could not remove
+PARTIAL = 'the vault may already hold part of the import: review it before retrying, a second import duplicates items'
 
 
 def fail(message, code=1):
@@ -66,26 +68,25 @@ def wipe(path):
 def wipe_all():
     # Signals wait until the wipe is done: a handler running mid-wipe would exit before this path is removed.
     previous = signal.pthread_sigmask(signal.SIG_BLOCK, CLEANUP_SIGNALS)
-    left = []
     try:
         for path in reversed(list(_to_delete)):
             try:
                 wipe(path)
             except OSError:
-                left.append(path)  # keep going: one failure must not leave the others behind
+                _left.append(path)  # keep going: one failure must not leave the others behind
             _to_delete.remove(path)
+        if _left:  # before the mask is restored: a pending signal's handler exits without returning here
+            print(f'pw-migrate: could not remove {len(_left)} file(s); delete them by hand: {" ".join(_left)}',
+                  file=sys.stderr)
     finally:
         signal.pthread_sigmask(signal.SIG_SETMASK, previous)
-    if left:
-        print(f'pw-migrate: could not remove {len(left)} file(s); delete them by hand: {" ".join(left)}', file=sys.stderr)
 
 
 def on_signal(signum, _frame):
-    kept = os.environ.get('EXPORT', '') not in _to_delete
     wipe_all()
-    note = ('; the vault may already hold part of the import: review it before retrying, a second import duplicates '
-            'items' if _import_started else '')
-    fail(f'interrupted by signal {signum}; export {"kept" if kept else "removed"}{note}', 130)
+    export = os.environ.get('EXPORT', '')
+    state = 'kept' if export and os.path.lexists(export) else 'removed'
+    fail(f'interrupted by signal {signum}; export {state}' + (f'; {PARTIAL}' if _import_started else ''), 130)
 
 
 def linux_fs_type(descriptor):
@@ -149,10 +150,14 @@ def read_rows(path):
         missing = LASTPASS_COLUMNS - set(reader.fieldnames or [])
         if missing:
             fail(f'not a LastPass CSV export: missing columns {sorted(missing)}')
+        fields = reader.fieldnames
         rows = list(reader)
+    for number, row in enumerate(rows, start=2):
+        if None in row.values() or None in row:  # missing or extra fields; never print the row
+            fail(f'line {number} of the export has the wrong number of fields; nothing was imported')
     if not rows:
         fail('the export has no entries; nothing to import')
-    return rows
+    return fields, rows
 
 
 def warn_disk_swap():
@@ -196,12 +201,15 @@ def report(title, values):
         print(f'  {key.replace("_", " ")}: {value}')
 
 
-def strip_totp(path, rows):
+def strip_totp(path, fields, rows):
     stripped = path + '.no-totp'
-    descriptor = os.open(stripped, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        descriptor = os.open(stripped, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        fail(f'{stripped} is left over from an earlier, killed run and holds plaintext: delete it, then retry')
     _to_delete.append(stripped)
     with os.fdopen(descriptor, 'w', newline='', encoding='utf-8') as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()) if rows else sorted(LASTPASS_COLUMNS))
+        writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
         for row in rows:
             writer.writerow({**row, 'totp': ''})
@@ -214,7 +222,8 @@ def bw(*args):
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     if result.returncode:
         fail(f'`bw {args[0]}` failed (exit {result.returncode}); its output is hidden because it may contain '
-             'vault data. Check `bw status` (logged in and unlocked, BW_SESSION exported).')
+             'vault data. Check `bw status` (logged in and unlocked, BW_SESSION exported).'
+             + (f' Note: {PARTIAL}.' if _import_started else ''))
     return result.stdout
 
 
@@ -244,7 +253,7 @@ def main():
     if not (dry_run and os.environ.get('KEEP_EXPORT') == '1'):
         _to_delete.append(path)  # a declined import with KEEP_EXPORT=1 takes it back off
     try:
-        rows = read_rows(path)
+        fields, rows = read_rows(path)
         expected = counts(rows)
         report('LastPass export (counts only):', expected)
         if platform.system() == 'Linux':
@@ -259,13 +268,16 @@ def main():
         before = vault_counts()
         report('Bitwarden personal vault before import:', before)
         if os.environ.get('ASSUME_YES') != '1':
-            answer = input(f'Import {expected["items"]} items into this Bitwarden vault? [y/N] ')
+            try:
+                answer = input(f'Import {expected["items"]} items into this Bitwarden vault? [y/N] ')
+            except EOFError:
+                answer = ''
             if answer.strip().lower() != 'y':
                 if os.environ.get('KEEP_EXPORT') == '1' and path in _to_delete:
                     _to_delete.remove(path)
                 print('Not imported.' + (' Export kept (KEEP_EXPORT=1).' if path not in _to_delete else ''))
                 return
-        source = strip_totp(path, rows) if strip and expected['totp'] else path
+        source = strip_totp(path, fields, rows) if strip and expected['totp'] else path
         global _import_started
         _import_started = True
         bw('import', 'lastpasscsv', source)
