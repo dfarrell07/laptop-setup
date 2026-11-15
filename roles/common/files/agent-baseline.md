@@ -18,8 +18,11 @@
   later pushes until a PR has been opened from the branch (check before each push, in the
   upstream repo too for a fork), after which pushes need a new approval for that PR, which
   covers its later pushes. With other agent sessions in the repo, push only your own branch,
-  warn them before a force-push and use `--force-with-lease`. SSH pushes need a YubiKey
-  touch: say so first; a hang or timeout means an untouched key, not an auth failure.
+  warn them before a force-push and use `--force-with-lease`. Remotes with an
+  `https://github.com/` URL push over HTTPS with gh's credentials (`git pushsk` sends them
+  over SSH). `git@github.com:` remotes, such as fork remotes, always push over SSH. An SSH
+  push needs a YubiKey touch: say so first; a hang or timeout means an untouched key, not
+  an auth failure.
 - Preserve existing local work. Keep credentials, private infrastructure details,
   conversation history and personal attribution out of public commits and PR prose.
 - Capture durable machine changes in the laptop-setup automation; locate its checkout rather
