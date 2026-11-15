@@ -74,6 +74,14 @@ claude_default_mode: bypassPermissions
 # Messages from your other Claude sessions (SendMessage): accept delivers them whatever either session's permission
 # mode, hold parks them for your review, refuse opts out. Any session on this account can then steer this one.
 claude_cross_session_inbound: accept
+# A repository's committed .claude/settings.json defaultMode outranks claude_default_mode for sessions started there
+# without a flag. When true, every run writes claude_default_mode into the git-ignored .claude/settings.local.json
+# (that key only) of each checkout under claude_project_mode_roots (worktrees included) whose project settings pick
+# another mode. false leaves those repositories in their own mode; make verify CHUNK=agents still reports them.
+claude_project_mode_override: true
+claude_project_mode_roots:
+  - "{{ ansible_facts['user_dir'] }}"
+claude_project_mode_depth: 4  # directory levels searched below each root (~/src/<owner>/<repo> is 3)
 # Bash rules every instance denies outright (a denial never prompts). Prefix rules on the command text: a wrapper
 # such as `env sudo` or `bash -c` is not caught, and sudo still needs a password the agent cannot type. Deny
 # lists are unioned: to drop an entry from existing settings, also add it to claude_retired_deny.
