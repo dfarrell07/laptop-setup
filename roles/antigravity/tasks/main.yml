@@ -171,3 +171,9 @@
     mode: "0600"
     force: false
   loop: "{{ antigravity_gemini_homes }}"
+
+- name: Pre-trust managed repos in every Antigravity home
+  ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/agent_trust.yml"
+  vars:
+    _agent_trust_kind: agy
+    _agent_trust_files: "{{ antigravity_gemini_homes | map('regex_replace', '$', '/antigravity-cli/settings.json') | list }}"

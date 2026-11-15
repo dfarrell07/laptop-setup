@@ -153,3 +153,18 @@ csb_rhel: false
 # clobbering, use containers_registries_extra (roles/containers/defaults) instead.
 containers_registries: >-
   {{ ['quay.io'] + (['registry.redhat.io'] if profile == 'work' else []) }}
+
+# Repo roots the agent CLIs trust without asking "trust this folder?" (Claude Code projects in .claude.json, Codex
+# [projects] trust_level, Antigravity trustedWorkspaces). Trust lets a repo's own agent config (hooks, MCP servers,
+# settings) load without a prompt, so the default covers only repos under your GitHub user; `all` adds every
+# managed upstream repo, `none` turns it off. Claude stops at the git root, so list worktrees and other checkouts
+# (absolute paths) in agents_trusted_dirs_extra. Only adds trust, never removes it.
+agents_trust_repos: own
+agents_trusted_dirs_extra: []
+agents_trusted_dirs: >-
+  {{ ((git_repos_list | default([]) if agents_trust_repos == 'all'
+       else git_repos_list | default([]) | selectattr('url', 'search', '[/:]' ~ (dotfiles_github_user | regex_escape) ~ '/') | list)
+      if agents_trust_repos != 'none' else [])
+     | map(attribute='dest')
+     | map('regex_replace', '^', (git_repos_base_dir | default(ansible_facts['user_dir'] ~ '/src')) ~ '/')
+     | list + agents_trusted_dirs_extra }}

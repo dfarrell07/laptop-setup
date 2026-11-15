@@ -6,6 +6,7 @@
   },
   "sandbox": {"enabled": {{ claude_sandbox_enabled | bool | lower }}, "allowUnsandboxedCommands": false, "failIfUnavailable": true, "enableWeakerNestedSandbox": {{ claude_nested_sandbox | bool | lower }}},
   "enableAllProjectMcpServers": {{ claude_enable_all_project_mcp_servers | to_json }},
+  "crossSessionInbound": {{ claude_cross_session_inbound | to_json }},
 {% if claude_default_mode == 'bypassPermissions' %}
   "skipDangerousModePermissionPrompt": true,
 {% endif %}

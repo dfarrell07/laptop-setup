@@ -29,7 +29,8 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   `enableAllProjectMcpServers=false`, auditd monitoring. Sessions run without approval prompts (`claude_default_mode:
   bypassPermissions`, Codex `codex_approval_policy: never` with `danger-full-access`). Deny rules guard only Claude's Read/Edit
   tools and the literal `sudo`/`su` prefix; Bash and Codex run with the user's full rights, so the effective boundary is the Unix
-  account, and secrets behind a YubiKey touch (vault, FIDO2 SSH) stay gated
+  account, and secrets behind a YubiKey touch (vault, FIDO2 SSH) stay gated. `crossSessionInbound: accept` delivers messages from
+  any session on the account, including prompting-mode ones, without review (`claude_cross_session_inbound: hold` restores the check)
 - **Supply chain** — `.npmrc ignore-scripts=true`, vendored and verified Ansible collections, SHA256-verified
   binary downloads, oh-my-zsh pinned to a commit, Go module checksum verification (see "Go Module Supply Chain")
 - **CI supply chain** — actionlint, zizmor and gitleaks run as SHA256-verified binary downloads (no third-party node actions); all GitHub

@@ -125,6 +125,14 @@ codex_approval_policy: on-request
 codex_sandbox_mode: workspace-write
 ```
 
+Each tool also asks "trust this folder?" once per repository, whatever the permission mode. The agents chunk
+pre-trusts the managed repos under your GitHub user (`agents_trust_repos: own`) in every Claude instance
+(`.claude.json`), both Codex homes (`[projects]` in `config.toml`) and every Antigravity home (`trustedWorkspaces`).
+Trust lets a repository's own agent config (hooks, MCP servers, settings) load without that prompt, so upstream
+repos are left out unless you set `agents_trust_repos: all`. Claude does not inherit trust past a git root, so add
+worktrees and checkouts outside `git_repos_base_dir` to `agents_trusted_dirs_extra`. Trust is only added, never
+removed; a file a running session rewrites during the edit is skipped with a warning until the next run.
+
 Codex config and Claude preferences (fullscreen UI, mobile notifications) are seeded once; existing user files are
 kept and not merged with new defaults, except Codex `approval_policy` and `sandbox_mode`, which are reapplied every
 run. A repository's own `.claude/settings.json` or `.codex/config.toml`, or a Codex `profile`, can still override the

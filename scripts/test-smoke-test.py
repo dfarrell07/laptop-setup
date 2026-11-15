@@ -292,6 +292,30 @@ class SmokeTests(unittest.TestCase):
             (home / '.ssh/id_ed25519_sk_signing.pub').unlink()
             self.assertEqual(run(), 'dotfile-gitconfig PASS')
 
+    def test_cross_session_inbound_check_fails_for_any_managed_dir_without_accept(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('_csi_bad=()')
+        end = source.index('unset _cd _csi_bad _csi_seen', start)
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+
+            def run():
+                return subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c',
+                    'record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; };\n' + source[start:end]],
+                    env=dict(os.environ, HOME=str(home)), capture_output=True, text=True).stdout.strip()
+            self.assertTrue(run().startswith('claude-cross-session-inbound FAIL no Claude config dir'))
+            for name, value in [('.claude', 'accept'), ('.claude-per2', 'hold')]:
+                (home / name).mkdir()
+                (home / name / 'settings.json').write_text(json.dumps({'crossSessionInbound': value}))
+            (home / '.claude-work').mkdir()  # no settings.json yet
+            result = run()
+            self.assertTrue(result.startswith('claude-cross-session-inbound FAIL'), result)
+            self.assertIn('.claude-work .claude-per2', result)
+            self.assertNotIn('.claude ', result.split(' of: ')[1])
+            for name in ['.claude-work', '.claude-per2']:
+                (home / name / 'settings.json').write_text(json.dumps({'crossSessionInbound': 'accept'}))
+            self.assertEqual(run(), 'claude-cross-session-inbound PASS')
+
     def test_github_ssh_auth_tells_unregistered_key_from_pin_needed(self):
         """A verify-required FIDO2 key always exits 255 under BatchMode: -v output says whether GitHub knows the key."""
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
