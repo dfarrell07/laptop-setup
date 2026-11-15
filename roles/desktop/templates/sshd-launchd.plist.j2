@@ -21,6 +21,7 @@
   <key>Sockets</key>
   <dict>
     <key>Listeners</key>
+    <!-- No SockNodeName (Tailscale address): launchd binds at boot, maybe before tailscaled is up, leaving no sshd; per-connection sshd has no MaxStartups state -->
     <dict>
       <key>SockServiceName</key>
       <string>{{ desktop_macos_ssh_port | int }}</string>
