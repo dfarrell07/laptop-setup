@@ -153,11 +153,13 @@ packages_support_work:
              # or set system_kernel_lockdown: '' in config.yml + re-run make system for a debug session
   - bpftool  # eBPF program/map introspection
 
-# Fedora-only work packages (not in EPEL, so a RHEL/Rocky transaction would fail on them).
-packages_fedora_work:
-  - gitlint  # commit message linting; submariner-release-management's make test runs it
+# Fedora-only packages, both profiles (not in EPEL, so a RHEL/Rocky transaction would fail on them).
+packages_fedora:
+  # commit message linting: submariner-release-management's make test and claude-skills' make gitlint run it
+  - gitlint
 
 packages_apt:
+  - gitlint  # mirrors packages_fedora
   - git-lfs  # depends on git (pulled in automatically)
   - make
   - curl
@@ -210,7 +212,6 @@ packages_apt_work:
   - tshark  # scripting-safe CLI capture; mirrors packages_networking_work wireshark-cli on Fedora
   - conntrack  # netfilter connection tracking (Debian binary package of conntrack-tools); mirrors Fedora
   - buildah  # OCI image builder; mirrors packages_containers_work on Fedora
-  - gitlint  # mirrors packages_fedora_work
   - skopeo  # container image inspection/copy; mirrors packages_containers_work on Fedora
 
 # Binary downloads — pinned versions with SHA256 verification.
@@ -288,7 +289,6 @@ packages_ec_sha256_arm64: "3b828381befb917db1a626f449cc6464b94371b765ea0f650f521
 
 packages_yamllint_version: "1.38.0"
 packages_ansible_lint_version: "26.6.0"
-packages_gitlint_version: "0.19.1"  # commit-message linter the claude-skills Makefile and CI run (make gitlint)
 # ansible-lint needs ansible-core, which supports Python up to 3.14, but Homebrew's python3 is already 3.15.
 packages_pipx_python: "{{ 'python3.14' if is_macos else 'python3' }}"
 
@@ -425,6 +425,7 @@ packages_brew_cask_personal:
   - bitwarden
 
 packages_brew:
+  - gitlint  # mirrors packages_fedora
   - bash  # macOS /bin/bash is 3.2; queue and setup scripts use modern Bash
   - python3  # ensure unversioned Python is available for the repository venv
   - python@3.14  # pipx venvs for ansible-lint (ansible-core supports Python up to 3.14); see packages_pipx_python
@@ -498,7 +499,6 @@ packages_brew_work:
   - mtr  # requires sudo on macOS for ICMP (raw socket); on Linux, capabilities handle it
   - actionlint  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_actionlint_version pin
   - zizmor      # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_zizmor_version pin
-  - gitlint  # mirrors packages_fedora_work
   - oras     # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_oras_version pin
 
 # Add native packages without replacing the base lists. Empty on a new machine.
