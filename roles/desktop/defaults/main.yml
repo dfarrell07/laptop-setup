@@ -417,6 +417,13 @@ desktop_macos_ssh_allow_from: [100.64.0.0/10, "fd7a:115c:a1e0::/48"]  # Tailscal
 # These two mirror roles/system/defaults (invisible to this role); a config.yml override of the system_* value applies to both
 desktop_macos_ssh_allow_agent_forwarding: "{{ system_ssh_allow_agent_forwarding | default('no') }}"
 desktop_macos_ssh_allow_tcp_forwarding: "{{ system_ssh_allow_tcp_forwarding | default('local') }}"
+# The same for the session limits and timeouts (sshd-hardening.conf.j2 explains each); '' or 0 for the unused
+# connection timeout omits it, as on Linux
+desktop_macos_ssh_max_sessions: "{{ system_ssh_max_sessions | default(10) }}"
+desktop_macos_ssh_client_alive_interval: "{{ system_ssh_client_alive_interval | default(300) }}"
+desktop_macos_ssh_client_alive_count_max: "{{ system_ssh_client_alive_count_max | default(2) }}"
+desktop_macos_ssh_unused_connection_timeout: "{{ system_ssh_unused_connection_timeout | default(3600) }}"
+desktop_macos_ssh_rekey_limit: "{{ system_ssh_rekey_limit | default('1G 1h') }}"
 desktop_macos_firewall_allow: "{{ [dotfiles_homebrew_prefix | trim ~ '/bin/mosh-server'] if desktop_macos_remote_login | bool else [] }}"
 desktop_macos_sshd_dropin: /etc/ssh/sshd_config.d/000-laptop-setup.conf
 desktop_macos_ssh_port: "{{ ssh_port | default(722) }}"
