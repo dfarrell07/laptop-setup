@@ -155,10 +155,10 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   merges can drop local edits. Run `make backup` right before `make apply CHUNK=agents` and check that
   `~/laptop-setup-backup-<timestamp>/` holds `.claude*/CLAUDE.md`, `.claude*/settings.local.json` and any hand-written `.codex*/AGENTS.md`
   or `.gemini*/GEMINI.md`.
-- **Verify:** `make verify CHUNK=agents` (`claude-privacy-tmpfiles`: the tmpfiles file exists; `codex`: `codex --version` runs, so a
-  failed Codex npm install, which the role only warns about, shows up here). Claude's sandbox settings are not mapped: check `jq .sandbox
-  ~/.claude/settings.json` (`enabled` follows `claude_sandbox_enabled`). Antigravity has no mapped check: run `agy --version` and `ls -l
-  ~/.gemini*/GEMINI.md`.
+- **Verify:** `make verify CHUNK=agents` (`claude-privacy-tmpfiles`: the tmpfiles file exists; `claude-cross-session-inbound`: every managed
+  Claude config dir has `crossSessionInbound: accept`; `codex`: `codex --version` runs, so a failed Codex npm install, which the role only
+  warns about, shows up here). Claude's sandbox settings are not mapped: check `jq .sandbox ~/.claude/settings.json` (`enabled` follows
+  `claude_sandbox_enabled`). Antigravity has no mapped check: run `agy --version` and `ls -l ~/.gemini*/GEMINI.md`.
 - **Undo:** per instance, restore the oldest `~/.claude*/settings.json.bak-<timestamp>` (written by the merge, which keeps every backup);
   if the instance had no `settings.json` before the chunk, delete `settings.json` instead (the backup then holds only the seeded file),
   and delete instance directories the chunk created (for example `~/.claude-per2`). The replaced `CLAUDE.md`, `AGENTS.md`, `GEMINI.md` and
