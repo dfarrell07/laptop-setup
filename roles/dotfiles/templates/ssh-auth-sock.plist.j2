@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- {{ ansible_managed }} -->
+<!-- At login, points launchd's environment (GUI apps, launchd jobs) at the socket of the managed ssh-agent
+     LaunchAgent, in place of Apple's agent, which the dotfiles role disables. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{{ dotfiles_ssh_agent_label | e }}.env</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/launchctl</string>
+    <string>setenv</string>
+    <string>SSH_AUTH_SOCK</string>
+    <string>{{ ansible_facts['user_dir'] }}/.ssh/ssh-agent.socket</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>

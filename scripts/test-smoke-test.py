@@ -538,6 +538,44 @@ class SmokeTests(unittest.TestCase):
             (d / 'bin/docker').write_text('#!/bin/sh\n')  # a real docker on PATH
             (d / 'bin/docker').chmod(0o755)
             self.assertEqual(run(), 'docker-shim PASS')
+    @unittest.skipUnless(shutil.which('zsh'), 'zsh required')
+    def test_macos_zshenv_path_and_launchd_agent_socket(self):
+        """Bare-PATH zsh (ssh remote commands) must get Homebrew and GNU tools first; launchd must name the agent."""
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('  _zpath=$(env -i')
+        end = source.index('  unset _brew _zpath _missing _sock', start)
+        with tempfile.TemporaryDirectory() as directory:
+            d = Path(directory).resolve()
+            home, brew, stubs = d / 'home', d / 'brew', d / 'bin'
+            for path in (home, brew / 'bin', brew / 'opt/coreutils/libexec/gnubin'):
+                path.mkdir(parents=True)
+            only_tools(stubs, 'env')  # env -i then finds the host zsh on the bare system PATH
+            (stubs / 'launchctl').write_text('#!/bin/sh\n[ "$1 $2" = "getenv SSH_AUTH_SOCK" ] && [ -n "$SOCK" ] && echo "$SOCK"\n')
+            (stubs / 'launchctl').chmod(0o755)
+
+            def run(zshenv, sock, gnu='true', molecule=''):
+                (home / '.zshenv').write_text(zshenv)
+                result = subprocess.run([BASH, '-eu', '-o', 'pipefail', '-c',
+                    'record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; };'
+                    f' _brew={brew} _macos_gnu_tools={gnu};\n' + source[start:end]],
+                    env=dict(os.environ, PATH=str(stubs), HOME=str(home), SOCK=sock,
+                             MOLECULE_PROJECT_DIRECTORY=molecule), capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                return result.stdout.splitlines()
+            good = f'path=({home}/.local/bin {brew}/opt/coreutils/libexec/gnubin {brew}/bin $path)\n'
+            sock = f'{home}/.ssh/ssh-agent.socket'
+            self.assertEqual(run(good, sock), ['macos-zshenv-path PASS ', 'macos-launchd-ssh-auth-sock PASS '])
+            late = f'path=({home}/.local/bin $path {brew}/opt/coreutils/libexec/gnubin {brew}/bin)\n'
+            path, _ = run(late, sock)
+            self.assertTrue(path.startswith('macos-zshenv-path FAIL'), path)
+            self.assertIn(f' {brew}/bin', path)
+            self.assertIn('coreutils-gnubin', path)
+            self.assertNotIn('coreutils-gnubin', run(late, sock, gnu='false')[0])  # GNU tools turned off
+            self.assertIn('~/.local/bin', run('', sock)[0])  # no ~/.zshenv
+            self.assertTrue(run(good, '')[1].startswith('macos-launchd-ssh-auth-sock FAIL launchd SSH_AUTH_SOCK is unset'))
+            apple = '/private/tmp/com.apple.launchd.x/Listeners'
+            self.assertTrue(run(good, apple)[1].startswith('macos-launchd-ssh-auth-sock FAIL'))
+            self.assertTrue(run(good, apple, molecule='/src')[1].startswith('macos-launchd-ssh-auth-sock WARN'))
 
     def test_github_ssh_auth_tells_unregistered_key_from_pin_needed(self):
         """A verify-required FIDO2 key always exits 255 under BatchMode: -v output says whether GitHub knows the key."""

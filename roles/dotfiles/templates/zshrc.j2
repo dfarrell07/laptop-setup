@@ -30,16 +30,10 @@ export GONOSUMDB='{{ (dotfiles_gonosumdb or dotfiles_goprivate or 'none') | repl
 export GOPRIVATE='{{ (dotfiles_goprivate or 'none') | replace("'", "'\\''" ) }}'
 {% endif %}
 {% if _system == 'Darwin' %}
-export PATH="{{ dotfiles_homebrew_prefix | trim }}/bin:$PATH"
-# Homebrew's unversioned python, python3 and pip ({{ dotfiles_macos_python }}), as /usr/bin/python on Fedora;
-# also keeps python3 on the version the repo venvs and pipx use rather than Homebrew's newest
-[[ -d "{{ dotfiles_homebrew_prefix | trim }}/opt/{{ dotfiles_macos_python }}/libexec/bin" ]] && PATH="{{ dotfiles_homebrew_prefix | trim }}/opt/{{ dotfiles_macos_python }}/libexec/bin:$PATH"
+# ~/.zshenv (_laptop_path) puts Homebrew, its python and the GNU tools first for every zsh; a login shell's
+# /etc/zprofile (path_helper) has since moved the system directories ahead of them, so restore that order
+(( $+functions[_laptop_path] )) && _laptop_path
 {% if dotfiles_macos_gnu_tools | bool %}
-# GNU coreutils, sed, grep, find, awk and tar ahead of the BSD tools, so commands behave as on Linux
-for _gnubin in coreutils gnu-sed grep findutils gawk gnu-tar make; do
-  [[ -d "{{ dotfiles_homebrew_prefix | trim }}/opt/$_gnubin/libexec/gnubin" ]] && PATH="{{ dotfiles_homebrew_prefix | trim }}/opt/$_gnubin/libexec/gnubin:$PATH"
-done
-unset _gnubin
 # oh-my-zsh loaded above with BSD ls and aliased ls='ls -G'; GNU ls reads -G as --no-group
 [[ -d "{{ dotfiles_homebrew_prefix | trim }}/opt/coreutils/libexec/gnubin" ]] && alias ls='ls --color=tty'
 {% endif %}

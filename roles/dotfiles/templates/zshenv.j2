@@ -1,4 +1,23 @@
 # {{ ansible_managed }}
 # macOS: ssh and mosh run remote commands through `zsh -c` with PATH=/usr/bin:/bin:/usr/sbin:/sbin and read only this
-# file, not .zshrc: Homebrew goes first so mosh-server and `mac-claude`'s tmux resolve.
-[[ ":$PATH:" == *":{{ dotfiles_homebrew_prefix | trim }}/bin:"* ]] || export PATH="{{ dotfiles_homebrew_prefix | trim }}/bin:$PATH"
+# file, not .zshrc, as do launchd jobs and editors that start `zsh -c`. So the PATH every zsh needs is set here, once:
+# ~/.local/bin and ~/go/bin, the GNU tools ahead of the BSD ones, Homebrew's unversioned python, then Homebrew (mosh-server,
+# `mac-claude`'s tmux). A login shell then runs /etc/zprofile, whose path_helper moves the system directories back in
+# front, so .zshrc calls _laptop_path again.
+typeset -U path PATH  # prepending an entry already present moves it to the front
+_laptop_path() {
+  local _brew="{{ dotfiles_homebrew_prefix | trim }}" _tool
+  local -a _first=("$HOME/.local/bin" "$HOME/go/bin")
+{% if dotfiles_macos_gnu_tools | bool %}
+  # GNU make, tar, awk, find, grep, sed and coreutils, so commands behave as on Linux
+  for _tool in make gnu-tar gawk findutils grep gnu-sed coreutils; do
+    [[ -d "$_brew/opt/$_tool/libexec/gnubin" ]] && _first+=("$_brew/opt/$_tool/libexec/gnubin")
+  done
+{% endif %}
+  # python, python3 and pip ({{ dotfiles_macos_python }}), as /usr/bin/python on Fedora; also keeps python3 on the version
+  # the repo venvs and pipx use rather than Homebrew's newest
+  [[ -d "$_brew/opt/{{ dotfiles_macos_python }}/libexec/bin" ]] && _first+=("$_brew/opt/{{ dotfiles_macos_python }}/libexec/bin")
+  path=("${_first[@]}" "$_brew/bin" "${path[@]}")
+  export PATH
+}
+_laptop_path
