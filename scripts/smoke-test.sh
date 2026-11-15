@@ -185,6 +185,14 @@ grep -qiE '^claude_personal2_instance_enabled:[[:space:]]*["'"'"']?(false|no|off
 unset -f _cfg_value
 _user_updates_off=false
 grep -qiE '^packages_user_updates_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _user_updates_off=true
+# claude_extra_config_dirs, a flow ([a, b]) or block (- a) list: one entry per line, comments, quotes and spaces trimmed
+_claude_extra_dirs=$(awk '
+  function trim(s) { sub(/[[:space:]]*#.*$/, "", s); gsub(/^[[:space:]"\047]+|[[:space:]"\047]+$/, "", s); return s }
+  /^claude_extra_config_dirs:/ { sub(/^[^:]*:/, ""); v = trim($0); block = (v == "")
+    if (!block) { gsub(/^\[|\]$/, "", v); n = split(v, parts, ","); for (i = 1; i <= n; i++) if (trim(parts[i]) != "") print trim(parts[i]) }
+    next }
+  block && /^[[:space:]]*-/ { sub(/^[[:space:]]*-/, ""); print trim($0); next }
+  block && /^[^[:space:]#]/ { block = 0 }' "$_cfg" 2>/dev/null || true)
 unset _cfg
 # Check tools as the login shell finds them: make verify runs with make's PATH, which lacks the user bin
 # directories the dotfiles PATH puts first (the claude, codex and agy CLIs live there).
@@ -1287,12 +1295,13 @@ unset _cd label
 # (crossSessionInbound: accept, claude_cross_session_inbound). FAILs for any managed config dir without it.
 _csi_bad=()
 _csi_seen=0
-# the fixed instances plus any other ~/.claude-<name> in use (claude_extra_config_dirs, e.g. a second person's login)
+# the fixed instances plus config.yml's claude_extra_config_dirs (~/.claude-<name>, as the play asserts); other
+# ~/.claude-* dirs are not managed and not checked
 _csi_dirs=("$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-per2")
-for _cd in "$HOME"/.claude-*/; do
-  _cd=${_cd%/}
-  [[ -f "$_cd/settings.json" && " ${_csi_dirs[*]} " != *" $_cd "* ]] && _csi_dirs+=("$_cd")
-done
+while IFS= read -r _cd; do
+  [[ "$_cd" == "$HOME/.claude-"* && "${_cd#"$HOME/.claude-"}" =~ ^[a-z0-9][a-z0-9-]*$ \
+     && " ${_csi_dirs[*]} " != *" $_cd "* ]] && _csi_dirs+=("$_cd")
+done <<<"$_claude_extra_dirs"
 for _cd in "${_csi_dirs[@]}"; do
   [[ -d "$_cd" ]] || continue
   _csi_seen=$((_csi_seen + 1))
@@ -1307,7 +1316,7 @@ else
   record "claude-cross-session-inbound" "FAIL" \
     "crossSessionInbound is not \"accept\" in settings.json of: ${_csi_bad[*]} — run: make apply CHUNK=agents"
 fi
-unset _cd _csi_bad _csi_seen _csi_dirs
+unset _cd _csi_bad _csi_seen _csi_dirs _claude_extra_dirs
 if [[ -d "$HOME/.claude-personal" ]]; then
   record "claude-retired-home" "WARN" "$HOME/.claude-personal is no longer managed (no 0700 tmpfiles rule); review and remove it"
 fi
