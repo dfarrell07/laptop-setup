@@ -577,6 +577,25 @@ class SmokeTests(unittest.TestCase):
             self.assertTrue(run(good, apple)[1].startswith('macos-launchd-ssh-auth-sock FAIL'))
             self.assertTrue(run(good, apple, molecule='/src')[1].startswith('macos-launchd-ssh-auth-sock WARN'))
 
+    def test_aerospace_config_check_needs_the_managed_file(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('  _aerospace_conf="$HOME/.config/aerospace/aerospace.toml"')
+        end = source.index('  unset _aerospace_conf', start)
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / '.config/aerospace/aerospace.toml'
+            tools = only_tools(Path(directory) / 'bin', 'grep')
+            for text, expected in [(None, 'FAIL'), ('# Seeded once by Ansible; edit freely\n', 'FAIL'),
+                                   ('# Ansible managed\nconfig-version = 2\n', 'PASS')]:
+                with self.subTest(text=text):
+                    if text is not None:
+                        config.parent.mkdir(parents=True, exist_ok=True)
+                        config.write_text(text)
+                    result = subprocess.run([BASH, '-eu', '-o', 'pipefail', '-c', 'record() { printf "%s %s\\n" "$1" "$2"; };\n'
+                                             + source[start:end]], env=dict(os.environ, HOME=directory, PATH=str(tools)),
+                                            capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout.strip(), 'aerospace-config ' + expected)
+
     def test_aerospace_running_check_only_when_it_is_the_wm(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
         start = source.index('  if [[ "$_desktop_env" != aerospace ]]')

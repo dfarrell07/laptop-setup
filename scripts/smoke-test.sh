@@ -706,8 +706,15 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   unset -f _first
 fi
 
-# macOS: AeroSpace, when it is the window manager, is running (the desktop chunk starts it, start-at-login keeps it)
+# macOS: the AeroSpace config is the managed one (the desktop chunk replaces seeded or hand-edited copies), and AeroSpace,
+# when it is the window manager, is running (the desktop chunk starts it, start-at-login keeps it)
 if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
+  _aerospace_conf="$HOME/.config/aerospace/aerospace.toml"
+  if [[ ! -f "$_aerospace_conf" ]]; then record "aerospace-config" "FAIL" "$_aerospace_conf missing — run: make apply CHUNK=desktop NOSUDO=1"
+  elif ! grep -q 'Ansible managed' "$_aerospace_conf"; then
+    record "aerospace-config" "FAIL" "$_aerospace_conf is a seeded or hand-written copy, so template updates miss it — run: make apply CHUNK=desktop NOSUDO=1 (keeps it as aerospace.toml.<timestamp>~)"
+  else record "aerospace-config" "PASS"; fi
+  unset _aerospace_conf
   if [[ "$_desktop_env" != aerospace ]]; then record "aerospace-running" "PASS" "AeroSpace is not the window manager (desktop_environment)"
   elif pgrep -x AeroSpace &>/dev/null; then record "aerospace-running" "PASS"
   # WARN in Molecule: a CI runner has no login session to tile
@@ -2912,7 +2919,7 @@ if [[ -n "$ONLY" ]]; then
       continue
     fi
     # macOS-only checks have nothing to verify on Linux
-    if $IS_LINUX && [[ " podman-machine docker-shim macos-dev-tools macos-zshenv-path macos-launchd-ssh-auth-sock aerospace-running macos-remote-access macos-firewall macos-always-on macos-screen macos-screen-lock tailscaled-daemon " == *" $_only_name "* ]]; then
+    if $IS_LINUX && [[ " podman-machine docker-shim macos-dev-tools macos-zshenv-path macos-launchd-ssh-auth-sock aerospace-running aerospace-config macos-remote-access macos-firewall macos-always-on macos-screen macos-screen-lock tailscaled-daemon " == *" $_only_name "* ]]; then
       $JSON || printf 'N/A   %s (macOS-only check; nothing to verify on Linux)\n' "$_only_name"
       continue
     fi
