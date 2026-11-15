@@ -99,6 +99,14 @@
             state: present
             disable_gpg_check: true  # the header is unsigned; the SHA256 pin above is the integrity check
       rescue:
+        # An rpm that does not match the pin is a supply-chain alarm, not a network hiccup: stop.
+        - name: Stop on an acli checksum mismatch
+          ansible.builtin.fail:
+            msg: >-
+              SECURITY: the downloaded acli rpm does not match packages_acli_rpm_sha256 ({{ ansible_failed_result.msg
+              | default('') }}). Nothing was installed. Check Atlassian's signed repo metadata before changing the pin.
+          when: "'checksum' in (ansible_failed_result.msg | default('') | lower)"
+
         # Like the other downloads: a blocked or failed fetch warns and the rest of the play goes on.
         - name: Warn that acli was not installed
           ansible.builtin.debug:

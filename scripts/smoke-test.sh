@@ -290,7 +290,7 @@ if [[ "$profile" == "work" ]] && ! grep -qE '^ID="?(rhel|rocky|almalinux|centos)
   _tools+=("gitlint:gitlint --version")
 fi
 # Release-management tools installed on Linux work machines only (skopeo from dnf/apt, ec pinned); acli only where
-# the packages role installs it (dnf, x86_64; not RHEL CSB, which IT owns), gitlint only on Fedora.
+# the packages role installs it (Fedora, x86_64; not RHEL CSB, which IT owns).
 if [[ "$profile" == "work" && "$(uname -s)" == Linux ]]; then _tools+=("skopeo:skopeo --version" "ec:ec version"); fi
 if [[ "$profile" == "work" && "$(uname -m)" == x86_64 ]] && grep -q '^ID=fedora' /etc/os-release 2>/dev/null; then
   _tools+=("acli:acli --version")
