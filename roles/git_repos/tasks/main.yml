@@ -299,8 +299,8 @@
   changed_when: git_repos_remote_result.stdout | trim | length > 0
 
 # Repos of the owner's that ship their own hooks (repos.yml hooks: true): the global hooks (core.hooksPath, with the
-# gitleaks scan and the token-push guard) chain to <repo>/.githooks/<name>. A repo-local core.hooksPath (a repo's
-# make install-hooks) would replace the global hooks, guards included, so it is removed here. Upstream repos never
+# gitleaks scan and the token-push guard) chain to <repo>/.githooks/<name>. Any repo-local core.hooksPath (a repo's
+# make install-hooks, in any spelling) would replace the global hooks, guards included, so it is removed here. Upstream repos never
 # opt in: their hooks would run their code on every commit.
 - name: Opt the owner's repos into their own .githooks  # noqa: command-instead-of-module
   ansible.builtin.shell:
@@ -309,8 +309,8 @@
       out="";
       [ "$(git config --local --get laptop.repoHooks || true)" = .githooks ] ||
       { git config --local laptop.repoHooks .githooks; out=updated; };
-      if [ "$(git config --local --get core.hooksPath || true)" = .githooks ]; then
-      git config --local --unset core.hooksPath; out=updated; fi;
+      if [ -n "$(git config --local --get-all core.hooksPath || true)" ]; then
+      git config --local --unset-all core.hooksPath; out=updated; fi;
       echo "$out"
     chdir: "{{ git_repos_base_dir }}/{{ item.dest }}"
   loop: "{{ git_repos_filtered | selectattr('hooks', 'defined') | selectattr('hooks') | list }}"

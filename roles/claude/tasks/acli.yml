@@ -1,6 +1,6 @@
 ---
 # acli login from the vault (docs: roles/claude/defaults/main.yml, acli_*). The token goes only over stdin, never on a
-# command line or in output (no_log). An acli already logged in to acli_site is left alone.
+# command line or in output (no_log). An acli already logged in to acli_site with the same token is left alone.
 - name: Check that acli is installed
   ansible.builtin.command:
     argv: [sh, -c, 'command -v acli']
@@ -16,12 +16,41 @@
       config.yml, then make repos_dnf packages; macOS: brew install acli), so Jira was not logged in.
   when: _acli_path.rc != 0
 
+# Linux: acli keeps the token in the Secret Service keyring; with no session bus or a locked login collection (an
+# SSH session) any acli auth call can block, so nothing runs then.
+- name: Check the login keyring is available
+  ansible.builtin.command:
+    argv: [timeout, "10", busctl, --user, get-property, org.freedesktop.secrets,
+           /org/freedesktop/secrets/collection/login, org.freedesktop.Secret.Collection, Locked]
+  register: _acli_keyring
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: _acli_path.rc == 0 and is_linux
+
+- name: Decide whether the keyring allows an acli login
+  ansible.builtin.set_fact:
+    _acli_keyring_ok: >-
+      {{ not is_linux or ((_acli_keyring.rc | default(1)) == 0
+         and (_acli_keyring.stdout | default('') | trim) == 'b false') }}
+
+- name: Warn that the keyring is not available for acli
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: acli was not checked or logged in: it stores the token in the login keyring, which is not reachable or
+      is locked here (an SSH session, or no desktop login). Run make claude from a desktop session.
+  when: _acli_path.rc == 0 and not _acli_keyring_ok | bool
+
 - name: Log acli in to each product
-  when: _acli_path.rc == 0
+  when: _acli_path.rc == 0 and _acli_keyring_ok | bool
+  vars:
+    # A digest of the token (never the token) shows when the vault holds a new one, so a rotation logs in again.
+    _acli_digest_file: "{{ ansible_facts['user_dir'] }}/.config/laptop-setup/acli-token.sha256"
+    _acli_digest: "{{ acli_api_token | hash('sha256') }}"
   block:
     - name: Read acli login state
       ansible.builtin.command:
-        argv: [acli, "{{ item }}", auth, status]
+        argv: [timeout, "20", acli, "{{ item }}", auth, status]
       loop: "{{ acli_products }}"
       register: _acli_status
       no_log: true
@@ -29,32 +58,21 @@
       failed_when: false
       check_mode: false
 
+    - name: Read the digest of the token last logged in with
+      ansible.builtin.slurp:
+        src: "{{ _acli_digest_file }}"
+      register: _acli_old_digest
+      failed_when: false
+      no_log: true
+
     - name: Decide which products need a login
       ansible.builtin.set_fact:
         _acli_need: >-
-          {{ _acli_status.results | rejectattr('rc', 'equalto', 0) | map(attribute='item') | list
-             + _acli_status.results | selectattr('rc', 'equalto', 0)
-               | rejectattr('stdout', 'search', acli_site | regex_escape) | map(attribute='item') | list }}
-
-    # Linux: the token goes to the Secret Service keyring, which needs a session bus and an unlocked login collection.
-    - name: Check the login keyring is available
-      ansible.builtin.command:
-        argv: [busctl, --user, get-property, org.freedesktop.secrets, /org/freedesktop/secrets/collection/login,
-               org.freedesktop.Secret.Collection, Locked]
-      register: _acli_keyring
-      changed_when: false
-      failed_when: false
-      check_mode: false
-      when: is_linux and _acli_need | length > 0
-
-    - name: Warn that the keyring is not available for the acli login
-      ansible.builtin.debug:
-        msg: >-
-          WARNING: acli was not logged in to {{ _acli_need | join(', ') }}: it stores the token in the login keyring,
-          which is not reachable or is locked here (an SSH session, or no desktop login). Run make claude from a
-          desktop session.
-      when: is_linux and _acli_need | length > 0 and (_acli_keyring.rc | default(1) != 0
-            or (_acli_keyring.stdout | default('') | trim) != 'b false')
+          {{ acli_products
+             if ((_acli_old_digest.content | default('') | b64decode | trim) != _acli_digest)
+             else (_acli_status.results | rejectattr('rc', 'equalto', 0) | map(attribute='item') | list
+                   + _acli_status.results | selectattr('rc', 'equalto', 0)
+                     | rejectattr('stdout', 'search', acli_site | regex_escape) | map(attribute='item') | list) }}
 
     - name: Report acli login not simulated in check mode
       ansible.builtin.debug:
@@ -71,10 +89,7 @@
       changed_when: true
       register: _acli_login
       failed_when: false
-      when:
-        - not ansible_check_mode
-        - _acli_need | length > 0
-        - not is_linux or ((_acli_keyring.rc | default(1)) == 0 and (_acli_keyring.stdout | default('') | trim) == 'b false')
+      when: not ansible_check_mode
 
     - name: Warn about failed acli logins
       ansible.builtin.debug:
@@ -84,3 +99,20 @@
       loop: "{{ _acli_login.results | default([]) | selectattr('rc', 'defined') | rejectattr('rc', 'equalto', 0) | list }}"
       loop_control:
         label: "{{ item.item }}"
+
+    - name: Create the laptop-setup state directory
+      ansible.builtin.file:
+        path: "{{ _acli_digest_file | dirname }}"
+        state: directory
+        mode: "0700"
+      when: not ansible_check_mode
+
+    - name: Record the digest of the token logged in with
+      ansible.builtin.copy:
+        content: "{{ _acli_digest }}\n"
+        dest: "{{ _acli_digest_file }}"
+        mode: "0600"
+      no_log: true
+      when:
+        - not ansible_check_mode
+        - _acli_login.results | default([]) | selectattr('rc', 'defined') | rejectattr('rc', 'equalto', 0) | list | length == 0
