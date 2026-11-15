@@ -371,6 +371,22 @@ class SharedVault(unittest.TestCase):
         kept = Path(self.env('a', a)['XDG_CONFIG_HOME']) / 'laptop-setup/vault.yml.unpushed'
         self.assertIn('vault_codex_api_key: edited', self.view('a', a, str(kept)))
 
+    def test_signers_come_from_allowed_signers_and_must_match_a_pin(self):
+        a = self.init_a()
+        self.shared('a', a, 'add-key', RECIPIENT=self.keys['b'][1])
+        b = self.machine('b', None)
+        env_b = self.env('b', b)
+        (Path(env_b['HOME']) / '.config/git').mkdir(parents=True)
+        (Path(env_b['HOME']) / '.config/git/allowed_signers').write_text(self.signers.read_text())
+        fresh = str(self.tmp / 'signers-b')  # no cache: built from allowed_signers
+        wrong = self.shared('b', b, 'join', check=False, VAULT_ALLOWED_SIGNERS=fresh,
+                            VAULT_SIGNING_FINGERPRINTS='SHA256:notyours')
+        self.assertNotEqual(wrong.returncode, 0)
+        self.assertIn('match secrets_signing_fingerprints', wrong.stderr)
+        fingerprint = run(['ssh-keygen', '-lf', str(self.tmp / 'signing.pub')]).stdout.split()[1]
+        self.shared('b', b, 'join', VAULT_ALLOWED_SIGNERS=fresh, VAULT_SIGNING_FINGERPRINTS=fingerprint)
+        self.assertIn('secret-a', self.view('b', b))
+
     def test_init_refuses_a_plaintext_vault_and_changes_nothing(self):
         a = self.machine('a', None)
         run(['git', 'clone', '-q', str(self.remote), str(self.tmp / 'secrets-a')], env=self.env('a', a))
