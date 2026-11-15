@@ -956,6 +956,22 @@ class MacTaskTests(unittest.TestCase):
         self.assertEqual(block['block'][read]['ansible.builtin.command']['argv'][:3], ['/usr/sbin/sshd', '-T', '-C'])
         self.assertIn('addr=100.64.0.1', block['block'][read]['ansible.builtin.command']['argv'][3])
 
+    def test_macos_ssh_allow_from_entries_must_be_cidrs(self):
+        task = production_task('roles/desktop/tasks/main.yml', 'Check the sshd tailnet ranges are CIDRs (macOS)')
+        defaults = yaml.safe_load((ROOT / 'roles/desktop/defaults/main.yml').read_text())
+        names = [t.get('name') for t in yaml.safe_load((ROOT / 'roles/desktop/tasks/main.yml').read_text())]
+        self.assertLess(names.index(task['name']), names.index('Apply the sshd login policy and start sshd (macOS)'))
+
+        def check(value):
+            run_tasks([task], {'is_macos': True, 'desktop_macos_remote_login': True, 'desktop_macos_ssh_allow_from': value})
+        check(defaults['desktop_macos_ssh_allow_from'])
+        check(['10.0.0.0/8', '192.168.1.7/32', '0.0.0.0/0', '::1/128', 'FD7A:115C:A1E0::/48', '2001:db8::/32'])
+        for bad in (['100.64.0.0'], ['100.64.0.0/10 10.0.0.0/8'], ['100.64.0.0/10\nMatch all'], ['100.64.0.0/10\n'],
+                    ['all'], ['*'], ['256.1.1.1/8'], ['100.64.0.0/33'], ['fd7a::/129'], ['fd7a::'], ['fd7a::g/48'],
+                    [' 100.64.0.0/10'], ['100.64.0.0/10', '!10.0.0.0/8'], [10], '100.64.0.0/10', []):
+            with self.subTest(bad=bad), self.assertRaisesRegex(AssertionError, 'must be a non-empty list of CIDRs'):
+                check(bad)
+
     def test_root_commands_are_system_paths(self):
         """sudo keeps /opt/homebrew/bin first on PATH on a Mac: a bare name under become would run a user-writable binary
         (Homebrew's ssh-keygen also writes host keys to its own etc/, which Apple's sshd never reads)."""

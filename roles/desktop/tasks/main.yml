@@ -603,6 +603,23 @@
     _empty: "{{ _desktop_sshd_algorithms | dict2items | rejectattr('value') | map(attribute='key') | list }}"
   when: _desktop_sshd_algorithms is defined
 
+# Each entry lands in AllowUsers user@<entry>: only an address range, never spaces, newlines or patterns
+- name: Check the sshd tailnet ranges are CIDRs (macOS)
+  ansible.builtin.assert:
+    that:
+      - desktop_macos_ssh_allow_from is sequence and desktop_macos_ssh_allow_from is not string
+      - desktop_macos_ssh_allow_from | length > 0
+      - _not_cidr | length == 0
+    fail_msg: >-
+      desktop_macos_ssh_allow_from must be a non-empty list of CIDRs (a.b.c.d/n or IPv6 hex:colons/n, no spaces);
+      not CIDRs: {{ _not_cidr | default([]) }}
+    quiet: true
+  vars:
+    _cidr: >-
+      ((25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])/(3[0-2]|[12]?[0-9])|[0-9A-Fa-f]*:[0-9A-Fa-f:]*/(12[0-8]|1[01][0-9]|[1-9]?[0-9])
+    _not_cidr: "{{ desktop_macos_ssh_allow_from | map('string') | reject('regex', _cidr, match_type='fullmatch') | list }}"
+  when: is_macos and desktop_macos_remote_login | bool
+
 - name: Apply the sshd login policy and start sshd (macOS)
   when:
     - is_macos and desktop_macos_remote_login | bool
