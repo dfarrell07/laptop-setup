@@ -151,10 +151,12 @@ def read_rows(path):
         if missing:
             fail(f'not a LastPass CSV export: missing columns {sorted(missing)}')
         fields = reader.fieldnames
-        rows = list(reader)
-    for number, row in enumerate(rows, start=2):
-        if None in row.values() or None in row:  # missing or extra fields; never print the row
-            fail(f'line {number} of the export has the wrong number of fields; nothing was imported')
+        rows = []
+        for row in reader:
+            if None in row.values() or None in row:  # missing or extra fields; never print the row
+                fail(f'the entry ending on line {reader.line_num} of the export has the wrong number of fields; '
+                     'nothing was imported')
+            rows.append(row)
     if not rows:
         fail('the export has no entries; nothing to import')
     return fields, rows
@@ -229,8 +231,12 @@ def bw(*args):
 
 def vault_counts():
     bw('sync')
-    items = json.loads(bw('list', 'items', '--organizationid', 'null'))
-    folders = json.loads(bw('list', 'folders'))
+    try:
+        items = json.loads(bw('list', 'items', '--organizationid', 'null'))
+        folders = json.loads(bw('list', 'folders'))
+    except ValueError:
+        fail('`bw list` returned something that is not JSON (output hidden)'
+             + (f'. Note: {PARTIAL}.' if _import_started else ''))
     return {
         'items': len(items),
         'logins': sum(item.get('type') == 1 for item in items),
@@ -297,6 +303,9 @@ def main():
               '(existing folders with the same name are reused). Cards, identities and notes are listed above.')
     finally:
         wipe_all()
+        if _left:
+            print(f'pw-migrate: FAILED to remove {" ".join(_left)}; delete it by hand', file=sys.stderr)
+            sys.exit(1)
         if path not in _to_delete and not os.path.exists(path):
             print('Export removed.')
 
