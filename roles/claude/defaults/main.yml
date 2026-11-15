@@ -19,6 +19,9 @@ claude_default_config_dir: "{{ ansible_facts['user_dir'] }}/.claude"
 claude_work_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-work"
 claude_personal2_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-per2"
 claude_personal2_instance_enabled: true
+# More Claude config dirs managed like the ones above (settings policy, CLAUDE.md, privacy), e.g. a second person's
+# login for a shared tool on this machine: a list of absolute paths, each ~/.claude-<name>. Set it in config.yml.
+claude_extra_config_dirs: []
 
 claude_telemetry_env:
   DISABLE_ERROR_REPORTING: "1"

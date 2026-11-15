@@ -38,8 +38,21 @@
     _claude_instances: >-
       {{ ([claude_default_config_dir]
           + ([claude_personal2_config_dir] if (claude_personal2_instance_enabled | bool) else [])
-          + ([claude_work_config_dir] if (profile == 'work') else []))
+          + ([claude_work_config_dir] if (profile == 'work') else [])
+          + claude_extra_config_dirs)
          | unique }}
+
+- name: Assert extra Claude config dirs are ~/.claude-<name>
+  ansible.builtin.assert:
+    that:
+      - claude_extra_config_dirs is sequence and claude_extra_config_dirs is not string
+      - >-
+        claude_extra_config_dirs
+        | reject('match', '^' ~ (ansible_facts['user_dir'] | regex_escape) ~ '/\\.claude-[a-z0-9][a-z0-9-]*\Z')
+        | list | length == 0
+    fail_msg: >-
+      claude_extra_config_dirs entries must be absolute paths of the form {{ ansible_facts['user_dir'] }}/.claude-<name>
+      (lowercase letters, digits, hyphens): {{ claude_extra_config_dirs }}
 
 - name: SECURITY assert active Claude instance paths cannot inject tmpfiles directives
   ansible.builtin.assert:
