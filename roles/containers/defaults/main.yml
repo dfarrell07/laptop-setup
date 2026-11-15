@@ -16,7 +16,7 @@ containers_nofile_hard_limit: "{{ containers_nofile_limit | int * 8 }}"
 # macOS: podman runs containers in a Linux VM. Sized for a 16 GB Mac; the disk grows on demand up to the limit.
 # The size is set when the machine is created: to change it later, podman machine stop, then podman machine set.
 containers_macos_machine_enabled: true
-containers_macos_machine_name: podman-machine-default
+containers_macos_machine_name: podman-machine-default  # mirrors group_vars/all/vars.yml (dotfiles reads it)
 containers_macos_machine_cpus: 4
 containers_macos_machine_memory_mb: 4096
 containers_macos_machine_disk_gb: 60

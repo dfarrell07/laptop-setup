@@ -73,6 +73,7 @@ dotfiles_macos_gnu_tools: true
 # macOS: the Homebrew Python whose unversioned python/python3/pip lead PATH (matches packages_pipx_python)
 dotfiles_macos_python: python@3.14
 dotfiles_homebrew_prefix: /opt/homebrew  # fallback; authoritative value in group_vars/all/vars.yml; Intel x86 uses /usr/local (set there)
+containers_macos_machine_name: podman-machine-default  # mirrors group_vars/all/vars.yml: zshenv's DOCKER_HOST socket
 ssh_port: 722  # fallback for standalone molecule invocation; authoritative value in group_vars/all/vars.yml
 ssh_signing_key_basename: id_ed25519_sk_signing  # fallback; authoritative value in group_vars/all/vars.yml
 # Fallback; authoritative in group_vars/all/vars.yml (vault-backed). Not settable in config.yml: pre-flight rejects it,

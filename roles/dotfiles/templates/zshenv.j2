@@ -21,3 +21,9 @@ _laptop_path() {
   export PATH
 }
 _laptop_path
+# Docker clients (kind, docker-compose, testcontainers) use the podman machine's API socket, as on Linux the rootless
+# podman socket (zshrc); TMPDIR is set in local and ssh sessions
+_laptop_docker_sock="${TMPDIR%/}/podman/"{{ (containers_macos_machine_name ~ '-api.sock') | quote }}
+[[ -n "${TMPDIR:-}" && -S "$_laptop_docker_sock" ]] && export DOCKER_HOST="unix://$_laptop_docker_sock"
+unset _laptop_docker_sock
+export KIND_EXPERIMENTAL_PROVIDER=podman  # use the Podman provider (not docker-provider-via-socket)
