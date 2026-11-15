@@ -82,6 +82,9 @@ claude_project_mode_override: true
 claude_project_mode_roots:
   - "{{ ansible_facts['user_dir'] }}"
 claude_project_mode_depth: 4  # directory levels searched below each root (~/src/<owner>/<repo> is 3)
+# Checkouts that keep their own committed mode (a repository whose owner chose prompts on purpose); a path covers
+# everything below it. Rendered to ~/.config/claude/project-mode-exclude, which make verify reads too.
+claude_project_mode_exclude: []
 # Bash rules every instance denies outright (a denial never prompts). Prefix rules on the command text: a wrapper
 # such as `env sudo` or `bash -c` is not caught, and sudo still needs a password the agent cannot type. Deny
 # lists are unioned: to drop an entry from existing settings, also add it to claude_retired_deny.

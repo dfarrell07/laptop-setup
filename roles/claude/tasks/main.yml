@@ -278,13 +278,23 @@
 # settings.local.json outranks it: set claude_default_mode there, only that key, in each such checkout. Problems left
 # (not git-ignored, unreadable JSON, a unit launching claude into another mode) are warnings; make verify CHUNK=agents
 # fails on them (claude-project-modes).
+- name: Deploy project permission mode exclusions
+  ansible.builtin.copy:
+    content: >-
+      {{ (['# Managed by Ansible (claude_project_mode_exclude); checkouts here keep their committed permission mode.']
+          + claude_project_mode_exclude) | join('\n') ~ '\n' }}
+    dest: "{{ claude_runtime_config_dir }}/project-mode-exclude"
+    mode: "0600"
+  when: claude_project_mode_override | bool
+
 - name: Override project permission modes in local checkouts
   ansible.builtin.command:
     argv: >-
       {{ [ansible_facts.get('python', {}).get('executable', 'python3'), '-I', '-c',
           lookup('ansible.builtin.file', role_path ~ '/files/claude-project-modes.py'),
           '--check' if ansible_check_mode else '--apply', '--mode', claude_default_mode,
-          '--depth', claude_project_mode_depth | string]
+          '--depth', claude_project_mode_depth | string,
+          '--exclude-file', claude_runtime_config_dir ~ '/project-mode-exclude']
          + (claude_project_mode_roots | map('regex_replace', '^', '--root=') | list) }}
   register: _claude_project_modes
   changed_when: (_claude_project_modes.stdout | from_json).changed | length > 0

@@ -201,8 +201,9 @@ The launchers pass `--dangerously-skip-permissions`; everything else relies on `
   user setting. The agents chunk writes `claude_default_mode` into the git-ignored `.claude/settings.local.json`,
   which outranks it, in every checkout and worktree under `claude_project_mode_roots` (default: home, 4 levels)
   whose project settings pick another mode; `claude-project-modes` in `make verify CHUNK=agents` lists the ones
-  left (a repository cloned since the last apply: re-run `make apply CHUNK=agents`). Only the command line (or
-  root-owned managed settings) outranks the local file.
+  left (a repository cloned since the last apply: re-run `make apply CHUNK=agents`). The file is local and
+  git-ignored, so the repository itself is unchanged; list a checkout in `claude_project_mode_exclude` to keep the
+  mode its owner chose. Only the command line (or root-owned managed settings) outranks the local file.
 - **An autostarted unit launches `claude` without a mode flag** into a directory that resolves to another mode.
   The same check lists such systemd user units and LaunchAgents. Add `--dangerously-skip-permissions` in whatever
   generates the unit (the health repository's `make up` does this for its sessions), then restart that unit. An

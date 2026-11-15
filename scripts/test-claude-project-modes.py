@@ -49,7 +49,8 @@ class ProjectModeTests(unittest.TestCase):
 
     def run_helper(self, action, *extra):
         result = subprocess.run([sys.executable, '-I', str(HELPER), action, '--root', str(self.root),
-                                 '--unit-dir', str(self.units), '--agent-dir', str(self.agents), *extra],
+                                 '--unit-dir', str(self.units), '--agent-dir', str(self.agents),
+                                 '--exclude-file', str(self.home / 'exclude'), *extra],
                                 capture_output=True, text=True, env=self.env, timeout=60)
         return result.returncode, json.loads(result.stdout)
 
@@ -107,6 +108,18 @@ class ProjectModeTests(unittest.TestCase):
         self.repo('node_modules/r', mode='acceptEdits')
         self.assertEqual(self.run_helper('--check', '--depth', '3')[0], 0)
         self.assertEqual(self.run_helper('--check', '--depth', '5')[0], 1)
+
+    def test_excluded_checkouts_and_their_units_keep_their_mode(self):
+        kept = self.repo('owner/kept', mode='acceptEdits')
+        fixed = self.repo('owner/fixed', mode='acceptEdits')
+        (self.units / 'kept.service').write_text(f'[Service]\nWorkingDirectory={kept}\nExecStart=/usr/bin/claude\n')
+        (self.home / 'exclude').write_text(f'# comment\n\n{kept}\n')
+        rc, out = self.run_helper('--apply')
+        self.assertEqual((rc, out['problems']), (0, []))
+        self.assertFalse((kept / '.claude/settings.local.json').exists())
+        self.assertEqual(self.local(fixed)['permissions']['defaultMode'], 'bypassPermissions')
+        (self.home / 'exclude').write_text(f'{self.root / "owner"}\n')  # a path covers everything below it
+        self.assertEqual(self.run_helper('--check'), (0, {'changed': [], 'problems': []}))
 
     def test_mode_flag_respected(self):
         repo = self.repo('r', mode='default')
