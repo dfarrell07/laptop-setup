@@ -250,6 +250,12 @@ alias evpn='cd ~/src/evpn'
 alias rhrepos='cd ~/src/rh-context'
 {% endif %}
 alias notes="cd {{ notes_repo_path }}"
+{% if profile == 'work' and dotfiles_konflux_api_url %}
+
+# --- Konflux ---
+# Browser (SSO) login; oc keeps the session token in ~/.kube/config, so none is written here.
+alias konflux-login={{ ('oc login --web ' ~ (dotfiles_konflux_api_url | quote)) | quote }}
+{% endif %}
 
 # --- Task queue ---
 cq() {
