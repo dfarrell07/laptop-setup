@@ -157,6 +157,7 @@ fi
 _trackpoint_id=$(awk -F': ' '/^desktop_sway_trackpoint_id:/{gsub(/^[[:space:]]*["'"'"']|["'"'"'][[:space:]]*$/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
 _desktop_terminal=$(awk -F': ' '/^desktop_terminal:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
 [[ -n "$_desktop_terminal" ]] || _desktop_terminal="alacritty"  # role default on Linux
+_desktop_env=$(awk -F': ' '/^desktop_environment:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
 # Role defaults (roles/repos_dnf, roles/notes) apply when config.yml does not override these.
 _gcloud_min_version=$(awk -F': ' '/^repos_dnf_gcloud_min_version:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
 [[ "$_gcloud_min_version" =~ ^[0-9]+(\.[0-9]+)*$ ]] || _gcloud_min_version="500.0.0"
@@ -703,6 +704,14 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   else record "macos-launchd-ssh-auth-sock" "$([[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && echo WARN || echo FAIL)" "launchd SSH_AUTH_SOCK is ${_sock:-unset}, not ~/.ssh/ssh-agent.socket, so GUI apps and launchd jobs miss the agent — run: make apply CHUNK=dotfiles"; fi
   unset _brew _zpath _missing _sock
   unset -f _first
+fi
+
+# macOS: AeroSpace, when it is the window manager, is running (the desktop chunk starts it, start-at-login keeps it)
+if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
+  if [[ "$_desktop_env" != aerospace ]]; then record "aerospace-running" "PASS" "AeroSpace is not the window manager (desktop_environment)"
+  elif pgrep -x AeroSpace &>/dev/null; then record "aerospace-running" "PASS"
+  # WARN in Molecule: a CI runner has no login session to tile
+  else record "aerospace-running" "$([[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && echo WARN || echo FAIL)" "AeroSpace is not running — run: make apply CHUNK=desktop NOSUDO=1 (or open -a AeroSpace)"; fi
 fi
 
 # macOS: containers run in the podman machine VM, which the containers chunk creates and starts at login
@@ -2903,7 +2912,7 @@ if [[ -n "$ONLY" ]]; then
       continue
     fi
     # macOS-only checks have nothing to verify on Linux
-    if $IS_LINUX && [[ " podman-machine docker-shim macos-dev-tools macos-zshenv-path macos-launchd-ssh-auth-sock macos-remote-access macos-firewall macos-always-on macos-screen macos-screen-lock tailscaled-daemon " == *" $_only_name "* ]]; then
+    if $IS_LINUX && [[ " podman-machine docker-shim macos-dev-tools macos-zshenv-path macos-launchd-ssh-auth-sock aerospace-running macos-remote-access macos-firewall macos-always-on macos-screen macos-screen-lock tailscaled-daemon " == *" $_only_name "* ]]; then
       $JSON || printf 'N/A   %s (macOS-only check; nothing to verify on Linux)\n' "$_only_name"
       continue
     fi

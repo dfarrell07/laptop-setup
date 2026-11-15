@@ -411,6 +411,35 @@
           "alt-enter = 'exec-and-forget open -na Alacritty'" in
           (_desktop_aerospace_content.content | default('') | b64decode).splitlines()
 
+    # start-at-login in the config starts AeroSpace from the next login on; this starts it now, in the background
+    # and without sudo, so the first run tiles without a logout
+    - name: Check whether AeroSpace is running (macOS)
+      ansible.builtin.command:
+        argv: [/usr/bin/pgrep, -x, AeroSpace]
+      register: _desktop_aerospace_running
+      changed_when: false
+      failed_when: false
+      check_mode: false  # read-only probe
+      when: desktop_macos_tiling_wm | bool
+
+    - name: Start AeroSpace (macOS)
+      ansible.builtin.command:
+        argv: [/usr/bin/open, -ga, AeroSpace]
+      register: _desktop_aerospace_open
+      changed_when: _desktop_aerospace_open.rc == 0
+      failed_when: false  # not installed yet (packages chunk): warned below rather than failing the chunk
+      when:
+        - desktop_macos_tiling_wm | bool
+        - _desktop_aerospace_running.rc | default(0) == 1
+
+    - name: Warn that AeroSpace did not start (macOS)
+      ansible.builtin.debug:
+        msg: >-
+          AeroSpace is the window manager (desktop_environment: aerospace) but `/usr/bin/open -ga AeroSpace` failed:
+          {{ _desktop_aerospace_open.stderr | default('') | trim }}. Install it with make apply CHUNK=packages, then
+          re-run make apply CHUNK=desktop.
+      when: _desktop_aerospace_open.rc | default(0) != 0
+
 # --- macOS: defaults ---
 - name: Set macOS defaults
   community.general.osx_defaults:

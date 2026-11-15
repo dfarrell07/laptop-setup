@@ -87,6 +87,49 @@ class AeroSpaceTests(unittest.TestCase):
                     run(2)
                     self.assertEqual(config.read_text(), before)
 
+    def test_aerospace_starts_when_it_is_the_wm_and_not_running(self):
+        production = yaml.safe_load((ROOT / 'roles/desktop/tasks/main.yml').read_text())
+        block = next(task['block'] for task in production if task['name'] == 'Deploy AeroSpace configuration (macOS)')
+        tasks = [task for task in block if 'AeroSpace' in task['name'] and ('running' in task['name']
+                 or task['name'].startswith(('Start', 'Warn')))]
+        self.assertEqual(len(tasks), 3)
+        start = next(task for task in tasks if task['name'].startswith('Start'))
+        self.assertNotIn('become', start)  # a user app: no sudo
+        self.assertEqual(start['ansible.builtin.command']['argv'], ['/usr/bin/open', '-ga', 'AeroSpace'])
+        with tempfile.TemporaryDirectory() as directory:
+            d = Path(directory)
+            for task in tasks:  # Apple's tools by full path; run the stubs instead
+                argv = task.get('ansible.builtin.command', {}).get('argv')
+                if argv:
+                    argv[0] = str(d / Path(argv[0]).name)
+            log = d / 'calls'
+            for name, body in [('pgrep', f'echo "pgrep $*" >> {log}; exit "$RUNNING"'),
+                               ('open', f'echo "open $*" >> {log}; exit "$OPEN_RC"')]:
+                (d / name).write_text('#!/bin/sh\n' + body + '\n')
+                (d / name).chmod(0o755)
+            play = d / 'test.yml'
+
+            def run(wm, running, open_rc=0):
+                log.unlink(missing_ok=True)
+                play.write_text(yaml.safe_dump([{'hosts': 'localhost', 'gather_facts': False,
+                    'vars': {'desktop_macos_tiling_wm': wm}, 'tasks': tasks}]))
+                result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(play)], cwd=ROOT,
+                    env=dict(os.environ, RUNNING=str(running), OPEN_RC=str(open_rc),
+                             ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
+                    capture_output=True, text=True, timeout=max(60, TEST_TIMEOUT))
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                return (log.read_text() if log.exists() else ''), result.stdout
+            calls, out = run(True, 1)
+            self.assertEqual(calls, 'pgrep -x AeroSpace\nopen -ga AeroSpace\n')
+            self.assertEqual(re.findall(r'changed=(\d+)', out)[-1], '1')
+            calls, out = run(True, 0)
+            self.assertEqual(calls, 'pgrep -x AeroSpace\n')  # already running: left alone
+            self.assertEqual(re.findall(r'changed=(\d+)', out)[-1], '0')
+            self.assertEqual(run(False, 1)[0], '')  # another window manager: not probed, not started
+            calls, out = run(True, 1, open_rc=1)  # not installed: warn, do not fail the chunk
+            self.assertIn('open -ga AeroSpace', calls)
+            self.assertIn('make apply CHUNK=packages', out)
+
     def test_firewall_enabled_and_disabled_output_formats(self):
         production = yaml.safe_load((ROOT / 'roles/desktop/tasks/main.yml').read_text())
         task = next(task for task in production if task['name'] == 'Enable macOS firewall settings')
