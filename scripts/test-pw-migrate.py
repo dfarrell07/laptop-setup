@@ -15,7 +15,8 @@ import unittest
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / 'scripts/pw-migrate.py'
 SHM = Path('/dev/shm')
-SECRETS = ['hunter2-secret', 'JBSWY3DPEHPK3PXP', 'note-body-secret', 'alice@example.test']
+SECRETS = ['hunter2-secret', 'JBSWY3DPEHPK3PXP', 'note-body-secret', 'alice@example.test', '4111111111111111',
+           '1 Secret Street']
 FAKE_BW = r'''
 import csv, json, os, sys
 state_path = os.environ['FAKE_BW_STATE']
@@ -37,11 +38,13 @@ elif args[:2] == ['import', 'lastpasscsv']:
         rows = rows[1:]
     names = {f['name'] for f in state['folders']}
     for row in rows:
-        if row['grouping'] and row['grouping'] not in names:
+        if row['grouping'] and row['grouping'] != '(none)' and row['grouping'] not in names:
             names.add(row['grouping'])
             state['folders'].append({'id': 'f' + str(len(names)), 'name': row['grouping']})
         note = row['url'] == 'http://sn'
-        state['items'].append({'type': 2 if note else 1, 'name': row['name'],
+        kind = row['extra'].split('\n', 1)[0] if note else ''
+        item_type = {'NoteType:Credit Card': 3, 'NoteType:Address': 4}.get(kind, 2) if note else 1
+        state['items'].append({'type': item_type, 'name': row['name'],
                                'login': None if note else {'password': row['password'], 'totp': row['totp'] or None}})
     json.dump(state, open(state_path, 'w'))
     print('Imported ' + str(len(rows)) + ' items: hunter2-secret')
@@ -55,6 +58,10 @@ ROWS = [
      'grouping': 'Work', 'fav': '0'},
     {'url': 'https://c.example.test', 'username': 'c', 'password': 'pw3', 'totp': '', 'extra': '', 'name': 'C',
      'grouping': '', 'fav': '0'},
+    {'url': 'http://sn', 'username': '', 'password': '', 'totp': '', 'name': 'K', 'grouping': '(none)', 'fav': '0',
+     'extra': 'NoteType:Credit Card\nNumber:4111111111111111'},
+    {'url': 'http://sn', 'username': '', 'password': '', 'totp': '', 'name': 'H', 'grouping': 'Home', 'fav': '0',
+     'extra': 'NoteType:Address\nAddress 1:1 Secret Street\nCity:X'},
 ]
 
 
@@ -66,7 +73,7 @@ class PwMigrateTests(unittest.TestCase):
         self.work = Path(work.name)
         (self.work / 'fakebw.py').write_text(FAKE_BW)
         handle = tempfile.NamedTemporaryFile('w', dir=SHM, prefix='pw-migrate-test-', suffix='.csv', delete=False,
-                                             newline='', encoding='utf-8')
+                                             newline='', encoding='utf-8-sig')  # LastPass exports may carry a BOM
         writer = csv.DictWriter(handle, fieldnames=list(ROWS[0]))
         writer.writeheader()
         writer.writerows(ROWS)
@@ -87,8 +94,8 @@ class PwMigrateTests(unittest.TestCase):
     def test_dry_run_reports_counts_only_and_removes_the_export(self):
         result = self.run_migrate(DRY_RUN='1')
         self.assertEqual(result.returncode, 0, result.stderr)
-        for line in ['items: 4', 'logins: 3', 'secure notes: 1', 'folders: 2', 'shared folder items: 1', 'totp: 1',
-                     'attachments: 0']:
+        for line in ['items: 6', 'logins: 3', 'secure notes: 1', 'payment cards: 1', 'addresses: 1', 'folders: 3',
+                     'shared folder items: 1', 'totp: 1', 'attachments: 0']:
             self.assertIn(line, result.stdout)
         self.assertFalse(self.export.exists())
         self.assertFalse((self.work / 'state.json').exists())  # bw never called
@@ -120,7 +127,8 @@ class PwMigrateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('Verify OK', result.stdout)
         state = json.loads((self.work / 'state.json').read_text())
-        self.assertEqual(len(state['items']), 4)
+        self.assertEqual(len(state['items']), 6)
+        self.assertEqual(sorted(i['type'] for i in state['items']), [1, 1, 1, 2, 3, 4])
         self.assertFalse([i for i in state['items'] if (i.get('login') or {}).get('totp')])
         self.assertFalse(self.export.exists())
         self.assertFalse(Path(str(self.export) + '.no-totp').exists())
@@ -150,6 +158,15 @@ class PwMigrateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn('Not imported', result.stdout)
         self.assertFalse(self.export.exists())
+
+    def test_declined_confirmation_keeps_the_export_when_asked(self):
+        environment = dict(os.environ, EXPORT=str(self.export), BW_CMD=f'{sys.executable} {self.work / "fakebw.py"}',
+                           FAKE_BW_STATE=str(self.work / 'state.json'), KEEP_EXPORT='1')
+        result = subprocess.run([sys.executable, str(SCRIPT)], env=environment, input='n\n', capture_output=True,
+                                text=True, timeout=60)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn('Export kept', result.stdout)
+        self.assertTrue(self.export.exists())
 
 
 if __name__ == '__main__':

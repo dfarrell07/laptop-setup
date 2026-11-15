@@ -19,6 +19,7 @@ import json
 import os
 import platform
 import plistlib
+import re
 import shlex
 import signal
 import stat
@@ -77,7 +78,8 @@ def macos_on_ramdisk(path):
     for image in info.get('images', []):
         if str(image.get('image-path', '')).startswith('ram://'):
             for entity in image.get('system-entities', []):
-                if device.startswith(entity.get('dev-entry', '\0')):
+                entry = entity.get('dev-entry', '')
+                if entry and (device == entry or re.fullmatch(re.escape(entry) + r's\d+', device)):
                     return True
     return False
 
@@ -113,12 +115,22 @@ def read_rows(path):
         return list(reader)
 
 
+def note_type(row):
+    """LastPass keeps cards and addresses as secure notes whose `extra` starts with NoteType:..."""
+    first = (row['extra'] or '').split('\n', 1)[0].strip()
+    return first[len('NoteType:'):].strip() if first.startswith('NoteType:') else ''
+
+
 def counts(rows):
-    groups = {row['grouping'] for row in rows if row['grouping']}
+    groups = {row['grouping'] for row in rows if row['grouping'] and row['grouping'] != '(none)'}
+    notes = [row for row in rows if row['url'] == SECURE_NOTE_URL]
     return {
         'items': len(rows),
-        'logins': sum(row['url'] != SECURE_NOTE_URL for row in rows),
-        'secure_notes': sum(row['url'] == SECURE_NOTE_URL for row in rows),
+        'logins': len(rows) - len(notes),
+        'secure_notes': sum(not note_type(row) for row in notes),
+        'payment_cards': sum(note_type(row) == 'Credit Card' for row in notes),
+        'addresses': sum(note_type(row) == 'Address' for row in notes),
+        'other_typed_notes': sum(note_type(row) not in ('', 'Credit Card', 'Address') for row in notes),
         'folders': len(groups),
         'shared_folder_items': sum(row['grouping'].startswith('Shared-') for row in rows),
         'totp': sum(bool(row['totp'].strip()) for row in rows),
@@ -160,7 +172,10 @@ def vault_counts():
     folders = json.loads(bw('list', 'folders'))
     return {
         'items': len(items),
+        'logins': sum(item.get('type') == 1 for item in items),
         'secure_notes': sum(item.get('type') == 2 for item in items),
+        'cards': sum(item.get('type') == 3 for item in items),
+        'identities': sum(item.get('type') == 4 for item in items),
         'folders': sum(folder.get('id') is not None for folder in folders),
         'totp': sum(bool((item.get('login') or {}).get('totp')) for item in items),
     }
@@ -173,7 +188,7 @@ def main():
     check_export(path)
     dry_run = os.environ.get('DRY_RUN') == '1'
     if not (dry_run and os.environ.get('KEEP_EXPORT') == '1'):
-        _to_delete.append(path)
+        _to_delete.append(path)  # a declined import with KEEP_EXPORT=1 takes it back off
     try:
         rows = read_rows(path)
         expected = counts(rows)
@@ -190,23 +205,26 @@ def main():
         if os.environ.get('ASSUME_YES') != '1':
             answer = input(f'Import {expected["items"]} items into this Bitwarden vault? [y/N] ')
             if answer.strip().lower() != 'y':
-                print('Not imported.')
+                if os.environ.get('KEEP_EXPORT') == '1' and path in _to_delete:
+                    _to_delete.remove(path)
+                print('Not imported.' + (' Export kept (KEEP_EXPORT=1).' if path not in _to_delete else ''))
                 return
         source = strip_totp(path, rows) if strip and expected['totp'] else path
         bw('import', 'lastpasscsv', source)
         after = vault_counts()
         delta = {key: after[key] - before[key] for key in after}
         report('Imported (vault after minus before):', delta)
-        want = {'items': expected['items'], 'secure_notes': expected['secure_notes'],
-                'totp': 0 if strip else expected['totp']}
+        # Bitwarden turns NoteType:Credit Card notes into cards and NoteType:Address into identities; other typed notes
+        # (bank account, passport, ...) depend on server flags, so only totals, logins and TOTP must match exactly.
+        want = {'items': expected['items'], 'logins': expected['logins'], 'totp': 0 if strip else expected['totp']}
         mismatch = {key: (delta[key], value) for key, value in want.items() if delta[key] != value}
         if delta['folders'] > expected['folders']:
             mismatch['folders'] = (delta['folders'], expected['folders'])
         if mismatch:
             fail('verify FAILED (got, expected): ' + json.dumps(mismatch) + '; review the vault before retrying, '
                  'a second import duplicates items')
-        print('Verify OK: item, secure-note and TOTP counts match; new folders do not exceed the export\'s '
-              '(existing folders with the same name are reused).')
+        print('Verify OK: item, login and TOTP counts match; new folders do not exceed the export\'s '
+              '(existing folders with the same name are reused). Cards, identities and notes are listed above.')
     finally:
         wipe_all()
         if path not in _to_delete and not os.path.exists(path):
