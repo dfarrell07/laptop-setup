@@ -41,6 +41,7 @@ CASES = {
     'bar_status': ('roles/desktop/templates/i3status-bar.sh.j2', {}),
     'audit': ('roles/system/templates/auditd-system.rules.j2', {}),
     'sshd_macos': ('roles/desktop/templates/sshd-macos.conf.j2', {}),
+    'sshd_launchd': ('roles/desktop/templates/sshd-launchd.plist.j2', {}),
     'zshenv': ('roles/dotfiles/templates/zshenv.j2', {'dotfiles_homebrew_prefix': '/opt/homebrew'}),
 }
 BASE = {'real_user_id': 'public-test-user', 'dotfiles_user_name': 'Test User',
@@ -355,6 +356,14 @@ class RenderedConfigTests(unittest.TestCase):
             config.write_text(f'HostKey {hostkey}\nInclude {self.out / "sshd_macos"}\n')
             result = subprocess.run([str(sshd), '-t', '-f', str(config)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_macos_sshd_job_listens_on_the_linux_ssh_port(self):
+        text = self.read('sshd_launchd')
+        self.assertIn('<string>722</string>', text)  # ssh_port, which the client config uses for the Mac
+        self.assertIn('<string>/usr/libexec/sshd-keygen-wrapper</string>', text)
+        if shutil.which('plutil'):
+            result = subprocess.run(['plutil', '-lint', str(self.out / 'sshd_launchd')], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_zshenv_puts_homebrew_on_the_bare_ssh_path(self):
         result = subprocess.run(['zsh', '-c', 'source "$1"; print -r -- $PATH', 'zsh', str(self.out / 'zshenv')]
