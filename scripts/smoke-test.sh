@@ -558,7 +558,10 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]]; then
       ! "$_alf" --listapps 2>/dev/null | grep -qF "$_mosh " && _missing+=" mosh-server-firewall"
   fi
   $_macos_screen_sharing && ! launchctl print system/com.apple.screensharing &>/dev/null && _missing+=" Screen-Sharing"
-  if [[ -n "$_missing" ]]; then record "macos-remote-access" "FAIL" "missing:$_missing — run: make apply CHUNK=desktop (needs sudo)"
+  # WARN in Molecule when that is all: GitHub's macOS runners have Remote Login on without our policy
+  if [[ "$_missing" == " sshd-key-policy" && -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then
+    record "macos-remote-access" "WARN" "Remote Login on without the key-only policy (CI runner) — run: make apply CHUNK=desktop (needs sudo)"
+  elif [[ -n "$_missing" ]]; then record "macos-remote-access" "FAIL" "missing:$_missing — run: make apply CHUNK=desktop (needs sudo)"
   elif $_rl_wait; then
     record "macos-remote-access" "WARN" "sshd stays off until your SSH key is authorized — run: make apply CHUNK=ssh_authorized_keys, then make apply CHUNK=desktop"
   elif ! $_macos_remote_login && ! $_macos_screen_sharing; then record "macos-remote-access" "PASS" "remote access not managed (desktop_macos_always_on is off)"

@@ -337,13 +337,13 @@ class SmokeTests(unittest.TestCase):
             policy = state / 'sshd_config.d/000-laptop-setup.conf'
             (state / 'sshd_config').write_text('Include /etc/ssh/sshd_config.d/*\n')  # not this directory
 
-            def run(remote_login, screen_sharing=False):
+            def run(remote_login, screen_sharing=False, molecule=''):
                 result = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c',
                     'record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; };'
                     f' _macos_remote_login={remote_login} _macos_screen_sharing={screen_sharing};'
                     f' _alf={d}/bin/alf _sshd_policy={policy} _sshd_config={state}/sshd_config;\n' + source[start:end]],
                     env=dict(os.environ, PATH=f'{d}/bin:' + os.environ['PATH'], HOME=str(d / 'home'),
-                             STATE=str(state), PREFIX=str(d / 'prefix')),
+                             STATE=str(state), PREFIX=str(d / 'prefix'), MOLECULE_PROJECT_DIRECTORY=molecule),
                     capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 return result.stdout.strip()
@@ -357,6 +357,9 @@ class SmokeTests(unittest.TestCase):
             self.assertEqual(run('true'), 'macos-remote-access FAIL missing: sshd — run: make apply CHUNK=desktop (needs sudo)')
             (state / 'com.openssh.sshd').write_text('')  # Remote Login on from System Settings, without the policy
             self.assertTrue(run('false').startswith('macos-remote-access FAIL missing: sshd-key-policy'))
+            # GitHub's macOS runners have Remote Login on: a WARN under Molecule, but only when that is all
+            self.assertTrue(run('false', molecule='/src').startswith('macos-remote-access WARN Remote Login on'))
+            self.assertTrue(run('false', 'true', molecule='/src').startswith('macos-remote-access FAIL'))
             self.assertIn('sshd', run('true'))  # and not our job on ssh_port
             (state / 'com.openssh.sshd').unlink()
             (state / 'com.laptop-setup.sshd').write_text('')
