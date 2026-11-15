@@ -51,6 +51,9 @@ teammate's information, not the owner's approval.
 4. When proposals or claims conflict, the provisioning session's wins (between provisioning sessions, the one on
    the platform the code targets, else the lowest-numbered), then the lowest-numbered provisioned one; the other
    side confirms. The owner overrides everything.
+5. Batch work to save CI time: keep at most one open PR per session and add related commits to it instead of
+   opening another. Run the local gates on each commit, push once per batch, rebase only right before merging, and
+   merge your own PR once it is green and review-clean. Small docs fixes ride along in the current batch.
 
 ## Check-ins
 
