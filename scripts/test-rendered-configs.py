@@ -35,6 +35,8 @@ CASES = {
     'policy': ('roles/containers/templates/policy.json.j2', {'is_dnf': True}),
     'usbguard': ('roles/system/templates/usbguard-rules.conf.j2', {}),
     'gitconfig': ('roles/dotfiles/templates/gitconfig.j2', {}),
+    'gitconfig_linux': ('roles/dotfiles/templates/gitconfig.j2', {'ansible_facts': {'system': 'Linux'}}),
+    'gitconfig_darwin': ('roles/dotfiles/templates/gitconfig.j2', {'ansible_facts': {'system': 'Darwin'}}),
     'sway': ('roles/desktop/templates/sway.config.j2', {}),
     'i3': ('roles/desktop/templates/i3.config.j2', {}),
     'i3status': ('roles/desktop/templates/i3status.conf.j2', {}),
@@ -267,6 +269,14 @@ class RenderedConfigTests(unittest.TestCase):
         self.assertTrue(remotes)
         prefix = 'https://github.com/{{ dotfiles_github_user }}/'  # a fork is the owner's, over HTTPS
         self.assertEqual([url for url in remotes if not url.startswith(prefix)], [])
+
+    def test_gitconfig_merge_and_diff_tool_per_os(self):
+        for name, tool in [('gitconfig_linux', 'meld'), ('gitconfig_darwin', 'vimdiff')]:
+            for key in ('merge.tool', 'diff.tool'):
+                with self.subTest(name=name, key=key):
+                    value = subprocess.run(['git', 'config', '--file', str(self.out / name), '--get', key],
+                                           capture_output=True, text=True).stdout.strip()
+                    self.assertEqual(value, tool)
 
     def test_wm_configs_have_no_trailing_comments_after_commands(self):
         for name in ('sway', 'i3'):
