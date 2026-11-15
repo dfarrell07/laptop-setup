@@ -625,8 +625,13 @@
       not CIDRs: {{ _not_cidr | default([]) }}
     quiet: true
   vars:
+    _octet: (25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])
+    # every way to write 1 to 8 groups of 1 to 4 hex digits (H), with at most one :: standing for the rest
+    _v6_forms: ['(H:){7}H', '(H:){1,7}:', '(H:){1,6}:H', '(H:){1,5}(:H){1,2}', '(H:){1,4}(:H){1,3}', '(H:){1,3}(:H){1,4}',
+                '(H:){1,2}(:H){1,5}', 'H:(:H){1,6}', ':((:H){1,7}|:)']
+    _v6: "{{ _v6_forms | join('|') | replace('H', '[0-9A-Fa-f]{1,4}') }}"
     _cidr: >-
-      ((25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])/(3[0-2]|[12]?[0-9])|[0-9A-Fa-f]*:[0-9A-Fa-f:]*/(12[0-8]|1[01][0-9]|[1-9]?[0-9])
+      ({{ _octet }}\.){3}{{ _octet }}/(3[0-2]|[12]?[0-9])|({{ _v6 }})/(12[0-8]|1[01][0-9]|[1-9]?[0-9])
     _not_cidr: "{{ desktop_macos_ssh_allow_from | map('string') | reject('regex', _cidr, match_type='fullmatch') | list }}"
   when: is_macos and desktop_macos_remote_login | bool
 
