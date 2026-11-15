@@ -21,11 +21,14 @@ containers_macos_machine_cpus: 4
 containers_macos_machine_memory_mb: 4096
 containers_macos_machine_disk_gb: 60
 containers_macos_machine_label: com.laptop-setup.podman-machine
-# A `docker` command that runs podman (Linux: the podman-docker package); skipped when a real docker exists
+# A `docker` command (~/.local/bin/docker) that runs podman (Linux: the podman-docker package). Skipped, and a
+# shim from an earlier run removed, when a real docker exists (Homebrew, Docker Desktop, OrbStack) or this is off.
 containers_macos_docker_shim: true
-# The LaunchAgent re-runs `podman machine start` this often (a no-op while it runs), so a VM that stopped (disk
-# pressure, sleep) comes back without a login
+# The LaunchAgent checks the machine at login and this often, and starts it if it stopped (disk pressure, sleep).
+# It leaves a machine alone while the hold file exists: touch it before `podman machine stop` to keep it stopped.
 containers_macos_machine_check_seconds: 300
+containers_macos_machine_hold_file: "{{ ansible_facts['user_dir'] }}/.local/state/podman-machine.hold"
+containers_macos_machine_ensure_script: "{{ ansible_facts['user_dir'] }}/.local/libexec/podman-machine-ensure"
 containers_podman_bin: "{{ dotfiles_homebrew_prefix | default('/opt/homebrew') }}/bin/podman"
 
 system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml

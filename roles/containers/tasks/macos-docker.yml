@@ -1,0 +1,48 @@
+---
+# roles/containers/tasks/macos-docker.yml
+# macOS: a `docker` command that runs podman, like the podman-docker package on Linux. It sits in ~/.local/bin, ahead
+# of every other docker on PATH, so it is removed again when a real docker appears or the shim or machine is off.
+
+- name: Look for a real docker command (macOS)
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ dotfiles_homebrew_prefix }}/bin/docker"
+    - /usr/local/bin/docker  # Docker Desktop, Rancher Desktop
+    - "{{ ansible_facts['user_dir'] }}/.docker/bin/docker"
+    - "{{ ansible_facts['user_dir'] }}/.orbstack/bin/docker"
+    - /Applications/Docker.app/Contents/Resources/bin/docker
+  register: _containers_real_docker
+
+- name: Decide whether the docker shim is wanted (macOS)
+  ansible.builtin.set_fact:
+    _containers_docker_shim_wanted: >-
+      {{ containers_macos_docker_shim | bool and containers_macos_machine_enabled | bool
+         and _containers_real_docker.results | selectattr('stat.exists') | list | length == 0 }}
+
+- name: Deploy the docker-to-podman shim (macOS)
+  ansible.builtin.copy:
+    dest: "{{ ansible_facts['user_dir'] }}/.local/bin/docker"
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      # Managed by laptop-setup (containers chunk): docker runs podman, as podman-docker does on Linux
+      exec "{{ containers_podman_bin }}" "$@"
+  when: _containers_docker_shim_wanted | bool
+
+- name: Remove the docker shim when it is not wanted (macOS)
+  when: not _containers_docker_shim_wanted | bool
+  block:
+    - name: Check for a laptop-setup docker shim (macOS)
+      ansible.builtin.command:
+        argv: [grep, -qF, "Managed by laptop-setup (containers chunk)", "{{ ansible_facts['user_dir'] }}/.local/bin/docker"]
+      register: _containers_docker_shim_ours
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Remove the laptop-setup docker shim (macOS)
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.local/bin/docker"
+        state: absent
+      when: _containers_docker_shim_ours.rc == 0
