@@ -12,8 +12,8 @@
 - name: Warn that the acli token is set but acli is not installed
   ansible.builtin.debug:
     msg: >-
-      WARNING: vault_acli_api_token and acli_site are set but acli is not installed (Linux: repos_dnf_acli_baseurl in
-      config.yml, then make repos_dnf packages; macOS: brew install acli), so Jira was not logged in.
+      WARNING: vault_acli_api_token and acli_site are set but acli is not installed (Linux: make packages; macOS:
+      brew tap atlassian/homebrew-acli && brew install acli), so Jira was not logged in.
   when: _acli_path.rc != 0
 
 # Linux: acli keeps the token in the Secret Service keyring; with no session bus or a locked login collection (an

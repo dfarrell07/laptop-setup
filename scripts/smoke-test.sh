@@ -284,7 +284,9 @@ fi
 _tool_absent="FAIL"
 [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && _tool_absent="WARN"
 _tools=("kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "jq:jq --version" "tmux:tmux -V" "rg:rg --version" "fzf:fzf --version" "transcrypt:transcrypt --version" "gitleaks:gitleaks version" "direnv:direnv --version")
-if [[ "$profile" == "work" ]]; then _tools+=("kind:kind version" "helm:helm version" "kustomize:kustomize version" "go:go version" "k9s:k9s version" "sops:sops --disable-version-check --version"); fi
+if [[ "$profile" == "work" ]]; then _tools+=("kind:kind version" "helm:helm version" "kustomize:kustomize version" "go:go version" "k9s:k9s version" "sops:sops --disable-version-check --version" "gitlint:gitlint --version" "oras:oras version"); fi
+# Release-management tools installed on Linux work machines only (skopeo from dnf/apt, ec and acli pinned).
+if [[ "$profile" == "work" && "$(uname -s)" == Linux ]]; then _tools+=("skopeo:skopeo --version" "ec:ec version" "acli:acli --version"); fi
 for tool in "${_tools[@]}"; do
   name="${tool%%:*}"; cmd="${tool#*:}"
   # shellcheck disable=SC2086  # intentional word-split: cmd is "binary arg1 arg2"
@@ -332,7 +334,7 @@ if [[ "$profile" != "work" || -z "$_acli_site" ]]; then
 elif [[ -n "$CONTAINER" ]]; then
   record "acli-auth" "SKIP" "host-only"
 elif ! command -v acli &>/dev/null; then
-  record "acli-auth" "WARN" "acli_site is set but acli is not installed (repos_dnf_acli_baseurl, then make repos_dnf packages)"
+  record "acli-auth" "WARN" "acli_site is set but acli is not installed: make packages"
 else
   _acli_out=""
   if _acli_out=$(timeout 20 acli jira auth status 2>/dev/null) && grep -qF "$_acli_site" <<<"$_acli_out"; then

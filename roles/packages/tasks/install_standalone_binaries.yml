@@ -42,6 +42,79 @@
     csb_action: >-
       Install sops manually from https://github.com/getsops/sops/releases
 
+- name: Install acli (Atlassian CLI) from its pinned rpm
+  when:
+    - profile == 'work'
+    - packages_install_binaries | bool
+    - is_dnf
+    - ansible_facts['architecture'] == 'x86_64'
+    - repos_dnf_acli_baseurl is not defined  # the internal mirror path in repos_dnf installs it instead
+  block:
+    - name: Assert the acli version is a plain release string (interpolated into the URL)
+      ansible.builtin.assert:
+        that: packages_acli_version is match('^[0-9]+(\\.[0-9]+)*-stable\\Z')
+
+    - name: Read the installed acli version
+      ansible.builtin.command:
+        argv: [rpm, -q, --qf, '%{VERSION}', acli]
+      register: _acli_rpm
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Download and install the pinned acli rpm
+      when: (_acli_rpm.stdout | default('')) != (packages_acli_version | replace('-', '~'))
+      # Root-owned 0700 temp dir: nobody else can swap or redirect the verified rpm before dnf reads it.
+      become: true
+      tags: [become]
+      block:
+        - name: Create a private directory for the acli rpm
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: acli-
+          register: _acli_tmp
+
+        - name: Download the acli rpm (SHA256-pinned)
+          ansible.builtin.get_url:
+            url: >-
+              https://acli.atlassian.com/linux/rpm/{{ packages_acli_version }}/acli_{{ packages_acli_version }}_linux_amd64.rpm
+            dest: "{{ _acli_tmp.path }}/acli.rpm"
+            checksum: "sha256:{{ packages_acli_rpm_sha256 }}"
+            mode: "0600"
+            timeout: 120
+
+        - name: Install the acli rpm
+          ansible.builtin.dnf:
+            name: "{{ _acli_tmp.path }}/acli.rpm"
+            state: present
+            disable_gpg_check: true  # the header is unsigned; the SHA256 pin above is the integrity check
+      always:
+        - name: Remove the acli rpm directory
+          ansible.builtin.file:
+            path: "{{ _acli_tmp.path }}"
+            state: absent
+          when: _acli_tmp.path is defined
+
+- name: Install oras (OCI artifact client)
+  when:
+    - profile == 'work'
+    - packages_install_binaries | bool
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+  ansible.builtin.include_tasks: install_tarball.yml
+  vars:
+    binary_name: oras
+    url: >-
+      https://github.com/oras-project/oras/releases/download/v{{ packages_oras_version
+      }}/oras_{{ packages_oras_version }}_linux_{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}.tar.gz
+    dest: /usr/local/bin/oras
+    checksum: "sha256:{{ packages_oras_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_oras_sha256 }}"
+    version_check_cmd: /usr/local/bin/oras version
+    version_string: "{{ packages_oras_version }}"
+    binary_in_archive: oras
+    csb_action: >-
+      Install oras manually from https://github.com/oras-project/oras/releases
+
 - name: Install gitleaks (secret scanner; version pinned to match CI linting.yml)
   # No profile guard — gitleaks is useful for personal repos; macOS brew also installs it universally.
   # Binary download (not dnf) required: Fedora 44 ships 8.30.0 but CI linting.yml pins 8.30.1; version must match CI.
