@@ -10,6 +10,8 @@ import tempfile
 import unittest
 import shutil
 
+import yaml
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -451,6 +453,81 @@ class SmokeTests(unittest.TestCase):
             (state / 'sshd_config.d/000-early.conf').unlink()
             self.assertEqual(run('true'), 'macos-remote-access PASS')
             self.assertIn('Screen-Sharing', run('true', 'true'))
+
+    def test_macos_dev_tools_needs_every_tool(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('  _brew=$( (brew --prefix)')
+        end = source.index('  unset _brew _missing _t', start)
+        with tempfile.TemporaryDirectory() as directory:
+            d = Path(directory)
+            (d / 'bin').mkdir()
+            (d / 'bin/brew').write_text('#!/bin/sh\necho "$PREFIX"\n')
+            (d / 'bin/brew').chmod(0o755)
+            prefix = d / 'prefix'
+
+            def tool(path):
+                path = prefix / path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('#!/bin/sh\n')
+                path.chmod(0o755)
+                return path
+
+            def run():
+                result = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c',
+                    'record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; }; _macos_python=python@3.14;\n'
+                    + source[start:end]],
+                    env=dict(os.environ, PATH=f'{d}/bin:/usr/bin:/bin', PREFIX=str(prefix)),
+                    capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                return result.stdout.strip()
+            self.assertEqual(run(), 'macos-dev-tools FAIL missing: python(python@3.14) autoreconf automake glibtoolize '
+                                    'pkg-config make(GNU) — run: make apply CHUNK=packages NOSUDO=1')
+            for path in ['opt/python@3.14/libexec/bin/python', 'bin/autoreconf', 'bin/automake', 'bin/glibtoolize',
+                         'bin/pkg-config']:
+                tool(path)
+            make = tool('opt/make/libexec/gnubin/make')
+            self.assertEqual(run(), 'macos-dev-tools PASS')
+            make.chmod(0o644)  # present but not executable
+            self.assertEqual(run(), 'macos-dev-tools FAIL missing: make(GNU) — run: make apply CHUNK=packages NOSUDO=1')
+
+    def test_docker_shim_needs_a_runnable_target(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('  if ! $_podman_machine; then record "docker-shim"')
+        end = source.index('\nfi\n', start)
+        with tempfile.TemporaryDirectory() as directory:
+            d = Path(directory)
+            (d / 'bin').mkdir()
+            (d / 'home/.local/bin').mkdir(parents=True)
+            shim = d / 'home/.local/bin/docker'
+            podman = d / 'podman'
+
+            def run(machine='true', docker_shim='true', molecule=''):
+                result = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c',
+                    'record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; };'
+                    f' _podman_machine={machine} _docker_shim={docker_shim};\n' + source[start:end]],
+                    env=dict(os.environ, PATH=f'{d}/bin:/usr/bin:/bin', HOME=str(d / 'home'),
+                             MOLECULE_PROJECT_DIRECTORY=molecule),
+                    capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                return result.stdout.strip()
+            self.assertEqual(run(machine='false'), 'docker-shim PASS containers_macos_machine_enabled is off')
+            self.assertEqual(run(docker_shim='false'), 'docker-shim PASS containers_macos_docker_shim is off')
+            self.assertTrue(run().startswith('docker-shim FAIL no docker command'))
+            self.assertTrue(run(molecule='/src').startswith('docker-shim WARN no docker command'))
+            # the shim as the containers role writes it
+            task = next(t for t in yaml.safe_load((ROOT / 'roles/containers/tasks/macos-docker.yml').read_text())
+                        if t.get('name') == 'Deploy the docker-to-podman shim (macOS)')
+            shim.write_text(task['ansible.builtin.copy']['content'].replace('{{ containers_podman_bin }}', str(podman)))
+            shim.chmod(0o755)
+            self.assertEqual(run(), f'docker-shim FAIL the docker shim runs {podman}, which is not executable — '
+                                    'run: make apply CHUNK=packages, then make apply CHUNK=containers')
+            podman.write_text('#!/bin/sh\n')
+            podman.chmod(0o755)
+            self.assertEqual(run(), 'docker-shim PASS')
+            shim.unlink()
+            (d / 'bin/docker').write_text('#!/bin/sh\n')  # a real docker on PATH
+            (d / 'bin/docker').chmod(0o755)
+            self.assertEqual(run(), 'docker-shim PASS')
 
     def test_github_ssh_auth_tells_unregistered_key_from_pin_needed(self):
         """A verify-required FIDO2 key always exits 255 under BatchMode: -v output says whether GitHub knows the key."""
