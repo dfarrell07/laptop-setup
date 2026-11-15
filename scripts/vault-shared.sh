@@ -125,8 +125,8 @@ no_rollback() {
   last=$(cat "$LAST_SEEN" 2>/dev/null || true)
   if [[ -z $last ]]; then
     # A machine with no record yet cannot tell a rolled-back history from the real one: show what it would trust.
-    printf 'The shared vault on GitHub is at:\n'
-    git -C "$S" log -1 --format='  %h %ci %s' "$1"
+    printf 'The shared vault on GitHub is at:\n' >&2
+    git -C "$S" log -1 --format='  %h %ci %s' "$1" >&2
     [[ -z ${VAULT_JOIN_CONFIRMED:-} ]] || return 0
     [[ -t 0 ]] || die "confirm the newest vault change in a terminal (make vault-join)"
     read -r -p "Is that the newest change you made to the vault? [y/N] " answer
@@ -188,7 +188,8 @@ verify_all() {  # every commit reachable from $1 must be signed by an allowed si
     grep -qxF "$c" "$VERIFIED" && continue
     # An SSH signature only: verify-commit would also accept an OpenPGP one from any key gpg trusts.
     git -C "$S" cat-file commit "$c" | sed '/^$/q' | grep -q '^gpgsig -----BEGIN SSH SIGNATURE-----' &&
-      git -C "$S" -c gpg.ssh.allowedSignersFile="$SIGNERS" verify-commit "$c" >/dev/null 2>&1 ||
+      git -C "$S" -c gpg.ssh.allowedSignersFile="$SIGNERS" -c gpg.program=false -c gpg.openpgp.program=false \
+        -c gpg.x509.program=false verify-commit "$c" >/dev/null 2>&1 ||
       die "commit $c in $S is not signed by your signing key: nothing was merged or used. Inspect it (git -C $S show --show-signature $c)"
     printf '%s\n' "$c" >>"$VERIFIED"
   done
@@ -216,8 +217,18 @@ txn_begin() {
 }
 txn_end() { trap - EXIT INT TERM; [[ -z ${TXN_DIR:-} ]] || rm -rf "$TXN_DIR"; TXN_DIR=''; }
 txn_rollback() {
-  local rc=$? f
+  local rc=$? f remote
   trap '' INT TERM  # a second Ctrl-C must not stop the restore halfway
+  # Interrupted while git push was finishing: if GitHub already has the new commit, the change is done, not undone.
+  if [[ -n ${TXN_PUSHING:-} ]]; then
+    remote=$(timeout 20 git -C "$S" ls-remote origin "refs/heads/$(git -C "$S" symbolic-ref --short HEAD 2>/dev/null)" 2>/dev/null | cut -f1)
+    if [[ $remote == "$TXN_PUSHING" ]]; then
+      rm -rf "$TXN_DIR"
+      seen "$TXN_PUSHING"
+      warn "interrupted after the push reached GitHub: the change is in place; run make vault-pull to finish here"
+      exit "$rc"
+    fi
+  fi
   [[ -z ${TXN_UNDO:-} ]] || "$TXN_UNDO"
   for f in vault.yml vault-pass.age recipients; do
     if [[ -f $TXN_DIR/$f ]]; then cp -p "$TXN_DIR/$f" "$S/$f"; else rm -f "$S/$f"; fi
@@ -239,7 +250,9 @@ commit_push() {
   # Signed, always: the other machines refuse an unsigned commit (a touch of the signing YubiKey).
   git -C "$S" commit -q -s -S -m "$1" ||
     die "signed commit in $S failed (commit signing needs your SSH signing key: make dotfiles)"
+  TXN_PUSHING=$(git -C "$S" rev-parse HEAD)
   git -C "$S" push -q || die "push from $S failed (offline, or another machine pushed first): run the command again"
+  TXN_PUSHING=
   txn_end  # pushed: from here on nothing may roll the clone back
   seen "$(git -C "$S" rev-parse HEAD)"
   ok "committed and pushed: $1"
