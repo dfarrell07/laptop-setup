@@ -558,14 +558,6 @@
   become: true
   tags: [become]
   block:
-    - name: Deploy the sshd login policy drop-in (macOS)
-      ansible.builtin.template:
-        src: sshd-macos.conf.j2
-        dest: "{{ desktop_macos_sshd_dropin }}"
-        mode: "0644"
-        owner: root
-        group: wheel
-
     # A fresh Mac has no host keys until its first ssh connection; sshd -t needs them
     - name: Create missing SSH host keys (macOS)
       ansible.builtin.command:
@@ -573,7 +565,18 @@
       register: _desktop_sshd_hostkeys
       changed_when: "'generating' in _desktop_sshd_hostkeys.stdout"
 
-    # launchd starts sshd per connection, so the next login reads the file: check it before anyone connects
+    # launchd starts sshd per connection, so the next login reads the file: sshd checks it (alone, with the default
+    # host keys, as root) before it replaces the live one, so a file it rejects never lands
+    - name: Deploy the sshd login policy drop-in (macOS)
+      ansible.builtin.template:
+        src: sshd-macos.conf.j2
+        dest: "{{ desktop_macos_sshd_dropin }}"
+        mode: "0644"
+        owner: root
+        group: wheel
+        validate: /usr/sbin/sshd -t -f %s
+
+    # The whole configuration, sshd_config and the other drop-ins with ours, before the job starts sshd with it
     - name: Validate the sshd configuration (macOS)
       ansible.builtin.command:
         argv: [/usr/sbin/sshd, -t]
@@ -612,18 +615,6 @@
       delay: 2
       until: _desktop_sshd_bootstrap.rc == 0
       when: _desktop_sshd_job.rc != 0 or _desktop_sshd_plist is changed
-  rescue:
-    - name: Remove the sshd drop-in that failed validation (macOS)
-      ansible.builtin.file:
-        path: "{{ desktop_macos_sshd_dropin }}"
-        state: absent
-      when: _desktop_sshd_plist is not defined
-
-    - name: Fail on the sshd setup (macOS)
-      ansible.builtin.fail:
-        msg: >-
-          sshd setup failed{{ ' (sshd -t rejected ' ~ desktop_macos_sshd_dropin ~ ', so it was removed)'
-          if _desktop_sshd_plist is not defined else '' }}: {{ ansible_failed_result.msg | default('') }}
 
 # Screen Sharing: the same launchd switch as System Settings > General > Sharing; enable clears the job's Disabled
 # override and bootstrap loads it now. Reading the state needs no sudo.
