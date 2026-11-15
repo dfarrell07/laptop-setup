@@ -49,7 +49,8 @@ dotfiles_claude_queue_repo: "{{ dotfiles_github_user }}/claude-tasks"
 # to the work git identity.
 # Override in config.yml to add or remove work orgs without editing templates.
 # Other owners' private GitHub repositories fetched over HTTPS with gh's token (owner/repo). The credential helper
-# gives the token only to the owner's own repositories and these; the pre-push hook still refuses token pushes here.
+# gives the token only to the owner's own repositories and these; the pre-push hook still refuses token pushes here,
+# but a repository whose own core.hooksPath skips that hook could push with the token where you have write access.
 dotfiles_github_https_read_repos:
   - stolostron/acm-threat-model
   - ansible-automation-platform/automation-portal-bootc-container

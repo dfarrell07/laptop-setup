@@ -591,7 +591,19 @@ if [[ -z "$_git_name" || "$_git_name" == "CHANGE_ME" ]]; then record "git-user-n
 else record "git-user-name" "PASS"; fi
 if [[ -z "$_git_email" || "$_git_email" == "CHANGE_ME" ]]; then record "git-user-email" "FAIL" "git user.email='$_git_email' — set dotfiles_user_email_work/personal in config.yml and re-run: make dotfiles"
 else record "git-user-email" "PASS"; fi
-unset _gc _git_name _git_email
+unset _git_name _git_email
+# GitHub token guard: gh's token only for the owner's repos. `gh auth login` (answering yes to "Authenticate Git with
+# your GitHub credentials?") or `gh auth setup-git` replaces the helper with gh's own, which serves every repo.
+if [[ -f "$_gc" ]] && grep -q 'Ansible managed' "$_gc"; then
+  _helper=$(git config --file "$_gc" --get-all credential.https://github.com.helper 2>/dev/null | tail -n 1 || true)
+  if [[ "$_helper" != *"/.config/git/gh-credential "* ]]; then
+    record "git-token-guard" "FAIL" "the github.com credential helper is '$_helper' (gh auth setup-git replaces it), so gh's token reaches any repo; run: make dotfiles, and answer No to gh's git question"
+  elif [[ ! -x "$HOME/.config/git/gh-credential" || ! -x "$HOME/.config/git/template/hooks/pre-push" ]]; then
+    record "git-token-guard" "FAIL" "the credential helper or the global pre-push hook is missing; run: make dotfiles"
+  else record "git-token-guard" "PASS"; fi
+  unset _helper
+fi
+unset _gc
 # git identity files and includeIf routing
 _gc_work="$HOME/.config/git/config-work"
 _gc_personal="$HOME/.config/git/config-personal"
