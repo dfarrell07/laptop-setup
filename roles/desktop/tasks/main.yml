@@ -700,6 +700,19 @@
   loop_control:
     label: "{{ item.item | default('') }}"
 
+# Each Homebrew upgrade of mosh leaves the previous Cellar path in the list, still allowed: remove those
+- name: Remove stale mosh-server entries from the macOS firewall
+  ansible.builtin.command:
+    argv: [/usr/libexec/ApplicationFirewall/socketfilterfw, --remove, "{{ item }}"]
+  changed_when: true
+  become: true
+  tags: [become]
+  when: is_macos and desktop_macos_firewall_allow | length > 0
+  loop: >-
+    {{ _desktop_fw_apps.stdout | default('') | regex_findall('(/[^ ]*/Cellar/mosh/[^/ ]+/bin/mosh-server)(?= |$)') | unique
+       | difference(_desktop_fw_allow_paths.results | default([]) | selectattr('rc', 'defined') | selectattr('rc', 'eq', 0)
+                    | map(attribute='stdout') | list) }}
+
 # --- GNOME hardening (Linux only, GNOME desktops) ---
 - name: GNOME hardening dconf settings
   when:
