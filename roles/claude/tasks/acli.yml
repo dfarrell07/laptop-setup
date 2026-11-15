@@ -1,0 +1,86 @@
+---
+# acli login from the vault (docs: roles/claude/defaults/main.yml, acli_*). The token goes only over stdin, never on a
+# command line or in output (no_log). An acli already logged in to acli_site is left alone.
+- name: Check that acli is installed
+  ansible.builtin.command:
+    argv: [sh, -c, 'command -v acli']
+  register: _acli_path
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Warn that the acli token is set but acli is not installed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: vault_acli_api_token and acli_site are set but acli is not installed (Linux: repos_dnf_acli_baseurl in
+      config.yml, then make repos_dnf packages; macOS: brew install acli), so Jira was not logged in.
+  when: _acli_path.rc != 0
+
+- name: Log acli in to each product
+  when: _acli_path.rc == 0
+  block:
+    - name: Read acli login state
+      ansible.builtin.command:
+        argv: [acli, "{{ item }}", auth, status]
+      loop: "{{ acli_products }}"
+      register: _acli_status
+      no_log: true
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Decide which products need a login
+      ansible.builtin.set_fact:
+        _acli_need: >-
+          {{ _acli_status.results | rejectattr('rc', 'equalto', 0) | map(attribute='item') | list
+             + _acli_status.results | selectattr('rc', 'equalto', 0)
+               | rejectattr('stdout', 'search', acli_site | regex_escape) | map(attribute='item') | list }}
+
+    # Linux: the token goes to the Secret Service keyring, which needs a session bus and an unlocked login collection.
+    - name: Check the login keyring is available
+      ansible.builtin.command:
+        argv: [busctl, --user, get-property, org.freedesktop.secrets, /org/freedesktop/secrets/collection/login,
+               org.freedesktop.Secret.Collection, Locked]
+      register: _acli_keyring
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      when: is_linux and _acli_need | length > 0
+
+    - name: Warn that the keyring is not available for the acli login
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: acli was not logged in to {{ _acli_need | join(', ') }}: it stores the token in the login keyring,
+          which is not reachable or is locked here (an SSH session, or no desktop login). Run make claude from a
+          desktop session.
+      when: is_linux and _acli_need | length > 0 and (_acli_keyring.rc | default(1) != 0
+            or (_acli_keyring.stdout | default('') | trim) != 'b false')
+
+    - name: Report acli login not simulated in check mode
+      ansible.builtin.debug:
+        msg: "CHECK MODE: acli would log in to {{ _acli_need | join(', ') }} at {{ acli_site }}; not simulated."
+      when: ansible_check_mode and _acli_need | length > 0
+
+    - name: Run acli auth login with the vault token
+      ansible.builtin.command:
+        argv: [timeout, "60", acli, "{{ item }}", auth, login, --site, "{{ acli_site }}", --email, "{{ acli_email }}", --token]
+        stdin: "{{ acli_api_token }}"
+        stdin_add_newline: false
+      loop: "{{ _acli_need }}"
+      no_log: true
+      changed_when: true
+      register: _acli_login
+      failed_when: false
+      when:
+        - not ansible_check_mode
+        - _acli_need | length > 0
+        - not is_linux or ((_acli_keyring.rc | default(1)) == 0 and (_acli_keyring.stdout | default('') | trim) == 'b false')
+
+    - name: Warn about failed acli logins
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: acli could not log in to {{ item.item }} (output hidden): check acli_site and acli_email in
+          config.yml and the token (Atlassian tokens expire within a year: make vault-edit, then make claude).
+      loop: "{{ _acli_login.results | default([]) | selectattr('rc', 'defined') | rejectattr('rc', 'equalto', 0) | list }}"
+      loop_control:
+        label: "{{ item.item }}"

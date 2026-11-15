@@ -158,6 +158,8 @@ USER="${USER:-$(id -un)}"  # cron/env -i runs leave USER unset; later checks use
 # user-updater opt-out.
 _codex_work=$(awk '/^codex_work_config_dir:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/[[:space:]]*#.*$/, "");
   gsub(/^["\047]|["\047]$/, ""); sub(/[[:space:]]+$/, ""); print; exit}' "$_cfg" 2>/dev/null || true)
+_acli_site=$(awk '/^acli_site:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/[[:space:]]*#.*$/, "");
+  gsub(/^["\047]|["\047]$/, ""); sub(/[[:space:]]+$/, ""); print; exit}' "$_cfg" 2>/dev/null || true)
 _user_updates_off=false
 grep -qiE '^packages_user_updates_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _user_updates_off=true
 unset _cfg
@@ -292,6 +294,20 @@ else
   fi
   unset _codex_work
 fi
+# Jira through acli (work profile, when config.yml sets acli_site): the claude role logs it in from
+# vault_acli_api_token. `acli jira auth status` shows the site and account, never the token.
+if [[ "$profile" != "work" || -z "$_acli_site" ]]; then
+  record "acli-auth" "PASS" "not applicable (personal profile or acli_site unset)"
+elif [[ -n "$CONTAINER" ]]; then
+  record "acli-auth" "SKIP" "host-only"
+elif ! command -v acli &>/dev/null; then
+  record "acli-auth" "WARN" "acli_site is set but acli is not installed (repos_dnf_acli_baseurl, then make repos_dnf packages)"
+elif timeout 20 acli jira auth status 2>/dev/null | grep -qF "$_acli_site"; then
+  record "acli-auth" "PASS"
+else
+  record "acli-auth" "WARN" "acli is not logged in to $_acli_site: add vault_acli_api_token (make vault-edit), then make claude from a desktop session (expired tokens too)"
+fi
+unset _acli_site
 # Session placement (claude role writes ~/.config/claude-sessions/machine; the launcher decides): no misplaced sessions
 _placement=$HOME/.config/claude-sessions/machine
 _launcher=$(compgen -G "${HOME}/src/*/claude-skills*/skills/sessions/scripts/session.sh" | head -1 || true)
