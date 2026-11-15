@@ -8,14 +8,28 @@
      'HostKeyAlgorithms': ssh_host_key_algorithms.split(','), 'PubkeyAcceptedAlgorithms': ssh_pubkey_accepted_algorithms}) %}
 PasswordAuthentication no
 KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+HostbasedAuthentication no
+GSSAPIAuthentication no
 AuthenticationMethods publickey
 PubkeyAcceptedAlgorithms {{ _alg['PubkeyAcceptedAlgorithms'] | map('regex_replace', '[\r\n].*', '') | join(',') }}
 PermitRootLogin no
 PermitUserEnvironment no
+AuthorizedKeysFile .ssh/authorized_keys
 AllowUsers {% for net in desktop_macos_ssh_allow_from %}{{ ansible_facts['user_id'] }}@{{ net }}{{ ' ' if not loop.last }}{% endfor %}
 
 MaxAuthTries 3
+MaxSessions {{ desktop_macos_ssh_max_sessions | int }}
 LoginGraceTime 30
+# No MaxStartups: launchd accepts each connection and starts one sshd -i for it, so no sshd sees concurrent
+# unauthenticated connections and the limit never applies.
+
+ClientAliveInterval {{ desktop_macos_ssh_client_alive_interval | int }}
+ClientAliveCountMax {{ desktop_macos_ssh_client_alive_count_max | int }}
+{% if desktop_macos_ssh_unused_connection_timeout | int %}
+UnusedConnectionTimeout {{ desktop_macos_ssh_unused_connection_timeout | int }}
+{% endif %}
+TCPKeepAlive no
 
 X11Forwarding no
 AllowAgentForwarding {{ desktop_macos_ssh_allow_agent_forwarding | regex_replace('[\r\n].*', '') }}
@@ -26,3 +40,5 @@ HostKeyAlgorithms {{ _alg['HostKeyAlgorithms'] | map('regex_replace', '[\r\n].*'
 Ciphers {{ _alg['Ciphers'] | map('regex_replace', '[\r\n].*', '') | join(',') }}
 MACs {{ _alg['MACs'] | map('regex_replace', '[\r\n].*', '') | join(',') }}
 KexAlgorithms {{ _alg['KexAlgorithms'] | map('regex_replace', '[\r\n].*', '') | join(',') }}
+RekeyLimit {{ desktop_macos_ssh_rekey_limit | regex_replace('[\r\n].*', '') }}
+Compression no

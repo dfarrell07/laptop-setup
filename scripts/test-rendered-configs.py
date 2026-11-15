@@ -306,8 +306,13 @@ class RenderedConfigTests(unittest.TestCase):
         text = self.read('sshd_macos')
         for line in ('PasswordAuthentication no', 'KbdInteractiveAuthentication no', 'AuthenticationMethods publickey',
                      'PermitRootLogin no', 'PermitUserEnvironment no', 'MaxAuthTries 3', 'LoginGraceTime 30',
-                     'X11Forwarding no', 'AllowAgentForwarding no', 'AllowTcpForwarding local', 'LogLevel VERBOSE'):
+                     'X11Forwarding no', 'AllowAgentForwarding no', 'AllowTcpForwarding local', 'LogLevel VERBOSE',
+                     'PermitEmptyPasswords no', 'HostbasedAuthentication no', 'GSSAPIAuthentication no',
+                     'AuthorizedKeysFile .ssh/authorized_keys', 'MaxSessions 10', 'ClientAliveInterval 300',
+                     'ClientAliveCountMax 2', 'UnusedConnectionTimeout 3600', 'TCPKeepAlive no', 'RekeyLimit 1G 1h',
+                     'Compression no'):
             self.assertIn(line + '\n', text)
+        self.assertNotIn('\nMaxStartups', text)  # no effect with one sshd -i per connection
         allow = next(line for line in text.splitlines() if line.startswith('AllowUsers '))
         users = allow.split()[1:]
         self.assertEqual([u.split('@', 1)[1] for u in users], ['100.64.0.0/10', 'fd7a:115c:a1e0::/48'])
@@ -319,9 +324,17 @@ class RenderedConfigTests(unittest.TestCase):
         for directive, var in [('Ciphers', 'ssh_ciphers'), ('MACs', 'ssh_macs'), ('KexAlgorithms', 'ssh_kex_algorithms'),
                                ('HostKeyAlgorithms', 'ssh_host_key_algorithms')]:
             self.assertEqual(directives[directive], group_vars[var], directive)
-        linux = (ROOT / 'roles/system/defaults/main.yml').read_text()
-        self.assertIn('system_ssh_allow_agent_forwarding: "no"', linux)  # the Mac mirrors these defaults
-        self.assertIn('system_ssh_allow_tcp_forwarding: "local"', linux)
+        # the Mac's defaults mirror the Linux ones: desktop_macos_ssh_X is "{{ system_ssh_X | default(<Linux value>) }}"
+        linux = yaml.safe_load((ROOT / 'roles/system/defaults/main.yml').read_text())
+        desktop = yaml.safe_load((ROOT / 'roles/desktop/defaults/main.yml').read_text())
+        mirrors = {name: value for name, value in desktop.items() if name.startswith('desktop_macos_ssh_')
+                   and str(value).startswith('{{ system_ssh_')}
+        self.assertEqual(len(mirrors), 7, mirrors)
+        for name, value in mirrors.items():
+            match = re.fullmatch(r"\{\{ (system_ssh_\w+) \| default\((.*)\) \}\}", value)
+            self.assertTrue(match, value)
+            self.assertEqual(match.group(1), name.replace('desktop_macos_', 'system_'))
+            self.assertEqual(yaml.safe_load(match.group(2)), linux[match.group(1)], name)
         sshd = Path('/usr/sbin/sshd')
         if sshd.exists():  # the drop-in parses with this host's sshd (Apple's on macOS), every algorithm included
             hostkey = self.out / 'hostkey'
