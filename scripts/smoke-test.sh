@@ -593,15 +593,24 @@ if [[ -z "$_git_email" || "$_git_email" == "CHANGE_ME" ]]; then record "git-user
 else record "git-user-email" "PASS"; fi
 unset _git_name _git_email
 # GitHub token guard: gh's token only for the owner's repos. `gh auth login` (answering yes to "Authenticate Git with
-# your GitHub credentials?") or `gh auth setup-git` replaces the helper with gh's own, which serves every repo.
+# your GitHub credentials?"), `gh auth setup-git` or any other github.com credential helper defeats it. Ask git for
+# credentials for an upstream URL with a stub gh first on PATH: any password at all means a helper leaks (the
+# output is matched, never printed).
 if [[ -f "$_gc" ]] && grep -q 'Ansible managed' "$_gc"; then
-  _helper=$(git config --file "$_gc" --get-all credential.https://github.com.helper 2>/dev/null | tail -n 1 || true)
-  if [[ "$_helper" != *"/.config/git/gh-credential "* ]]; then
-    record "git-token-guard" "FAIL" "the github.com credential helper is '$_helper' (gh auth setup-git replaces it), so gh's token reaches any repo; run: make dotfiles, and answer No to gh's git question"
-  elif [[ ! -x "$HOME/.config/git/gh-credential" || ! -x "$HOME/.config/git/template/hooks/pre-push" ]]; then
+  if [[ ! -x "$HOME/.config/git/gh-credential" || ! -x "$HOME/.config/git/template/hooks/pre-push" ]]; then
     record "git-token-guard" "FAIL" "the credential helper or the global pre-push hook is missing; run: make dotfiles"
-  else record "git-token-guard" "PASS"; fi
-  unset _helper
+  else
+    _tg_dir=$(mktemp -d)
+    printf '#!/bin/sh\ncat >/dev/null\nprintf "username=x\\npassword=smoke-sentinel\\n"\n' > "$_tg_dir/gh"
+    chmod 0700 "$_tg_dir/gh"
+    if (cd "$_tg_dir" && printf 'url=https://github.com/torvalds/linux.git\n\n' \
+        | env -u GIT_ASKPASS -u SSH_ASKPASS PATH="$_tg_dir:$PATH" GIT_TERMINAL_PROMPT=0 \
+          timeout 20 git credential fill 2>/dev/null | grep -q '^password='); then
+      record "git-token-guard" "FAIL" "a git credential helper hands a token to upstream GitHub repos (gh auth setup-git or a [credential] helper in ~/.config/git/config or ~/.gitconfig); run: make dotfiles, and answer No to gh's git question"
+    else record "git-token-guard" "PASS"; fi
+    rm -rf "$_tg_dir"
+    unset _tg_dir
+  fi
 fi
 unset _gc
 # git identity files and includeIf routing
