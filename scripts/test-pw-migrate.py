@@ -164,6 +164,14 @@ class PwMigrateTests(unittest.TestCase):
         self.assertIn('Not imported', result.stdout)
         self.assertFalse(self.export.exists())
 
+    def test_empty_export_fails_before_bw_and_is_removed(self):
+        self.export.write_text('url,username,password,totp,extra,name,grouping,fav\n')
+        result = self.run_migrate()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('no entries', result.stderr)
+        self.assertFalse(self.export.exists())
+        self.assertFalse((self.work / 'state.json').exists())
+
     def test_hangup_at_the_prompt_removes_the_export(self):
         environment = dict(os.environ, EXPORT=str(self.export), BW_CMD=f'{sys.executable} {self.work / "fakebw.py"}',
                            FAKE_BW_STATE=str(self.work / 'state.json'))

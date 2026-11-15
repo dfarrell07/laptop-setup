@@ -2,7 +2,8 @@
 
 The owner's choice of Bitwarden (with KeePassXC for offline recovery secrets) and the order of the move are in the
 owner's private notes. This page covers the one step automation does: importing the LastPass vault into Bitwarden
-with `make pw-migrate`, without the plaintext export ever reaching persistent storage, a log, git or an agent.
+with `make pw-migrate`, without the plaintext export reaching a disk file, a log, git or an agent (with disk swap,
+use encrypted swap or `sudo swapoff -a` for the run; the target warns).
 
 ## What you do, what the target does
 
@@ -11,15 +12,17 @@ with `make pw-migrate`, without the plaintext export ever reaching persistent st
 2. **You** install the Bitwarden CLI (`bw`) and sign in: `bw login`, then `export BW_SESSION="$(bw unlock --raw)"`
    in the same shell. On macOS laptop-setup installs the Bitwarden app; `bw` itself comes from Bitwarden's release
    page or Homebrew (`bitwarden-cli`). Avoid the npm package version that shipped a trojan (2026.4.0).
-3. **You** export the LastPass vault as CSV straight into memory and decrypt it there:
-   - Linux: save it under `/dev/shm` or `$XDG_RUNTIME_DIR` (both tmpfs), e.g. `/dev/shm/lastpass.csv`.
+3. **You** export the LastPass vault as CSV (plaintext) straight into memory:
+   - Linux: save it under `$XDG_RUNTIME_DIR` (tmpfs, private to you), e.g. `$XDG_RUNTIME_DIR/lastpass.csv`; `/dev/shm`
+     also works but is shared, so the file is readable by others until the target makes it 0600.
    - macOS: create a RAM disk first, `diskutil erasevolume HFS+ PWMIGRATE $(hdiutil attach -nomount ram://262144)`
      (128 MB), and save it in `/Volumes/PWMIGRATE`. Eject it afterwards: `diskutil eject PWMIGRATE`.
    - Do not open the file in an editor or a viewer, and do not save it anywhere else first: browsers' download
      folders and editors' swap files are on disk.
-4. **Dry run**: `make pw-migrate EXPORT=/dev/shm/lastpass.csv DRY_RUN=1 KEEP_EXPORT=1` prints only counts (items,
-   logins, secure notes, folders, shared-folder items, TOTP seeds, attachments) and keeps the file for the real run.
-5. **Import**: `make pw-migrate EXPORT=/dev/shm/lastpass.csv` prints the counts and the vault's current counts,
+4. **Dry run**: `make pw-migrate EXPORT=$XDG_RUNTIME_DIR/lastpass.csv DRY_RUN=1 KEEP_EXPORT=1` prints only counts
+   (items, logins, secure notes, payment cards, addresses, other typed notes, folders, shared-folder items, TOTP seeds,
+   attachments) and keeps the file for the real run. It warns when disk swap is active (tmpfs can be swapped out).
+5. **Import**: `make pw-migrate EXPORT=$XDG_RUNTIME_DIR/lastpass.csv` prints the counts and the vault's current counts,
    asks before importing, runs `bw import lastpasscsv`, then verifies: the vault's item, login and TOTP counts
    must grow by exactly the export's, and new folders must not exceed the export's. It removes the export (and the
    TOTP-stripped copy it made next to it) whether it succeeds, fails, is interrupted or you decline (add
@@ -39,6 +42,7 @@ yourself, or let an agent run it, but never `cat`, `head` or open the file.
 | --- | --- | --- |
 | `EXPORT` | (required) | Path of the decrypted LastPass CSV |
 | `DRY_RUN=1` | off | Counts only; removes the export unless `KEEP_EXPORT=1` |
+| `KEEP_EXPORT=1` | off | Keep the export after a dry run or a declined import |
 | `STRIP_TOTP=0` | strip | Import TOTP seeds too (the owner's plan keeps them on the YubiKey, not in Bitwarden) |
 | `ASSUME_YES=1` | ask | Skip the confirmation |
 
