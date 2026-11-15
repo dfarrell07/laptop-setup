@@ -816,8 +816,8 @@ if command -v vim &>/dev/null; then record "vim-binary" "PASS"
 elif $IS_LINUX; then record "vim-binary" "FAIL" "vim not found — run: make packages"
 else record "vim-binary" "WARN" "vim not found (macOS: system or brew)"; fi
 
-# --- pipx tools (yamllint, ansible-lint — installed by packages role via pipx) ---
-for tool in yamllint ansible-lint; do
+# --- pipx tools (yamllint, ansible-lint, gitlint — installed by packages role via pipx) ---
+for tool in yamllint ansible-lint gitlint; do
   if command -v "$tool" &>/dev/null; then
     if exec_cmd "$tool" --version &>/dev/null; then
       record "pipx-$tool" "PASS"

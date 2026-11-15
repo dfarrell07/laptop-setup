@@ -36,6 +36,16 @@
         name: "ansible-lint=={{ packages_ansible_lint_version }}"
         state: install
       timeout: 300
+
+    # gitlint itself is a metapackage without the command: gitlint-core has it, and its trusted-deps extra pins the
+    # dependencies as the gitlint package does
+    - name: Gitlint present at {{ packages_gitlint_version }}
+      community.general.pipx:
+        executable: pipx
+        python: "{{ packages_pipx_python }}"
+        name: "gitlint-core[trusted-deps]=={{ packages_gitlint_version }}"
+        state: install
+      timeout: 300
   rescue:
     - name: Record pipx install failure (CSB)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
