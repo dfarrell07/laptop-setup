@@ -6,6 +6,8 @@ Uses a fake LastPass vault on /dev/shm and a fake `bw` (BW_CMD); never a real va
 import csv
 import json
 import os
+import signal
+import time
 from pathlib import Path
 import subprocess
 import sys
@@ -23,6 +25,8 @@ state_path = os.environ['FAKE_BW_STATE']
 state = json.load(open(state_path)) if os.path.exists(state_path) else {'items': [], 'folders': []}
 mode = os.environ.get('FAKE_BW_MODE', '')
 args = sys.argv[1:]
+assert args[0] == '--nointeraction'  # never prompts on the captured stdout
+args = args[1:]
 if args[0] == 'sync':
     print('Syncing complete.')
 elif args[:2] == ['list', 'items']:
@@ -48,6 +52,7 @@ elif args[:2] == ['import', 'lastpasscsv']:
                                'login': None if note else {'password': row['password'], 'totp': row['totp'] or None}})
     json.dump(state, open(state_path, 'w'))
     print('Imported ' + str(len(rows)) + ' items: hunter2-secret')
+json.dump(state, open(state_path, 'w'))
 '''
 ROWS = [
     {'url': 'https://a.example.test', 'username': 'alice@example.test', 'password': 'hunter2-secret',
@@ -98,7 +103,7 @@ class PwMigrateTests(unittest.TestCase):
                      'shared folder items: 1', 'totp: 1', 'attachments: 0']:
             self.assertIn(line, result.stdout)
         self.assertFalse(self.export.exists())
-        self.assertFalse((self.work / 'state.json').exists())  # bw never called
+        self.assertFalse((self.work / 'state.json').exists())  # bw never called (it writes state on every call)
 
     def test_dry_run_can_keep_the_export(self):
         self.assertEqual(self.run_migrate(DRY_RUN='1', KEEP_EXPORT='1').returncode, 0)
@@ -158,6 +163,22 @@ class PwMigrateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn('Not imported', result.stdout)
         self.assertFalse(self.export.exists())
+
+    def test_hangup_at_the_prompt_removes_the_export(self):
+        environment = dict(os.environ, EXPORT=str(self.export), BW_CMD=f'{sys.executable} {self.work / "fakebw.py"}',
+                           FAKE_BW_STATE=str(self.work / 'state.json'))
+        process = subprocess.Popen([sys.executable, str(SCRIPT)], env=environment, stdin=subprocess.PIPE,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        deadline = time.monotonic() + 30
+        while not (self.work / 'state.json').exists() and time.monotonic() < deadline:
+            time.sleep(0.1)  # bw list ran: the script is at the confirmation prompt
+        time.sleep(0.5)
+        process.send_signal(signal.SIGHUP)
+        out, err = process.communicate(timeout=30)
+        self.assertNotEqual(process.returncode, 0)
+        self.assertFalse(self.export.exists())
+        for secret in SECRETS:
+            self.assertNotIn(secret, out + err)
 
     def test_declined_confirmation_keeps_the_export_when_asked(self):
         environment = dict(os.environ, EXPORT=str(self.export), BW_CMD=f'{sys.executable} {self.work / "fakebw.py"}',
