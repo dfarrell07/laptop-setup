@@ -1,0 +1,15 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Daily user-space software updates (npm globals, pipx, dev container)
+
+[Service]
+Type=oneshot
+# A timer that came due during suspend fires on resume, before Wi-Fi is back; wait up to 2 min for it.
+ExecStartPre=-/usr/bin/nm-online -q -t 120
+Environment="LAPTOP_UPDATE_NPM={{ packages_user_updates_npm | join(' ') }}"
+Environment="LAPTOP_UPDATE_PIPX_SKIP={{ packages_user_updates_pipx_skip | join(' ') }}"
+ExecStart=%h/.local/bin/laptop-user-update {{ packages_user_updates_container | quote }}
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=1h
+SyslogIdentifier=laptop-user-update

@@ -2,6 +2,12 @@
 [Unit]
 Description=AIDE file integrity check
 ConditionPathExists=/var/lib/aide/aide.db.gz
+# A pending package rebaseline goes first (Wants= pulls it in; it is skipped when none is pending), so a check never
+# reports the update it is about to accept.
+Wants=aide-rebaseline.service
+After=aide-rebaseline.service
+# Never scan mid-transaction when both Persistent timers catch up at boot (ordering only).
+After=dnf5-automatic.service dnf-automatic.service
 OnFailure=aide-notify@%n.service
 
 [Service]

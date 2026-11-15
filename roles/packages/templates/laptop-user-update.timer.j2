@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Daily user-space software updates
+
+[Timer]
+OnCalendar={{ packages_user_updates_calendar }}
+RandomizedDelaySec=1h
+# Run a missed update after login, boot or resume
+Persistent=true
+
+[Install]
+WantedBy=timers.target
