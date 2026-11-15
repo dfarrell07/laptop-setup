@@ -85,7 +85,7 @@ class SharedVault(unittest.TestCase):
                    SECRETS_REMOTE=str(self.remote), VAULT_AGE_IDENTITIES=str(self.keys[name][0]),
                    ANSIBLE_VAULT_PASSWORD_FILE='scripts/vault-pass.sh', TEST_EDITOR=str(editor),
                    GIT_CONFIG_GLOBAL=str(home / 'gitconfig'), GIT_CONFIG_NOSYSTEM='1',
-                   VAULT_ALLOWED_SIGNERS=str(self.signers))
+                   VAULT_ALLOWED_SIGNERS=str(self.signers), VAULT_JOIN_CONFIRMED='1')
         Path(env['GIT_CONFIG_GLOBAL']).write_text(
             f'[user]\n\tname = t\n\temail = t@t\n\tsigningkey = {self.signing}\n[gpg]\n\tformat = ssh\n'
             '[init]\n\tdefaultBranch = main\n[safe]\n\tbareRepository = all\n')
@@ -368,7 +368,7 @@ class SharedVault(unittest.TestCase):
         failed = self.shared('a', a, 'edit', check=False, **self.NO_PUSH)
         self.assertNotEqual(failed.returncode, 0)
         self.assertEqual(self.snapshot('a'), before)
-        kept = Path(self.env('a', a)['XDG_CONFIG_HOME']) / 'laptop-setup/vault.yml.unpushed'
+        kept = next((Path(self.env('a', a)['XDG_CONFIG_HOME']) / 'laptop-setup').glob('vault.yml.unpushed.*'))
         self.assertIn('vault_codex_api_key: edited', self.view('a', a, str(kept)))
 
     def test_signers_come_from_allowed_signers_and_must_match_a_pin(self):
@@ -384,8 +384,20 @@ class SharedVault(unittest.TestCase):
         self.assertNotEqual(wrong.returncode, 0)
         self.assertIn('match secrets_signing_fingerprints', wrong.stderr)
         fingerprint = run(['ssh-keygen', '-lf', str(self.tmp / 'signing.pub')]).stdout.split()[1]
-        self.shared('b', b, 'join', VAULT_ALLOWED_SIGNERS=fresh, VAULT_SIGNING_FINGERPRINTS=fingerprint)
+        # The pin as config.yml holds it (the colon inside SHA256: must survive parsing).
+        with open(b / 'config.yml', 'a') as f:
+            f.write(f'secrets_signing_fingerprints: !unsafe "SHA256:other {fingerprint}"  # mine\n')
+        self.shared('b', b, 'join', VAULT_ALLOWED_SIGNERS=fresh)
         self.assertIn('secret-a', self.view('b', b))
+
+    def test_a_fresh_join_must_confirm_the_head_it_trusts(self):
+        a = self.init_a()
+        self.shared('a', a, 'add-key', RECIPIENT=self.keys['b'][1])
+        b = self.machine('b', None)
+        result = self.shared('b', b, 'join', check=False, VAULT_JOIN_CONFIRMED='')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('confirm the newest vault change', result.stderr)
+        self.assertIn('Recipients: add a key', result.stdout)  # what it would trust is shown
 
     def test_init_refuses_a_plaintext_vault_and_changes_nothing(self):
         a = self.machine('a', None)
