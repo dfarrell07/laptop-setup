@@ -33,9 +33,10 @@ alt-enter = 'exec-and-forget open -na {{ desktop_macos_terminal_app }}'
 alt-shift-q = 'close'
 alt-shift-c = 'reload-config'
 # sway $mod+d (wofi drun): pick an app with choose (brew choose-gui) and open it
-alt-d = 'exec-and-forget ls /Applications /Applications/Utilities /System/Applications /System/Applications/Utilities | sed -n "s/\\.app$//p" | sort -u | {{ dotfiles_homebrew_prefix }}/bin/choose | xargs -I{} open -a "{}"'
-# sway $mod+Ctrl+l (swaylock): the macOS lock-screen shortcut, sent through System Events (AeroSpace already has Accessibility)
-alt-ctrl-l = 'exec-and-forget osascript -e "tell application \"System Events\" to keystroke \"q\" using {control down, command down}"'
+alt-d = 'exec-and-forget ls /Applications /Applications/Utilities /System/Applications /System/Applications/Utilities "$HOME/Applications" 2>/dev/null | sed -n "s/\\.app$//p" | sort -u | {{ dotfiles_homebrew_prefix }}/bin/choose | { IFS= read -r app && open -a "$app"; }'
+# sway $mod+Ctrl+l (swaylock): the macOS lock shortcut via System Events, after the held keys are released.
+# First use prompts to let AeroSpace control System Events (Privacy & Security > Automation).
+alt-ctrl-l = 'exec-and-forget sleep 0.4; osascript -e "tell application \"System Events\" to keystroke \"q\" using {control down, command down}"'
 
 # Focus wraps at the workspace edge, as in sway
 alt-h = 'focus --boundaries-action wrap-around-the-workspace left'
