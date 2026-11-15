@@ -306,15 +306,19 @@ class SmokeTests(unittest.TestCase):
 
     def test_cross_session_inbound_check_fails_for_any_managed_dir_without_accept(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        parse = source[source.index('_claude_extra_dirs=$(awk'):source.index('unset _cfg\n')]
         start = source.index('_csi_bad=()')
         end = source.index('unset _cd _csi_bad _csi_seen', start)
         with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory)
+            home = Path(directory) / 'home'
+            home.mkdir()
+            config = Path(directory) / 'config.yml'
+            config.write_text('')
 
             def run():
                 return subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c',
-                    'record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; };\n' + source[start:end]],
-                    env=dict(os.environ, HOME=str(home)), capture_output=True, text=True).stdout.strip()
+                    'record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; };\n' + parse + source[start:end]],
+                    env=dict(os.environ, HOME=str(home), _cfg=str(config)), capture_output=True, text=True).stdout.strip()
             self.assertTrue(run().startswith('claude-cross-session-inbound FAIL no Claude config dir'))
             for name, value in [('.claude', 'accept'), ('.claude-per2', 'hold')]:
                 (home / name).mkdir()
@@ -327,13 +331,25 @@ class SmokeTests(unittest.TestCase):
             for name in ['.claude-work', '.claude-per2']:
                 (home / name / 'settings.json').write_text(json.dumps({'crossSessionInbound': 'accept'}))
             self.assertEqual(run(), 'claude-cross-session-inbound PASS')
-            (home / '.claude-second').mkdir()  # claude_extra_config_dirs: checked once it has settings
+            # an unmanaged ~/.claude-* (not in claude_extra_config_dirs) is not checked
+            (home / '.claude-tmp').mkdir()
+            (home / '.claude-tmp' / 'settings.json').write_text(json.dumps({'crossSessionInbound': 'hold'}))
             self.assertEqual(run(), 'claude-cross-session-inbound PASS')
+            (home / '.claude-second').mkdir()
             (home / '.claude-second' / 'settings.json').write_text(json.dumps({'crossSessionInbound': 'hold'}))
-            result = run()
-            self.assertTrue(result.startswith('claude-cross-session-inbound FAIL'), result)
-            self.assertIn('.claude-second', result)
+            self.assertEqual(run(), 'claude-cross-session-inbound PASS')
+            for listing in (f'claude_extra_config_dirs: ["{home}/.claude-second"]  # a second login\n',
+                            f"claude_extra_config_dirs:\n  - '{home}/.claude-second'\n  # comment\nprofile: work\n",
+                            f'claude_extra_config_dirs: [{home}/.claude-third, {home}/.claude-second]\n'):
+                with self.subTest(listing=listing):
+                    config.write_text(listing)
+                    result = run()
+                    self.assertTrue(result.startswith('claude-cross-session-inbound FAIL'), result)
+                    self.assertTrue(result.endswith('of: .claude-second — run: make apply CHUNK=agents'), result)
             (home / '.claude-second' / 'settings.json').write_text(json.dumps({'crossSessionInbound': 'accept'}))
+            self.assertEqual(run(), 'claude-cross-session-inbound PASS')
+            # only ~/.claude-<name> entries are read
+            config.write_text(f'claude_extra_config_dirs: [{home}/.claude-tmp/../.claude-tmp, {directory}/.claude-tmp]\n')
             self.assertEqual(run(), 'claude-cross-session-inbound PASS')
 
     def test_macos_remote_access_needs_the_key_policy_and_mosh_firewall_rule(self):
