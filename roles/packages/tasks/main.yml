@@ -362,7 +362,7 @@
   ansible.builtin.include_tasks: user_updates.yml
   when:
     - packages_user_updates_enabled | bool
-    - is_linux
+    - is_linux or is_macos
     - not system_is_container | default(false)
 
 # Turning the updater off must stop one an earlier run installed, not just skip deploying it.
@@ -389,6 +389,27 @@
         - .config/systemd/user/laptop-user-update.service
         - .config/systemd/user/laptop-user-update.timer
         - .config/systemd/user/timers.target.wants/laptop-user-update.timer  # left if the user manager was unreachable
+
+- name: Remove the daily user-space updater when disabled (macOS)
+  when:
+    - not (packages_user_updates_enabled | bool)
+    - is_macos
+  block:
+    - name: Unload the user update job (macOS)  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        argv: [/bin/launchctl, bootout, "{{ item }}/{{ ansible_facts['user_uid'] }}/com.laptop-setup.user-update"]
+      loop: [gui, user]
+      register: _packages_user_update_bootout
+      changed_when: _packages_user_update_bootout.rc == 0
+      failed_when: false
+
+    - name: Remove the user updater script and launchd agent (macOS)
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/{{ item }}"
+        state: absent
+      loop:
+        - .local/bin/laptop-user-update
+        - Library/LaunchAgents/com.laptop-setup.user-update.plist
 
 - name: Install krew
   ansible.builtin.include_tasks: install_krew.yml

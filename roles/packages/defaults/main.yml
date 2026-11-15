@@ -58,11 +58,13 @@ packages_brew_cask_lulu_enabled: false
 # machines where eBPF development requires the daemon; prefer manual bpftool for one-off tasks.
 packages_bpfman_enabled: false
 
-# Daily user-space updates (Linux): laptop-user-update.timer runs ~/.local/bin/laptop-user-update, which updates npm
+# Daily user-space updates: laptop-user-update.timer runs ~/.local/bin/laptop-user-update, which updates npm
 # global packages (Codex), pipx apps and the distrobox dev container's packages. Logs: journalctl --user -u
-# laptop-user-update; a failed run shows as UPD in the status bar. Pinned tools are not touched.
+# laptop-user-update; a failed run shows as UPD in the status bar. Pinned tools are not touched. macOS: the launchd
+# agent com.laptop-setup.user-update runs it daily at midnight (npm and pipx only), logging to
+# ~/.local/state/log/laptop-user-update.log.
 packages_user_updates_enabled: true
-packages_user_updates_calendar: daily
+packages_user_updates_calendar: daily  # Linux timer only
 packages_user_updates_container: "{{ container_name | default('fedora-dev') }}"  # '' skips the container step
 # npm global packages (in ~/.npm-global) the updater moves to their latest public-registry release. Only these: a
 # package installed from git or an internal registry must not be swapped for a same-named public one.

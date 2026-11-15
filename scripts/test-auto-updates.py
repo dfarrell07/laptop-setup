@@ -71,6 +71,7 @@ class AutoUpdateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as name:
             home = Path(name)
             variables = {'ansible_facts': {'user_dir': name, 'user_uid': '4294967294'}, 'ansible_managed': 'test',
+                         'is_linux': True, 'is_macos': False,
                          'packages_user_updates_calendar': 'daily', 'packages_user_updates_container': 'fedora-dev',
                          'packages_user_updates_pipx_skip': ['yamllint', 'ansible-lint'],
                          'packages_user_updates_npm': ['@openai/codex']}
@@ -85,8 +86,69 @@ class AutoUpdateTests(unittest.TestCase):
             self.assertIn('OnCalendar=daily', (home / '.config/systemd/user/laptop-user-update.timer').read_text())
             with self.assertRaisesRegex(AssertionError, 'container name'):
                 run_play(home, tasks, {**variables, 'packages_user_updates_container': 'x;rm'})
+            self.assertFalse((home / 'Library').exists())  # no launchd agent on Linux
 
-    def run_updater(self, home, npm_rc=0, container_exists=True, outdated_fails=False):
+    def test_user_update_launchd_agent_on_macos(self):
+        import plistlib
+        tasks = yaml.safe_load((ROOT / 'roles/packages/tasks/user_updates.yml').read_text())
+
+        def fix_src(task):
+            module = task.get('ansible.builtin.copy') or task.get('ansible.builtin.template')
+            if module:
+                module['src'] = str(ROOT / 'roles/packages' / ('files' if 'ansible.builtin.copy' in task else 'templates')
+                                    / module['src'])
+            for inner in task.get('block', []):
+                fix_src(inner)
+        with tempfile.TemporaryDirectory() as name:
+            home = Path(name)
+            stubs = home / 'stubs'
+            stubs.mkdir()
+
+            def stub_launchctl(task):  # Apple's launchctl by full path; run the stub instead
+                argv = task.get('ansible.builtin.command', {}).get('argv')
+                if argv:
+                    self.assertEqual(argv[0], '/bin/launchctl')
+                    argv[0] = str(stubs / 'launchctl')
+                for inner in task.get('block', []):
+                    stub_launchctl(inner)
+            for task in tasks:
+                fix_src(task)
+                stub_launchctl(task)
+            log = home / 'launchctl.log'
+            # gui domain present; a job is loaded once bootstrapped
+            stub(stubs, 'launchctl', f'echo "$*" >> {log}\ncase "$1 $2" in\n'
+                 '  "print gui/501") exit 0 ;;\n'
+                 f'  "print gui/501/com.laptop-setup.user-update") [ -f {home}/loaded ] ;;\n'
+                 f'  "bootstrap gui/501") touch {home}/loaded ;;\n'
+                 f'  "bootout gui/501/com.laptop-setup.user-update") rm {home}/loaded ;;\n'
+                 '  *) exit 1 ;;\nesac\n')
+            variables = {'ansible_facts': {'user_dir': name, 'user_uid': '501'}, 'ansible_managed': 'test',
+                         'is_linux': False, 'is_macos': True, 'dotfiles_homebrew_prefix': '/opt/homebrew',
+                         'packages_user_updates_calendar': 'daily', 'packages_user_updates_container': 'fedora-dev',
+                         'packages_user_updates_pipx_skip': ['yamllint', 'ansible-lint'],
+                         'packages_user_updates_npm': ['@openai/codex']}
+            run_play(home, tasks, variables)
+            self.assertEqual(log.read_text().splitlines()[-1],
+                             f'bootstrap gui/501 {name}/Library/LaunchAgents/com.laptop-setup.user-update.plist')
+            log.unlink()
+            again = run_play(home, tasks, variables)
+            self.assertNotIn('bootstrap', log.read_text())  # loaded and unchanged: left alone
+            self.assertRegex(again, r'changed=0 ')
+            run_play(home, tasks, {**variables, 'packages_user_updates_npm': ['@openai/codex', 'other']})
+            self.assertEqual([l.split()[0] for l in log.read_text().splitlines()][-2:], ['bootout', 'bootstrap'])
+            self.assertFalse((home / '.config/systemd').exists())  # no systemd units on macOS
+            script = home / '.local/bin/laptop-user-update'
+            self.assertEqual(script.stat().st_mode & 0o777, 0o755)
+            agent = plistlib.loads((home / 'Library/LaunchAgents/com.laptop-setup.user-update.plist').read_bytes())
+            self.assertEqual(agent['ProgramArguments'], [str(script)])  # no container argument: no distrobox on macOS
+            self.assertEqual(agent['StartCalendarInterval'], {'Hour': 0, 'Minute': 0})
+            self.assertEqual(agent['EnvironmentVariables'], {
+                'LAPTOP_UPDATE_PATH': '/opt/homebrew/bin:/usr/bin:/bin', 'LAPTOP_UPDATE_NPM': '@openai/codex other',
+                'LAPTOP_UPDATE_PIPX_SKIP': 'yamllint ansible-lint'})
+            self.assertEqual(agent['StandardOutPath'], name + '/.local/state/log/laptop-user-update.log')
+            self.assertTrue((home / '.local/state/log').is_dir())
+
+    def run_updater(self, home, npm_rc=0, container_exists=True, outdated_fails=False, container='fedora-dev'):
         bin_dir = home / '.local/bin'
         bin_dir.mkdir(parents=True)
         (home / '.npm-global/lib/node_modules').mkdir(parents=True)
@@ -108,7 +170,7 @@ class AutoUpdateTests(unittest.TestCase):
         stub(bin_dir, 'podman', f'echo "podman $*" >> {log}; ' + (
             'case "$*" in *ExecIDs*) echo 0;; *State.Running*) echo false;; esac; exit 0'
             if container_exists else 'exit 1'))
-        result = subprocess.run(['bash', str(ROOT / 'roles/packages/files/laptop-user-update.sh'), 'fedora-dev'],
+        result = subprocess.run(['bash', str(ROOT / 'roles/packages/files/laptop-user-update.sh')] + ([container] if container else []),
                                 env={'HOME': str(home), 'PATH': '/usr/bin:/bin', 'LAPTOP_UPDATE_PATH': f'{bin_dir}:/usr/bin:/bin',
                                      'LAPTOP_UPDATE_PIPX_SKIP': 'yamllint ansible-lint',
                                      'LAPTOP_UPDATE_NPM': '@openai/codex ms rc tag'},
@@ -140,6 +202,12 @@ class AutoUpdateTests(unittest.TestCase):
             self.assertIn('== npm: FAILED (exit 3)', result.stdout)
             self.assertIn('pipx upgrade-all', calls)  # later steps still run
             self.assertNotIn('distrobox upgrade', calls)
+        with tempfile.TemporaryDirectory() as name:  # macOS: the launchd agent passes no container
+            result, calls = self.run_updater(Path(name), container='')
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertIn('pipx upgrade-all --skip yamllint ansible-lint', calls)
+            self.assertNotIn('podman', calls)
+            self.assertNotIn('distrobox', calls)
         with tempfile.TemporaryDirectory() as name:
             result, calls = self.run_updater(Path(name), outdated_fails=True)
             self.assertEqual(result.returncode, 1)
@@ -166,6 +234,33 @@ class AutoUpdateTests(unittest.TestCase):
                                       f'systemctl() {{ ' + body + '; };\n' + source[start:end]],
                                      capture_output=True, text=True)
                 self.assertEqual(run.stdout.strip(), expected, run.stderr)
+
+    def test_smoke_user_updates_check_on_macos(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('  _uu_label=com.laptop-setup.user-update')
+        end = source.index('  unset _uu_label _uu_job', start)
+        with tempfile.TemporaryDirectory() as name:
+            home = Path(name)
+            stubs = home / 'stubs'
+            stubs.mkdir()
+            # launchctl print: only the user domain (SSH session) holds the job, with $EXIT as its last exit code
+            (stubs / 'id').symlink_to(shutil.which('id'))
+            stub(stubs, 'launchctl', 'case "$2" in user/*) [ -n "$EXIT" ] || exit 113; '
+                 'printf "\\tstate = not running\\n\\tlast exit code = %s\\n" "$EXIT" ;; *) exit 113 ;; esac')
+            (home / 'Library/LaunchAgents').mkdir(parents=True)
+            for off, exit_code, agent, expected in [
+                    ('false', '(never exited)', False, 'user-updates PASS'), ('false', '0', False, 'user-updates PASS'),
+                    ('false', '1', False, 'user-updates FAIL'), ('false', '', False, 'user-updates WARN'),
+                    ('true', '', False, 'user-updates PASS'), ('true', '', True, 'user-updates WARN')]:
+                with self.subTest(off=off, exit_code=exit_code, agent=agent):
+                    plist = home / 'Library/LaunchAgents/com.laptop-setup.user-update.plist'
+                    plist.write_text('') if agent else plist.unlink(missing_ok=True)
+                    run = subprocess.run([shutil.which('bash'), '-eu', '-o', 'pipefail', '-c',
+                                          'record() { printf "%s %s\\n" "$1" "$2"; };'
+                                          f' _user_updates_off={off};\n' + source[start:end]],
+                                         env=dict(os.environ, HOME=name, EXIT=exit_code, PATH=str(stubs)),
+                                         capture_output=True, text=True)
+                    self.assertEqual(run.stdout.strip(), expected, run.stderr)
 
     def test_bar_shows_upd_only_when_an_update_unit_failed(self):
         defaults = yaml.safe_load((ROOT / 'roles/desktop/defaults/main.yml').read_text())

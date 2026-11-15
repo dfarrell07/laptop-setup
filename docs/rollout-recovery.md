@@ -85,7 +85,9 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   operator-sdk, cosign, tkn, ec), `/var/lib/ansible-packages`, the Go tools it installed in `~/go/bin`, `~/.local/bin/subctl*`,
   `pipx uninstall yamllint ansible-lint`, and `~/.krew` (this also removes krew plugins you added yourself). Stop the updater with
   `systemctl --user disable --now laptop-user-update.timer`, then delete `~/.local/bin/laptop-user-update` and
-  `~/.config/systemd/user/laptop-user-update.{service,timer}` (or set `packages_user_updates_enabled: false`).
+  `~/.config/systemd/user/laptop-user-update.{service,timer}` (or set `packages_user_updates_enabled: false`). On macOS:
+  `launchctl bootout gui/$(id -u)/com.laptop-setup.user-update`, then delete `~/.local/bin/laptop-user-update` and
+  `~/Library/LaunchAgents/com.laptop-setup.user-update.plist`.
 
 ## ssh_client
 
