@@ -542,16 +542,16 @@
     extended: true
 
 # --- macOS: remote access (Remote Login with the Linux key policy, mosh, optional Screen Sharing) ---
-# Remote Login is macOS's OpenSSH sshd, which launchd starts per connection on port 22. It is only turned on together
-# with the key-only, tailnet-only policy below, so it never accepts passwords: until the ssh_client chunk writes
-# ~/.ssh/authorized_keys it stays off and the macos-remote-access smoke check says so.
+# sshd is macOS's OpenSSH, started per connection by a launchd job of ours on ssh_port. It is only turned on together
+# with the key-only, tailnet-only policy below, so it never accepts passwords: until the ssh_authorized_keys chunk
+# writes ~/.ssh/authorized_keys it stays off and the macos-remote-access smoke check says so.
 - name: Check for authorized SSH keys (macOS)
   ansible.builtin.stat:
     path: "{{ ansible_facts['user_dir'] }}/.ssh/authorized_keys"
   register: _desktop_authorized_keys
   when: is_macos and desktop_macos_remote_login | bool
 
-- name: Apply the sshd login policy (macOS)
+- name: Apply the sshd login policy and start sshd (macOS)
   when:
     - is_macos and desktop_macos_remote_login | bool
     - _desktop_authorized_keys.stat.size | default(0) > 0
@@ -566,31 +566,73 @@
         owner: root
         group: wheel
 
+    # A fresh Mac has no host keys until its first ssh connection; sshd -t needs them
+    - name: Create missing SSH host keys (macOS)
+      ansible.builtin.command:
+        argv: [ssh-keygen, -A]
+      register: _desktop_sshd_hostkeys
+      changed_when: "'generating' in _desktop_sshd_hostkeys.stdout"
+
     # launchd starts sshd per connection, so the next login reads the file: check it before anyone connects
     - name: Validate the sshd configuration (macOS)
       ansible.builtin.command:
         argv: [/usr/sbin/sshd, -t]
       changed_when: false
+
+    - name: Deploy the sshd launchd job on the SSH port (macOS)
+      ansible.builtin.template:
+        src: sshd-launchd.plist.j2
+        dest: "/Library/LaunchDaemons/{{ desktop_macos_sshd_label }}.plist"
+        mode: "0644"
+        owner: root
+        group: wheel
+      register: _desktop_sshd_plist
+
+    - name: Check the sshd launchd job (macOS)  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        argv: [launchctl, print, "system/{{ desktop_macos_sshd_label }}"]
+      register: _desktop_sshd_job
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Unload the changed sshd launchd job (macOS)  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        argv: [launchctl, bootout, "system/{{ desktop_macos_sshd_label }}"]
+      changed_when: true
+      when: _desktop_sshd_job.rc == 0 and _desktop_sshd_plist is changed
+
+    - name: Load the sshd launchd job (macOS)  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        argv: [launchctl, bootstrap, system, "/Library/LaunchDaemons/{{ desktop_macos_sshd_label }}.plist"]
+      changed_when: true
+      register: _desktop_sshd_bootstrap
+      # bootout returns before launchd finishes tearing the job down ("Bootstrap failed: 5")
+      retries: 5
+      delay: 2
+      until: _desktop_sshd_bootstrap.rc == 0
+      when: _desktop_sshd_job.rc != 0 or _desktop_sshd_plist is changed
   rescue:
     - name: Remove the sshd drop-in that failed validation (macOS)
       ansible.builtin.file:
         path: "{{ desktop_macos_sshd_dropin }}"
         state: absent
+      when: _desktop_sshd_plist is not defined
 
-    - name: Fail on the invalid sshd drop-in (macOS)
+    - name: Fail on the sshd setup (macOS)
       ansible.builtin.fail:
-        msg: "sshd -t rejected {{ desktop_macos_sshd_dropin }}; removed it, and Remote Login stays as it was."
+        msg: >-
+          sshd setup failed{{ ' (sshd -t rejected ' ~ desktop_macos_sshd_dropin ~ ', so it was removed)'
+          if _desktop_sshd_plist is not defined else '' }}: {{ ansible_failed_result.msg | default('') }}
 
-# The same launchd switches as System Settings > General > Sharing: enable clears the job's Disabled override and
-# bootstrap loads it now. Reading the state needs no sudo.
+# Screen Sharing: the same launchd switch as System Settings > General > Sharing; enable clears the job's Disabled
+# override and bootstrap loads it now. Reading the state needs no sudo.
 - name: Choose the macOS remote access services to turn on
   ansible.builtin.set_fact:
     _desktop_remote_wanted: >-
-      {{ ([{'name': 'Remote Login', 'label': 'com.openssh.sshd', 'plist': '/System/Library/LaunchDaemons/ssh.plist'}]
-          if desktop_macos_remote_login | bool and _desktop_authorized_keys.stat.size | default(0) > 0 else [])
-         + ([{'name': 'Screen Sharing', 'label': 'com.apple.screensharing',
-              'plist': '/System/Library/LaunchDaemons/com.apple.screensharing.plist'}]
-            if desktop_macos_screen_sharing | bool else []) }}
+      {{ [{'name': 'Screen Sharing', 'label': 'com.apple.screensharing',
+           'plist': '/System/Library/LaunchDaemons/com.apple.screensharing.plist'}]
+         if desktop_macos_screen_sharing | bool else [] }}
   when: is_macos
 
 - name: Check macOS remote access services
