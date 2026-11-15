@@ -69,6 +69,8 @@ is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml; use
 is_macos: false  # fallback; authoritative value in group_vars/all/vars.yml; used in tasks/main.yml, not templates
 # macOS: GNU coreutils, sed, grep, findutils, gawk and tar (Homebrew gnubin) ahead of the BSD tools in shells
 dotfiles_macos_gnu_tools: true
+# macOS: the Homebrew Python whose unversioned python/python3/pip lead PATH (matches packages_pipx_python)
+dotfiles_macos_python: python@3.14
 dotfiles_homebrew_prefix: /opt/homebrew  # fallback; authoritative value in group_vars/all/vars.yml; Intel x86 uses /usr/local (set there)
 ssh_port: 722  # fallback for standalone molecule invocation; authoritative value in group_vars/all/vars.yml
 ssh_signing_key_basename: id_ed25519_sk_signing  # fallback; authoritative value in group_vars/all/vars.yml

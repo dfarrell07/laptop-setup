@@ -435,6 +435,11 @@ packages_brew:
   - kubectl  # Linux installs it on both profiles (packages_containers_kubectl); unversioned on macOS
   - podman  # Linux packages_containers; macOS runs containers in a podman machine VM
   - go  # the personal profile clones the ovnk category (Go repos): build and test them here
+  # autotools for the ovnk C projects (OVS/OVN boot.sh needs autoreconf and glibtoolize; macOS CI installs them)
+  - autoconf
+  - automake
+  - libtool
+  - pkgconf
   - gitleaks  # no work guard — useful for personal repos; actionlint/zizmor are GHA-specific (work-only)
   - gnupg
   # keg-only; provides upstream OpenSSL CLI for s_client/genrsa/vault scripts
