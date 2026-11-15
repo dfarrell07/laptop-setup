@@ -413,9 +413,14 @@ class SmokeTests(unittest.TestCase):
                              'agent-cli-logins WARN login status timed out for: ~/.claude')
             # claude_extra_config_dirs: valid ~/.claude-<name> entries only, never the Vertex home
             (home / '.claude-extra').mkdir()
-            extra = 'printf -v _claude_extra_dirs "%s\\n" "$HOME/.claude-extra" "$HOME/.claude-work" /tmp/x "$HOME/.claude-Bad"; '
+            extra = ('printf -v _claude_extra_dirs "%s\\n" "$HOME/.claude-extra" "$HOME/.claude-work" /tmp/x '
+                     '"$HOME/.claude-Bad" "$HOME/.claude-per2"; _claude_home2="~/.claude-per2"; ')  # same home twice
             self.assertEqual(run(extra + '_claude_home2_off=true; _codex_enabled=false'),
-                             'agent-cli-logins WARN not logged in, run: CLAUDE_CONFIG_DIR=~/.claude-extra claude auth login')
+                             'agent-cli-logins WARN not logged in, run: CLAUDE_CONFIG_DIR=~/.claude-extra claude auth login; '
+                             'CLAUDE_CONFIG_DIR=~/.claude-per2 claude auth login')
+            self.assertEqual(run(extra + '_codex_enabled=false'),
+                             'agent-cli-logins WARN not logged in, run: CLAUDE_CONFIG_DIR=~/.claude-per2 claude auth login; '
+                             'CLAUDE_CONFIG_DIR=~/.claude-extra claude auth login')
             calls.unlink()
             self.assertEqual(run('ONLY=,codex,'), '')
             self.assertFalse(calls.exists())
