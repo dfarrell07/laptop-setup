@@ -386,6 +386,22 @@ class ShippedFileTests(unittest.TestCase):
             self.assertEqual(result.returncode, 7, 'repo hook failure must abort the commit')
 
 
+    def test_acli_token_goes_only_over_stdin_with_no_log(self):
+        tasks = yaml.safe_load((ROOT / 'roles/claude/tasks/acli.yml').read_text())
+
+        def walk(items):
+            for task in items:
+                yield task
+                yield from walk(task.get('block', []))
+        using = [t for t in walk(tasks) if 'block' not in t and re.search(r'{{[^}]*\bacli_api_token', yaml.safe_dump(t))]
+        self.assertTrue(using)
+        for task in using:
+            self.assertTrue(task.get('no_log'), task.get('name'))
+            command = task.get('ansible.builtin.command', {})
+            self.assertNotIn('acli_api_token', yaml.safe_dump(command.get('argv', [])), task.get('name'))
+            self.assertIn('acli_api_token', command.get('stdin', ''), task.get('name'))
+        self.assertIn("vault_acli_api_token: ''", (ROOT / 'group_vars/all/vault.yml').read_text())
+
     def test_global_commit_msg_hook_allows_other_repo_conventions(self):
         """The global hook runs in every repo: it must require sign-off but not this repo's style."""
         hook = ROOT / 'roles/dotfiles/files/git-template-commit-msg'
