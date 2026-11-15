@@ -337,28 +337,13 @@ make setup-yubikeys
 `scripts/setup-yubikeys.sh` generates a fresh HMAC secret, programs slot 2 of each key, and verifies the outputs match. The secret never
 touches disk and is never displayed. Keep the YubiKeys in separate physical locations.
 
-To write `vault-pass.sh` manually:
+The helper holds no secret and is the same file on every machine. To write it without programming keys (keys already
+programmed with the secret, for example on a second machine), run `scripts/write-vault-pass.sh`: it writes
+`scripts/vault-pass.sh` (mode 700) and its `vault-pass.sh.sha256` baseline. On a new machine that reuses an existing
+vault, `make vault-import FROM=HOST:PATH` does that, fetches the encrypted vault and checks that a key opens it. For a
+first vault, follow with:
 
 ```bash
-#!/bin/bash
-# scripts/vault-pass.sh — YubiKey HMAC-SHA1 vault password derivation
-# Requires: ykman (yubikey-manager package on Fedora/RHEL; brew install ykman on macOS)
-# SECURITY: this script prints the vault password; never let xtrace record it.
-unset BASH_ENV
-{ set +x; } 2>/dev/null
-set -euo pipefail
-_CHALRESP_HEX=$(printf '%s' 'ansible-vault-laptop-setup' | od -An -tx1 | tr -d ' \n')
-_to=timeout; command -v timeout >/dev/null 2>&1 || _to=gtimeout
-"$_to" 20 ykman otp calculate 2 "$_CHALRESP_HEX" || {
-  echo "ERROR: vault password unavailable: insert exactly one programmed YubiKey and touch it (ykman message above)" >&2; exit 1
-}
-```
-
-Then:
-
-```bash
-chmod 700 scripts/vault-pass.sh
-(cd scripts && sha256sum vault-pass.sh > vault-pass.sh.sha256)  # make checks this; relative path required
 make ssh-keys && make vault-init
 ```
 
