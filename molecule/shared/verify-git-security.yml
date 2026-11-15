@@ -137,7 +137,7 @@
     - {key: receive.fsckObjects, value: 'true'}
     - {key: protocol.file.allow, value: user}
     - {key: 'credential.https://github.com.helper', value: '!gh auth git-credential'}
-    - {key: 'url.ssh://git@github.com/.pushinsteadof', value: 'https://github.com/'}
+    - {key: alias.pushsk, value: '!git -c url.ssh://git@github.com/.pushInsteadOf=https://github.com/ push'}
   loop_control:
     label: "{{ item.key }}"
 

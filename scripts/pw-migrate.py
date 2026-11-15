@@ -68,6 +68,7 @@ def wipe(path):
 def wipe_all():
     # Signals wait until the wipe is done: a handler running mid-wipe would exit before this path is removed.
     previous = signal.pthread_sigmask(signal.SIG_BLOCK, CLEANUP_SIGNALS)
+    already = len(_left)
     try:
         for path in reversed(list(_to_delete)):
             try:
@@ -75,8 +76,9 @@ def wipe_all():
             except OSError:
                 _left.append(path)  # keep going: one failure must not leave the others behind
             _to_delete.remove(path)
-        if _left:  # before the mask is restored: a pending signal's handler exits without returning here
-            print(f'pw-migrate: could not remove {len(_left)} file(s); delete them by hand: {" ".join(_left)}',
+        new = _left[already:]
+        if new:  # before the mask is restored: a pending signal's handler exits without returning here
+            print(f'pw-migrate: could not remove {len(new)} file(s); delete them by hand: {" ".join(new)}',
                   file=sys.stderr)
     finally:
         signal.pthread_sigmask(signal.SIG_SETMASK, previous)
