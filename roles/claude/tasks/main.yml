@@ -33,15 +33,7 @@
       exfiltration or arbitrary local privilege escalation.
       This check protects against --start-at-task bypass. Use only simple directory paths in claude_log_dir.
 
-- name: Set active Claude instance directories
-  ansible.builtin.set_fact:
-    _claude_instances: >-
-      {{ ([claude_default_config_dir]
-          + ([claude_personal2_config_dir] if (claude_personal2_instance_enabled | bool) else [])
-          + ([claude_work_config_dir] if (profile == 'work') else [])
-          + claude_extra_config_dirs)
-         | unique }}
-
+# Before the set_fact below: a string there fails list concatenation before this message
 - name: Assert extra Claude config dirs are ~/.claude-<name>
   ansible.builtin.assert:
     that:
@@ -53,6 +45,15 @@
     fail_msg: >-
       claude_extra_config_dirs entries must be absolute paths of the form {{ ansible_facts['user_dir'] }}/.claude-<name>
       (lowercase letters, digits, hyphens): {{ claude_extra_config_dirs }}
+
+- name: Set active Claude instance directories
+  ansible.builtin.set_fact:
+    _claude_instances: >-
+      {{ ([claude_default_config_dir]
+          + ([claude_personal2_config_dir] if (claude_personal2_instance_enabled | bool) else [])
+          + ([claude_work_config_dir] if (profile == 'work') else [])
+          + claude_extra_config_dirs)
+         | unique }}
 
 - name: SECURITY assert active Claude instance paths cannot inject tmpfiles directives
   ansible.builtin.assert:
