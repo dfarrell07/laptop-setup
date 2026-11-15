@@ -32,7 +32,7 @@ if args[0] == 'sync':
         sys.exit(1)
     print('Syncing complete.')
 elif args[:2] == ['list', 'items']:
-    print(json.dumps(state['items']))
+    print('not json' if mode == 'bad-json' else json.dumps(state['items']))
 elif args[:2] == ['list', 'folders']:
     print(json.dumps([{'id': None, 'name': 'No Folder'}] + state['folders']))
 elif args[:2] == ['import', 'lastpasscsv']:
@@ -188,6 +188,32 @@ class PwMigrateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn('left over from an earlier, killed run', result.stderr)
         self.assertFalse(self.export.exists())
+
+    def test_non_json_bw_output_fails_cleanly(self):
+        result = self.run_migrate(FAKE_BW_MODE='bad-json')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('not JSON', result.stderr)
+        self.assertNotIn('Traceback', result.stderr)
+        self.assertFalse(self.export.exists())
+
+    def test_malformed_entry_reports_its_physical_line(self):
+        rows = self.export.read_text(encoding='utf-8-sig')
+        self.export.write_text(rows + 'https://x.example.test,only-two\n', encoding='utf-8')
+        lines = (rows + 'x\n').count('\n')  # the notes span lines, so the entry is past row 7
+        result = self.run_migrate()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(f'line {lines}', result.stderr)
+
+    def test_a_file_that_cannot_be_removed_fails_the_run(self):
+        locked = Path(tempfile.mkdtemp(prefix='pw-migrate-test-', dir=SHM))
+        export = locked / 'export.csv'
+        export.write_bytes(self.export.read_bytes())
+        locked.chmod(0o500)  # the file can be read and zeroed but not unlinked
+        self.addCleanup(lambda: (locked.chmod(0o700), export.exists() and export.unlink(), locked.rmdir()))
+        result = self.run_migrate(EXPORT=str(export), DRY_RUN='1')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('could not remove 1 file', result.stderr)
+        self.assertEqual(result.stderr.count('could not remove'), 1)
 
     def test_empty_export_fails_before_bw_and_is_removed(self):
         self.export.write_text('url,username,password,totp,extra,name,grouping,fav\n')

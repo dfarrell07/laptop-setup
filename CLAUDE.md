@@ -183,7 +183,7 @@ runs `git_repos` for one `repo_category`. `make help` lists everything; scenario
 
 - Before committing run the focused `scripts/test-*.py` for the change (`.venv/bin/python3 scripts/test-X.py`), then `make gate`
   (`make lint`, `make syntax-check`, `make test-scripts` and `make check-vars-sync` in parallel).
-  `LAPTOP_SETUP_TEST_TIMEOUT=180 make test-scripts` raises the Ansible test deadlines on a busy host.
+  `make test-scripts` gives the Ansible test deadlines 300 s; `LAPTOP_SETUP_TEST_TIMEOUT=600` raises them on a busy host.
 - Gates in a second worktree (one per session sharing a machine): keep it on disk, not tmpfs, since it gets its own `.venv`
   and `node_modules`. Copy `scripts/vault-pass-ci.sh` to `scripts/vault-pass.sh` (a fixed dummy), then run `make npm` and
   `make collections`, which also builds the worktree's own `.venv`. Never symlink `.venv` or `collections`: pip would
