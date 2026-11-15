@@ -21,6 +21,11 @@ containers_macos_machine_cpus: 4
 containers_macos_machine_memory_mb: 4096
 containers_macos_machine_disk_gb: 60
 containers_macos_machine_label: com.laptop-setup.podman-machine
+# A `docker` command that runs podman (Linux: the podman-docker package); skipped when a real docker exists
+containers_macos_docker_shim: true
+# The LaunchAgent re-runs `podman machine start` this often (a no-op while it runs), so a VM that stopped (disk
+# pressure, sleep) comes back without a login
+containers_macos_machine_check_seconds: 300
 containers_podman_bin: "{{ dotfiles_homebrew_prefix | default('/opt/homebrew') }}/bin/podman"
 
 system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml
