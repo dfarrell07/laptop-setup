@@ -400,7 +400,7 @@ else
             -u ANTHROPIC_AUTH_TOKEN -u CLAUDE_CODE_OAUTH_TOKEN -u CLAUDE_CODE_USE_BEDROCK -u CLAUDE_CODE_USE_FOUNDRY \
             ${_to[@]+"${_to[@]}"} claude auth status &>/dev/null </dev/null || _rc=$?
         if (( _rc == 124 )); then _timed_out+=("$_disp (CLAUDE_CONFIG_DIR unset)")
-        elif (( _rc != 0 )); then _logged_out+=("env -u CLAUDE_CONFIG_DIR claude auth login (tools without CLAUDE_CONFIG_DIR)"); fi
+        elif (( _rc != 0 )); then _logged_out+=("env -u CLAUDE_CONFIG_DIR claude auth login"); fi
       fi
     done
   fi
