@@ -11,6 +11,10 @@ settings.local.json would not be git-ignored is reported, never written.
 macOS LaunchAgents) that passes no mode flag and whose working directory resolves to another mode. An explicit
 --permission-mode or --dangerously-skip-permissions on the command line is a deliberate choice and passes.
 
+Checkouts listed in the exclude file (default ~/.config/claude/project-mode-exclude, written by the agents chunk
+from claude_project_mode_exclude: one path per line, ~ expanded, # comments; a path covers everything below it) keep
+their own mode, and units starting there are not reported.
+
 Output: one JSON object {"changed": [...], "problems": [...]}. Exit 1 with --check when there are problems, or
 with --apply when a problem remains.
 """
@@ -119,9 +123,25 @@ def set_local_mode(checkout, mode):
     os.replace(tmp, path)
 
 
-def check_checkouts(checkouts, mode, apply):
+def read_excludes(path):
+    try:
+        lines = Path(path).expanduser().read_text().splitlines()
+    except OSError:
+        return []
+    return [Path(os.path.expanduser(line.strip())).resolve() for line in lines
+            if line.strip() and not line.strip().startswith("#")]
+
+
+def excluded(path, excludes):
+    path = Path(path).resolve()
+    return any(path == ex or ex in path.parents for ex in excludes)
+
+
+def check_checkouts(checkouts, mode, apply, excludes=()):
     changed, problems = [], []
     for co in checkouts:
+        if excluded(co, excludes):
+            continue
         got, source = project_mode(co)
         if got is None or got == mode:
             continue
@@ -211,9 +231,11 @@ def launch_agents(agent_dir):
         yield path.name, argv, data.get("WorkingDirectory"), data.get("EnvironmentVariables") or {}
 
 
-def check_launches(mode, unit_dir, agent_dir):
+def check_launches(mode, unit_dir, agent_dir, excludes=()):
     problems = []
     for name, argv, workdir, env in [*systemd_units(unit_dir), *launch_agents(agent_dir)]:
+        if workdir and excluded(workdir, excludes):
+            continue
         msg = launch_problem(name, argv, workdir, env, mode)
         if msg:
             problems.append(msg)
@@ -230,10 +252,13 @@ def main():
     ap.add_argument("--depth", type=int, default=4)
     ap.add_argument("--unit-dir", default="~/.config/systemd/user")
     ap.add_argument("--agent-dir", default="~/Library/LaunchAgents")
+    ap.add_argument("--exclude-file", default="~/.config/claude/project-mode-exclude")
     args = ap.parse_args()
     roots = args.root or [os.path.expanduser("~")]
-    changed, problems = check_checkouts(find_checkouts(roots, args.depth), args.mode, args.apply)
-    problems += check_launches(args.mode, os.path.expanduser(args.unit_dir), os.path.expanduser(args.agent_dir))
+    excludes = read_excludes(args.exclude_file)
+    changed, problems = check_checkouts(find_checkouts(roots, args.depth), args.mode, args.apply, excludes)
+    problems += check_launches(args.mode, os.path.expanduser(args.unit_dir), os.path.expanduser(args.agent_dir),
+                               excludes)
     print(json.dumps({"changed": changed, "problems": problems}, indent=1))
     return 1 if problems else 0
 
