@@ -541,6 +541,132 @@
     label: "{{ item.name }}"
     extended: true
 
+# --- macOS: remote access (Remote Login with the Linux key policy, mosh, optional Screen Sharing) ---
+# Remote Login is macOS's OpenSSH sshd, which launchd starts per connection on port 22. It is only turned on together
+# with the key-only, tailnet-only policy below, so it never accepts passwords: until the ssh_client chunk writes
+# ~/.ssh/authorized_keys it stays off and the macos-remote-access smoke check says so.
+- name: Check for authorized SSH keys (macOS)
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.ssh/authorized_keys"
+  register: _desktop_authorized_keys
+  when: is_macos and desktop_macos_remote_login | bool
+
+- name: Apply the sshd login policy (macOS)
+  when:
+    - is_macos and desktop_macos_remote_login | bool
+    - _desktop_authorized_keys.stat.size | default(0) > 0
+  become: true
+  tags: [become]
+  block:
+    - name: Deploy the sshd login policy drop-in (macOS)
+      ansible.builtin.template:
+        src: sshd-macos.conf.j2
+        dest: "{{ desktop_macos_sshd_dropin }}"
+        mode: "0644"
+        owner: root
+        group: wheel
+
+    # launchd starts sshd per connection, so the next login reads the file: check it before anyone connects
+    - name: Validate the sshd configuration (macOS)
+      ansible.builtin.command:
+        argv: [/usr/sbin/sshd, -t]
+      changed_when: false
+  rescue:
+    - name: Remove the sshd drop-in that failed validation (macOS)
+      ansible.builtin.file:
+        path: "{{ desktop_macos_sshd_dropin }}"
+        state: absent
+
+    - name: Fail on the invalid sshd drop-in (macOS)
+      ansible.builtin.fail:
+        msg: "sshd -t rejected {{ desktop_macos_sshd_dropin }}; removed it, and Remote Login stays as it was."
+
+# The same launchd switches as System Settings > General > Sharing: enable clears the job's Disabled override and
+# bootstrap loads it now. Reading the state needs no sudo.
+- name: Choose the macOS remote access services to turn on
+  ansible.builtin.set_fact:
+    _desktop_remote_wanted: >-
+      {{ ([{'name': 'Remote Login', 'label': 'com.openssh.sshd', 'plist': '/System/Library/LaunchDaemons/ssh.plist'}]
+          if desktop_macos_remote_login | bool and _desktop_authorized_keys.stat.size | default(0) > 0 else [])
+         + ([{'name': 'Screen Sharing', 'label': 'com.apple.screensharing',
+              'plist': '/System/Library/LaunchDaemons/com.apple.screensharing.plist'}]
+            if desktop_macos_screen_sharing | bool else []) }}
+  when: is_macos
+
+- name: Check macOS remote access services
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    argv: [launchctl, print, "system/{{ item.label }}"]
+  register: _desktop_remote_services
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe
+  when: is_macos
+  loop: "{{ _desktop_remote_wanted | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Enable macOS remote access services
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    argv: [launchctl, enable, "system/{{ item.item.label }}"]
+  changed_when: true
+  become: true
+  tags: [become]
+  when: is_macos and item.rc is defined and item.rc != 0
+  loop: "{{ _desktop_remote_services.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+- name: Load macOS remote access services
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    argv: [launchctl, bootstrap, system, "{{ item.item.plist }}"]
+  changed_when: true
+  register: _desktop_remote_bootstrap
+  # 5 or 37: launchd already has the job (loaded by System Settings meanwhile)
+  failed_when: _desktop_remote_bootstrap.rc not in [0, 5, 37]
+  become: true
+  tags: [become]
+  when: is_macos and item.rc is defined and item.rc != 0
+  loop: "{{ _desktop_remote_services.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+# mosh (the zshrc `mac` / `mac-claude` aliases) talks UDP to mosh-server. The app firewall asks on screen the first
+# time an unlisted, ad-hoc signed program accepts a connection, which unattended means blocked: allow the resolved
+# Cellar path (it changes when Homebrew upgrades mosh; the smoke check notices).
+- name: Resolve programs to allow through the macOS firewall
+  ansible.builtin.command:
+    argv: [realpath, "{{ item }}"]
+  register: _desktop_fw_allow_paths
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: is_macos
+  loop: "{{ desktop_macos_firewall_allow }}"
+
+- name: Read the macOS firewall app list
+  ansible.builtin.command:
+    argv: [/usr/libexec/ApplicationFirewall/socketfilterfw, --listapps]
+  register: _desktop_fw_apps
+  changed_when: false
+  check_mode: false
+  when: is_macos and desktop_macos_firewall_allow | length > 0
+
+- name: Allow programs through the macOS firewall
+  ansible.builtin.shell:
+    cmd: >-
+      /usr/libexec/ApplicationFirewall/socketfilterfw --add {{ item.stdout | quote }} &&
+      /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp {{ item.stdout | quote }}
+  changed_when: true
+  become: true
+  tags: [become]
+  when:
+    - is_macos
+    - item.rc | default(1) == 0
+    - (item.stdout ~ ' ') not in (_desktop_fw_apps.stdout | default('') ~ ' ')
+  loop: "{{ _desktop_fw_allow_paths.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | default('') }}"
+
 # --- GNOME hardening (Linux only, GNOME desktops) ---
 - name: GNOME hardening dconf settings
   when:
