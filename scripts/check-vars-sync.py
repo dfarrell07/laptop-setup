@@ -61,6 +61,11 @@ CROSS_ROLE_MIRROR_KEYS = {
         REPO_ROOT / "roles/redhat/defaults/main.yml",
         REPO_ROOT / "roles/system/defaults/main.yml",
     ],
+    # The containers role creates the macOS podman machine; the dotfiles zshenv points DOCKER_HOST at its socket.
+    "containers_macos_machine_name": [
+        REPO_ROOT / "roles/containers/defaults/main.yml",
+        REPO_ROOT / "roles/dotfiles/defaults/main.yml",
+    ],
     "is_linux": [
         REPO_ROOT / "roles/claude/defaults/main.yml",
         REPO_ROOT / "roles/containers/defaults/main.yml",
