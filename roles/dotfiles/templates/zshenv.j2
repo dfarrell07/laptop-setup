@@ -23,7 +23,8 @@ _laptop_path() {
 _laptop_path
 # Docker clients (kind, docker-compose, testcontainers) use the podman machine's API socket, as on Linux the rootless
 # podman socket (zshrc); TMPDIR is set in local and ssh sessions. Only a socket this user owns, and never over a
-# DOCKER_HOST already set or a running Docker Desktop (its socket, which its docker context uses)
+# DOCKER_HOST already set or where Docker Desktop is installed: ~/.docker/run/docker.sock, which its docker context
+# uses, exists while it runs and can be left behind when it stops, so a stale one also keeps DOCKER_HOST unset
 _laptop_docker_sock="${TMPDIR%/}/podman/"{{ (containers_macos_machine_name ~ '-api.sock') | quote }}
 [[ -z "${DOCKER_HOST:-}" && ! -e "$HOME/.docker/run/docker.sock" && -n "${TMPDIR:-}" && -S "$_laptop_docker_sock" \
   && -O "$_laptop_docker_sock" ]] && export DOCKER_HOST="unix://$_laptop_docker_sock"
