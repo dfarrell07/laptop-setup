@@ -362,11 +362,14 @@ class SmokeTests(unittest.TestCase):
             calls = Path(directory) / 'calls'
             home.mkdir()
             tools.mkdir()
-            # Logged in: only ~/.claude, checked as cper runs it (CLAUDE_CONFIG_DIR set, token variables cleared).
+            # Logged in: only ~/.claude, checked as cper runs it (CLAUDE_CONFIG_DIR set, token variables cleared),
+            # plus the default (unset) login while $HOME/default-login exists (a separate Keychain item on macOS).
             (tools / 'claude').write_text(
                 '#!/bin/sh\necho "claude $* ${CLAUDE_CONFIG_DIR-unset}" >> "$CALLS"\n'
                 '[ "$1 $2" = "auth status" ] || exit 9\n[ -z "${ANTHROPIC_API_KEY+x}" ] || exit 0\n'
+                '[ -z "${CLAUDE_CONFIG_DIR+x}" ] && { [ -e "$HOME/default-login" ]; exit; }\n'
                 '[ "$CLAUDE_CONFIG_DIR" = "$HOME/.claude" ]\n')
+            (home / 'default-login').touch()
             (tools / 'codex').write_text(
                 '#!/bin/sh\necho "codex $* $CODEX_HOME" >> "$CALLS"\n[ "$1 $2" = "login status" ] || exit 9\n'
                 '[ -n "${OPENAI_API_KEY+x}" ]\n')
@@ -386,6 +389,10 @@ class SmokeTests(unittest.TestCase):
             self.assertEqual(run(), 'agent-cli-logins PASS')  # no managed homes yet
             (home / '.claude').mkdir()
             self.assertEqual(run(), 'agent-cli-logins PASS')
+            (home / 'default-login').unlink()  # logged in only with CLAUDE_CONFIG_DIR set (the macOS split)
+            self.assertEqual(run(), 'agent-cli-logins WARN not logged in, run: env -u CLAUDE_CONFIG_DIR claude auth login '
+                                    '(tools without CLAUDE_CONFIG_DIR)')
+            (home / 'default-login').touch()
             for name in ('.claude-per2', '.codex-personal', '.claude-work'):  # .claude-work: Vertex, not checked
                 (home / name).mkdir()
             expected = ('agent-cli-logins WARN not logged in, run: CLAUDE_CONFIG_DIR=~/.claude-per2 claude auth login; '
