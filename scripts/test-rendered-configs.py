@@ -58,6 +58,27 @@ CASES = {
     'ssh_agent_plist': ('roles/dotfiles/templates/ssh-agent.plist.j2', {'dotfiles_homebrew_prefix': '/opt/homebrew'}),
     'ssh_auth_sock_plist': ('roles/dotfiles/templates/ssh-auth-sock.plist.j2', {}),
 }
+SSHD_ALGORITHM_VARS = {'KexAlgorithms': 'ssh_kex_algorithms', 'Ciphers': 'ssh_ciphers', 'MACs': 'ssh_macs',
+                       'HostKeyAlgorithms': 'ssh_host_key_algorithms', 'PubkeyAcceptedAlgorithms': 'ssh_pubkey_accepted_algorithms'}
+
+
+def host_sshd_algorithms():
+    """The group_vars algorithm lists kept to what this host's ssh -Q lists, as the play does on a Mac; None without an ssh
+    that answers or when a list would be empty (sshd -t of the full lists fails on an older OpenSSH, e.g. Ubuntu CI's)."""
+    ssh = '/usr/bin/ssh' if Path('/usr/bin/ssh').exists() else shutil.which('ssh')
+    if not ssh:
+        return None
+    group_vars = yaml.safe_load((ROOT / 'group_vars/all/vars.yml').read_text())
+    kept = {}
+    for kind, var in SSHD_ALGORITHM_VARS.items():
+        result = subprocess.run([ssh, '-Q', kind], capture_output=True, text=True)
+        wanted = group_vars[var] if isinstance(group_vars[var], list) else group_vars[var].split(',')
+        kept[kind] = [a.strip() for a in wanted if a.strip() in result.stdout.split()]
+        if result.returncode or not kept[kind]:
+            return None
+    return kept
+
+
 BASE = {'real_user_id': 'public-test-user', 'dotfiles_user_name': 'Test User',
         'dotfiles_user_email_work': 'w@example.test', 'dotfiles_user_email_personal': 'p@example.test',
         'dotfiles_github_user': 'testuser', 'ansible_managed': 'Ansible managed'}
@@ -81,7 +102,12 @@ class RenderedConfigTests(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         out = Path(cls.tmp.name)
         tasks = []
-        for name, (src, extra) in CASES.items():
+        cls.host_algorithms = host_sshd_algorithms()
+        cases = dict(CASES)
+        if cls.host_algorithms:  # the drop-in this host's sshd -t can parse
+            cases['sshd_macos_host'] = ('roles/desktop/templates/sshd-macos.conf.j2',
+                                        {'_desktop_sshd_algorithms': cls.host_algorithms})
+        for name, (src, extra) in cases.items():
             tasks.append({'name': f'render {name}', 'ansible.builtin.template': {
                 'src': str(ROOT / src), 'dest': str(out / name), 'mode': '0600'},
                 'vars': extra})
@@ -349,25 +375,31 @@ class RenderedConfigTests(unittest.TestCase):
             self.assertTrue(match, value)
             self.assertEqual(match.group(1), name.replace('desktop_macos_', 'system_'))
             self.assertEqual(yaml.safe_load(match.group(2)), linux[match.group(1)], name)
+
+    @unittest.skipUnless(Path('/usr/sbin/sshd').exists(), 'no /usr/sbin/sshd')
+    def test_macos_sshd_dropin_parses_with_this_hosts_sshd(self):
+        """sshd -t on the drop-in with the algorithms this host's OpenSSH supports, as the play keeps them on a Mac."""
+        if not self.host_algorithms:
+            self.skipTest("this host's ssh -Q supports none of a configured algorithm list")
         sshd = Path('/usr/sbin/sshd')
-        if sshd.exists():  # the drop-in parses with this host's sshd (Apple's on macOS), every algorithm included
-            hostkey = self.out / 'hostkey'
-            if not hostkey.exists():
-                subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(hostkey)], check=True)
-            config = self.out / 'sshd_config'
-            config.write_text(f'HostKey {hostkey}\nInclude {self.out / "sshd_macos"}\n')
-            result = subprocess.run([str(sshd), '-t', '-f', str(config)], capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            # the task's validate command, sshd -t -f <drop-in alone>; it runs as root (become) with the default host
-            # keys, here a readable one stands in for them
-            result = subprocess.run([str(sshd), '-t', '-f', str(self.out / 'sshd_macos'), '-o', f'HostKey={hostkey}'],
-                                    capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            bad = self.out / 'sshd_macos_bad'
-            bad.write_text(text.replace('Ciphers ', 'Ciphers no-such-cipher,'))
-            result = subprocess.run([str(sshd), '-t', '-f', str(bad), '-o', f'HostKey={hostkey}'],
-                                    capture_output=True, text=True)
-            self.assertNotEqual(result.returncode, 0, 'sshd -t must reject an unknown algorithm')
+        text = self.read('sshd_macos_host')
+        hostkey = self.out / 'hostkey'
+        if not hostkey.exists():
+            subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(hostkey)], check=True)
+        config = self.out / 'sshd_config'
+        config.write_text(f'HostKey {hostkey}\nInclude {self.out / "sshd_macos_host"}\n')
+        result = subprocess.run([str(sshd), '-t', '-f', str(config)], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # the task's validate command, sshd -t -f <drop-in alone>; it runs as root (become) with the default host
+        # keys, here a readable one stands in for them
+        result = subprocess.run([str(sshd), '-t', '-f', str(self.out / 'sshd_macos_host'), '-o', f'HostKey={hostkey}'],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        bad = self.out / 'sshd_macos_bad'
+        bad.write_text(text.replace('Ciphers ', 'Ciphers no-such-cipher,'))
+        result = subprocess.run([str(sshd), '-t', '-f', str(bad), '-o', f'HostKey={hostkey}'],
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0, 'sshd -t must reject an unknown algorithm')
 
     def test_macos_sshd_dropin_uses_the_algorithms_the_play_kept(self):
         directives = dict(line.split(' ', 1) for line in self.read('sshd_macos_older').splitlines()
