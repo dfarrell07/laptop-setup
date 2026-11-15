@@ -641,22 +641,44 @@
       failed_when: false
       check_mode: false
 
-    - name: Unload the changed sshd launchd job (macOS)  # noqa: command-instead-of-module
-      ansible.builtin.command:
-        argv: [/bin/launchctl, bootout, "system/{{ desktop_macos_sshd_label }}"]
+    # A changed plist needs bootout and bootstrap (kickstart -k restarts the loaded definition, it does not reread the
+    # file). bootout also ends the sshd processes the job started, so a run over this sshd loses its session there
+    # and would never reach bootstrap, leaving the Mac without sshd. Both steps therefore run as one detached job
+    # (async, poll 0: Ansible's async wrapper starts it in its own session), which finishes even if this run dies;
+    # rerun the desktop chunk afterwards to finish it. bootout returns before launchd has torn the job down
+    # ("Bootstrap failed: 5"), so bootstrap retries.
+    - name: Reload the changed sshd launchd job, detached (macOS)  # noqa: command-instead-of-module
+      ansible.builtin.shell:
+        cmd: >-
+          /bin/launchctl bootout {{ ('system/' ~ desktop_macos_sshd_label) | quote }};
+          i=0; until /bin/launchctl bootstrap system {{ ('/Library/LaunchDaemons/' ~ desktop_macos_sshd_label ~ '.plist') | quote }};
+          do i=$((i + 1)); [ "$i" -lt 15 ] || exit 1; /bin/sleep 1; done
+      async: 120
+      poll: 0
       changed_when: true
+      register: _desktop_sshd_reload
       when: _desktop_sshd_job.rc == 0 and _desktop_sshd_plist is changed
+
+    - name: Wait for the sshd launchd job reload (macOS)
+      ansible.builtin.async_status:
+        jid: "{{ _desktop_sshd_reload.ansible_job_id }}"
+      register: _desktop_sshd_reload_status
+      until: _desktop_sshd_reload_status.finished
+      retries: 60
+      delay: 1
+      when: _desktop_sshd_reload.ansible_job_id is defined
 
     - name: Load the sshd launchd job (macOS)  # noqa: command-instead-of-module
       ansible.builtin.command:
         argv: [/bin/launchctl, bootstrap, system, "/Library/LaunchDaemons/{{ desktop_macos_sshd_label }}.plist"]
       changed_when: true
-      register: _desktop_sshd_bootstrap
-      # bootout returns before launchd finishes tearing the job down ("Bootstrap failed: 5")
-      retries: 5
-      delay: 2
-      until: _desktop_sshd_bootstrap.rc == 0
-      when: _desktop_sshd_job.rc != 0 or _desktop_sshd_plist is changed
+      when: _desktop_sshd_job.rc != 0
+
+    - name: Check the sshd launchd job is loaded (macOS)  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        argv: [/bin/launchctl, print, "system/{{ desktop_macos_sshd_label }}"]
+      changed_when: false
+      when: not ansible_check_mode and (_desktop_sshd_job.rc != 0 or _desktop_sshd_plist is changed)
 
 # Screen Sharing: the same launchd switch as System Settings > General > Sharing; enable clears the job's Disabled
 # override and bootstrap loads it now. Reading the state needs no sudo.
