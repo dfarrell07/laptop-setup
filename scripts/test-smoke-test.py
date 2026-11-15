@@ -390,8 +390,7 @@ class SmokeTests(unittest.TestCase):
             (home / '.claude').mkdir()
             self.assertEqual(run(), 'agent-cli-logins PASS')
             (home / 'default-login').unlink()  # logged in only with CLAUDE_CONFIG_DIR set (the macOS split)
-            self.assertEqual(run(), 'agent-cli-logins WARN not logged in, run: env -u CLAUDE_CONFIG_DIR claude auth login '
-                                    '(tools without CLAUDE_CONFIG_DIR)')
+            self.assertEqual(run(), 'agent-cli-logins WARN not logged in, run: env -u CLAUDE_CONFIG_DIR claude auth login')
             (home / 'default-login').touch()
             for name in ('.claude-per2', '.codex-personal', '.claude-work'):  # .claude-work: Vertex, not checked
                 (home / name).mkdir()
