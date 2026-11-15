@@ -110,6 +110,12 @@ _podman_machine_name=$(awk -F: '/^containers_macos_machine_name:/{sub(/#.*/, "",
 grep -qiE '^desktop_macos_always_on:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_always_on=true
 _claude_mode=$(sed -nE 's/^claude_default_mode:[[:space:]]*["'\'']?([A-Za-z]+)["'\'']?.*/\1/p' "$_cfg" 2>/dev/null | tail -1)
 _claude_mode=${_claude_mode:-bypassPermissions}
+# Remote Login follows desktop_macos_always_on and Screen Sharing is off, unless config.yml sets them
+_macos_remote_login=$_macos_always_on _macos_screen_sharing=false
+grep -qiE '^desktop_macos_remote_login:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_remote_login=true
+grep -qiE '^desktop_macos_remote_login:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_remote_login=false
+grep -qiE '^desktop_macos_screen_sharing:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_screen_sharing=true
+grep -qiE '^desktop_macos_screen_sharing:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_screen_sharing=false
 _claude_sandbox=false
 grep -qiE '^claude_sandbox_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _claude_sandbox=true
 _mask_iscsi=true
@@ -606,6 +612,29 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   elif launchctl print system/com.tailscale.tailscaled &>/dev/null || launchctl print system/homebrew.mxcl.tailscale &>/dev/null; then
     record "tailscaled-daemon" "PASS"
   else record "tailscaled-daemon" "FAIL" "tailscaled system daemon not installed — run: make apply CHUNK=packages (needs sudo)"; fi
+fi
+
+# macOS remote access: Remote Login (sshd) only with the key-only, tailnet-only policy, mosh-server allowed through the
+# app firewall, and Screen Sharing when turned on
+if ! $IS_LINUX && [[ -z "$CONTAINER" ]]; then
+  _alf=/usr/libexec/ApplicationFirewall/socketfilterfw _sshd_policy=/etc/ssh/sshd_config.d/000-laptop-setup.conf
+  _missing="" _rl_wait=false
+  _rl_on=false; launchctl print system/com.openssh.sshd &>/dev/null && _rl_on=true
+  # Remote Login without the policy takes passwords, however it got turned on
+  $_rl_on && [[ ! -f "$_sshd_policy" ]] && _missing+=" sshd-key-policy"
+  if $_macos_remote_login; then
+    if [[ ! -s "$HOME/.ssh/authorized_keys" ]]; then _rl_wait=true
+    elif ! $_rl_on; then _missing+=" Remote-Login"; fi
+    _mosh=$(realpath "$( (brew --prefix) 2>/dev/null || echo /opt/homebrew)/bin/mosh-server" 2>/dev/null) &&
+      ! "$_alf" --listapps 2>/dev/null | grep -qF "$_mosh " && _missing+=" mosh-server-firewall"
+  fi
+  $_macos_screen_sharing && ! launchctl print system/com.apple.screensharing &>/dev/null && _missing+=" Screen-Sharing"
+  if [[ -n "$_missing" ]]; then record "macos-remote-access" "FAIL" "missing:$_missing — run: make apply CHUNK=desktop (needs sudo)"
+  elif $_rl_wait; then
+    record "macos-remote-access" "WARN" "Remote Login stays off until your SSH key is authorized — run: make apply CHUNK=ssh_client, then make apply CHUNK=desktop"
+  elif ! $_macos_remote_login && ! $_macos_screen_sharing; then record "macos-remote-access" "PASS" "remote access not managed (desktop_macos_always_on is off)"
+  else record "macos-remote-access" "PASS"; fi
+  unset _missing _rl_wait _rl_on _mosh _alf _sshd_policy
 fi
 
 # macOS developer tools the ovnk projects need: unversioned python, autotools (OVS/OVN boot.sh), pkg-config,
@@ -2813,7 +2842,7 @@ if [[ -n "$ONLY" ]]; then
       continue
     fi
     # macOS-only checks have nothing to verify on Linux
-    if $IS_LINUX && [[ " podman-machine docker-shim macos-dev-tools macos-firewall macos-always-on macos-screen macos-screen-lock tailscaled-daemon " == *" $_only_name "* ]]; then
+    if $IS_LINUX && [[ " podman-machine docker-shim macos-dev-tools macos-remote-access macos-firewall macos-always-on macos-screen macos-screen-lock tailscaled-daemon " == *" $_only_name "* ]]; then
       $JSON || printf 'N/A   %s (macOS-only check; nothing to verify on Linux)\n' "$_only_name"
       continue
     fi

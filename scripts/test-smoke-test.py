@@ -380,6 +380,50 @@ class SmokeTests(unittest.TestCase):
             self.assertFalse(calls.exists())
             self.assertEqual(run('CONTAINER=dev'), 'agent-cli-logins SKIP host-only')
 
+    def test_macos_remote_access_needs_the_key_policy_and_mosh_firewall_rule(self):
+        """Remote Login never counts as fine without the key-only policy; it waits for authorized_keys."""
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('  _missing="" _rl_wait=false')
+        end = source.index('  unset _missing _rl_wait _rl_on _mosh _alf _sshd_policy', start)
+        with tempfile.TemporaryDirectory() as directory:
+            d = Path(directory).resolve()
+            (d / 'bin').mkdir()
+            (d / 'home/.ssh').mkdir(parents=True)
+            (d / 'prefix/bin').mkdir(parents=True)
+            mosh = d / 'prefix/bin/mosh-server'
+            mosh.write_text('')
+            for name, body in [('launchctl', '[ -e "$STATE/$(echo "$2" | sed s,system/,,)" ]'),
+                               ('brew', 'echo "$PREFIX"'), ('alf', 'cat "$STATE/apps" 2>/dev/null')]:
+                (d / 'bin' / name).write_text('#!/bin/sh\n' + body + '\n')
+                (d / 'bin' / name).chmod(0o755)
+            state = d / 'state'
+            state.mkdir()
+
+            def run(remote_login, screen_sharing=False):
+                result = subprocess.run(['bash', '-u', '-c',
+                    'record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; };'
+                    f' _macos_remote_login={remote_login} _macos_screen_sharing={screen_sharing};'
+                    f' _alf={d}/bin/alf _sshd_policy={state}/policy;\n' + source[start:end]],
+                    env=dict(os.environ, PATH=f'{d}/bin:' + os.environ['PATH'], HOME=str(d / 'home'),
+                             STATE=str(state), PREFIX=str(d / 'prefix')),
+                    capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                return result.stdout.strip()
+            self.assertTrue(run('false').startswith('macos-remote-access PASS remote access not managed'))
+            (state / 'apps').write_text(f'1 : {mosh} \n')
+            self.assertTrue(run('true').startswith('macos-remote-access WARN Remote Login stays off'))
+            (state / 'apps').write_text('')
+            self.assertIn('mosh-server-firewall', run('true'))
+            (state / 'apps').write_text(f'1 : {mosh} \n')
+            (d / 'home/.ssh/authorized_keys').write_text('sk-ssh-ed25519@openssh.com AAAA k\n')
+            self.assertEqual(run('true'), 'macos-remote-access FAIL missing: Remote-Login — run: make apply CHUNK=desktop (needs sudo)')
+            (state / 'com.openssh.sshd').write_text('')  # on, e.g. from System Settings, without the policy
+            self.assertIn('sshd-key-policy', run('true'))
+            self.assertIn('sshd-key-policy', run('false'))
+            (state / 'policy').write_text('')
+            self.assertEqual(run('true'), 'macos-remote-access PASS')
+            self.assertIn('Screen-Sharing', run('true', 'true'))
+
     def test_github_ssh_auth_tells_unregistered_key_from_pin_needed(self):
         """A verify-required FIDO2 key always exits 255 under BatchMode: -v output says whether GitHub knows the key."""
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
