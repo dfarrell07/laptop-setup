@@ -557,12 +557,38 @@ fi
 # app firewall, and Screen Sharing when turned on
 if ! $IS_LINUX && [[ -z "$CONTAINER" ]]; then
   _alf=/usr/libexec/ApplicationFirewall/socketfilterfw _sshd_policy=/etc/ssh/sshd_config.d/000-laptop-setup.conf
+  _sshd_config=/etc/ssh/sshd_config
   _missing="" _rl_wait=false
   # sshd from our job (ssh_port) or from Remote Login (port 22): without the policy it takes passwords
   _rl_on=false
   launchctl print system/com.laptop-setup.sshd &>/dev/null && _rl_on=true
   launchctl print system/com.openssh.sshd &>/dev/null && _rl_on=true
   $_rl_on && [[ ! -f "$_sshd_policy" ]] && _missing+=" sshd-key-policy"
+  # sshd keeps the first value it sees, so the policy must be read first: sshd_config includes the directory, the
+  # policy sorts first there (sshd globs in C order) and nothing read before it allows passwords. sshd -T would say
+  # for sure but needs root; these files are world-readable.
+  if $_rl_on && [[ -f "$_sshd_policy" ]]; then
+    _pw_yes='tolower($0) ~ /^[ \t]*(passwordauthentication|kbdinteractiveauthentication|challengeresponseauthentication)[ \t=]+yes/'
+    awk 'tolower($0) ~ /^[ \t]*passwordauthentication[ \t=]+no([ \t#]|$)/ {f=1} END {exit !f}' "$_sshd_policy" ||
+      _missing+=" sshd-key-policy(PasswordAuthentication-no)"
+    # first Include of the policy's directory (a relative path is under sshd_config's directory)
+    _incl=$(awk -v d="${_sshd_policy%/*}/" -v c="${_sshd_config%/*}/" \
+      'tolower($1) == "include" { p = $2; if (p !~ /^\//) p = c p; if (index(p, d) == 1) { print NR; exit } }' \
+      "$_sshd_config" 2>/dev/null || true)
+    if [[ -z "$_incl" ]]; then _missing+=" sshd-key-policy(not-included-by-sshd_config)"
+    else
+      if awk -v n="$_incl" "NR < n && $_pw_yes {f=1} END {exit !f}" "$_sshd_config"; then
+        _missing+=" sshd-password-auth(sshd_config)"
+      fi
+      _first=""
+      while IFS= read -r _f; do
+        [[ -n "$_first" ]] || _first=$_f
+        [[ "$_f" != "$_sshd_policy" ]] || break
+        if [[ -f "$_f" ]] && awk "$_pw_yes {f=1} END {exit !f}" "$_f"; then _missing+=" sshd-password-auth(${_f##*/})"; fi
+      done < <(printf '%s\n' "${_sshd_policy%/*}"/* | LC_ALL=C sort)
+      [[ "$_first" == "$_sshd_policy" ]] || _missing+=" sshd-key-policy-first(${_first##*/} sorts before it)"
+    fi
+  fi
   if $_macos_remote_login; then
     if [[ ! -s "$HOME/.ssh/authorized_keys" ]]; then _rl_wait=true
     elif ! launchctl print system/com.laptop-setup.sshd &>/dev/null; then _missing+=" sshd"; fi
@@ -575,7 +601,7 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]]; then
     record "macos-remote-access" "WARN" "sshd stays off until your SSH key is authorized — run: make apply CHUNK=ssh_authorized_keys, then make apply CHUNK=desktop"
   elif ! $_macos_remote_login && ! $_macos_screen_sharing; then record "macos-remote-access" "PASS" "remote access not managed (desktop_macos_always_on is off)"
   else record "macos-remote-access" "PASS"; fi
-  unset _missing _rl_wait _rl_on _mosh _alf _sshd_policy
+  unset _missing _rl_wait _rl_on _mosh _alf _sshd_policy _sshd_config _pw_yes _incl _first _f
 fi
 
 # macOS developer tools the ovnk projects need: unversioned python, autotools (OVS/OVN boot.sh), pkg-config,
