@@ -49,6 +49,23 @@ class AeroSpaceTests(unittest.TestCase):
                     command = bindings[key].removeprefix('exec-and-forget ')
                     self.assertEqual(subprocess.run(['bash', '-n', '-c', command]).returncode, 0, command)
                 self.assertIn('/opt/homebrew/bin/choose |', bindings['alt-d'])
+                # Run the launcher with stubs: choose prints the pick without a newline (as choose-gui does),
+                # names keep spaces and quotes, and a cancelled pick (no output) opens nothing.
+                for pick, opened in [('Say "It\'s" On', 'Say "It\'s" On'), ('', None)]:
+                    stubs = home / 'stubs'
+                    stubs.mkdir(exist_ok=True)
+                    (stubs / 'ls').write_text('#!/bin/sh\nprintf "%s\\n" "/Applications:" "Say \\"It\'s\\" On.app" "x.txt"\n')
+                    (stubs / 'open').write_text('#!/bin/sh\nprintf "%s" "$2" > "$OPENED"\n')
+                    choose = stubs / 'choose'
+                    choose.write_text('#!/bin/sh\ncat >/dev/null; printf "%s" "$PICK"\n')
+                    for stub in stubs.iterdir():
+                        stub.chmod(0o755)
+                    record = home / 'opened'
+                    record.unlink(missing_ok=True)
+                    command = bindings['alt-d'].removeprefix('exec-and-forget ').replace('/opt/homebrew/bin/choose', str(choose))
+                    subprocess.run(['bash', '-c', command], env=dict(os.environ, PATH=f'{stubs}:/usr/bin:/bin', PICK=pick,
+                                   OPENED=str(record)), check=False, timeout=30)
+                    self.assertEqual(record.read_text() if record.exists() else None, opened)
                 self.assertIn('using {control down, command down}', bindings['alt-ctrl-l'])  # macOS lock-screen shortcut
                 self.assertEqual(re.findall(r'changed=(\d+)', run())[-1], '0')
                 config.write_text(config.read_text().replace(expected, 'exec-and-forget open -na Alacritty') + '\n# keep custom settings\n')
