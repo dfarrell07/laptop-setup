@@ -271,6 +271,16 @@
   no_log: true
   when: ssh_signing_key | trim | length > 0
 
+# The ssh role runs before dotfiles, so this check (also made there) must come before the .pub file is written.
+- name: Assert the vault signing public key is one key line, not a file path
+  ansible.builtin.assert:
+    that: ssh_signing_key_pub is regex('^(ssh-|ecdsa-|sk-)[a-zA-Z0-9@._+-]+ [A-Za-z0-9+/]+={0,2}( [^\x00-\x1f\x7f]*)?$')
+    fail_msg: >-
+      vault_ssh_signing_key_pub is not a single public key line (a file path pasted instead of the .pub file's contents
+      is the usual cause). Nothing was written. Fix it with make vault-signing-key, or paste the line in make vault-edit.
+    quiet: true
+  when: ssh_signing_key_pub | trim | length > 0
+
 - name: Deploy SSH signing public key
   ansible.builtin.copy:
     content: "{{ ssh_signing_key_pub }}"
