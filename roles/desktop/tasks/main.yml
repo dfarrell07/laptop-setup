@@ -661,28 +661,41 @@
         argv: [/usr/sbin/sshd, -t]
       changed_when: false
 
-    # What sshd applies to a tailnet login: a sshd_config without the drop-in Include, or a drop-in sorting before ours
-    # (sshd keeps the first value), would leave passwords on. Checked before the job loads or reloads.
-    - name: Read the effective sshd settings for a tailnet login (macOS)
+    # What sshd applies to a login from the tailnet and from outside it (TEST-NET-3): a sshd_config without the drop-in
+    # Include, a drop-in sorting before ours (sshd keeps the first value; AllowUsers lines add up) or a Match block for
+    # other addresses would leave passwords on or other users in. Checked before the job loads or reloads.
+    - name: Read the effective sshd settings for a tailnet and an outside login (macOS)
       ansible.builtin.command:
-        argv: [/usr/sbin/sshd, -T, -C, "user={{ ansible_facts['user_id'] }},addr=100.64.0.1,host=x"]
+        argv: [/usr/sbin/sshd, -T, -C, "user={{ ansible_facts['user_id'] }},addr={{ item }},host=x"]
+      loop: [100.64.0.1, 203.0.113.5]
       register: _desktop_sshd_effective
       changed_when: false
 
-    - name: Check the effective sshd settings are key-only (macOS)
+    # sshd -T prints lowercase keywords and one allowusers line per entry, values as written
+    - name: Check the effective sshd settings are key-only and this user only (macOS)
       ansible.builtin.assert:
-        that: _missing | length == 0
+        that:
+          - ansible_facts['user_id'] != 'root'
+          - _missing | length == 0
+          - _allow | sort == _allow_wanted | sort
         fail_msg: >-
-          sshd -T for a tailnet login shows
-          {{ _desktop_sshd_effective.stdout_lines | select('match', '(' ~ _wanted | map('split', ' ') | map('first')
-             | join('|') ~ ') ') | join(', ') }}, not {{ _wanted | join(', ') }}. /etc/ssh/sshd_config must Include
-          sshd_config.d/*, and no file there sorting before {{ desktop_macos_sshd_dropin | basename }} may set these.
-          The job was not (re)loaded.
+          sshd -T for a login from {{ item.item }} as {{ ansible_facts['user_id'] }} shows {{ _shown | join(', ') }}
+          and allowusers {{ _allow | join(' ') }}, not {{ _wanted | join(', ') }} and allowusers
+          {{ _allow_wanted | join(' ') }}. /etc/ssh/sshd_config must Include sshd_config.d/*, no file there sorting
+          before {{ desktop_macos_sshd_dropin | basename }} may set these or add AllowUsers, and no Match block may
+          change them. The job was not (re)loaded.
         quiet: true
+      loop: "{{ _desktop_sshd_effective.results }}"
+      loop_control:
+        label: "{{ item.item }}"
       vars:
+        _lines: "{{ item.stdout_lines | map('trim') | list }}"
         _wanted: [passwordauthentication no, kbdinteractiveauthentication no, authenticationmethods publickey]
-        _missing: "{{ _wanted | reject('in', _desktop_sshd_effective.stdout_lines | map('trim') | list) | list }}"
-      when: _desktop_sshd_effective is not skipped  # check mode: the drop-in was not written
+        _missing: "{{ _wanted | reject('in', _lines) | list }}"
+        _shown: "{{ _lines | select('match', '(' ~ _wanted | map('split', ' ') | map('first') | join('|') ~ ') ') | list }}"
+        _allow: "{{ _lines | select('match', 'allowusers ') | map('regex_replace', '^allowusers ', '') | list }}"
+        _allow_wanted: "{{ [ansible_facts['user_id']] | product(desktop_macos_ssh_allow_from) | map('join', '@') | list }}"
+      when: item is not skipped  # check mode: the drop-in was not written
 
     - name: Deploy the sshd launchd job on the SSH port (macOS)
       ansible.builtin.template:
