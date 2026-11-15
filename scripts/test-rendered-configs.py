@@ -156,7 +156,7 @@ class RenderedConfigTests(unittest.TestCase):
             stub('i3status', 'printf \'{"version":1}\\n[\\n[{"name":"wireless","full_text":"WIFI"}]\\n\'')
             stub('podman', 'printf "a1\\nb2\\n"')
             stub('ps', 'printf "pts/0    claude\\n?        codex\\n?        codex\\npts/3    codex\\n'
-                       '?        agy\\npts/4    node\\npts/5    zsh\\n"')
+                       '?        agy\\npts/4    node\\npts/5    zsh\\npts/3    codex\\npts/0    agy\\n"')
             for quiet in ['nmcli', 'tailscale', 'rpm']:
                 stub(quiet, 'exit 1')
             script = stubs / 'bar-status'
@@ -165,6 +165,7 @@ class RenderedConfigTests(unittest.TestCase):
                                     env=dict(os.environ, PATH=f'{stubs}:/usr/bin:/bin', HOME=name))
             update = result.stdout.splitlines()[-1]
             self.assertIn('"full_text":"CTR 2"', update)
+            # pts/0 and pts/3: a second agent process on a terminal is the same session
             self.assertIn('"full_text":"AI 2"', update)
 
     def test_audit_rules_set_backlog_before_rules(self):
