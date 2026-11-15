@@ -828,6 +828,14 @@ else
   else record "dotfile-gitconfig" "PASS"; fi
   unset _sk
 fi
+# macOS: git mergetool and difftool open vimdiff (meld is Linux-only), and vim is installed
+if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
+  _git_tools="$(git config --file "$_gc" --get merge.tool 2>/dev/null || true) $(git config --file "$_gc" --get diff.tool 2>/dev/null || true)"
+  if [[ "$_git_tools" != "vimdiff vimdiff" ]]; then record "macos-git-difftool" "FAIL" "merge.tool and diff.tool are '$_git_tools', not vimdiff — run: make apply CHUNK=dotfiles"
+  elif ! command -v vim &>/dev/null; then record "macos-git-difftool" "FAIL" "vim not found — run: make apply CHUNK=packages"
+  else record "macos-git-difftool" "PASS"; fi
+  unset _git_tools
+fi
 if [[ -f "$HOME/.gitconfig" ]]; then record "legacy-gitconfig" "FAIL" "$HOME/.gitconfig shadows the managed ~/.config/git/config: merge anything you need into it, then move this file aside (mv ~/.gitconfig ~/.gitconfig.bak)"; else record "legacy-gitconfig" "PASS"; fi
 # git identity must be set to non-placeholder values
 _git_name=$(git config --global user.name 2>/dev/null || echo "")
@@ -2935,7 +2943,7 @@ if [[ -n "$ONLY" ]]; then
       continue
     fi
     # macOS-only checks have nothing to verify on Linux
-    if $IS_LINUX && [[ " podman-machine docker-shim macos-dev-tools macos-zshenv-path macos-launchd-ssh-auth-sock aerospace-running aerospace-config macos-remote-access macos-firewall macos-always-on macos-screen macos-screen-lock tailscaled-daemon " == *" $_only_name "* ]]; then
+    if $IS_LINUX && [[ " podman-machine docker-shim macos-dev-tools macos-zshenv-path macos-launchd-ssh-auth-sock aerospace-running aerospace-config macos-git-difftool macos-remote-access macos-firewall macos-always-on macos-screen macos-screen-lock tailscaled-daemon " == *" $_only_name "* ]]; then
       $JSON || printf 'N/A   %s (macOS-only check; nothing to verify on Linux)\n' "$_only_name"
       continue
     fi

@@ -614,6 +614,33 @@ class SmokeTests(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertEqual(result.stdout.strip(), 'aerospace-running ' + expected)
 
+    def test_macos_git_difftool_check(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('  _git_tools="$(git config --file "$_gc" --get merge.tool')
+        end = source.index('  unset _git_tools', start)
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / 'config'
+            tools = only_tools(Path(directory) / 'bin', 'git')
+            (tools / 'vim').write_text('#!/bin/sh\n')
+            (tools / 'vim').chmod(0o755)
+            for text, expected in [('[merge]\n\ttool = vimdiff\n[diff]\n\ttool = vimdiff\n', 'PASS'),
+                                   ('[merge]\n\ttool = meld\n[diff]\n\ttool = meld\n', 'FAIL'),
+                                   ('[merge]\n\tconflictStyle = zdiff3\n', 'FAIL')]:
+                with self.subTest(text=text):
+                    config.write_text(text)
+                    result = subprocess.run([BASH, '-eu', '-o', 'pipefail', '-c', 'record() { printf "%s %s\\n" "$1" "$2"; };'
+                                             f' _gc={config};\n' + source[start:end]],
+                                            env=dict(os.environ, GIT_CONFIG_NOSYSTEM='1', PATH=str(tools)),
+                                            capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout.strip(), 'macos-git-difftool ' + expected)
+            (tools / 'vim').unlink()
+            config.write_text('[merge]\n\ttool = vimdiff\n[diff]\n\ttool = vimdiff\n')
+            result = subprocess.run([BASH, '-eu', '-o', 'pipefail', '-c', 'record() { printf "%s %s\\n" "$1" "$2"; };'
+                                     f' _gc={config};\n' + source[start:end]],
+                                    env=dict(os.environ, GIT_CONFIG_NOSYSTEM='1', PATH=str(tools)), capture_output=True, text=True)
+            self.assertEqual(result.stdout.strip(), 'macos-git-difftool FAIL')  # no vim
+
     def test_github_ssh_auth_tells_unregistered_key_from_pin_needed(self):
         """A verify-required FIDO2 key always exits 255 under BatchMode: -v output says whether GitHub knows the key."""
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
