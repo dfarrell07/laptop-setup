@@ -391,6 +391,16 @@
         dest: "{{ ansible_facts['user_dir'] }}/.config/aerospace/aerospace.toml"
         mode: "0644"
         backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
+      register: _desktop_aerospace_config
+
+    # The CLI from the pinned release (packages role, install_brew.yml); as the user, no sudo
+    - name: Reload the changed AeroSpace config (macOS)  # noqa: no-handler
+      ansible.builtin.command:
+        argv: ["{{ ansible_facts['user_dir'] }}/.local/bin/aerospace", reload-config]
+      register: _desktop_aerospace_reload
+      changed_when: _desktop_aerospace_reload.rc == 0
+      failed_when: false  # not running or not installed yet: it reads the new file when it starts
+      when: _desktop_aerospace_config is changed
 
     # start-at-login in the config starts AeroSpace from the next login on; this starts it now, in the background
     # and without sudo, so the first run tiles without a logout

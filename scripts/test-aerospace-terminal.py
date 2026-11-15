@@ -135,6 +135,45 @@ class AeroSpaceTests(unittest.TestCase):
             self.assertIn('open -ga AeroSpace', calls)
             self.assertIn('make apply CHUNK=packages', out)
 
+    def test_aerospace_reloads_a_changed_config_by_full_path(self):
+        production = yaml.safe_load((ROOT / 'roles/desktop/tasks/main.yml').read_text())
+        block = next(task['block'] for task in production if task['name'] == 'Deploy AeroSpace configuration (macOS)')
+        names = [task['name'] for task in block]
+        deploy = copy.deepcopy(block[names.index('Deploy AeroSpace config (macOS)')])
+        reload_task = block[names.index('Reload the changed AeroSpace config (macOS)')]
+        self.assertEqual(names.index(reload_task['name']), names.index(deploy['name']) + 1)
+        self.assertNotIn('become', reload_task)  # the user's AeroSpace: no sudo
+        self.assertEqual(reload_task['ansible.builtin.command']['argv'],
+                         ["{{ ansible_facts['user_dir'] }}/.local/bin/aerospace", 'reload-config'])
+        deploy['ansible.builtin.template']['src'] = str(ROOT / 'roles/desktop/templates/aerospace.toml.j2')
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            (home / '.config/aerospace').mkdir(parents=True)
+            (home / '.local/bin').mkdir(parents=True)
+            log = home / 'calls'
+            (home / '.local/bin/aerospace').write_text(f'#!/bin/sh\necho "aerospace $*" >> {log}; exit "$RELOAD_RC"\n')
+            (home / '.local/bin/aerospace').chmod(0o755)
+            play = home / 'test.yml'
+            play.write_text(yaml.safe_dump([{'hosts': 'localhost', 'gather_facts': False,
+                'vars_files': [str(ROOT / 'roles/desktop/defaults/main.yml')],
+                'vars': {'ansible_facts': {'user_dir': str(home), 'system': 'Darwin'}}, 'tasks': [deploy, reload_task]}]))
+
+            def run(rc=0):
+                log.unlink(missing_ok=True)
+                result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(play)], cwd=ROOT,
+                    env=dict(os.environ, RELOAD_RC=str(rc), ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
+                    capture_output=True, text=True, timeout=max(60, TEST_TIMEOUT))
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                return log.read_text() if log.exists() else ''
+            self.assertEqual(run(), 'aerospace reload-config\n')  # new config: reloaded
+            self.assertEqual(run(), '')  # unchanged: left alone
+            config = home / '.config/aerospace/aerospace.toml'
+            config.write_text(config.read_text() + '# edited\n')
+            self.assertEqual(run(rc=1), 'aerospace reload-config\n')  # AeroSpace not running: the run still passes
+            (home / '.local/bin/aerospace').unlink()
+            config.write_text('')
+            run()  # not installed yet: passes too
+
     def test_firewall_enabled_and_disabled_output_formats(self):
         production = yaml.safe_load((ROOT / 'roles/desktop/tasks/main.yml').read_text())
         task = next(task for task in production if task['name'] == 'Enable macOS firewall settings')
