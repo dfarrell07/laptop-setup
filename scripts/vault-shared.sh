@@ -117,6 +117,7 @@ sync_clone() {
   check_tree "$target"
   git -C "$S" merge -q --ff-only "$target" || die "git merge in $S failed: resolve it there (git -C $S status), then re-run"
   seen "$target"
+  ! active || install_local
 }
 seen() { mkdir -p "$CONF" && printf '%s\n' "$1" >"$LAST_SEEN" && chmod 600 "$LAST_SEEN"; }
 no_rollback() {
@@ -132,28 +133,41 @@ new_password() { python3 -c 'import secrets; print(secrets.token_urlsafe(48))'; 
 # could seal a password of their own choosing to your keys. Every commit must carry a signature by one of the owner's
 # SSH signing keys: those in ~/.config/git/allowed_signers, else the ones GitHub lists for the owner (fetched once).
 ensure_signers() {
-  [[ -s $SIGNERS ]] && return 0
+  [[ -n ${SIGNERS_READY:-} ]] && return 0
   mkdir -p "$CONF" && chmod 700 "$CONF"
-  local keys=''
+  local keys='' from='' pins
+  # Optional pin (config.yml secrets_signing_fingerprints: "SHA256:... SHA256:..."; public values): only keys with
+  # these fingerprints are ever trusted, from any source.
+  pins=${VAULT_SIGNING_FINGERPRINTS:-$(awk -F': *' '/^secrets_signing_fingerprints:/ { v=$2; sub(/#.*/, "", v); gsub(/[\047"]/, "", v); print v; exit }' config.yml 2>/dev/null || true)}
+  # Rebuilt every run from allowed_signers (managed by make dotfiles), so a retired key stops being trusted.
   if [[ -s $HOME/.config/git/allowed_signers ]]; then
     keys=$(grep -Ev '^[[:space:]]*(#|$)' "$HOME/.config/git/allowed_signers" | grep -oE '(sk-)?ssh-[a-z0-9@.-]+ [A-Za-z0-9+/=]+' || true)
+    from=allowed_signers
   fi
+  if [[ -z $keys && -s $SIGNERS && -z ${VAULT_SIGNERS_REFRESH:-} ]]; then SIGNERS_READY=1; return 0; fi  # confirmed before
   if [[ -z $keys && -n $user ]] && command -v gh >/dev/null; then
     keys=$(gh api "users/$user/ssh_signing_keys" --jq '.[].key' 2>/dev/null | grep -oE '(sk-)?ssh-[a-z0-9@.-]+ [A-Za-z0-9+/=]+' || true)
+    from=github
   fi
-  [[ -n $keys ]] || die "no SSH signing key to check the shared vault's commits: make dotfiles (allowed_signers), or add your signing key to GitHub (gh ssh-key add --type signing)"
-  if [[ ! -s $HOME/.config/git/allowed_signers ]]; then
-    # Keys GitHub lists are only as trustworthy as the GitHub account that can also push: confirm them by eye.
-    printf 'Commit signing keys GitHub lists for %s:\n' "$user"
-    printf '%s\n' "$keys" | while IFS= read -r k; do printf '%s\n' "$k" | ssh-keygen -lf - 2>/dev/null | sed 's/^/  /'; done
-    [[ -t 0 ]] || die "confirm these in a terminal (or make dotfiles first, which writes ~/.config/git/allowed_signers)"
+  [[ -n $keys ]] || die "no SSH signing key to check the shared vault's commits: make dotfiles (writes ~/.config/git/allowed_signers from the vault), or list your signing key on github.com (Settings, SSH and GPG keys, as a Signing Key; not with gh, which would widen its token)"
+  local k fp kept=''
+  while IFS= read -r k; do
+    fp=$(printf '%s\n' "$k" | ssh-keygen -lf - 2>/dev/null | awk '{print $2}')
+    [[ -n $fp ]] || continue
+    if [[ -n $pins ]] && [[ " $pins " != *" $fp "* ]]; then continue; fi
+    kept+="$k"$'\n'
+    printf '  signer: %s (%s)\n' "$fp" "$from"
+  done <<<"$keys"
+  [[ -n $kept ]] || die "none of the signing keys from $from match secrets_signing_fingerprints in config.yml"
+  if [[ $from == github && -z $pins ]]; then
+    # Keys GitHub lists are only as trustworthy as the GitHub account that can also push: confirm them by eye once.
+    [[ -t 0 ]] || die "confirm the signing keys above in a terminal, or pin them (secrets_signing_fingerprints in config.yml), or run make dotfiles first"
     local answer
-    read -r -p "Are these your signing keys (compare with ssh-keygen -lf on your key's .pub)? [y/N] " answer
+    read -r -p "Are these your signing keys (compare: ssh-keygen -lf <your signing key>.pub)? [y/N] " answer
     [[ $answer == [yY] ]] || die "not confirmed: nothing was trusted"
   fi
-  printf '%s\n' "$keys" | sed 's/^/* namespaces="git" /' >"$SIGNERS"
-  chmod 600 "$SIGNERS"
-  ok "commit signers for the shared vault: $SIGNERS ($(wc -l <"$SIGNERS") key(s); check them against yours)"
+  printf '%s' "$kept" | sed '/^$/d; s/^/* namespaces="git" /' >"$SIGNERS.tmp" && chmod 600 "$SIGNERS.tmp" && mv -f "$SIGNERS.tmp" "$SIGNERS"
+  SIGNERS_READY=1
 }
 verify_all() {  # every commit reachable from $1 must be signed by an allowed signer
   local c
@@ -162,7 +176,9 @@ verify_all() {  # every commit reachable from $1 must be signed by an allowed si
   mkdir -p "$CONF" && chmod 700 "$CONF" && touch "$VERIFIED" && chmod 600 "$VERIFIED"
   for c in $(git -C "$S" rev-list "$1"); do
     grep -qxF "$c" "$VERIFIED" && continue
-    git -C "$S" -c gpg.ssh.allowedSignersFile="$SIGNERS" verify-commit "$c" >/dev/null 2>&1 ||
+    # An SSH signature only: verify-commit would also accept an OpenPGP one from any key gpg trusts.
+    git -C "$S" cat-file commit "$c" | grep -q '^gpgsig -----BEGIN SSH SIGNATURE-----' &&
+      git -C "$S" -c gpg.ssh.allowedSignersFile="$SIGNERS" verify-commit "$c" >/dev/null 2>&1 ||
       die "commit $c in $S is not signed by your signing key: nothing was merged or used. Inspect it (git -C $S show --show-signature $c)"
     printf '%s\n' "$c" >>"$VERIFIED"
   done
@@ -411,6 +427,10 @@ cmd_join() {
   sync_clone
   verify_all HEAD  # a clone made by hand: its own commits too
   check_tree HEAD
+  # A clone whose first join stopped before checkout has a verified HEAD but no files yet.
+  if [[ ! -e $S/vault.yml ]] && git -C "$S" rev-parse -q --verify HEAD >/dev/null 2>&1; then
+    git -C "$S" checkout -q HEAD -- . || die "checkout in $S failed"
+  fi
   [[ -f $S/vault-pass.age && -f $S/vault.yml ]] || die "$S has no shared vault yet: make vault-share-init on the first machine"
   if [[ ! -s $IDS ]]; then identity_stubs || die "no enrolled YubiKey plugged in (age-plugin-yubikey --identity listed none)"; fi
   printf 'Recipients in the shared vault:\n'; recipients_of "$S/recipients" | sed 's/^/  /'
@@ -445,6 +465,7 @@ cmd_pull() {
 
 cmd_edit() {
   cmd_pull
+  check_approved  # an edit is sealed under the shared password: only to keys this machine approved
   local before
   before=$(sha256sum "$S/vault.yml")
   EDITOR='' VISUAL='' ANSIBLE_EDITOR='' "$DISPATCH" ansible-vault edit "$S/vault.yml"
