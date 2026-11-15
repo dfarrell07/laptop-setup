@@ -434,6 +434,8 @@ packages_brew:
   - flock  # flock(1) (discoteq's, compatible with util-linux's): the claude-skills session launcher locks with it
   - kubectl  # Linux installs it on both profiles (packages_containers_kubectl); unversioned on macOS
   - podman  # Linux packages_containers; macOS runs containers in a podman machine VM
+  # Latest Go by choice; GOTOOLCHAIN=auto only moves up, so a repo pinned to an older Go (ovn-kubernetes' 1.26 cross
+  # build fails on 1.27) is built with GOTOOLCHAIN=go1.26.<n>, which downloads that toolchain on demand
   - go  # the personal profile clones the ovnk category (Go repos): build and test them here
   # autotools for the ovnk C projects (OVS/OVN boot.sh needs autoreconf and glibtoolize; macOS CI installs them)
   - autoconf
