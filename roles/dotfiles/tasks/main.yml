@@ -204,6 +204,14 @@
     mode: "0644"
     backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
 
+- name: Deploy zshenv (macOS)
+  ansible.builtin.template:
+    src: zshenv.j2
+    dest: "{{ ansible_facts['user_dir'] }}/.zshenv"
+    mode: "0644"
+    backup: true
+  when: is_macos
+
 # git reads ~/.gitconfig after ~/.config/git/config, so its keys override the managed ones, and
 # tmux reads ~/.tmux.conf before the XDG file: a legacy file would override or mix with the managed one.
 - name: Migrate legacy dotfiles to XDG paths

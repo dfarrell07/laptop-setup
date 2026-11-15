@@ -399,6 +399,19 @@ desktop_macos_always_on_pmset:
   autorestart: 1
   womp: 1
 
+# Remote access to an always-on Mac, as on Linux: Tailscale is the network, then `mac` / `mac-claude` (mosh + tmux,
+# zshrc) over sshd with the hardware SSH key. Remote Login is macOS's OpenSSH sshd; it turns on only together with
+# the Linux key policy (keys only, no root, this user) and only for tailnet addresses, once the ssh_client chunk has
+# written ~/.ssh/authorized_keys. Tailscale SSH (tailscale set --ssh) stays off: one SSH path, the same key as Linux.
+# Screen Sharing is a fallback for prompts macOS only shows on screen; it is off and takes the macOS password, so turn
+# it on only when needed (over ssh: set desktop_macos_screen_sharing: true, make apply CHUNK=desktop). false leaves a
+# service as it is (never turned off). Needs sudo (desktop chunk); the macos-remote-access smoke check confirms it.
+desktop_macos_remote_login: "{{ desktop_macos_always_on }}"
+desktop_macos_screen_sharing: false
+desktop_macos_ssh_allow_from: [100.64.0.0/10, "fd7a:115c:a1e0::/48"]  # Tailscale's IPv4 and IPv6 ranges
+desktop_macos_firewall_allow: "{{ [dotfiles_homebrew_prefix | trim ~ '/bin/mosh-server'] if desktop_macos_remote_login | bool else [] }}"
+desktop_macos_sshd_dropin: /etc/ssh/sshd_config.d/000-laptop-setup.conf
+
 desktop_macos_firewall_settings:
   - {name: global, check_cmd: --getglobalstate, set_cmd: --setglobalstate on, match_str: 'State = 1'}
   - name: stealth
