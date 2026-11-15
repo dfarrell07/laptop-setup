@@ -27,18 +27,41 @@ if is_vault "$VAULT"; then
   die "$VAULT is already encrypted here: nothing to import (view it with make vault-view)"
 fi
 
-tmp=$(mktemp "${VAULT}.import.XXXXXX")
-trap 'rm -f "$tmp"' EXIT  # replaced below once there is more to clean up
+# Until the import is committed, any exit (an error, Ctrl-C at the touch prompt) puts the previous helper and its
+# baseline back, or removes the new ones when there were none: with the YubiKey helper in place and no vault it opens,
+# every Ansible run would ask for a key.
+tmp=$(mktemp "${VAULT}.import.XXXXXX") prev=$(mktemp) prev_sha=$(mktemp)
+wrote=false committed=false had_prev=false had_sha=false stub=true
+restore() {
+  if $had_prev; then cp -p "$prev" "$PASS_SH"; else rm -f "$PASS_SH"; fi
+  if $had_sha; then cp -p "$prev_sha" scripts/vault-pass.sh.sha256; else rm -f scripts/vault-pass.sh.sha256; fi
+}
+cleanup() {
+  local rc=$?
+  if $wrote && ! $committed; then restore; fi
+  rm -f "$tmp" "$prev" "$prev_sha"
+  exit "$rc"
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
 chmod 600 "$tmp"
+if [[ -f $PASS_SH ]]; then
+  cp -p "$PASS_SH" "$prev" && had_prev=true
+  grep -qE "^pass=['\"]CHANGE_ME['\"]|ci-dummy-vault-password" "$PASS_SH" || stub=false
+fi
+if [[ -f scripts/vault-pass.sh.sha256 ]]; then cp -p scripts/vault-pass.sh.sha256 "$prev_sha" && had_sha=true; fi
 
 # Fetch. A local path wins over HOST:PATH, so a file name with a colon still works.
+FROM=${FROM%/}
 if [[ -e $FROM ]]; then
   src=$FROM
   if [[ -d $FROM ]]; then
-    # a make backup directory holds <repo path>/group_vars/all/vault.yml; a checkout has it at the top
+    # a checkout or a copied folder has vault.yml at the top; a make backup directory holds
+    # <repo path>/group_vars/all/vault.yml
     found=()
+    [[ ! -f $FROM/vault.yml ]] || found+=("$FROM/vault.yml")
     while IFS= read -r f; do found+=("$f"); done < <(
-      find "$FROM" -maxdepth 6 -type f \( -path '*/group_vars/all/vault.yml' -o -path "$FROM/vault.yml" \) 2>/dev/null)
+      find "$FROM" -maxdepth 6 -type f -path '*/group_vars/all/vault.yml' 2>/dev/null)
     [[ ${#found[@]} -eq 1 ]] || die "expected exactly one vault.yml under $FROM, found ${#found[@]}: give the file itself"
     src=${found[0]}
   fi
@@ -53,37 +76,24 @@ fi
 is_vault "$tmp" || die "$src is not an encrypted Ansible vault (first line must start with \$ANSIBLE_VAULT)"
 ok "fetched an encrypted vault from $src"
 
-# The helper is identical on every machine. Keep the current one (and its baseline) to put back on any failure: with
-# the YubiKey helper in place and no vault it opens, every Ansible run would ask for a key.
-prev=$(mktemp) prev_sha=$(mktemp)
-trap 'rm -f "$tmp" "$prev" "$prev_sha"' EXIT
-had_prev=false stub=true
-if [[ -f $PASS_SH ]]; then
-  cp -p "$PASS_SH" "$prev" && had_prev=true
-  cp -p scripts/vault-pass.sh.sha256 "$prev_sha" 2>/dev/null || : >"$prev_sha"
-  grep -qE "^pass=['\"]CHANGE_ME['\"]|ci-dummy-vault-password" "$PASS_SH" || stub=false
-fi
-restore() {
-  $had_prev || return 0
-  cp -p "$prev" "$PASS_SH"
-  if [[ -s $prev_sha ]]; then cp -p "$prev_sha" scripts/vault-pass.sh.sha256; fi
-}
+# The helper is identical on every machine; a different non-stub one is someone's edit, so leave it to them.
+wrote=true
 scripts/write-vault-pass.sh
 if ! $stub && ! cmp -s "$PASS_SH" "$prev"; then
-  restore
   die "$PASS_SH differs from the standard YubiKey helper: review it, or move it aside and re-run (nothing was changed)"
 fi
 ok "$PASS_SH is the standard YubiKey helper (no secret in it)"
 
 printf 'Opening the imported vault to prove a key works (insert one YubiKey and touch it when it blinks)...\n'
-if ! "$DISPATCH" ansible-vault decrypt --output - "$tmp" >/dev/null; then
-  restore
+"$DISPATCH" ansible-vault decrypt --output - "$tmp" >/dev/null ||
   die "the YubiKey did not open the vault: insert a key programmed with the same secret as the source machine's, then re-run (nothing was changed)"
-fi
 ok "a YubiKey opened the imported vault"
 
+# skip-worktree first, so the encrypted vault is never a change git would stage (SECURITY.md)
+git update-index --skip-worktree -- "$VAULT" || die "git update-index failed: is $VAULT tracked in this checkout?"
 mv -f -- "$tmp" "$VAULT"
 chmod 600 "$VAULT"
-ok "$VAULT installed (0600)"
-scripts/vault-init.sh  # already encrypted: only marks it skip-worktree
+committed=true
+ok "$VAULT installed (0600, skip-worktree)"
+scripts/vault-init.sh  # already encrypted: confirms skip-worktree
 printf 'Next: make apply CHUNK=ssh_client and make apply CHUNK=dotfiles (SSH and signing keys from the vault)\n'

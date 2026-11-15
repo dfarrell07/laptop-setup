@@ -43,8 +43,8 @@ die_loop() {
 _key_inserted() { local s; s=$("$_timeout" 10 ykman list --serials 2>/dev/null) || return 2; [[ -n "$s" ]]; }
 
 # ── Ctrl+C / signal cleanup ───────────────────────────────────────────────────
-_tmp='' _prog_err='' _ykcr_err=''
-trap 'rm -f "$_tmp" "$_prog_err" "$_ykcr_err"' EXIT
+_prog_err='' _ykcr_err=''
+trap 'rm -f "$_prog_err" "$_ykcr_err"' EXIT
 _cleanup_msg() {
   printf "\n\nInterrupted.\n" >&2
   if [[ ${PROGRAMMED_COUNT:-0} -gt 0 || ${_slot_write_started:-false} == true ]]; then
