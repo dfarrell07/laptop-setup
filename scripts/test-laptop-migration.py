@@ -455,13 +455,25 @@ class MigrationTests(unittest.TestCase):
         start = source.index('# Work Codex login (work profile)')
         end = source.index('  unset _codex_work\nfi\n') + len('  unset _codex_work\nfi\n')
         for status, profile, expected in [(0, 'work', 'codex-work-login PASS'), (1, 'work', 'codex-work-login FAIL'),
-                                          (1, 'personal', '')]:
+                                          (1, 'personal', 'codex-work-login PASS')]:
             with self.subTest(status=status, profile=profile):
-                script = ('record() { printf "%s %s\\n" "$1" "$2"; }; _codex_enabled=true; CONTAINER=; _cfg=/dev/null; '
+                script = ('record() { printf "%s %s\\n" "$1" "$2"; }; _codex_enabled=true; CONTAINER=; _codex_work=; '
                           f'profile={profile}; codex() {{ [ "$CODEX_HOME" = "$HOME/.codex" ] || return 9; return {status}; }}; '
                           'export -f codex;\n' + source[start:end])
                 result = subprocess.run(['bash', '-c', script], capture_output=True, text=True, timeout=30)
                 self.assertEqual(result.stdout.strip(), expected, result.stderr)
+
+    def test_smoke_reads_config_values_before_dropping_the_config_path(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('_codex_work=$(awk')
+        end = source.index('unset _cfg', start)
+        with tempfile.TemporaryDirectory() as name:
+            config = Path(name) / 'config.yml'
+            config.write_text("codex_work_config_dir: '/x/work home'   # custom\npackages_user_updates_enabled: false\n")
+            result = subprocess.run(['bash', '-c', f'_cfg={config}\n' + source[start:end]
+                                     + 'printf "%s|%s" "$_codex_work" "$_user_updates_off"'],
+                                    capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.stdout, '/x/work home|true', result.stderr)
 
     def test_smoke_session_placement_flags_misplaced_sessions(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()

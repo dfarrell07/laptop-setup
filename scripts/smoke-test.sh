@@ -140,6 +140,12 @@ _notes_repo_name=$(awk -F': ' '/^notes_repo_name:/{gsub(/[[:space:]"'"'"']/, "",
 [[ -n "${HOME:-}" ]] || { echo "Error: HOME is not set" >&2; exit 2; }
 _notes_dir="$HOME/$_notes_repo_name"
 USER="${USER:-$(id -un)}"  # cron/env -i runs leave USER unset; later checks use it under set -u
+# Read before _cfg goes away: the work Codex home (value up to an inline comment, quotes and spaces trimmed) and the
+# user-updater opt-out.
+_codex_work=$(awk '/^codex_work_config_dir:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/[[:space:]]*#.*$/, "");
+  gsub(/^["\047]|["\047]$/, ""); sub(/[[:space:]]+$/, ""); print; exit}' "$_cfg" 2>/dev/null || true)
+_user_updates_off=false
+grep -qiE '^packages_user_updates_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _user_updates_off=true
 unset _cfg
 # Check tools as the login shell finds them: make verify runs with make's PATH, which lacks the user bin
 # directories the dotfiles PATH puts first (the claude, codex and agy CLIs live there).
@@ -257,8 +263,9 @@ else
 fi
 # Work Codex login (work profile): delegate's codex:work target and owork need it; the codex role logs it in from
 # vault_codex_api_key. `codex login status` prints only the method (a key masked), never the credential.
-if [[ "$profile" == "work" ]] && $_codex_enabled; then
-  _codex_work=$(sed -nE 's/^codex_work_config_dir:[[:space:]]*["'"'"']?([^"'"'"'#]+)["'"'"']?.*/\1/p' "${_cfg:-/dev/null}" 2>/dev/null | head -1)
+if [[ "$profile" != "work" ]] || ! $_codex_enabled; then
+  record "codex-work-login" "PASS" "not applicable (personal profile or Codex disabled)"
+else
   _codex_work=${_codex_work:-$HOME/.codex}; _codex_work=${_codex_work/#\~/$HOME}
   if [[ -n "$CONTAINER" ]]; then
     record "codex-work-login" "SKIP" "host-only"
@@ -293,7 +300,7 @@ unset _placement _launcher _misplaced _sessions
 
 # Daily user-space updater (packages role; docs/auto-updates.md): Linux host only
 if $IS_LINUX && [[ -z "$CONTAINER" ]]; then
-  if grep -qiE '^packages_user_updates_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "${_cfg:-/dev/null}" 2>/dev/null; then
+  if $_user_updates_off; then
     if [[ ! ("$EUID" -eq 0 && -n "${SUDO_USER:-}") ]] && systemctl --user is-enabled laptop-user-update.timer &>/dev/null; then
       record "user-updates" "WARN" "disabled in config but the timer is still enabled (make packages removes it)"
     else record "user-updates" "PASS" "disabled in config"; fi

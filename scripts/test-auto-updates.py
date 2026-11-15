@@ -162,7 +162,8 @@ class AutoUpdateTests(unittest.TestCase):
                                            ('disabled-left', '[ "$2" = is-enabled ]', disabled.name, 'user-updates WARN')]:
             with self.subTest(state=state):
                 run = subprocess.run(['bash', '-c', 'record() { printf "%s %s\\n" "$1" "$2"; }; IS_LINUX=true; CONTAINER=; '
-                                      f'_cfg={cfg}; systemctl() {{ ' + body + '; };\n' + source[start:end]],
+                                      f'_user_updates_off={"false" if cfg == "/dev/null" else "true"}; '
+                                      f'systemctl() {{ ' + body + '; };\n' + source[start:end]],
                                      capture_output=True, text=True)
                 self.assertEqual(run.stdout.strip(), expected, run.stderr)
 
