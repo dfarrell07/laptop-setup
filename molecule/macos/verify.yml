@@ -34,6 +34,15 @@
     - name: Include common verify assertions
       ansible.builtin.import_tasks: ../shared/verify-common.yml
 
+    # smoke-test.sh reads config.yml, which a CI checkout lacks; tell it the converge made no podman machine (the
+    # runner cannot run a VM). force: false leaves an existing config.yml (a local run on a real Mac) alone.
+    - name: Tell smoke-test.sh there is no podman machine on the runner
+      ansible.builtin.copy:
+        dest: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/config.yml"
+        content: "containers_macos_machine_enabled: false\n"
+        mode: "0600"
+        force: false
+
     - name: Include smoke-test verification
       ansible.builtin.import_tasks: ../shared/verify-smoke.yml
 
