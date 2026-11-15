@@ -255,6 +255,21 @@ elif exec_cmd codex --version &>/dev/null; then
 else
   record "codex" "$_tool_absent" "not found — run: make codex"
 fi
+# Session placement (claude role writes ~/.config/claude-sessions/machine; the launcher decides): no misplaced sessions
+_placement=$HOME/.config/claude-sessions/machine
+_launcher=$(compgen -G "${HOME}/src/*/claude-skills*/skills/sessions/scripts/session.sh" | head -1 || true)
+if [[ -n "$CONTAINER" ]]; then
+  record "claude-session-placement" "SKIP" "host-only check"
+elif [[ ! -f "$_placement" ]]; then
+  record "claude-session-placement" "PASS" "placement off (claude_machine_role unset)"
+elif [[ -z "$_launcher" ]]; then
+  record "claude-session-placement" "SKIP" "session launcher not found under ~/src/*/claude-skills*"
+elif _misplaced=$(bash "$_launcher" ls 2>/dev/null | awk '/(^|[[:space:]])misplaced([[:space:]]|$)/ {print $1}' | paste -sd' ' -) \
+  && [[ -n "$_misplaced" ]]; then
+  record "claude-session-placement" "FAIL" "sessions on the wrong machine: $_misplaced (session.sh stop, then start on the right one)"
+else record "claude-session-placement" "PASS"; fi
+unset _placement _launcher _misplaced
+
 # Daily user-space updater (packages role; docs/auto-updates.md): Linux host only
 if $IS_LINUX && [[ -z "$CONTAINER" ]]; then
   if grep -qiE '^packages_user_updates_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "${_cfg:-/dev/null}" 2>/dev/null; then
