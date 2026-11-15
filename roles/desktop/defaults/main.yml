@@ -410,7 +410,13 @@ desktop_macos_always_on_pmset:
 # service as it is (never turned off). Needs sudo (desktop chunk); the macos-remote-access smoke check confirms it.
 desktop_macos_remote_login: "{{ desktop_macos_always_on }}"
 desktop_macos_screen_sharing: false
+# The AllowUsers tailnet ranges are defence in depth, not a network boundary: sshd listens on all interfaces, as on
+# Linux, and 100.64.0.0/10 is also carrier-grade NAT (hotspots, mobile carriers), so the real protection is key-only
+# auth with the hardware key. Screen Sharing, when on, listens on all interfaces and takes the macOS password.
 desktop_macos_ssh_allow_from: [100.64.0.0/10, "fd7a:115c:a1e0::/48"]  # Tailscale's IPv4 and IPv6 ranges
+# These two mirror roles/system/defaults (invisible to this role); a config.yml override of the system_* value applies to both
+desktop_macos_ssh_allow_agent_forwarding: "{{ system_ssh_allow_agent_forwarding | default('no') }}"
+desktop_macos_ssh_allow_tcp_forwarding: "{{ system_ssh_allow_tcp_forwarding | default('local') }}"
 desktop_macos_firewall_allow: "{{ [dotfiles_homebrew_prefix | trim ~ '/bin/mosh-server'] if desktop_macos_remote_login | bool else [] }}"
 desktop_macos_sshd_dropin: /etc/ssh/sshd_config.d/000-laptop-setup.conf
 desktop_macos_ssh_port: "{{ ssh_port | default(722) }}"
