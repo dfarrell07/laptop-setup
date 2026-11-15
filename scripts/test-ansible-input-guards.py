@@ -281,9 +281,10 @@ class InputGuardTests(unittest.TestCase):
         """vault_ssh_auth_key_pub may hold backup keys, one per line: every line must pass the sshd type check."""
         task = guard('roles/ssh/tasks/main.yml', 'Assert SSH auth public key type is accepted by sshd hardening')
         primary, backup, rsa = 'ssh-ed25519 AAAA a', 'sk-ssh-ed25519@openssh.com AAAA b', 'ssh-rsa AAAA c'
-        for key, accepted in [(primary, True), (primary + '\n' + backup + '\n', True), (primary + '\n' + rsa, False)]:
-            with self.subTest(key=key):
-                self.check(task, {'ansible_facts': {'system': 'Linux'}, 'ssh_auth_key_pub': key,
+        cases = [(primary, True), (primary + '\n' + backup + '\n', True), (primary + '\n' + rsa, False)]
+        for (key, accepted), system in [(c, s) for c in cases for s in ('Linux', 'Darwin')]:  # the Mac's sshd too
+            with self.subTest(key=key, system=system):
+                self.check(task, {'ansible_facts': {'system': system}, 'ssh_auth_key_pub': key,
                                   'ssh_pubkey_accepted_algorithms': ['ssh-ed25519', 'sk-ssh-ed25519@openssh.com']},
                            accepted)
 

@@ -190,14 +190,26 @@ class RenderedConfigTests(unittest.TestCase):
 
     def test_macos_sshd_policy_is_key_only_and_tailnet_only(self):
         text = self.read('sshd_macos')
-        for line in ('PasswordAuthentication no', 'KbdInteractiveAuthentication no', 'PermitRootLogin no'):
+        for line in ('PasswordAuthentication no', 'KbdInteractiveAuthentication no', 'AuthenticationMethods publickey',
+                     'PermitRootLogin no', 'PermitUserEnvironment no', 'MaxAuthTries 3', 'LoginGraceTime 30',
+                     'X11Forwarding no', 'AllowAgentForwarding no', 'AllowTcpForwarding local', 'LogLevel VERBOSE'):
             self.assertIn(line + '\n', text)
         allow = next(line for line in text.splitlines() if line.startswith('AllowUsers '))
         users = allow.split()[1:]
         self.assertEqual([u.split('@', 1)[1] for u in users], ['100.64.0.0/10', 'fd7a:115c:a1e0::/48'])
         self.assertEqual(len({u.split('@', 1)[0] for u in users}), 1)
+        # the algorithm lists are the Linux ones (group_vars), not a copy
+        group_vars = yaml.safe_load((ROOT / 'group_vars/all/vars.yml').read_text())
+        directives = dict(line.split(' ', 1) for line in text.splitlines() if line and not line.startswith('#'))
+        self.assertEqual(directives['PubkeyAcceptedAlgorithms'], ','.join(group_vars['ssh_pubkey_accepted_algorithms']))
+        for directive, var in [('Ciphers', 'ssh_ciphers'), ('MACs', 'ssh_macs'), ('KexAlgorithms', 'ssh_kex_algorithms'),
+                               ('HostKeyAlgorithms', 'ssh_host_key_algorithms')]:
+            self.assertEqual(directives[directive], group_vars[var], directive)
+        linux = (ROOT / 'roles/system/defaults/main.yml').read_text()
+        self.assertIn('system_ssh_allow_agent_forwarding: "no"', linux)  # the Mac mirrors these defaults
+        self.assertIn('system_ssh_allow_tcp_forwarding: "local"', linux)
         sshd = Path('/usr/sbin/sshd')
-        if sshd.exists():  # the drop-in parses with this host's sshd (Apple's on macOS)
+        if sshd.exists():  # the drop-in parses with this host's sshd (Apple's on macOS), every algorithm included
             hostkey = self.out / 'hostkey'
             if not hostkey.exists():
                 subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(hostkey)], check=True)
