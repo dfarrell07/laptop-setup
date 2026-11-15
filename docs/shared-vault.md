@@ -59,8 +59,12 @@ too (new tokens and keys, then `make vault-edit`); the new password protects onl
   first, resolves GitHub's head once, and refuses, before merging anything, unless every commit in its history is
   signed by one of your SSH signing keys (a clone made by hand is checked the same way). The keys come from
   `~/.config/git/allowed_signers`, or, on a machine without them yet, from the signing keys GitHub lists for your
-  account after you confirm their fingerprints; they are kept in `~/.config/laptop-setup/vault-allowed-signers`. The
-  repository may hold only regular files (no symlinks).
+  account after you confirm their fingerprints (kept in `~/.config/laptop-setup/vault-allowed-signers`). Only SSH
+  signatures count. Pinning removes the trust-on-first-use step: put your signing key's fingerprint in `config.yml`
+  as `secrets_signing_fingerprints: "SHA256:..."` (several space-separated; `ssh-keygen -lf <key>.pub`), and only
+  keys with those fingerprints are trusted, from any source. When you rotate the signing key, keep the old public
+  key in `allowed_signers` (with `valid-before`) so older commits still verify. The repository may hold only regular
+  files (no symlinks).
 - **No rollback**: each machine records the last commit it accepted and refuses a history that no longer contains it
   (a force-push back to an older signed state could bring back a removed key). A brand-new machine has no record yet,
   so it trusts the newest signed state it is shown; join new machines after a key removal has been pushed.
