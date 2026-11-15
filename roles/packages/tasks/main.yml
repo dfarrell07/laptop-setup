@@ -319,6 +319,26 @@
           {{ ansible_failed_result.stderr | default(ansible_failed_result.msg | default('unknown')) | truncate(200) }}.
           Run: sudo {{ dotfiles_homebrew_prefix }}/bin/tailscaled install-system-daemon
 
+# tailscaled install-system-daemon creates /usr/local/bin under root's umask when it is missing, leaving it root-only
+# (0700): the user can then run nothing there. Restore the usual 0755; the owner stays (Homebrew's on Intel Macs).
+- name: Check /usr/local/bin (macOS)
+  ansible.builtin.stat:
+    path: /usr/local/bin
+  register: _packages_usr_local_bin
+  when: is_macos
+
+- name: Keep /usr/local/bin readable by everyone (macOS)
+  ansible.builtin.file:
+    path: /usr/local/bin
+    state: directory
+    mode: "0755"
+  become: true
+  tags: [become]
+  when:
+    - is_macos
+    - _packages_usr_local_bin.stat.isdir | default(false)
+    - _packages_usr_local_bin.stat.mode != '0755'
+
 - name: Install binary downloads
   ansible.builtin.import_tasks: install_binary_downloads.yml
 

@@ -946,12 +946,16 @@ class MacTaskTests(unittest.TestCase):
         for docker, podman_stat, wanted in [([dangling], podman, True), ([{'exists': True, 'executable': False}], podman, True),
                                             ([dangling, {'exists': True, 'executable': True}], podman, False),
                                             ([dangling], {'exists': False}, False),
-                                            ([dangling], {'exists': True, 'executable': False}, False)]:
+                                            ([dangling], {'exists': True, 'executable': False}, False),
+                                            # stat failed (failed_when: false; e.g. a root-only /usr/local/bin): no stat key
+                                            ([None, dangling], podman, True),
+                                            ([None, {'exists': True, 'executable': True}], podman, False)]:
             with self.subTest(docker=docker, podman=podman_stat):
                 results = run_tasks([task, {'ansible.builtin.debug': {'var': '_containers_docker_shim_wanted'}}], {
                     'containers_macos_docker_shim': True, 'containers_macos_machine_enabled': True,
                     '_containers_podman_bin_stat': {'stat': podman_stat},
-                    '_containers_real_docker': {'results': [{'stat': stat} for stat in docker]}})
+                    '_containers_real_docker': {'results': [{'msg': 'Permission denied'} if stat is None else {'stat': stat}
+                                                            for stat in docker]}})
                 self.assertEqual(results[1]['_containers_docker_shim_wanted'], wanted)
 
     def test_macos_sshd_reload_survives_its_session(self):

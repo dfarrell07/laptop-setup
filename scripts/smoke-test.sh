@@ -639,6 +639,10 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   elif launchctl print system/com.tailscale.tailscaled &>/dev/null || launchctl print system/homebrew.mxcl.tailscale &>/dev/null; then
     record "tailscaled-daemon" "PASS"
   else record "tailscaled-daemon" "FAIL" "tailscaled system daemon not installed — run: make apply CHUNK=packages (needs sudo)"; fi
+  # tailscaled install-system-daemon can leave a missing /usr/local/bin root-only (0700)
+  if [[ -d /usr/local/bin && ! -r /usr/local/bin ]]; then
+    record "usr-local-bin" "FAIL" "/usr/local/bin is not readable by you (root-only) — run: make apply CHUNK=packages (needs sudo)"
+  else record "usr-local-bin" "PASS"; fi
 fi
 
 # macOS remote access: sshd only with the key-only, tailnet-only policy, mosh-server allowed through the
@@ -2958,7 +2962,7 @@ if [[ -n "$ONLY" ]]; then
       continue
     fi
     # macOS-only checks have nothing to verify on Linux
-    if $IS_LINUX && [[ " podman-machine docker-shim macos-dev-tools macos-zshenv-path macos-launchd-ssh-auth-sock aerospace-running aerospace-config macos-git-difftool macos-remote-access macos-firewall macos-always-on macos-screen macos-screen-lock tailscaled-daemon " == *" $_only_name "* ]]; then
+    if $IS_LINUX && [[ " podman-machine docker-shim macos-dev-tools macos-zshenv-path macos-launchd-ssh-auth-sock aerospace-running aerospace-config macos-git-difftool macos-remote-access macos-firewall macos-always-on macos-screen macos-screen-lock tailscaled-daemon usr-local-bin " == *" $_only_name "* ]]; then
       $JSON || printf 'N/A   %s (macOS-only check; nothing to verify on Linux)\n' "$_only_name"
       continue
     fi
