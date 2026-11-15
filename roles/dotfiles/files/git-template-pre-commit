@@ -1,16 +1,7 @@
 #!/bin/sh
-# Use '# gitleaks:allow' on a line to suppress a false positive
-_gitleaks_rc=0
-if command -v gitleaks >/dev/null 2>&1; then
-  set --; [ -f .gitleaks.toml ] && set -- --config .gitleaks.toml; gitleaks git --pre-commit --staged --redact --max-decode-depth 2 "$@"
-  _gitleaks_rc=$?
-else
-  # Missing tool (fresh machine, offline provision) warns: blocking every commit in every repo
-  # until provisioning finishes is worse; a leak gitleaks does find still blocks.
-  echo "WARNING: gitleaks not found — staged changes were NOT scanned for secrets; install via ~/laptop-setup: make bootstrap-hooks" >&2
-fi
-# Chain to per-repo hook if one exists (core.hooksPath replaces .git/hooks/ lookup).
-# Per-repo hook failure blocks the commit; gitleaks failure also blocks even if per-repo hook passes.
+# Global pre-commit (core.hooksPath): the repository's own hook first (it may stage files, such as formatter output),
+# then a gitleaks scan of everything staged. Either failing blocks the commit.
+# Use '# gitleaks:allow' on a line to suppress a false positive.
 # The repo's own hook: <repo>/<laptop.repoHooks>/pre-commit when the git_repos role opted the repo in (repos.yml
 # hooks: true; a local setting repo content cannot make), else .git/hooks/pre-commit.
 _repo_hooks_dir=$(git config --local --get laptop.repoHooks 2>/dev/null || true)
@@ -21,4 +12,11 @@ esac
 if [ -x "$_repo_hook" ]; then
   "$_repo_hook" || exit $?
 fi
-exit $_gitleaks_rc
+if command -v gitleaks >/dev/null 2>&1; then
+  set --; [ -f .gitleaks.toml ] && set -- --config .gitleaks.toml; gitleaks git --pre-commit --staged --redact --max-decode-depth 2 "$@"
+  exit $?
+fi
+# Missing tool (fresh machine, offline provision) warns: blocking every commit in every repo
+# until provisioning finishes is worse; a leak gitleaks does find still blocks.
+echo "WARNING: gitleaks not found — staged changes were NOT scanned for secrets; install via ~/laptop-setup: make bootstrap-hooks" >&2
+exit 0

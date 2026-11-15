@@ -496,6 +496,53 @@ class SharedVault(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('no SSH signing key', result.stderr)
 
+    def trusted_gpg_home(self):
+        """A gpg home holding a key gpg trusts (it made it): what an attacker with a key in your keyring would use."""
+        home = self.tmp / 'gnupg'
+        home.mkdir(mode=0o700)
+        env = dict(os.environ, GNUPGHOME=str(home))
+        run(['gpg', '--batch', '--passphrase', '', '--quick-gen-key', 'Evil <e@e.test>', 'ed25519', 'sign', 'never'],
+            env=env)
+        fpr = run(['gpg', '--batch', '--with-colons', '--list-secret-keys'], env=env).stdout
+        fpr = next(line.split(':')[9] for line in fpr.splitlines() if line.startswith('fpr:'))
+        return str(home), fpr
+
+    @unittest.skipUnless(shutil.which('gpg'), 'gpg is not installed')
+    def test_a_commit_signed_by_a_gpg_trusted_key_is_refused(self):
+        a, b = self.joined_pair()
+        gnupg, fpr = self.trusted_gpg_home()
+        secrets_a, env = self.tmp / 'secrets-a', dict(self.env('a', a), GNUPGHOME=gnupg)
+        (secrets_a / 'vault-pass.age').write_bytes(b'attacker')
+        run(['git', '-C', str(secrets_a), '-c', 'gpg.format=openpgp', '-c', f'user.signingkey={fpr}', 'commit', '-S',
+             '-qam', 'pgp'], env=env)
+        # The second variant: the same PGP signature with an SSH marker header added after it.
+        raw = run(['git', '-C', str(secrets_a), 'cat-file', 'commit', 'HEAD'], env=env).stdout
+        head, _, body = raw.partition('\n\n')
+        doubled = f'{head}\ngpgsig -----BEGIN SSH SIGNATURE-----\n\n{body}'
+        for variant in ('plain', 'doubled'):
+            if variant == 'doubled':
+                sha = run(['git', '-C', str(secrets_a), 'hash-object', '-t', 'commit', '-w', '--stdin'], env=env,
+                          input=doubled).stdout.strip()
+                run(['git', '-C', str(secrets_a), 'push', '-qf', 'origin', f'{sha}:main'], env=env)
+            else:
+                run(['git', '-C', str(secrets_a), 'push', '-q'], env=env)
+            result = self.shared('b', b, 'pull', check=False, GNUPGHOME=gnupg)
+            self.assert_refused_and_unchanged(b, result, 'not signed')
+
+    def test_a_different_signer_set_verifies_the_history_again(self):
+        a, b = self.joined_pair()
+        self.shared('a', a, 'edit')
+        self.shared('b', b, 'pull')  # verified and cached under the owner's key
+        other = self.tmp / 'other'
+        run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(other)])
+        env_b = self.env('b', b)
+        (Path(env_b['HOME']) / '.config/git').mkdir(parents=True, exist_ok=True)
+        (Path(env_b['HOME']) / '.config/git/allowed_signers').write_text(
+            f't@t namespaces="git" {(self.tmp / "other.pub").read_text()}')
+        result = self.shared('b', b, 'pull', check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('not signed', result.stderr)
+
     def test_a_list_form_pin_is_refused(self):
         a = self.init_a()
         b = self.machine('b', None)

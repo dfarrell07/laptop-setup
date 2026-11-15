@@ -108,6 +108,9 @@ LAST_SEEN=$CONF/vault-last-seen
 VERIFIED=$CONF/vault-verified-commits
 sync_clone() {
   local target
+  # Modified or added files only: a clone whose first join stopped before checkout shows every file deleted.
+  [[ -z $(git -C "$S" diff HEAD --name-only --diff-filter=AM 2>/dev/null) ]] ||
+    die "$S has uncommitted changes (an interrupted run?): inspect git -C $S status, then git -C $S checkout -- . to drop them"
   git -C "$S" fetch -q 2>/dev/null || { warn "could not fetch $S (offline?): using the local clone"; verify_all HEAD; return 0; }
   target=$(git -C "$S" rev-parse -q --verify '@{u}^{commit}' 2>/dev/null) || { verify_all HEAD; return 0; }
   no_rollback "$target"
@@ -143,21 +146,38 @@ new_password() { python3 -c 'import secrets; print(secrets.token_urlsafe(48))'; 
 # SSH signing keys: those in ~/.config/git/allowed_signers, else the ones GitHub lists for the owner (fetched once).
 # A signer list's entries as "<valid-before/valid-after options, comma-separated or empty>|<keytype key>".
 signer_entries() {
-  grep -Ev '^[[:space:]]*(#|$)' "$1" 2>/dev/null | awk '{
+  grep -Ev '^[[:space:]]*(#|$)' "$1" 2>/dev/null | awk '
+  # Split an options field on commas outside double quotes (namespaces="file,git").
+  function splitopts(str, out,    n, c, q, cur, x) {
+    n = 0; q = 0; cur = ""
+    for (x = 1; x <= length(str); x++) {
+      c = substr(str, x, 1)
+      if (c == "\"") q = !q
+      if (c == "," && !q) { out[++n] = cur; cur = "" } else cur = cur c
+    }
+    out[++n] = cur
+    return n
+  }
+  {
     for (i = 1; i <= NF; i++) if ($i ~ /^(sk-)?ssh-[a-z0-9@.-]+$/ && i < NF) break
     if (i > NF) next
-    opts = ""; ns = ""
-    for (k = 1; k < i; k++) if ($k ~ /namespaces=/) ns = $k
+    opts = ""; ns = ""; bad = 0
+    for (k = 2; k < i; k++) {
+      n = splitopts($k, parts)
+      for (m = 1; m <= n; m++) {
+        o = tolower(parts[m])
+        if (o ~ /^namespaces=/) ns = o
+        else if (o ~ /^valid-(before|after)=/) opts = opts (opts == "" ? "" : ",") o
+        else bad = 1  # cert-authority and the like: not a plain signing key
+      }
+    }
+    if (bad) next
     # A key limited to other namespaces (namespaces="file") never signs vault commits.
     if (ns != "") {
-      v = ns; sub(/.*namespaces=/, "", v); sub(/^"/, "", v); sub(/".*$/, "", v)
+      v = ns; sub(/^namespaces=/, "", v); gsub(/"/, "", v)
       n = split(v, names, ","); hit = 0
       for (m = 1; m <= n; m++) if (names[m] == "git") hit = 1
       if (!hit) next
-    }
-    for (k = 1; k < i; k++) {
-      n = split($k, parts, ",")
-      for (m = 1; m <= n; m++) if (parts[m] ~ /^valid-(before|after)=/) opts = opts (opts == "" ? "" : ",") parts[m]
     }
     print opts "|" $i " " $(i + 1)
   }'
@@ -258,12 +278,17 @@ txn_rollback() {
     fi
   fi
   [[ -z ${TXN_UNDO:-} ]] || "$TXN_UNDO"
+  local broken=0
   for f in vault.yml vault-pass.age recipients; do
-    if [[ -f $TXN_DIR/$f ]]; then cp -p "$TXN_DIR/$f" "$S/$f"; else rm -f "$S/$f"; fi
+    if [[ -f $TXN_DIR/$f ]]; then cp -p "$TXN_DIR/$f" "$S/$f" || broken=1; else rm -f "$S/$f" || broken=1; fi
   done
   if [[ -n $TXN_HEAD ]]; then git -C "$S" reset -q "$TXN_HEAD" 2>/dev/null || true
   elif git -C "$S" rev-parse -q --verify HEAD >/dev/null 2>&1; then git -C "$S" update-ref -d HEAD 2>/dev/null || true; fi
   git -C "$S" reset -q 2>/dev/null || true
+  if [[ $broken != 0 ]]; then
+    warn "stopped, and restoring $S failed: the previous files are kept in $TXN_DIR; copy them back (cp -p $TXN_DIR/* $S/) before running anything else"
+    exit "$rc"
+  fi
   rm -rf "$TXN_DIR"
   warn "stopped before the change was pushed: the shared vault is as it was; run the command again"
   exit "$rc"
@@ -567,6 +592,8 @@ case ${1:-} in active|status|'') ;; *)
   command -v flock >/dev/null || die "flock is not installed: make packages (macOS: brew install flock)"
   exec 9>"$CONF/lock"
   flock -n 9 || die "another vault command is running (lock $CONF/lock)"
+  # Daemons git starts (credential-cache, an ssh master) must not inherit the lock and hold it after this run.
+  git() { command git "$@" 9>&-; }
   ;;
 esac
 case ${1:-} in

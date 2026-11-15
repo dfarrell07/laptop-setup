@@ -302,10 +302,14 @@ elif [[ -n "$CONTAINER" ]]; then
   record "acli-auth" "SKIP" "host-only"
 elif ! command -v acli &>/dev/null; then
   record "acli-auth" "WARN" "acli_site is set but acli is not installed (repos_dnf_acli_baseurl, then make repos_dnf packages)"
-elif timeout 20 acli jira auth status 2>/dev/null | grep -qF "$_acli_site"; then
-  record "acli-auth" "PASS"
 else
-  record "acli-auth" "WARN" "acli is not logged in to $_acli_site: add vault_acli_api_token (make vault-edit), then make claude from a desktop session (expired tokens too)"
+  _acli_out=""
+  if _acli_out=$(timeout 20 acli jira auth status 2>/dev/null) && grep -qF "$_acli_site" <<<"$_acli_out"; then
+    record "acli-auth" "PASS"
+  else
+    record "acli-auth" "WARN" "acli (jira) is not logged in to $_acli_site: add vault_acli_api_token (make vault-edit), then make claude from a desktop session (expired tokens too)"
+  fi
+  unset _acli_out
 fi
 unset _acli_site
 # Session placement (claude role writes ~/.config/claude-sessions/machine; the launcher decides): no misplaced sessions
