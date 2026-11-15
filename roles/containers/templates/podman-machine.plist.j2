@@ -1,17 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- {{ ansible_managed }} -->
-<!-- Starts the podman machine at login; `podman machine start` exits once the VM runs, so no KeepAlive. -->
+<!-- Starts the podman machine at login and restarts it if it stops (podman-machine-ensure); the script exits once
+     the VM runs, so no KeepAlive. -->
 <plist version="1.0">
 <dict>
   <key>Label</key>
   <string>{{ containers_macos_machine_label | e }}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>{{ containers_podman_bin | e }}</string>
-    <string>machine</string>
-    <string>start</string>
-    <string>{{ containers_macos_machine_name | e }}</string>
+    <string>/bin/sh</string>
+    <string>{{ containers_macos_machine_ensure_script | e }}</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>
