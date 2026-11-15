@@ -1,0 +1,14 @@
+#!/bin/sh
+# {{ ansible_managed }}
+# Run by the podman machine LaunchAgent at login and every {{ containers_macos_machine_check_seconds | int }}s: starts the
+# machine only when it is stopped, was provisioned (booted once by the play) and is not on hold. Logs only when it acts.
+# Keep it stopped on purpose: touch {{ containers_macos_machine_hold_file }}
+podman={{ containers_podman_bin | quote }}
+name={{ containers_macos_machine_name | quote }}
+[ -e {{ containers_macos_machine_hold_file | quote }} ] && exit 0
+state=$("$podman" machine inspect --format '{{ '{{' }}.State{{ '}}' }}' "$name" 2>/dev/null) || exit 0  # no machine yet: the play creates it
+[ "$state" = stopped ] || exit 0
+# never booted: the first boot provisions the VM and must run under the play, which waits for it
+case "$("$podman" machine inspect --format '{{ '{{' }}.LastUp{{ '}}' }}' "$name" 2>/dev/null)" in ''|0001-01-01*) exit 0 ;; esac
+echo "$(date '+%Y-%m-%d %H:%M:%S') starting $name"
+exec "$podman" machine start "$name"
