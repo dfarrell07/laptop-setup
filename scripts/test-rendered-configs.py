@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check content of rendered configs and shipped units/hooks (real Ansible engine, no host changes)."""
+import getpass
 import os
 from pathlib import Path
 import re
@@ -450,29 +451,38 @@ class RenderedConfigTests(unittest.TestCase):
         result = subprocess.run([str(sshd), '-t', '-f', str(bad), '-o', f'HostKey={hostkey}'],
                                 capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0, 'sshd -t must reject an unknown algorithm')
-        # the play's sshd -T check on this sshd's output: our drop-in first passes; a drop-in sorting before it, or a
-        # sshd_config without the Include, does not
+        # the play's sshd -T check on this sshd's output: our drop-in first passes; a drop-in sorting before it, a
+        # sshd_config without the Include, or a Match block for addresses outside the tailnet does not
         dropins = self.out / 'sshd_config.d'
         dropins.mkdir(exist_ok=True)
         shutil.copy(self.out / 'sshd_macos_host', dropins / '000-laptop-setup.conf')
         effective = self.out / 'sshd_effective'
-        for name, earlier, include, ok in [('ours first', None, True, True),
-                                           ('earlier drop-in', 'PasswordAuthentication yes\n', True, False),
-                                           ('no Include', None, False, False)]:
+        user = getpass.getuser()  # the drop-in was rendered with this host's ansible_facts['user_id']
+        match = 'Match Address 203.0.113.0/24\n    PasswordAuthentication yes\n    AllowUsers *\n'
+        for name, earlier, include, tail, error in [
+                ('ours first', None, True, '', None),
+                ('earlier drop-in', 'PasswordAuthentication yes\n', True, '', 'shows .*passwordauthentication yes'),
+                ('earlier AllowUsers', 'AllowUsers nobody\n', True, '', r'allowusers .*nobody@?'),
+                ('no Include', None, False, '', 'shows .*passwordauthentication yes'),
+                ('Match outside the tailnet', None, True, match, r'from 203\.0\.113\.5 .*shows passwordauthentication yes,'
+                                                                  r'.* and allowusers \*, not')]:
             with self.subTest(name):
                 (dropins / '000-aaa.conf').unlink(missing_ok=True)
                 if earlier:
                     (dropins / '000-aaa.conf').write_text(earlier)
                 effective.write_text(f'HostKey {hostkey}\n' + (f'Include {dropins}/*\n' if include else '')
-                                     + 'PasswordAuthentication yes\nKbdInteractiveAuthentication yes\n')
-                result = subprocess.run([str(sshd), '-T', '-f', str(effective), '-C', 'user=nobody,addr=100.64.0.1,host=x'],
-                                        capture_output=True, text=True)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                if ok:
-                    sshd_effective_check(result.stdout)
+                                     + 'PasswordAuthentication yes\nKbdInteractiveAuthentication yes\n' + tail)
+                outputs = []
+                for addr in SSHD_PROBE_ADDRESSES:
+                    result = subprocess.run([str(sshd), '-T', '-f', str(effective), '-C', f'user={user},addr={addr},host=x'],
+                                            capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    outputs.append(result.stdout)
+                if error is None:
+                    sshd_effective_check(*outputs, user=user)
                 else:
-                    with self.assertRaisesRegex(AssertionError, 'shows passwordauthentication yes'):
-                        sshd_effective_check(result.stdout)
+                    with self.assertRaisesRegex(AssertionError, error):
+                        sshd_effective_check(*outputs, user=user)
 
     def test_macos_sshd_dropin_uses_the_algorithms_the_play_kept(self):
         directives = dict(line.split(' ', 1) for line in self.read('sshd_macos_older').splitlines()
@@ -731,10 +741,19 @@ def production_task(path, name):
 
 
 
-def sshd_effective_check(stdout):
-    """Run the play's check of sshd -T output (raises AssertionError with its message when it fails)."""
-    task = production_task('roles/desktop/tasks/main.yml', 'Check the effective sshd settings are key-only (macOS)')
-    run_tasks([task], {'_desktop_sshd_effective': {'stdout_lines': stdout.splitlines()},
+SSHD_PROBE_ADDRESSES = ['100.64.0.1', '203.0.113.5']  # the play's probes: a tailnet address and TEST-NET-3 outside it
+
+
+def sshd_effective_check(*outputs, user='u', allow_from=None):
+    """Run the play's check of sshd -T output, one output per probe address (the last one repeats); raises
+    AssertionError with its message when it fails."""
+    task = production_task('roles/desktop/tasks/main.yml', 'Check the effective sshd settings are key-only and this user only (macOS)')
+    if allow_from is None:
+        allow_from = yaml.safe_load((ROOT / 'roles/desktop/defaults/main.yml').read_text())['desktop_macos_ssh_allow_from']
+    results = [{'item': addr, 'stdout_lines': outputs[min(i, len(outputs) - 1)].splitlines()}
+               for i, addr in enumerate(SSHD_PROBE_ADDRESSES)]
+    run_tasks([task], {'_desktop_sshd_effective': {'results': results}, 'ansible_facts': {'user_id': user},
+                       'desktop_macos_ssh_allow_from': allow_from,
                        'desktop_macos_sshd_dropin': '/etc/ssh/sshd_config.d/000-laptop-setup.conf'})
 
 # Root commands: every task that runs with become (on the task, a block or an include site) is checked unless a `when`
@@ -943,29 +962,64 @@ class MacTaskTests(unittest.TestCase):
             run(dict(supported, MACs=['hmac-sha1']))
 
     def test_macos_sshd_effective_settings_must_be_key_only(self):
-        """sshd -T sample output (lowercase keys, one per line): every one of the three settings must be there."""
+        """sshd -T sample output (lowercase keys, one per line, one allowusers line per entry): every one of the three
+        settings must be there, and the allowusers lines are exactly user@<range>, for both probe addresses."""
         good = ('port 22\npasswordauthentication no\nkbdinteractiveauthentication no\npubkeyauthentication yes\n'
-                'authenticationmethods publickey\nallowusers u@100.64.0.0/10\n')
+                'authenticationmethods publickey\nallowusers u@100.64.0.0/10\nallowusers u@fd7a:115c:a1e0::/48\n')
         sshd_effective_check(good)
         for wrong in ('passwordauthentication yes', 'kbdinteractiveauthentication yes', 'authenticationmethods any',
                       'authenticationmethods publickey,password'):
             key = wrong.split()[0]
-            with self.subTest(wrong):
-                text = '\n'.join(wrong if line.startswith(key + ' ') else line for line in good.splitlines())
-                with self.assertRaisesRegex(AssertionError, f'shows .*{wrong}'):
-                    sshd_effective_check(text)
+            text = '\n'.join(wrong if line.startswith(key + ' ') else line for line in good.splitlines())
+            for outputs in ([text], [good, text]):  # a tailnet login, or only one from outside it (a Match Address block)
+                with self.subTest(wrong, outside_only=len(outputs) == 2):
+                    with self.assertRaisesRegex(AssertionError, f'from {SSHD_PROBE_ADDRESSES[len(outputs) - 1]} .*shows .*{wrong}'):
+                        sshd_effective_check(*outputs)
         with self.assertRaisesRegex(AssertionError, 'must Include'):
             sshd_effective_check('passwordauthentication no\nkbdinteractiveauthentication no\n')
+        allow = 'allowusers u@100.64.0.0/10\nallowusers u@fd7a:115c:a1e0::/48\n'
+        for name, users in [('any user', allow + 'allowusers *\n'), ('only a pattern', 'allowusers *\n'),
+                            ('another user', allow + 'allowusers other@100.64.0.0/10\n'),
+                            ('any address', 'allowusers u\n'), ('a range missing', 'allowusers u@100.64.0.0/10\n'),
+                            ('a wider range', allow.replace('/10', '/8')), ('none', '')]:
+            text = good.replace(allow, users)
+            for outputs in ([text], [good, text]):
+                with self.subTest(name, outside_only=len(outputs) == 2):
+                    with self.assertRaisesRegex(AssertionError, 'allowusers'):
+                        sshd_effective_check(*outputs)
+        # the configured ranges, as written, in any order
+        sshd_effective_check(good.replace(allow, 'allowusers u@fd7a:115c:a1e0::/48\nallowusers u@100.64.0.0/10\n'))
+        sshd_effective_check(good.replace(allow, 'allowusers u@10.0.0.0/8\n'), allow_from=['10.0.0.0/8'])
+        with self.assertRaisesRegex(AssertionError, 'as root shows'):
+            sshd_effective_check(good.replace('allowusers u@', 'allowusers root@'), user='root')
         # it runs before the job is deployed and (re)loaded, after the drop-in and sshd -t
         tasks = yaml.safe_load((ROOT / 'roles/desktop/tasks/main.yml').read_text())
         block = next(t for t in tasks if t.get('name') == 'Apply the sshd login policy and start sshd (macOS)')
         names = [t['name'] for t in block['block']]
-        read = names.index('Read the effective sshd settings for a tailnet login (macOS)')
+        read = names.index('Read the effective sshd settings for a tailnet and an outside login (macOS)')
         self.assertLess(names.index('Validate the sshd configuration (macOS)'), read)
-        self.assertEqual(names[read + 1], 'Check the effective sshd settings are key-only (macOS)')
+        self.assertEqual(names[read + 1], 'Check the effective sshd settings are key-only and this user only (macOS)')
         self.assertLess(read + 1, names.index('Deploy the sshd launchd job on the SSH port (macOS)'))
         self.assertEqual(block['block'][read]['ansible.builtin.command']['argv'][:3], ['/usr/sbin/sshd', '-T', '-C'])
-        self.assertIn('addr=100.64.0.1', block['block'][read]['ansible.builtin.command']['argv'][3])
+        self.assertEqual(block['block'][read]['loop'], SSHD_PROBE_ADDRESSES)
+
+    def test_macos_sshd_probe_asks_for_the_real_user(self):
+        """sshd -T -C user= is the gathered login user (Play 2 gathers facts without become), never root: the block's
+        become does not change ansible_facts['user_id'], and the drop-in's AllowUsers names the same user."""
+        read = production_task('roles/desktop/tasks/main.yml',
+                               'Read the effective sshd settings for a tailnet and an outside login (macOS)')
+        argv = read.pop('ansible.builtin.command')['argv']
+        self.assertEqual(argv[3], "user={{ ansible_facts['user_id'] }},addr={{ item }},host=x")
+        template = (ROOT / 'roles/desktop/templates/sshd-macos.conf.j2').read_text()
+        self.assertIn("{{ ansible_facts['user_id'] }}@{{ net }}", template)
+        read.pop('register')
+        read['ansible.builtin.debug'] = {'msg': argv[3]}
+        results = run_tasks([read], {'ansible_facts': {'user_id': 'alice'}})[0]['results']
+        self.assertEqual([r['msg'] for r in results], [f'user=alice,addr={a},host=x' for a in SSHD_PROBE_ADDRESSES])
+        play = next(p for p in yaml.safe_load((ROOT / 'site.yml').read_text())
+                    if any(isinstance(r, dict) and r.get('role') == 'desktop' for r in p.get('roles', [])))
+        self.assertIs(play['become'], False)
+        self.assertIs(play['gather_facts'], True)
 
     def test_macos_ssh_allow_from_entries_must_be_cidrs(self):
         task = production_task('roles/desktop/tasks/main.yml', 'Check the sshd tailnet ranges are CIDRs (macOS)')
