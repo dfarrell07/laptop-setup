@@ -52,6 +52,10 @@ keys and the vault re-encrypted with it (plug in a key you keep, not the one you
 old commits, so if a key was stolen, or a machine that had the vault was compromised, rotate the secrets themselves
 too (new tokens and keys, then `make vault-edit`); the new password protects only what is written after it.
 
+Run `make vault-pull` on every machine right after a removal: a machine records the newest commit it has seen and
+refuses any history without it, but one that never saw the removal could still be shown the state before it (by
+someone who can force-push) and would then write new secrets under a password the removed key opens.
+
 ## Trust
 
 - **Signatures are the trust anchor.** age does not say who encrypted a file, so anyone who can push could seal a
@@ -63,7 +67,9 @@ too (new tokens and keys, then `make vault-edit`); the new password protects onl
   signatures count. Pinning removes the trust-on-first-use step: put your signing key's fingerprint in `config.yml`
   as `secrets_signing_fingerprints: "SHA256:..."` (several space-separated; `ssh-keygen -lf <key>.pub`), and only
   keys with those fingerprints are trusted, from any source. When you rotate the signing key, keep the old public
-  key in `allowed_signers` (with `valid-before`) so older commits still verify. The repository may hold only regular
+  key in `allowed_signers` (with `valid-before`) so older commits still verify; `valid-before` and `valid-after` carry
+over, but they compare the commit's own date, which its author chooses, so they are a weak limit. Only one run at a
+time: the commands take a lock (`flock`; macOS has none, so do not run two at once there). The repository may hold only regular
   files (no symlinks).
 - **No rollback**: each machine records the last commit it accepted and refuses a history that no longer contains it
   (a force-push back to an older signed state could bring back a removed key). A brand-new machine has no record yet:

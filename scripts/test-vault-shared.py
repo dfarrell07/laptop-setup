@@ -439,6 +439,60 @@ class SharedVault(unittest.TestCase):
         self.shared('a', a, 'init')
         self.assertIn('secret-a', self.view('a', a))
 
+    def forged_push(self, a, header):
+        """A signed commit on GitHub whose raw object gets an extra signature header (a PGP block posing as SSH)."""
+        secrets_a, env = self.tmp / 'secrets-a', self.env('a', a)
+        (secrets_a / 'README.md').write_text('changed\n')
+        run(['git', '-C', str(secrets_a), 'commit', '-S', '-qam', 'readme'], env=env)
+        raw = run(['git', '-C', str(secrets_a), 'cat-file', 'commit', 'HEAD'], env=env).stdout
+        head, _, body = raw.partition('\ngpgsig ')
+        forged = f'{head}\n{header}\ngpgsig {body}'
+        sha = run(['git', '-C', str(secrets_a), 'hash-object', '-t', 'commit', '-w', '--stdin'], env=env,
+                  input=forged).stdout.strip()
+        run(['git', '-C', str(secrets_a), 'push', '-qf', 'origin', f'{sha}:main'], env=env)
+
+    def test_a_second_signature_header_is_refused(self):
+        a, b = self.joined_pair()
+        self.forged_push(a, 'gpgsig -----BEGIN PGP SIGNATURE-----\n \n -----END PGP SIGNATURE-----')
+        self.assert_refused_and_unchanged(b, self.shared('b', b, 'pull', check=False), 'not signed')
+
+    def test_a_pgp_style_commit_with_the_ssh_marker_in_its_message_is_refused(self):
+        a, b = self.joined_pair()
+        secrets_a, env = self.tmp / 'secrets-a', self.env('a', a)
+        (secrets_a / 'vault-pass.age').write_bytes(b'attacker')
+        run(['git', '-C', str(secrets_a), '-c', 'commit.gpgsign=false', 'commit', '-qam',
+             'x\n\ngpgsig -----BEGIN SSH SIGNATURE-----'], env=env)
+        run(['git', '-C', str(secrets_a), 'push', '-q'], env=env)
+        self.assert_refused_and_unchanged(b, self.shared('b', b, 'pull', check=False), 'not signed')
+
+    def test_the_pin_also_filters_a_cached_signer_list(self):
+        a, b = self.joined_pair()
+        self.shared('a', a, 'edit')
+        result = self.shared('b', b, 'pull', check=False, VAULT_SIGNING_FINGERPRINTS='SHA256:notyours')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('match secrets_signing_fingerprints', result.stderr)
+
+    def test_an_expired_signer_in_allowed_signers_is_not_trusted(self):
+        a = self.init_a()
+        self.shared('a', a, 'add-key', RECIPIENT=self.keys['b'][1])
+        b = self.machine('b', None)
+        env_b = self.env('b', b)
+        (Path(env_b['HOME']) / '.config/git').mkdir(parents=True)
+        pub = (self.tmp / 'signing.pub').read_text().strip()
+        (Path(env_b['HOME']) / '.config/git/allowed_signers').write_text(f't@t namespaces="git",valid-before="20000101" {pub}\n')
+        result = self.shared('b', b, 'join', check=False, VAULT_ALLOWED_SIGNERS=str(self.tmp / 'signers-b'))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('not signed', result.stderr)
+
+    def test_a_list_form_pin_is_refused(self):
+        a = self.init_a()
+        b = self.machine('b', None)
+        with open(b / 'config.yml', 'a') as f:
+            f.write('secrets_signing_fingerprints:\n  - "SHA256:x"\n')
+        result = self.shared('b', b, 'join', check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('one quoted string', result.stderr)
+
     def test_init_refuses_a_plaintext_vault_and_changes_nothing(self):
         a = self.machine('a', None)
         run(['git', 'clone', '-q', str(self.remote), str(self.tmp / 'secrets-a')], env=self.env('a', a))

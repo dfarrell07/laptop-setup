@@ -112,7 +112,7 @@ sync_clone() {
   target=$(git -C "$S" rev-parse -q --verify '@{u}^{commit}' 2>/dev/null) || { verify_all HEAD; return 0; }
   no_rollback "$target"
   [[ -z $(git -C "$S" rev-list "$target..HEAD") ]] ||
-    die "$S has local commits not on GitHub: push them (git -C $S push) or drop them (git -C $S reset --hard $target)"
+    die "$S has local commits not on GitHub: push them (git -C $S push) or drop them (git -C $S reset --hard $(cat "$LAST_SEEN" 2>/dev/null || echo '<the last commit you trust>'))"
   verify_all "$target"
   check_tree "$target"
   git -C "$S" merge -q --ff-only "$target" || die "git merge in $S failed: resolve it there (git -C $S status), then re-run"
@@ -141,33 +141,49 @@ new_password() { python3 -c 'import secrets; print(secrets.token_urlsafe(48))'; 
 # Trust comes from commit signatures, not from age: age does not say who encrypted a file, so anyone who can push
 # could seal a password of their own choosing to your keys. Every commit must carry a signature by one of the owner's
 # SSH signing keys: those in ~/.config/git/allowed_signers, else the ones GitHub lists for the owner (fetched once).
+# A signer list's entries as "<valid-before/valid-after options, comma-separated or empty>|<keytype key>".
+signer_entries() {
+  grep -Ev '^[[:space:]]*(#|$)' "$1" 2>/dev/null | awk '{
+    for (i = 1; i <= NF; i++) if ($i ~ /^(sk-)?ssh-[a-z0-9@.-]+$/ && i < NF) break
+    if (i > NF) next
+    opts = ""
+    for (k = 1; k < i; k++) {
+      n = split($k, parts, ",")
+      for (m = 1; m <= n; m++) if (parts[m] ~ /^valid-(before|after)=/) opts = opts (opts == "" ? "" : ",") parts[m]
+    }
+    print opts "|" $i " " $(i + 1)
+  }'
+}
 ensure_signers() {
   [[ -n ${SIGNERS_READY:-} ]] && return 0
   mkdir -p "$CONF" && chmod 700 "$CONF"
-  local keys='' from='' pins
+  local entries='' from='' pins raw
   # Optional pin (config.yml secrets_signing_fingerprints: "SHA256:... SHA256:..."; public values): only keys with
-  # these fingerprints are ever trusted, from any source.
-  pins=${VAULT_SIGNING_FINGERPRINTS:-$(sed -n 's/^secrets_signing_fingerprints:[[:space:]]*//p' config.yml 2>/dev/null | head -n 1 |
-    sed 's/[[:space:]]#.*//; s/^!unsafe[[:space:]]*//' | tr -d "\"'" || true)}
-  # Rebuilt every run from allowed_signers (managed by make dotfiles), so a retired key stops being trusted.
+  # these fingerprints are ever trusted, from any source, the cached list included.
+  raw=$(grep -m1 '^secrets_signing_fingerprints:' config.yml 2>/dev/null || true)
+  [[ -z $raw || $raw =~ :[[:space:]]*[^[:space:]#] ]] ||
+    die "secrets_signing_fingerprints in config.yml must be one quoted string (\"SHA256:... SHA256:...\"), not a list"
+  pins=${VAULT_SIGNING_FINGERPRINTS:-$(printf '%s' "$raw" | sed 's/^secrets_signing_fingerprints:[[:space:]]*//; s/[[:space:]]#.*//; s/^!unsafe[[:space:]]*//' | tr -d "\"'")}
+  # Rebuilt every run from allowed_signers (managed by make dotfiles), so a retired key stops being trusted; its
+  # valid-before/valid-after options carry over (they compare the commit's own date, so they are a weak limit).
   if [[ -s $HOME/.config/git/allowed_signers ]]; then
-    keys=$(grep -Ev '^[[:space:]]*(#|$)' "$HOME/.config/git/allowed_signers" | grep -oE '(sk-)?ssh-[a-z0-9@.-]+ [A-Za-z0-9+/=]+' || true)
-    from=allowed_signers
-  fi
-  if [[ -z $keys && -s $SIGNERS && -z ${VAULT_SIGNERS_REFRESH:-} ]]; then SIGNERS_READY=1; return 0; fi  # confirmed before
-  if [[ -z $keys && -n $user ]] && command -v gh >/dev/null; then
-    keys=$(gh api "users/$user/ssh_signing_keys" --jq '.[].key' 2>/dev/null | grep -oE '(sk-)?ssh-[a-z0-9@.-]+ [A-Za-z0-9+/=]+' || true)
+    entries=$(signer_entries "$HOME/.config/git/allowed_signers"); from=allowed_signers
+  elif [[ -s $SIGNERS && -z ${VAULT_SIGNERS_REFRESH:-} ]]; then
+    entries=$(signer_entries "$SIGNERS"); from=cache  # confirmed on an earlier run
+  elif [[ -n $user ]] && command -v gh >/dev/null; then
+    entries=$(gh api "users/$user/ssh_signing_keys" --jq '.[].key' 2>/dev/null |
+      grep -oE '(sk-)?ssh-[a-z0-9@.-]+ [A-Za-z0-9+/=]+' | sed 's/^/|/' || true)
     from=github
   fi
-  [[ -n $keys ]] || die "no SSH signing key to check the shared vault's commits: make dotfiles (writes ~/.config/git/allowed_signers from the vault), or list your signing key on github.com (Settings, SSH and GPG keys, as a Signing Key; not with gh, which would widen its token)"
-  local k fp kept=''
-  while IFS= read -r k; do
-    fp=$(printf '%s\n' "$k" | ssh-keygen -lf - 2>/dev/null | awk '{print $2}')
+  [[ -n $entries ]] || die "no SSH signing key to check the shared vault's commits: make dotfiles (writes ~/.config/git/allowed_signers from the vault), or list your signing key on github.com (Settings, SSH and GPG keys, as a Signing Key; not with gh, which would widen its token)"
+  local opts key fp kept=''
+  while IFS='|' read -r opts key; do
+    fp=$(printf '%s\n' "$key" | ssh-keygen -lf - 2>/dev/null | awk '{print $2}' || true)
     [[ -n $fp ]] || continue
     if [[ -n $pins ]] && [[ " $pins " != *" $fp "* ]]; then continue; fi
-    kept+="$k"$'\n'
-    printf '  signer: %s (%s)\n' "$fp" "$from"
-  done <<<"$keys"
+    kept+="* namespaces=\"git\"${opts:+,$opts} $key"$'\n'
+    [[ $from == cache ]] || printf '  signer: %s (%s)\n' "$fp" "$from"
+  done <<<"$entries"
   [[ -n $kept ]] || die "none of the signing keys from $from match secrets_signing_fingerprints in config.yml"
   if [[ $from == github && -z $pins ]]; then
     # Keys GitHub lists are only as trustworthy as the GitHub account that can also push: confirm them by eye once.
@@ -176,7 +192,9 @@ ensure_signers() {
     read -r -p "Are these your signing keys (compare: ssh-keygen -lf <your signing key>.pub)? [y/N] " answer
     [[ $answer == [yY] ]] || die "not confirmed: nothing was trusted"
   fi
-  printf '%s' "$kept" | sed '/^$/d; s/^/* namespaces="git" /' >"$SIGNERS.tmp" && chmod 600 "$SIGNERS.tmp" && mv -f "$SIGNERS.tmp" "$SIGNERS"
+  printf '%s' "$kept" >"$SIGNERS.tmp.$$" && chmod 600 "$SIGNERS.tmp.$$" && mv -f "$SIGNERS.tmp.$$" "$SIGNERS"
+  # The verified-commit cache belongs to this signer set: a different set re-verifies everything.
+  VERIFIED=$CONF/vault-verified-$(sha256sum "$SIGNERS" | cut -c1-16)
   SIGNERS_READY=1
 }
 verify_all() {  # every commit reachable from $1 must be signed by an allowed signer
@@ -187,7 +205,8 @@ verify_all() {  # every commit reachable from $1 must be signed by an allowed si
   for c in $(git -C "$S" rev-list "$1"); do
     grep -qxF "$c" "$VERIFIED" && continue
     # An SSH signature only: verify-commit would also accept an OpenPGP one from any key gpg trusts.
-    git -C "$S" cat-file commit "$c" | sed '/^$/q' | grep -q '^gpgsig -----BEGIN SSH SIGNATURE-----' &&
+    [[ $(git -C "$S" cat-file commit "$c" | sed '/^$/q' | grep -c '^gpgsig ') == 1 ]] &&
+      git -C "$S" cat-file commit "$c" | sed '/^$/q' | grep -q '^gpgsig -----BEGIN SSH SIGNATURE-----' &&
       git -C "$S" -c gpg.ssh.allowedSignersFile="$SIGNERS" -c gpg.program=false -c gpg.openpgp.program=false \
         -c gpg.x509.program=false verify-commit "$c" >/dev/null 2>&1 ||
       die "commit $c in $S is not signed by your signing key: nothing was merged or used. Inspect it (git -C $S show --show-signature $c)"
@@ -434,7 +453,8 @@ cmd_init() {
 }
 
 init_undo() {
-  cp -p "$INIT_OLD" "$PASS_SH" && { [[ ! -f $INIT_OLD.sha256 ]] || cp -p "$INIT_OLD.sha256" scripts/vault-pass.sh.sha256; }
+  cp -p "$INIT_OLD" "$PASS_SH" || { warn "could not restore the previous helper: it is kept at $INIT_OLD"; return; }
+  [[ ! -f $INIT_OLD.sha256 ]] || cp -p "$INIT_OLD.sha256" scripts/vault-pass.sh.sha256
   rm -f "$INIT_OLD" "$INIT_OLD.sha256"
 }
 
@@ -532,7 +552,16 @@ cmd_status() {
   if active && cmp -s "$S/vault.yml" "$VAULT"; then echo "working copy:   in step"; else echo "working copy:   not in step (make vault-pull)"; fi
 }
 
-case ${1:-} in active) ;; *) need_dir ;; esac
+case ${1:-} in active|status|'') ;; *)
+  need_dir
+  # One run at a time: concurrent runs would share the clone's index, the records and the signer file.
+  mkdir -p "$CONF" && chmod 700 "$CONF"
+  if command -v flock >/dev/null; then
+    exec 9>"$CONF/lock"
+    flock -n 9 || die "another vault command is running (lock $CONF/lock)"
+  fi
+  ;;
+esac
 case ${1:-} in
   init) cmd_init ;;
   join) cmd_join ;;
