@@ -631,6 +631,12 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   else record "podman-machine" "FAIL" "podman machine running but unreachable — check ~/.local/state/log/podman-machine.log"; fi
   if ! $_podman_machine; then record "docker-shim" "PASS" "containers_macos_machine_enabled is off"
   elif ! $_docker_shim; then record "docker-shim" "PASS" "containers_macos_docker_shim is off"
+  elif grep -qF "Managed by laptop-setup (containers chunk)" "$HOME/.local/bin/docker" 2>/dev/null; then
+    # our shim: docker works only if the podman it runs does
+    _shim_target=$(sed -n 's/^exec "\(.*\)" "\$@"$/\1/p' "$HOME/.local/bin/docker")
+    if [[ -n "$_shim_target" && -x "$_shim_target" ]]; then record "docker-shim" "PASS"
+    else record "docker-shim" "FAIL" "the docker shim runs ${_shim_target:-an unknown command}, which is not executable — run: make apply CHUNK=packages, then make apply CHUNK=containers"; fi
+    unset _shim_target
   elif [[ -x "$HOME/.local/bin/docker" || -x "$(command -v docker 2>/dev/null)" ]]; then record "docker-shim" "PASS"
   # WARN in Molecule: CI turns the machine off (molecule vars), so the play rightly installs no shim
   else record "docker-shim" "$([[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && echo WARN || echo FAIL)" "no docker command — run: make apply CHUNK=containers"; fi
