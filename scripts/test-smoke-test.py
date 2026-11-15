@@ -327,6 +327,14 @@ class SmokeTests(unittest.TestCase):
             for name in ['.claude-work', '.claude-per2']:
                 (home / name / 'settings.json').write_text(json.dumps({'crossSessionInbound': 'accept'}))
             self.assertEqual(run(), 'claude-cross-session-inbound PASS')
+            (home / '.claude-second').mkdir()  # claude_extra_config_dirs: checked once it has settings
+            self.assertEqual(run(), 'claude-cross-session-inbound PASS')
+            (home / '.claude-second' / 'settings.json').write_text(json.dumps({'crossSessionInbound': 'hold'}))
+            result = run()
+            self.assertTrue(result.startswith('claude-cross-session-inbound FAIL'), result)
+            self.assertIn('.claude-second', result)
+            (home / '.claude-second' / 'settings.json').write_text(json.dumps({'crossSessionInbound': 'accept'}))
+            self.assertEqual(run(), 'claude-cross-session-inbound PASS')
 
     def test_agent_cli_logins_lists_each_logged_out_home_without_logging_in(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
