@@ -35,6 +35,11 @@ class SharedVault(unittest.TestCase):
         self.remote = self.tmp / 'remote.git'
         run(['git', 'init', '-q', '--bare', '-b', 'main', str(self.remote)],
             env=dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1'))
+        # The owner's SSH signing key: every commit to the shared repository is signed with it, and only it is allowed.
+        self.signing = self.tmp / 'signing'
+        run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(self.signing)])
+        self.signers = self.tmp / 'allowed-signers'
+        self.signers.write_text(f'* namespaces="git" {(self.tmp / "signing.pub").read_text()}')
         self.keys = {}
         for name in ('a', 'b'):
             key = self.tmp / f'key-{name}'
@@ -51,11 +56,12 @@ class SharedVault(unittest.TestCase):
         # swaps in a scripted editor for ansible-vault edit (the script itself clears EDITOR).
         (repo / 'scripts/verify-ansible-args.sh').write_text(
             '#!/bin/sh\nexport ANSIBLE_VAULT_PASSWORD_FILE=scripts/vault-pass.sh\n'
-            'if [ "$2" = edit ]; then export EDITOR="$TEST_EDITOR"; fi\nexec "$@"\n')
+            'if [ "$2" = edit ]; then export EDITOR="$TEST_EDITOR"; fi\n'
+            'if [ "$2" = rekey ] && [ -n "$TEST_FAIL_REKEY" ]; then exit 1; fi\nexec "$@"\n')
         (repo / 'scripts/verify-ansible-args.sh').chmod(0o755)
         (repo / 'scripts/vault-pass.sh').write_text(f'#!/bin/sh\necho old-password-{name}\n')
         (repo / 'scripts/vault-pass.sh').chmod(0o700)
-        (repo / 'config.yml').write_text('dotfiles_github_user: tester  # comment\n')
+        (repo / 'config.yml').write_text("dotfiles_github_user: !unsafe 'tester'  # comment\n")
         vault = repo / 'group_vars/all/vault.yml'
         vault.write_text('vault_placeholder: ""\n')
         env = self.env(name, repo)
@@ -78,8 +84,11 @@ class SharedVault(unittest.TestCase):
                    PATH=f'{VENV_BIN}:{os.environ["PATH"]}', SECRETS_DIR=str(self.tmp / f'secrets-{name}'),
                    SECRETS_REMOTE=str(self.remote), VAULT_AGE_IDENTITIES=str(self.keys[name][0]),
                    ANSIBLE_VAULT_PASSWORD_FILE='scripts/vault-pass.sh', TEST_EDITOR=str(editor),
-                   GIT_CONFIG_GLOBAL=str(home / 'gitconfig'), GIT_CONFIG_NOSYSTEM='1')
-        Path(env['GIT_CONFIG_GLOBAL']).write_text('[user]\n\tname = t\n\temail = t@t\n[init]\n\tdefaultBranch = main\n')
+                   GIT_CONFIG_GLOBAL=str(home / 'gitconfig'), GIT_CONFIG_NOSYSTEM='1',
+                   VAULT_ALLOWED_SIGNERS=str(self.signers))
+        Path(env['GIT_CONFIG_GLOBAL']).write_text(
+            f'[user]\n\tname = t\n\temail = t@t\n\tsigningkey = {self.signing}\n[gpg]\n\tformat = ssh\n'
+            '[init]\n\tdefaultBranch = main\n[safe]\n\tbareRepository = all\n')
         return env
 
     def shared(self, name, repo, *args, check=True, **extra):
@@ -133,7 +142,7 @@ class SharedVault(unittest.TestCase):
         secrets_a = self.tmp / 'secrets-a'
         with open(secrets_a / 'recipients', 'a') as f:
             f.write(f'{rogue}\n')
-        run(['git', '-C', str(secrets_a), 'commit', '-qam', 'rogue'], env=self.env('a', a))
+        run(['git', '-C', str(secrets_a), 'commit', '-S', '-qam', 'rogue'], env=self.env('a', a))
         run(['git', '-C', str(secrets_a), 'push', '-q'], env=self.env('a', a))
         pulled = self.shared('b', b, 'pull')
         self.assertIn('recipients list changed', pulled.stderr)
@@ -162,6 +171,131 @@ class SharedVault(unittest.TestCase):
         only_stale = {k: v for k, v in self.env('b', b).items() if k != 'ANSIBLE_VAULT_PASSWORD_FILE'}
         self.assertNotEqual(run([str(VENV_BIN / 'ansible-vault'), 'view', '--vault-password-file', str(stale),
                                  str(secrets_b / 'vault.yml')], cwd=b, env=only_stale, check=False).returncode, 0)
+
+    def rogue_push(self, a):
+        rogue = run(['age-keygen']).stdout.split('public key: ')[1].split()[0]
+        secrets_a = self.tmp / 'secrets-a'
+        with open(secrets_a / 'recipients', 'a') as f:
+            f.write(f'{rogue}\n')
+        run(['git', '-C', str(secrets_a), 'commit', '-S', '-qam', 'rogue'], env=self.env('a', a))
+        run(['git', '-C', str(secrets_a), 'push', '-q'], env=self.env('a', a))
+        return rogue
+
+    def test_rejoining_does_not_approve_a_pushed_recipient(self):
+        a = self.init_a()
+        self.shared('a', a, 'add-key', RECIPIENT=self.keys['b'][1])
+        b = self.machine('b', None)
+        self.shared('b', b, 'join')
+        self.rogue_push(a)
+        rejoin = self.shared('b', b, 'join', check=False)
+        self.assertNotEqual(rejoin.returncode, 0)
+        self.assertIn('never approved', rejoin.stderr)
+
+    def test_a_failed_remove_key_changes_nothing(self):
+        a = self.init_a()
+        self.shared('a', a, 'add-key', RECIPIENT=self.keys['b'][1])
+        secrets = self.tmp / 'secrets-a'
+        before = {f: (secrets / f).read_bytes() for f in ('recipients', 'vault-pass.age', 'vault.yml')}
+        failed = self.shared('a', a, 'remove-key', self.keys['b'][1], check=False, TEST_FAIL_REKEY='1')
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertEqual({f: (secrets / f).read_bytes() for f in before}, before)
+        self.assertEqual(run(['git', '-C', str(secrets), 'status', '--porcelain'], env=self.env('a', a)).stdout, '')
+
+    def test_a_failed_add_key_leaves_the_list_alone(self):
+        a = self.init_a()
+        recipients = (self.tmp / 'secrets-a/recipients').read_text()
+        wrong = self.tmp / 'wrong-key'
+        run(['age-keygen', '-o', str(wrong)])
+        failed = self.shared('a', a, 'add-key', check=False, RECIPIENT=self.keys['b'][1], VAULT_AGE_IDENTITIES=str(wrong))
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertEqual((self.tmp / 'secrets-a/recipients').read_text(), recipients)
+        self.shared('a', a, 'add-key', RECIPIENT=self.keys['b'][1])  # a retry works
+        self.assertIn(self.keys['b'][1], (self.tmp / 'secrets-a/recipients').read_text())
+
+    def test_a_failed_init_rolls_back_and_can_run_again(self):
+        a = self.machine('a', 'vault_codex_api_key: secret-a\n')
+        run(['git', 'clone', '-q', str(self.remote), str(self.tmp / 'secrets-a')], env=self.env('a', a))
+        self.shared('a', a, 'add-key', RECIPIENT=self.keys['a'][1])
+        helper = (a / 'scripts/vault-pass.sh').read_text()
+        failed = self.shared('a', a, 'init', check=False, TEST_FAIL_REKEY='1')
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertEqual((a / 'scripts/vault-pass.sh').read_text(), helper)
+        self.assertFalse((self.tmp / 'secrets-a/vault-pass.age').exists())
+        self.assertIn('active', self.shared('a', a, 'init').stdout)
+        self.assertIn('secret-a', self.view('a', a))
+
+    def test_the_github_user_is_read_through_an_unsafe_tag(self):
+        a = self.machine('a', None)
+        env = {k: v for k, v in self.env('a', a).items() if k not in ('SECRETS_DIR', 'SECRETS_REMOTE')}
+        status = run(['bash', str(a / 'scripts/vault-shared.sh'), 'status'], cwd=a, env=env).stdout
+        self.assertIn('/src/tester/laptop-secrets', status)
+
+    def attacker_commit(self, a, sign_on_top=False, symlink=False):
+        """An unsigned commit (someone with push access but not the signing key) replacing vault-pass.age."""
+        secrets_a = self.tmp / 'secrets-a'
+        env = self.env('a', a)
+        (secrets_a / 'vault-pass.age').write_bytes(b'attacker')
+        if symlink:
+            (secrets_a / 'evil').symlink_to(Path(env['HOME']) / '.zshrc')
+        run(['git', '-C', str(secrets_a), 'add', '-A'], env=env)
+        run(['git', '-C', str(secrets_a), '-c', 'commit.gpgsign=false', 'commit', '-qm', 'evil'], env=env)
+        if sign_on_top:
+            (secrets_a / 'README.md').write_text('harmless\n')
+            run(['git', '-C', str(secrets_a), 'commit', '-S', '-qam', 'looks fine'], env=env)
+        run(['git', '-C', str(secrets_a), 'push', '-q'], env=env)
+
+    def joined_pair(self):
+        a = self.init_a()
+        self.shared('a', a, 'add-key', RECIPIENT=self.keys['b'][1])
+        b = self.machine('b', None)
+        self.shared('b', b, 'join')
+        return a, b
+
+    def assert_refused_and_unchanged(self, b, result, text):
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(text, result.stderr)
+        self.assertNotEqual((self.tmp / 'secrets-b/vault-pass.age').read_bytes(), b'attacker')
+
+    def test_an_unsigned_commit_is_never_merged(self):
+        a, b = self.joined_pair()
+        self.attacker_commit(a)
+        self.assert_refused_and_unchanged(b, self.shared('b', b, 'pull', check=False), 'not signed')
+
+    def test_a_signed_commit_on_top_does_not_hide_an_unsigned_one(self):
+        a, b = self.joined_pair()
+        self.attacker_commit(a, sign_on_top=True)
+        self.assert_refused_and_unchanged(b, self.shared('b', b, 'pull', check=False), 'not signed')
+
+    def test_a_fresh_join_refuses_an_unsigned_history(self):
+        a = self.init_a()
+        self.shared('a', a, 'add-key', RECIPIENT=self.keys['b'][1])
+        self.attacker_commit(a, sign_on_top=True)
+        b = self.machine('b', None)
+        result = self.shared('b', b, 'join', check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('not signed', result.stderr)
+        self.assertIn('old-password', (b / 'scripts/vault-pass.sh').read_text())
+
+    def test_a_committed_symlink_is_refused(self):
+        a, b = self.joined_pair()
+        secrets_a = self.tmp / 'secrets-a'
+        (secrets_a / 'evil').symlink_to('/etc/hostname')
+        run(['git', '-C', str(secrets_a), 'add', 'evil'], env=self.env('a', a))
+        run(['git', '-C', str(secrets_a), 'commit', '-S', '-qm', 'link'], env=self.env('a', a))
+        run(['git', '-C', str(secrets_a), 'push', '-q'], env=self.env('a', a))
+        result = self.shared('b', b, 'pull', check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('non-regular', result.stderr)
+
+    def test_rejoining_keeps_the_machines_own_vault(self):
+        a = self.init_a()
+        self.shared('a', a, 'add-key', RECIPIENT=self.keys['b'][1])
+        b = self.machine('b', 'vault_only_on_b: x\n')
+        own = (b / 'group_vars/all/vault.yml').read_bytes()
+        self.shared('b', b, 'join')
+        self.shared('a', a, 'edit')
+        self.shared('b', b, 'join')
+        self.assertEqual((b / 'group_vars/all/vault.yml.pre-shared').read_bytes(), own)
 
     def test_init_refuses_a_plaintext_vault_and_changes_nothing(self):
         a = self.machine('a', None)
