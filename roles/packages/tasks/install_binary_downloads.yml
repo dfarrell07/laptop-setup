@@ -57,6 +57,28 @@
       Install kind manually from https://kind.sigs.k8s.io/dl/
 
 # Binary download (not dnf): Fedora 44 ships helm 4.2.2; packages_helm_version pins 4.2.3 (newer patch release not yet in repos).
+# Every profile: the shared vault opens with a YubiKey on personal machines too.
+- name: Install age-plugin-yubikey
+  when:
+    - packages_install_binaries | bool
+    - packages_yubikey_enabled | bool
+    - is_linux
+    - ansible_facts['architecture'] == 'x86_64'
+  ansible.builtin.include_tasks: install_tarball.yml
+  vars:
+    binary_name: age-plugin-yubikey
+    url: >-
+      https://github.com/str4d/age-plugin-yubikey/releases/download/v{{ packages_age_plugin_yk_version
+      }}/age-plugin-yubikey-v{{ packages_age_plugin_yk_version }}-x86_64-linux.tar.gz
+    dest: /usr/local/bin/age-plugin-yubikey
+    checksum: "sha256:{{ packages_age_plugin_yk_sha256 }}"
+    version_check_cmd: /usr/local/bin/age-plugin-yubikey --version
+    version_string: "{{ packages_age_plugin_yk_version }}"
+    strip_components: 1
+    binary_in_archive: age-plugin-yubikey/age-plugin-yubikey
+    csb_action: >-
+      Install age-plugin-yubikey manually from https://github.com/str4d/age-plugin-yubikey/releases
+
 - name: Install helm
   when:
     - profile == 'work'

@@ -73,15 +73,19 @@ packages_user_updates_pipx_skip: [yamllint, ansible-lint]
 packages_security_yubikey:
   - yubikey-manager
   - pcsc-lite  # pcscd smart-card daemon; ykman PIV/OATH talk to the key through it
+  - age  # the shared vault's password is age-encrypted to the YubiKeys (docs/shared-vault.md)
 
 packages_apt_yubikey:
   - yubikey-manager
   - pcscd  # smart-card daemon; ykman PIV/OATH talk to the key through it
+  - age  # shared vault (docs/shared-vault.md)
 
 # macOS: ykpers/ykpersonalize not available on Homebrew (EOL Feb 2026);
 # setup-yubikeys.sh uses ykman for all operations
 packages_brew_yubikey:
   - ykman
+  - age  # shared vault (docs/shared-vault.md)
+  - age-plugin-yubikey
 
 # RHEL/Rocky-only security packages: Fedora's libssh pulls in libfido2.so.1 as a
 # capability dep; on RHEL/Rocky, libssh lacks FIDO2 so an explicit install is needed.
@@ -217,6 +221,11 @@ packages_kustomize_sha256_arm64: "0953ea3e476f66d6ddfcd911d750f5167b9365aa9491b2
 
 packages_transcrypt_version: "2.3.2"
 packages_transcrypt_sha256: "d4723d29cee8781de6fa83e5ad2817ad81241674fb4159db6452c1ce9d4b0253"
+
+# age-plugin-yubikey (shared vault, docs/shared-vault.md): Linux x86_64 only; 0.5.0 is the newest release with a
+# Linux binary (0.5.1 ships macOS and Windows only; Homebrew has it). Trust on first use: upstream publishes no digest.
+packages_age_plugin_yk_version: "0.5.0"
+packages_age_plugin_yk_sha256: "019b35a13fc81be56d73d0723db0a2082fbd04c936c2c6836381111f7f51b2c3"
 
 packages_sops_version: "3.13.3"
 packages_sops_sha256: "e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b"
