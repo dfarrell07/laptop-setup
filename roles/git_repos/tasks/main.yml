@@ -284,7 +284,9 @@
       old=$(git config --get remote.{{ item.1.name | quote }}.url) || old="";
       if [ "$old" = {{ item.1.url | quote }} ]; then true;
       elif [ -n "$old" ]; then git remote set-url {{ item.1.name | quote }} {{ item.1.url | quote }} && echo updated;
-      else git remote add {{ item.1.name | quote }} {{ item.1.url | quote }} && echo added; fi
+      else git remote add {{ item.1.name | quote }} {{ item.1.url | quote }} && echo added; fi;
+      if git config --get-all remote.{{ item.1.name | quote }}.pushurl >/dev/null; then
+      git config --unset-all remote.{{ item.1.name | quote }}.pushurl && echo updated; fi
     chdir: "{{ git_repos_base_dir }}/{{ item.0.dest }}"
   loop: "{{ git_repos_filtered | subelements('extra_remotes', skip_missing=true) }}"
   loop_control:
@@ -293,7 +295,8 @@
     - item.0.dest in git_repos_available_dests
     - not ansible_check_mode  # check mode clones nothing, so the chdir target may not exist
   register: git_repos_remote_result
-  changed_when: git_repos_remote_result.stdout | trim in ['added', 'updated']
+  # A fork remote is one plain URL: a leftover pushurl (a hand-made workaround) is removed, so git push uses it.
+  changed_when: git_repos_remote_result.stdout | trim | length > 0
 
 # Last, so one repo that cannot fast-forward does not stop fork remotes being configured
 - name: Fail if any pulls failed
