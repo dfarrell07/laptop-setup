@@ -862,6 +862,26 @@ for _cd in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-per2"; do
   else record "claude-md($label)" 'FAIL' "CLAUDE.md missing from $_cd — run: make claude"; fi
 done
 unset _cd label
+
+# Cross-session messages from the owner's other sessions are delivered, not held for approval
+# (crossSessionInbound: accept, claude_cross_session_inbound). FAILs for any managed config dir without it.
+_csi_bad=()
+_csi_seen=0
+for _cd in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-per2"; do
+  [[ -d "$_cd" ]] || continue
+  _csi_seen=$((_csi_seen + 1))
+  python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("crossSessionInbound") == "accept" else 1)' \
+    "$_cd/settings.json" 2>/dev/null || _csi_bad+=("${_cd##*/}")
+done
+if (( _csi_seen == 0 )); then
+  record "claude-cross-session-inbound" "FAIL" "no Claude config dir found — run: make apply CHUNK=agents"
+elif (( ${#_csi_bad[@]} == 0 )); then
+  record "claude-cross-session-inbound" "PASS"
+else
+  record "claude-cross-session-inbound" "FAIL" \
+    "crossSessionInbound is not \"accept\" in settings.json of: ${_csi_bad[*]} — run: make apply CHUNK=agents"
+fi
+unset _cd _csi_bad _csi_seen
 if [[ -d "$HOME/.claude-personal" ]]; then
   record "claude-retired-home" "WARN" "$HOME/.claude-personal is no longer managed (no 0700 tmpfiles rule); review and remove it"
 fi
