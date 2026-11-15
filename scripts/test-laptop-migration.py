@@ -503,6 +503,7 @@ class MigrationTests(unittest.TestCase):
         selected = [task for task in production if task.get('name') in [
             'Seed Claude user preferences without replacing CLI edits',
             'Merge security policy into instance settings.json',
+            'Find Claude Code state files', 'Keep Claude Code state files private',
             'Deploy instance CLAUDE.md (managed by Ansible; edits are overwritten each run)']]
         for task in selected:
             if 'ansible.builtin.template' in task:
@@ -519,7 +520,14 @@ class MigrationTests(unittest.TestCase):
                                   '_claude_instances': [name + '/.claude', name + '/.claude-work', name + '/.claude-per2']})
                 for instance in variables['_claude_instances']:
                     Path(instance).mkdir(mode=0o700)
+                state_files = [directory / '.claude.json', directory / '.claude-work' / '.claude.json']
+                for state in state_files:
+                    state.write_text('{}\n')
+                    state.chmod(0o644)
                 run_play(directory, tasks=selected, variables=variables)
+                for state in state_files:
+                    self.assertEqual(state.stat().st_mode & 0o777, 0o600, str(state))
+                self.assertFalse((directory / '.claude-per2' / '.claude.json').exists())
                 for instance in ['.claude', '.claude-work', '.claude-per2']:
                     settings_file = directory / instance / 'settings.json'
                     settings = json.loads(settings_file.read_text())
