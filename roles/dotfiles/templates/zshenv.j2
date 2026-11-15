@@ -7,7 +7,8 @@
 typeset -U path PATH  # prepending an entry already present moves it to the front
 _laptop_path() {
   local _brew="{{ dotfiles_homebrew_prefix | trim }}" _tool
-  local -a _first=("$HOME/.local/bin" "$HOME/go/bin")
+  # the user tool dirs .zshrc lists (codex from npm, go install, cargo, krew), in its order
+  local -a _first=("$HOME/.local/bin" "$HOME/.npm-global/bin" "$HOME/go/bin" "$HOME/bin" "$HOME/.cargo/bin" "$HOME/.krew/bin")
 {% if dotfiles_macos_gnu_tools | bool %}
   # GNU make, tar, awk, find, grep, sed and coreutils, so commands behave as on Linux
   for _tool in make gnu-tar gawk findutils grep gnu-sed coreutils; do
@@ -21,6 +22,9 @@ _laptop_path() {
   export PATH
 }
 _laptop_path
+# What every process needs, as Linux's environment.d gives it: the same values as .zshrc
+export EDITOR=vim VISUAL=vim GOPATH="$HOME/go" GOTOOLCHAIN={{ packages_gotoolchain | default('auto') | quote }}
+export LANG="${LANG:-en_US.UTF-8}"  # mosh-server needs a UTF-8 locale; ssh passes the client's LANG when it has one
 # Docker clients (kind, docker-compose, testcontainers) use the podman machine's API socket, as on Linux the rootless
 # podman socket (zshrc); TMPDIR is set in local and ssh sessions. Only a socket this user owns, and never over a
 # DOCKER_HOST already set or where Docker Desktop is installed: ~/.docker/run/docker.sock, which its docker context
