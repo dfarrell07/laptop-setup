@@ -295,12 +295,15 @@
 # fails on them (claude-project-modes).
 - name: Deploy project permission mode exclusions
   ansible.builtin.copy:
-    content: >-
-      {{ (['# Managed by Ansible (claude_project_mode_exclude); checkouts here keep their committed permission mode.']
-          + claude_project_mode_exclude) | join('\n') ~ '\n' }}
+    # double quotes: YAML turns \n into a newline (a folded scalar left a literal backslash-n, one comment line)
+    content: "{{ ([_claude_mode_exclude_header] + claude_project_mode_exclude) | join('\n') }}\n"
     dest: "{{ claude_runtime_config_dir }}/project-mode-exclude"
     mode: "0600"
+  vars:
+    _claude_mode_exclude_header: "# Managed by Ansible (claude_project_mode_exclude); checkouts here keep their committed permission mode."
   when: claude_project_mode_override | bool
+  # check mode only simulates the directory above, and copy needs it to exist: a fresh machine's plan must not fail here
+  ignore_errors: "{{ ansible_check_mode }}"
 
 - name: Override project permission modes in local checkouts
   ansible.builtin.command:
