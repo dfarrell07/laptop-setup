@@ -597,6 +597,44 @@ class MacTaskTests(unittest.TestCase):
                     '_containers_real_docker': {'results': [{'stat': stat} for stat in docker]}})
                 self.assertEqual(results[1]['_containers_docker_shim_wanted'], wanted)
 
+    def test_macos_root_commands_are_system_paths(self):
+        """sudo keeps /opt/homebrew/bin first on PATH: a bare name under become would run a user-writable binary
+        (Homebrew's ssh-keygen also writes host keys to its own etc/, which Apple's sshd never reads)."""
+        # tailscaled installs itself as the system daemon: running the Homebrew binary as root is the point
+        allowed = {'{{ dotfiles_homebrew_prefix }}/bin/tailscaled'}
+
+        def walk(tasks, become, macos):
+            for task in tasks or []:
+                task_become = task.get('become', become)
+                when = str(task.get('when', ''))
+                task_macos = macos or 'is_macos' in when or 'Darwin' in when
+                for key in ('block', 'rescue', 'always'):
+                    yield from walk(task.get(key), task_become, task_macos)
+                if task_become and task_macos:
+                    yield task
+        files = ['roles/desktop/tasks/main.yml', 'roles/packages/tasks/main.yml', 'roles/packages/tasks/install_brew.yml',
+                 'roles/containers/tasks/main.yml', 'roles/containers/tasks/macos.yml', 'roles/containers/tasks/macos-docker.yml']
+        checked = []
+        for path in files:
+            macos_only = 'macos' in path or path.endswith('install_brew.yml')  # included only on macOS
+            for task in walk(yaml.safe_load((ROOT / path).read_text()), False, macos_only):
+                commands = []
+                for module in ('ansible.builtin.command', 'ansible.builtin.shell'):
+                    args = task.get(module)
+                    if isinstance(args, dict) and 'argv' in args:
+                        commands.append(args['argv'][0])
+                    elif args is not None:
+                        cmd = re.sub(r'{{.*?}}', 'ARG', args.get('cmd') if isinstance(args, dict) else args)
+                        commands += [part.split()[0] for part in re.split(r'&&|\|\||[;|]', cmd) if part.split()]
+                for args in task.values():
+                    if isinstance(args, dict) and isinstance(args.get('validate'), str):
+                        commands.append(args['validate'].split()[0])
+                for command in commands:
+                    checked.append(command)
+                    self.assertTrue(command.startswith('/') or command in allowed, f'{path}: {task.get("name")}: {command}')
+        for command in ('/usr/bin/ssh-keygen', '/usr/sbin/sshd', '/bin/launchctl', '/usr/bin/pmset', '/bin/cp'):
+            self.assertIn(command, checked)  # the walk reaches the remote-access, power and AeroSpace tasks
+
 
 if __name__ == '__main__':
     unittest.main()

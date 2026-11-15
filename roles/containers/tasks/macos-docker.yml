@@ -53,7 +53,7 @@
   block:
     - name: Check for a laptop-setup docker shim (macOS)
       ansible.builtin.command:
-        argv: [grep, -qF, "Managed by laptop-setup (containers chunk)", "{{ ansible_facts['user_dir'] }}/.local/bin/docker"]
+        argv: [/usr/bin/grep, -qF, "Managed by laptop-setup (containers chunk)", "{{ ansible_facts['user_dir'] }}/.local/bin/docker"]
       register: _containers_docker_shim_ours
       changed_when: false
       failed_when: false
