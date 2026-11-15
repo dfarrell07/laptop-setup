@@ -13,6 +13,7 @@
 # - Fork remotes are HTTPS too: pushes use gh's credentials, so agents can push to your forks; `git pushsk` pushes
 #   over SSH (YubiKey touch). make repos converts an existing SSH fork remote to the URL listed here.
 # - depth: 1 for reference-only repos; omit it where you rebase or push branches.
+# - hooks: true on your own repos that ship .githooks: the global git hooks chain to them (never on upstream repos).
 
 git_repos_public:
   # ===== personal =====
@@ -38,10 +39,12 @@ git_repos_public:
   - url: "https://github.com/{{ dotfiles_github_user }}/patents.git"
     dest: "{{ dotfiles_github_user }}/patents"
     category: personal
+    hooks: true  # ships .githooks: the global hooks chain to them
 
   - url: "https://github.com/{{ dotfiles_github_user }}/startups.git"
     dest: "{{ dotfiles_github_user }}/startups"
     category: personal
+    hooks: true  # ships .githooks: the global hooks chain to them
 
   - url: "https://github.com/{{ dotfiles_github_user }}/dotfiles.git"
     dest: "{{ dotfiles_github_user }}/dotfiles"
@@ -204,6 +207,7 @@ git_repos_public:
   # ===== ovnk: OVN-Kubernetes and OpenShift networking =====
   - url: https://github.com/{{ dotfiles_github_user }}/ovnk-workspace
     dest: "ovnk/{{ dotfiles_github_user }}/ovnk-workspace"
+    hooks: true  # ships .githooks: the global hooks chain to them
     depth: 1
     category: ovnk
 

@@ -11,7 +11,13 @@ else
 fi
 # Chain to per-repo hook if one exists (core.hooksPath replaces .git/hooks/ lookup).
 # Per-repo hook failure blocks the commit; gitleaks failure also blocks even if per-repo hook passes.
-_repo_hook="$(git rev-parse --git-common-dir 2>/dev/null)/hooks/pre-commit"
+# The repo's own hook: <repo>/<laptop.repoHooks>/pre-commit when the git_repos role opted the repo in (repos.yml
+# hooks: true; a local setting repo content cannot make), else .git/hooks/pre-commit.
+_repo_hooks_dir=$(git config --local --get laptop.repoHooks 2>/dev/null || true)
+case "$_repo_hooks_dir" in
+  ""|/*|*..*) _repo_hook="$(git rev-parse --git-common-dir 2>/dev/null)/hooks/pre-commit" ;;
+  *) _repo_hook="$(git rev-parse --show-toplevel 2>/dev/null)/$_repo_hooks_dir/pre-commit" ;;
+esac
 if [ -x "$_repo_hook" ]; then
   "$_repo_hook" || exit $?
 fi

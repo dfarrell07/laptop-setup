@@ -298,6 +298,31 @@
   # A fork remote is one plain URL: a leftover pushurl (a hand-made workaround) is removed, so git push uses it.
   changed_when: git_repos_remote_result.stdout | trim | length > 0
 
+# Repos of the owner's that ship their own hooks (repos.yml hooks: true): the global hooks (core.hooksPath, with the
+# gitleaks scan and the token-push guard) chain to <repo>/.githooks/<name>. A repo-local core.hooksPath (a repo's
+# make install-hooks) would replace the global hooks, guards included, so it is removed here. Upstream repos never
+# opt in: their hooks would run their code on every commit.
+- name: Opt the owner's repos into their own .githooks  # noqa: command-instead-of-module
+  ansible.builtin.shell:
+    cmd: >-
+      set -euo pipefail;
+      out="";
+      [ "$(git config --local --get laptop.repoHooks || true)" = .githooks ] ||
+      { git config --local laptop.repoHooks .githooks; out=updated; };
+      if [ "$(git config --local --get core.hooksPath || true)" = .githooks ]; then
+      git config --local --unset core.hooksPath; out=updated; fi;
+      echo "$out"
+    chdir: "{{ git_repos_base_dir }}/{{ item.dest }}"
+  loop: "{{ git_repos_filtered | selectattr('hooks', 'defined') | selectattr('hooks') | list }}"
+  loop_control:
+    label: "{{ item.dest }}"
+  when:
+    - item.dest in git_repos_available_dests
+    - item.url is match('^https://github\\.com/' ~ (dotfiles_github_user | regex_escape) ~ '/')
+    - not ansible_check_mode
+  register: git_repos_hooks_result
+  changed_when: git_repos_hooks_result.stdout | trim == 'updated'
+
 # Last, so one repo that cannot fast-forward does not stop fork remotes being configured
 - name: Fail if any pulls failed
   ansible.builtin.fail:
