@@ -543,12 +543,14 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   else record "tailscaled-daemon" "FAIL" "tailscaled system daemon not installed — run: make apply CHUNK=packages (needs sudo)"; fi
 fi
 
-# macOS developer tools the ovnk projects need: unversioned python, autotools (OVS/OVN boot.sh), pkg-config
+# macOS developer tools the ovnk projects need: unversioned python, autotools (OVS/OVN boot.sh), pkg-config,
+# and GNU make (Apple make 3.81 lacks --output-sync)
 if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   _brew=$( (brew --prefix) 2>/dev/null || echo /opt/homebrew)
   _missing=""
   [[ -x "$_brew/opt/python@3.14/libexec/bin/python" ]] || _missing+=" python(python@3.14)"
   for _t in autoreconf automake glibtoolize pkg-config; do [[ -x "$_brew/bin/$_t" ]] || _missing+=" $_t"; done
+  [[ -x "$_brew/opt/make/libexec/gnubin/make" ]] || _missing+=" make(GNU)"
   if [[ -z "$_missing" ]]; then record "macos-dev-tools" "PASS"
   else record "macos-dev-tools" "FAIL" "missing:$_missing — run: make apply CHUNK=packages NOSUDO=1"; fi
   unset _brew _missing _t
