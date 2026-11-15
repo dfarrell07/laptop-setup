@@ -582,22 +582,26 @@ class SmokeTests(unittest.TestCase):
             d = Path(directory).resolve()
             home, stubs = d / 'home', d / 'bin'
             home.mkdir()
-            (home / '.zshenv').write_text('path=(/opt/brew/bin $path); export PATH\n')
-            only_tools(stubs, 'env')  # env -i then finds the host zsh on the bare system PATH
+            (home / '.zshenv').write_text('path=(/opt/brew/opt/coreutils/libexec/gnubin /opt/brew/bin $path); export PATH\n')
+            only_tools(stubs, 'env', 'grep')  # env -i then finds the host zsh on the bare system PATH
             (stubs / 'launchctl').write_text('#!/bin/sh\n[ "$1 $2" = "getenv PATH" ] && [ -n "$LPATH" ] && echo "$LPATH"\n')
             (stubs / 'launchctl').chmod(0o755)
 
-            def run(launchd_path):
+            def run(launchd_path, gnu='true'):
                 result = subprocess.run([BASH, '-euo', 'pipefail', '-c',
-                    'record() { printf "%s %s\\n" "$1" "$2"; };\n' + source[start:end]],
+                    f'record() {{ printf "%s %s\\n" "$1" "$2"; }}; _launchd_gnu={gnu};\n' + source[start:end]],
                     env={'PATH': str(stubs), 'HOME': str(home), 'LPATH': launchd_path}, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 return result.stdout.strip()
             if not shutil.which('zsh', path='/usr/bin:/bin:/usr/sbin:/sbin'):
                 self.skipTest('no zsh on the system PATH')
-            self.assertEqual(run('/opt/brew/bin:/usr/bin:/bin:/usr/sbin:/sbin'), 'macos-launchd-path PASS')
+            full = '/opt/brew/opt/coreutils/libexec/gnubin:/opt/brew/bin:/usr/bin:/bin:/usr/sbin:/sbin'
+            self.assertEqual(run(full), 'macos-launchd-path PASS')
             self.assertEqual(run('/usr/bin:/bin:/usr/sbin:/sbin'), 'macos-launchd-path FAIL')  # launchd's default
             self.assertEqual(run(''), 'macos-launchd-path FAIL')
+            # dotfiles_macos_launchd_gnu_tools: false: GUI apps get the PATH without the GNU tools first
+            self.assertEqual(run('/opt/brew/bin:/usr/bin:/bin:/usr/sbin:/sbin', gnu='false'), 'macos-launchd-path PASS')
+            self.assertEqual(run(full, gnu='false'), 'macos-launchd-path FAIL')
 
     def test_macos_zshenv_path_and_launchd_agent_socket(self):
         """Bare-PATH zsh (ssh remote commands) must get Homebrew and GNU tools first; launchd must name the agent."""

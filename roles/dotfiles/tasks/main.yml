@@ -588,7 +588,7 @@
           - PATH=/usr/bin:/bin:/usr/sbin:/sbin
           - /bin/zsh
           - -c
-          - print -r -- $PATH
+          - "{{ 'print -r -- $PATH' if dotfiles_macos_launchd_gnu_tools | bool else 'print -r -- ${(j.:.)path:#*/libexec/gnubin}' }}"
         # zsh must expand $PATH, not the command module (by default it expands it from the playbook's own PATH)
         expand_argument_vars: false
       register: _dotfiles_zshenv_path

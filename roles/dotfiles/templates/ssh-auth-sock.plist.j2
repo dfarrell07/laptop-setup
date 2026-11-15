@@ -13,7 +13,11 @@
   <array>
     <string>/bin/zsh</string>
     <string>-c</string>
+{% if dotfiles_macos_launchd_gnu_tools | bool %}
     <string>/bin/launchctl setenv SSH_AUTH_SOCK "$1" &amp;&amp; /bin/launchctl setenv PATH "$PATH"</string>
+{% else %}
+    <string>/bin/launchctl setenv SSH_AUTH_SOCK "$1" &amp;&amp; /bin/launchctl setenv PATH "${(j.:.)path:#*/libexec/gnubin}"</string>
+{% endif %}
     <string>zsh</string>
     <string>{{ ansible_facts['user_dir'] }}/.ssh/ssh-agent.socket</string>
   </array>
