@@ -8,6 +8,7 @@ no longer opens it. ansible-vault comes from the dev venv; the tests skip when a
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -75,7 +76,10 @@ class SharedVault(unittest.TestCase):
 
     def env(self, name, repo):
         editor = self.tmp / 'editor.sh'
-        editor.write_text('#!/bin/sh\nsed -i "s/^vault_codex_api_key: .*/vault_codex_api_key: edited/" "$1"\n')
+        # Portable (BSD sed's -i needs a suffix argument): a python script rewrites the file ansible-vault hands over.
+        editor.write_text(f'#!{sys.executable}\nimport re, sys\npath = sys.argv[1]\n'
+                          'text = re.sub(r"(?m)^vault_codex_api_key: .*", "vault_codex_api_key: edited", open(path).read())\n'
+                          'open(path, "w").write(text)\n')
         editor.chmod(0o755)
         home = self.tmp / f'home-{name}'
         home.mkdir(exist_ok=True)
