@@ -91,6 +91,13 @@
       loop:
         - "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents"
         - "{{ ansible_facts['user_dir'] }}/.local/state/log"
+        - "{{ containers_macos_machine_ensure_script | dirname }}"
+
+    - name: Deploy the podman machine start script (macOS)
+      ansible.builtin.template:
+        src: podman-machine-ensure.sh.j2
+        dest: "{{ containers_macos_machine_ensure_script }}"
+        mode: "0755"
 
     - name: Deploy the podman machine LaunchAgent (macOS)
       ansible.builtin.template:
@@ -128,21 +135,3 @@
       delay: 2
       until: _containers_machine_bootstrap.rc == 0
       when: _containers_machine_agent.rc != 0 or _containers_machine_plist is changed
-
-    - name: Check for a real docker command (macOS)
-      ansible.builtin.stat:
-        path: "{{ dotfiles_homebrew_prefix }}/bin/docker"
-      register: _containers_real_docker
-
-    # Like Linux podman-docker: scripts and Makefiles that call docker run podman
-    - name: Deploy the docker-to-podman shim (macOS)
-      ansible.builtin.copy:
-        dest: "{{ ansible_facts['user_dir'] }}/.local/bin/docker"
-        mode: "0755"
-        content: |
-          #!/bin/sh
-          # Managed by laptop-setup (containers chunk): docker runs podman, as podman-docker does on Linux
-          exec "{{ containers_podman_bin }}" "$@"
-      when:
-        - containers_macos_docker_shim | bool
-        - not _containers_real_docker.stat.exists
