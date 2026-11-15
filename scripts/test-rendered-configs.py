@@ -530,10 +530,10 @@ class RenderedConfigTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, tmp)
         (tmp / 'podman').mkdir()
 
-        def env_after(case):
+        def env_after(case, **env):
             result = subprocess.run(['zsh', '-f', '-c', 'source "$1"; print -r -- "${DOCKER_HOST-unset}|$KIND_EXPERIMENTAL_PROVIDER"',
                                      'zsh', str(self.out / case)], env={'PATH': '/usr/bin:/bin', 'HOME': str(tmp),
-                                     'TMPDIR': f'{tmp}/'}, capture_output=True, text=True)
+                                     'TMPDIR': f'{tmp}/', **env}, capture_output=True, text=True)
             self.assertEqual(result.stderr, '')
             return result.stdout.strip()
         self.assertEqual(env_after('zshenv'), 'unset|podman')  # no machine running: no DOCKER_HOST
@@ -543,6 +543,17 @@ class RenderedConfigTests(unittest.TestCase):
             server.bind(str(path))
             self.addCleanup(server.close)
             self.assertEqual(env_after(case), f'unix://{path}|podman')
+        # a DOCKER_HOST already set, or Docker Desktop's socket, wins; the user's own socket only (-O: tests run unprivileged,
+        # so a socket owned by someone else cannot be made here)
+        self.assertEqual(env_after('zshenv', DOCKER_HOST='tcp://127.0.0.1:2375'), 'tcp://127.0.0.1:2375|podman')
+        (tmp / '.docker/run').mkdir(parents=True)
+        desktop = socket.socket(socket.AF_UNIX)
+        desktop.bind(str(tmp / '.docker/run/docker.sock'))
+        self.addCleanup(desktop.close)
+        self.assertEqual(env_after('zshenv'), 'unset|podman')
+        desktop.close()
+        (tmp / '.docker/run/docker.sock').unlink()
+        self.assertIn('-S "$_laptop_docker_sock" \\\n  && -O "$_laptop_docker_sock" ]]', self.read('zshenv'))
         (tmp / 'podman/podman-machine-default-api.sock').unlink()
         (tmp / 'podman/podman-machine-default-api.sock').write_text('')  # a plain file, not the machine's socket
         self.assertEqual(env_after('zshenv'), 'unset|podman')
