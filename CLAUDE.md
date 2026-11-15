@@ -110,7 +110,8 @@ make ssh-keys | github-ssh-keys | vault-init | vault-edit | vault-view  # github
 make migration-inventory | workstation-audit  # private reports for a laptop move
 make lint                   # ansible-lint, yamllint, shellcheck, markdownlint, check-vars-sync, script integrity
 make syntax-check | shellcheck | markdownlint | commitlint | check-vars-sync
-make test-scripts           # hook tests + scripts/test-*.py suites
+make test-scripts           # hook tests + scripts/test-*.py suites, in parallel (JOBS=1: serial)
+make gate                   # lint + syntax-check + check-vars-sync + test-scripts side by side (pre-commit gate)
 make test-poller            # claude-queue-poller.sh helper tests
 make test                   # shellcheck + test-scripts + test-poller + Podman molecule scenarios
 make ci                     # lint + syntax-check + all non-VM tests (adds macOS); make test-vm needs bootstrap-test
@@ -180,9 +181,9 @@ runs `git_repos` for one `repo_category`. `make help` lists everything; scenario
 
 ## Testing and CI
 
-- Before committing run the focused `scripts/test-*.py` for the change (`.venv/bin/python3 scripts/test-X.py`), then `make lint`,
-  `make syntax-check`, `make test-scripts` and `make check-vars-sync`. `LAPTOP_SETUP_TEST_TIMEOUT=180 make test-scripts` raises the
-  Ansible test deadlines on a busy host.
+- Before committing run the focused `scripts/test-*.py` for the change (`.venv/bin/python3 scripts/test-X.py`), then `make gate`
+  (`make lint`, `make syntax-check`, `make test-scripts` and `make check-vars-sync` in parallel).
+  `LAPTOP_SETUP_TEST_TIMEOUT=180 make test-scripts` raises the Ansible test deadlines on a busy host.
 - Gates in a second worktree (one per session sharing a machine): keep it on disk, not tmpfs, since it gets its own `.venv`
   and `node_modules`. Copy `scripts/vault-pass-ci.sh` to `scripts/vault-pass.sh` (a fixed dummy), then run `make npm` and
   `make collections`, which also builds the worktree's own `.venv`. Never symlink `.venv` or `collections`: pip would
