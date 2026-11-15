@@ -248,6 +248,11 @@
     that: claude_default_mode in ['default', 'acceptEdits', 'plan', 'dontAsk', 'auto', 'bypassPermissions']
     fail_msg: "claude_default_mode={{ claude_default_mode }} is not a Claude Code permission mode."
 
+- name: Assert claude_cross_session_inbound is accept, hold or refuse
+  ansible.builtin.assert:
+    that: claude_cross_session_inbound in ['accept', 'hold', 'refuse']
+    fail_msg: "claude_cross_session_inbound={{ claude_cross_session_inbound }} must be accept, hold or refuse."
+
 # The helper runs on the target with the target's Python (inline via -c: the controller path
 # ansible_playbook_python does not exist inside containers or on remote hosts).
 - name: Merge security policy into instance settings.json
