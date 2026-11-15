@@ -578,6 +578,39 @@
       changed_when: true
       when: _dotfiles_launchd_ssh_auth_sock.stdout | default('') | trim != ansible_facts['user_dir'] ~ '/.ssh/ssh-agent.socket'
 
+    # The PATH ~/.zshenv builds from launchd's default, which the LaunchAgent above publishes at every login
+    - name: Read the PATH ~/.zshenv builds (macOS)
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/env
+          - -i
+          - "HOME={{ ansible_facts['user_dir'] }}"
+          - PATH=/usr/bin:/bin:/usr/sbin:/sbin
+          - /bin/zsh
+          - -c
+          - print -r -- $PATH
+        # zsh must expand $PATH, not the command module (by default it expands it from the playbook's own PATH)
+        expand_argument_vars: false
+      register: _dotfiles_zshenv_path
+      changed_when: false
+      check_mode: false  # read-only probe
+
+    - name: Read launchd PATH (macOS)  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        argv: [/bin/launchctl, getenv, PATH]
+      register: _dotfiles_launchd_path
+      changed_when: false
+      failed_when: false
+      check_mode: false  # read-only probe
+
+    - name: Set launchd PATH for GUI apps and launchd jobs (macOS)  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        argv: [/bin/launchctl, setenv, PATH, "{{ _dotfiles_zshenv_path.stdout | trim }}"]
+      changed_when: true
+      when:
+        - _dotfiles_zshenv_path.stdout | trim | length > 0
+        - _dotfiles_launchd_path.stdout | default('') | trim != _dotfiles_zshenv_path.stdout | trim
+
 - name: Check if SSH supports post-quantum KEX
   ansible.builtin.command:
     cmd: ssh -Q kex

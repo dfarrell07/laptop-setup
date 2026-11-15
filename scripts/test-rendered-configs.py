@@ -575,7 +575,8 @@ class RenderedConfigTests(unittest.TestCase):
             # zsh -c with no rc file but ~/.zshenv, as ssh and mosh run remote commands
             result = subprocess.run(['zsh', '-c', 'print -r -- $PATH'], env={'PATH': bare, 'HOME': str(home)},
                                     capture_output=True, text=True)
-            expected = ([f'{home}/.local/bin', f'{home}/go/bin'] + [f'{brew}/opt/{t}/libexec/gnubin' for t in gnubins]
+            expected = ([f'{home}/.local/bin', f'{home}/.npm-global/bin', f'{home}/go/bin', f'{home}/bin', f'{home}/.cargo/bin',
+                         f'{home}/.krew/bin'] + [f'{brew}/opt/{t}/libexec/gnubin' for t in gnubins]
                         + [f'{brew}/opt/python@3.14/libexec/bin', f'{brew}/bin'] + bare.split(':'))
             self.assertEqual(result.stdout.strip().split(':'), expected, result.stderr)
             # sourcing it again (nested shells, .zshrc after path_helper) moves the entries back to the front, once each
@@ -623,8 +624,18 @@ class RenderedConfigTests(unittest.TestCase):
         env = self.read('ssh_auth_sock_plist')
         socket = re.search(r'<string>-a</string>\s*<string>([^<]+)</string>', agent).group(1)
         self.assertTrue(socket.endswith('/.ssh/ssh-agent.socket'), socket)
-        arguments = re.findall(r'<string>([^<]*)</string>', env.split('<array>')[1].split('</array>')[0])
-        self.assertEqual(arguments, ['/bin/launchctl', 'setenv', 'SSH_AUTH_SOCK', socket])
+        arguments = [a.replace('&amp;', '&') for a in
+                     re.findall(r'<string>([^<]*)</string>', env.split('<array>')[1].split('</array>')[0])]
+        self.assertEqual(arguments[0:2] + arguments[3:], ['/bin/zsh', '-c', 'zsh', socket])
+        # run the job's command with a stub launchctl: SSH_AUTH_SOCK, then the PATH zsh -c built (from ~/.zshenv)
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / 'log'
+            stub = Path(directory) / 'launchctl'
+            stub.write_text(f'#!/bin/sh\necho "$*" >> {log}\n')
+            stub.chmod(0o755)
+            command = arguments[2].replace('/bin/launchctl', str(stub))
+            subprocess.run(['/bin/sh', '-c', command, 'zsh', socket], env={'PATH': '/opt/x/bin:/usr/bin:/bin'}, check=True)
+            self.assertEqual(log.read_text().splitlines(), [f'setenv SSH_AUTH_SOCK {socket}', 'setenv PATH /opt/x/bin:/usr/bin:/bin'])
         self.assertIn('<key>RunAtLoad</key>', env)
         self.assertNotIn('KeepAlive', env)  # a one-shot at login: kept alive, launchd would rerun it forever
         if shutil.which('plutil'):
