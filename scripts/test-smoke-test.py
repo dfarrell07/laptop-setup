@@ -513,6 +513,24 @@ class SmokeTests(unittest.TestCase):
             self.assertTrue(run(good, apple)[1].startswith('macos-launchd-ssh-auth-sock FAIL'))
             self.assertTrue(run(good, apple, molecule='/src')[1].startswith('macos-launchd-ssh-auth-sock WARN'))
 
+    def test_aerospace_running_check_only_when_it_is_the_wm(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('  if [[ "$_desktop_env" != aerospace ]]')
+        end = source.index('\nfi\n', start)
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / 'pgrep').write_text('#!/bin/sh\n[ "$1 $2" = "-x AeroSpace" ] && exit "$RUNNING"\nexit 2\n')
+            (Path(directory) / 'pgrep').chmod(0o755)
+            for wm, running, molecule, expected in [('aerospace', 0, '', 'PASS'), ('aerospace', 1, '', 'FAIL'),
+                                                    ('aerospace', 1, '/src', 'WARN'), ('CHANGE_ME', 1, '', 'PASS')]:
+                with self.subTest(wm=wm, running=running, molecule=molecule):
+                    result = subprocess.run([BASH, '-eu', '-o', 'pipefail', '-c', 'record() { printf "%s %s\\n" "$1" "$2"; };'
+                                             f' _desktop_env={wm};\n' + source[start:end]],
+                                            env=dict(os.environ, PATH=directory,
+                                                     RUNNING=str(running), MOLECULE_PROJECT_DIRECTORY=molecule),
+                                            capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout.strip(), 'aerospace-running ' + expected)
+
     def test_github_ssh_auth_tells_unregistered_key_from_pin_needed(self):
         """A verify-required FIDO2 key always exits 255 under BatchMode: -v output says whether GitHub knows the key."""
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
