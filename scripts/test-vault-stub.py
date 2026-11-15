@@ -63,6 +63,39 @@ echo "$*" >> "$(dirname "$0")/calls.log"
 """
 
 
+class VaultModeTests(unittest.TestCase):
+    """verify-ansible-args.sh restores vault.yml to 0600 before every Ansible run (a checkout leaves it at the umask)."""
+
+    def run_slice(self, repo):
+        source = (ROOT / 'scripts/verify-ansible-args.sh').read_text()
+        body = source[source.index('# vault-mode: begin'):source.index('# vault-mode: end')]
+        return subprocess.run(['bash', '-c', 'set -euo pipefail; _repo_root="$1"\n' + body, 'slice', str(repo)],
+                              capture_output=True, text=True, timeout=30)
+
+    def test_placeholder_tightened_and_symlink_refused(self):
+        with tempfile.TemporaryDirectory() as name:
+            repo = Path(name)
+            (repo / 'group_vars/all').mkdir(parents=True)
+            vault = repo / 'group_vars/all/vault.yml'
+            self.assertEqual(self.run_slice(repo).returncode, 0)  # no vault yet: nothing to do
+            vault.write_text('---\n')
+            vault.chmod(0o644)
+            self.assertEqual(self.run_slice(repo).returncode, 0)
+            self.assertEqual(vault.stat().st_mode & 0o777, 0o600)
+            vault.chmod(0o400)  # tighter than required is left to chmod 600 (owner keeps read)
+            self.assertEqual(self.run_slice(repo).returncode, 0)
+            self.assertEqual(vault.stat().st_mode & 0o777, 0o600)
+            target = repo / 'elsewhere.yml'
+            target.write_text('---\n')
+            target.chmod(0o644)
+            vault.unlink()
+            vault.symlink_to(target)
+            result = self.run_slice(repo)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn('symlink', result.stderr)
+            self.assertEqual(target.stat().st_mode & 0o777, 0o644)  # never followed
+
+
 class VaultInitTests(unittest.TestCase):
     """make vault-init: refuses the stub or missing keys, sets skip-worktree, encrypts the filled stub once."""
 
