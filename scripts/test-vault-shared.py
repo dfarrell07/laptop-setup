@@ -53,6 +53,7 @@ class SharedVault(unittest.TestCase):
         (repo / 'scripts').mkdir(parents=True)
         (repo / 'group_vars/all').mkdir(parents=True)
         shutil.copy(SCRIPT, repo / 'scripts/vault-shared.sh')
+        shutil.copy(ROOT / 'scripts/vault-set-signing-key.py', repo / 'scripts/vault-set-signing-key.py')
         # The real wrapper pins ANSIBLE_VAULT_PASSWORD_FILE to scripts/vault-pass.sh; so does this stand-in, and it
         # swaps in a scripted editor for ansible-vault edit (the script itself clears EDITOR).
         (repo / 'scripts/verify-ansible-args.sh').write_text(
@@ -586,6 +587,19 @@ class SharedVault(unittest.TestCase):
         result = self.shared('b', b, 'join', check=False)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('one quoted string', result.stderr)
+
+    def test_signing_key_lands_in_the_shared_vault_and_is_pushed(self):
+        a = self.init_a()
+        key = self.tmp / 'id_signing'
+        key.write_text('-----BEGIN OPENSSH PRIVATE KEY-----\nZmFrZQ==\n-----END OPENSSH PRIVATE KEY-----\n')
+        Path(f'{key}.pub').write_text('sk-ssh-ed25519@openssh.com AAAAGnNr signing\n')
+        env = self.env('a', a)
+        env['PATH'] = f"{Path(sys.executable).parent}:{env['PATH']}"  # a python3 that can import ansible
+        result = run(['bash', str(a / 'scripts/vault-shared.sh'), 'signing-key', str(key)], cwd=a, env=env)
+        self.assertNotIn('ZmFrZQ', result.stdout + result.stderr)
+        self.assertIn('vault_ssh_signing_key_pub', self.view('a', a))
+        log = run(['git', f'--git-dir={self.remote}', 'log', '-1', '--format=%s', 'main']).stdout.strip()
+        self.assertEqual(log, 'Vault: signing key')
 
     def test_init_refuses_a_plaintext_vault_and_changes_nothing(self):
         a = self.machine('a', None)

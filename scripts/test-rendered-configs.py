@@ -764,6 +764,27 @@ class ShippedFileTests(unittest.TestCase):
             self.assertEqual(result.returncode, 7, 'repo hook failure must abort the commit')
 
 
+    def test_a_file_path_in_the_vault_never_overwrites_a_key_file(self):
+        """Each private key deploy is preceded by an assert that the vault value is a key block, not a pasted path."""
+        tasks = yaml.safe_load((ROOT / 'roles/ssh/tasks/main.yml').read_text())
+        names = [t.get('name', '') for t in tasks]
+        block = '-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXk=\n-----END OPENSSH PRIVATE KEY-----\n'
+        for key, deploy in [('ssh_auth_key', 'Deploy SSH auth key'), ('ssh_signing_key', 'Deploy SSH signing key')]:
+            at = names.index(deploy)
+            guard = tasks[at - 1]
+            self.assertIn('ansible.builtin.assert', guard, deploy)
+            that = guard['ansible.builtin.assert']['that']
+            pattern = re.search(r"search\('(.*)'\)", that).group(1)
+            self.assertTrue(re.search(pattern, block), deploy)
+            for wrong in ('/home/me/.ssh/id_ed25519_sk_signing', '~/.ssh/id_ed25519_sk', 'sk-ssh-ed25519@openssh.com AAAA'):
+                self.assertFalse(re.search(pattern, wrong), (deploy, wrong))
+        dot = yaml.safe_load((ROOT / 'roles/dotfiles/tasks/main.yml').read_text())
+        signers = next(t for t in dot if t.get('name') == 'Validate and deploy git allowed signers')
+        first = signers['block'][0]['ansible.builtin.assert']['that']
+        path_re = re.search(r"match\('(.*)'\)", first).group(1).replace('\\\\', '\\')
+        self.assertTrue(re.match(path_re, '/home/me/.ssh/id_ed25519_sk_signing.pub'))
+        self.assertFalse(re.match(path_re, 'sk-ssh-ed25519@openssh.com AAAAC3 signing'))
+
     def test_acli_token_goes_only_over_stdin_with_no_log(self):
         tasks = yaml.safe_load((ROOT / 'roles/claude/tasks/acli.yml').read_text())
 

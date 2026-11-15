@@ -233,6 +233,14 @@
 - name: Validate and deploy git allowed signers
   when: ssh_signing_key_pub | trim | length > 0
   block:
+    - name: Assert ssh_signing_key_pub is the key itself, not a file path
+      ansible.builtin.assert:
+        that: not (ssh_signing_key_pub | trim) is match('^(/|~|\\$HOME|[A-Za-z0-9_.-]+/)')
+        fail_msg: >-
+          vault_ssh_signing_key_pub holds a file path ({{ ssh_signing_key_pub | trim }}), not the key. In make vault-edit,
+          paste the single line of that .pub file instead (cat it to copy: sk-ssh-ed25519@openssh.com AAAA... comment),
+          and the private key file's contents into vault_ssh_signing_key (a | block, every line indented two spaces).
+
     - name: Assert ssh_signing_key_pub contains no newlines or control characters
       ansible.builtin.assert:
         that:

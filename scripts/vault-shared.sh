@@ -533,6 +533,11 @@ cmd_edit() {
   before=$(sha256sum "$S/vault.yml")
   EDITOR='' VISUAL='' ANSIBLE_EDITOR='' "$DISPATCH" ansible-vault edit "$S/vault.yml"
   [[ $(sha256sum "$S/vault.yml") != "$before" ]] || { ok "no change"; return 0; }
+  publish_change "Vault: edit"
+}
+
+# Commit and push a change already made to $S/vault.yml, as a transaction (vault-edit, vault-signing-key).
+publish_change() {
   # Keep the edited (still encrypted) vault aside: if the commit or push fails, the clone goes back to GitHub's state
   # and this copy holds the edit.
   EDIT_KEEP=$CONF/vault.yml.unpushed.$(date +%Y%m%d%H%M%S)
@@ -542,10 +547,23 @@ cmd_edit() {
   TXN_UNDO=edit_undo
   txn_begin
   mv -f "$edited.tmp" "$S/vault.yml"
-  commit_push "Vault: edit"
+  commit_push "$1"
   txn_end
   rm -f "$EDIT_KEEP"
   install_local
+}
+
+# make vault-signing-key: the key files into the shared vault, then published like an edit.
+cmd_signing_key() {
+  cmd_pull
+  check_approved
+  local before py
+  before=$(sha256sum "$S/vault.yml")
+  py=$(command -v python3)
+  "$py" -I -c 'import ansible' 2>/dev/null || py=.venv/bin/python3
+  "$py" -I scripts/vault-set-signing-key.py "$1" "$S/vault.yml"
+  [[ $(sha256sum "$S/vault.yml") != "$before" ]] || { ok "no change"; return 0; }
+  publish_change "Vault: signing key"
 }
 edit_undo() {
   warn "your edit is kept, encrypted, in $EDIT_KEEP: view it with .venv/bin/ansible-vault view --vault-password-file scripts/vault-pass.sh $EDIT_KEEP and redo it with make vault-edit"
@@ -587,6 +605,7 @@ case ${1:-} in
   remove-key) shift; cmd_remove_key "$@" ;;
   pull) cmd_pull ;;
   edit) cmd_edit ;;
+  signing-key) shift; cmd_signing_key "${1:?usage: vault-shared.sh signing-key KEY}" ;;
   view) cmd_view ;;
   status) cmd_status ;;
   active) active ;;
