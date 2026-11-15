@@ -454,9 +454,10 @@ class MigrationTests(unittest.TestCase):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
         start = source.index('# Session placement (claude role')
         end = source.index('unset _placement _launcher _misplaced')
-        for listing, expected in [('personal-startups running /x misplaced\nwork-evpn running /y\n',
+        for listing, expected in [('personal-startups running misplaced /x\nwork-evpn running /y\n',
                                    'claude-session-placement FAIL sessions on the wrong machine: personal-startups'),
-                                  ('work-evpn running /y\n', 'claude-session-placement PASS')]:
+                                  ('work-evpn running /y\n', 'claude-session-placement PASS'),
+                                  ('x running misplaced /a\n" ; exit 1 ; printf "', 'claude-session-placement WARN')]:
             with self.subTest(expected=expected), tempfile.TemporaryDirectory() as name:
                 home = Path(name)
                 (home / '.config/claude-sessions').mkdir(parents=True)
@@ -470,6 +471,7 @@ class MigrationTests(unittest.TestCase):
                                         capture_output=True, text=True, timeout=30)
                 self.assertTrue(result.stdout.startswith(expected), result.stdout + result.stderr)
                 self.assertNotIn('work-evpn', result.stdout)
+                self.assertNotIn('misplaced /a', result.stdout)
 
     def test_claude_baseline_scopes_plugins_and_preserves_cli_preferences(self):
         production = yaml.safe_load((ROOT / 'roles/claude/tasks/main.yml').read_text())
