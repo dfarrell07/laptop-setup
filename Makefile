@@ -2,7 +2,7 @@
        dotfiles packages repos notes \
        ssh desktop system repos_dnf redhat containers claude codex container \
        container-rebuild csb-audit ssh-keys github-ssh-keys vault-init vault-import vault-edit vault-view vault-share-init vault-join vault-add-key \
-       vault-remove-key vault-pull vault-status update hooks pw-migrate gate \
+       vault-remove-key vault-pull vault-status vault-signing-key update hooks pw-migrate gate \
        smoke-test-container smoke-test-user \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
        test-scripts test-poller test-gitleaks test-% \
@@ -119,6 +119,7 @@ help:
 	@echo "  vault-edit             Edit the vault (vault-view: read only); shared once vault-join or vault-share-init ran"
 	@echo "  vault-share-init       Move this machine's vault into the shared laptop-secrets repo (first machine, once)"
 	@echo "  vault-join             Use the shared vault on this machine (vault-pull: fetch changes; vault-status)"
+	@echo "  vault-signing-key      Copy ~/.ssh/id_ed25519_sk_signing (KEY=...) into the vault, nothing to paste"
 	@echo "  vault-add-key [NOPIN=1] Enrol the plugged-in YubiKey (vault-remove-key RECIPIENT=age1...: drop one, new password)"
 	@echo "  usb-add                Allow blocked USB devices (USBGuard) and save their rules to config.yml"
 	@echo "  preflight              Check prerequisites and CSB detection"
@@ -528,6 +529,7 @@ TEST_SCRIPTS := \
 	'.venv/bin/python3 scripts/test-usb-add.py' \
 	'.venv/bin/python3 scripts/test-vault-import.py' \
 	'.venv/bin/python3 scripts/test-vault-shared.py' \
+	'.venv/bin/python3 scripts/test-vault-signing-key.py' \
 	'.venv/bin/python3 scripts/test-collection-source-verifier.py' \
 	'.venv/bin/python3 scripts/test-rollout.py' \
 	'bash test-var-override.sh'
@@ -611,6 +613,14 @@ vault-remove-key: guard-not-root
 
 vault-pull: guard-not-root
 	@scripts/vault-shared.sh pull
+
+# Copy an SSH signing key's files into the vault (no pasting): KEY defaults to ~/.ssh/id_ed25519_sk_signing; reads
+# KEY and KEY.pub, prints nothing secret. With the shared vault active it is committed and pushed like vault-edit.
+vault-signing-key: guard-not-root
+	@$(if $(filter command line,$(origin KEY)),,KEY="$$HOME/.ssh/id_ed25519_sk_signing" )\
+	sh -c 'if scripts/vault-shared.sh active; then exec scripts/vault-shared.sh signing-key "$$KEY"; fi; \
+	py=$$(command -v python3); "$$py" -I -c "import ansible" 2>/dev/null || py=.venv/bin/python3; \
+	exec "$$py" -I scripts/vault-set-signing-key.py "$$KEY" group_vars/all/vault.yml'
 
 vault-status:
 	@scripts/vault-shared.sh status

@@ -103,6 +103,16 @@
     - ssh_auth_key_pub | trim | length > 0
   tags: [always, ssh_authorized_keys]
 
+- name: Assert the vault auth key is a private key block, not a file path
+  ansible.builtin.assert:
+    that: ssh_auth_key is search('-----BEGIN [A-Z ]*PRIVATE KEY-----')
+    fail_msg: >-
+      vault_ssh_auth_key is not a private key (it does not start with -----BEGIN ... PRIVATE KEY-----; a file path
+      pasted instead of the file's contents is the usual cause). Nothing was written. In make vault-edit, paste the
+      key file's contents as a | block, every line indented two spaces.
+    quiet: true
+  when: ssh_auth_key | trim | length > 0
+
 - name: Deploy SSH auth key
   ansible.builtin.copy:
     content: "{{ ssh_auth_key }}"
@@ -241,6 +251,17 @@
     exclusive: true
   tags: [ssh_authorized_keys]
   when: ssh_auth_key_pub | trim | length > 0
+
+# A file path pasted into the vault instead of the key would overwrite the real key file with that text.
+- name: Assert the vault signing key is a private key block, not a file path
+  ansible.builtin.assert:
+    that: ssh_signing_key is search('-----BEGIN [A-Z ]*PRIVATE KEY-----')
+    fail_msg: >-
+      vault_ssh_signing_key is not a private key (it does not start with -----BEGIN ... PRIVATE KEY-----; a file
+      path pasted instead of the file's contents is the usual cause). Nothing was written. In make vault-edit, paste
+      the key file's contents as a | block, every line indented two spaces.
+    quiet: true
+  when: ssh_signing_key | trim | length > 0
 
 - name: Deploy SSH signing key
   ansible.builtin.copy:
