@@ -41,6 +41,11 @@ CASES = {
     'bar_status': ('roles/desktop/templates/i3status-bar.sh.j2', {}),
     'audit': ('roles/system/templates/auditd-system.rules.j2', {}),
     'sshd_macos': ('roles/desktop/templates/sshd-macos.conf.j2', {}),
+    # what the play keeps on a Mac whose OpenSSH predates ML-KEM
+    'sshd_macos_older': ('roles/desktop/templates/sshd-macos.conf.j2', {'_desktop_sshd_algorithms': {
+        'KexAlgorithms': ['sntrup761x25519-sha512', 'curve25519-sha256'], 'Ciphers': ['chacha20-poly1305@openssh.com'],
+        'MACs': ['hmac-sha2-512-etm@openssh.com'], 'HostKeyAlgorithms': ['ssh-ed25519'],
+        'PubkeyAcceptedAlgorithms': ['ssh-ed25519', 'sk-ssh-ed25519@openssh.com']}}),
     'sshd_launchd': ('roles/desktop/templates/sshd-launchd.plist.j2', {}),
     'zshenv': ('roles/dotfiles/templates/zshenv.j2', {'dotfiles_homebrew_prefix': '/opt/homebrew'}),
     # podman from PATH (a stub); the hold file path is replaced per test
@@ -387,6 +392,15 @@ class RenderedConfigTests(unittest.TestCase):
                                     capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0, 'sshd -t must reject an unknown algorithm')
 
+    def test_macos_sshd_dropin_uses_the_algorithms_the_play_kept(self):
+        directives = dict(line.split(' ', 1) for line in self.read('sshd_macos_older').splitlines()
+                          if line and not line.startswith('#'))
+        self.assertEqual(directives['KexAlgorithms'], 'sntrup761x25519-sha512,curve25519-sha256')
+        self.assertEqual(directives['Ciphers'], 'chacha20-poly1305@openssh.com')
+        self.assertEqual(directives['MACs'], 'hmac-sha2-512-etm@openssh.com')
+        self.assertEqual(directives['HostKeyAlgorithms'], 'ssh-ed25519')
+        self.assertEqual(directives['PubkeyAcceptedAlgorithms'], 'ssh-ed25519,sk-ssh-ed25519@openssh.com')
+
     def test_macos_sshd_dropin_is_validated_before_it_lands(self):
         tasks = yaml.safe_load((ROOT / 'roles/desktop/tasks/main.yml').read_text())
         block = next(t for t in tasks if t.get('name') == 'Apply the sshd login policy and start sshd (macOS)')
@@ -596,6 +610,31 @@ class MacTaskTests(unittest.TestCase):
                     '_containers_podman_bin_stat': {'stat': podman_stat},
                     '_containers_real_docker': {'results': [{'stat': stat} for stat in docker]}})
                 self.assertEqual(results[1]['_containers_docker_shim_wanted'], wanted)
+
+    def test_macos_sshd_keeps_only_the_algorithms_this_mac_supports(self):
+        tasks = [production_task('roles/desktop/tasks/main.yml', name) for name in (
+            'Keep the sshd algorithms this Mac supports (macOS)',
+            'Check each sshd algorithm list keeps a supported algorithm (macOS)')]
+        group_vars = yaml.safe_load((ROOT / 'group_vars/all/vars.yml').read_text())
+        variables = {k: group_vars[k] for k in ('ssh_kex_algorithms', 'ssh_ciphers', 'ssh_macs', 'ssh_host_key_algorithms',
+                                                'ssh_pubkey_accepted_algorithms')}
+        # /usr/bin/ssh -Q of an OpenSSH before 9.9: no ML-KEM, and its own order
+        supported = {'KexAlgorithms': ['ecdh-sha2-nistp521', 'curve25519-sha256', 'sntrup761x25519-sha512'],
+                     'Ciphers': ['aes256-gcm@openssh.com', 'chacha20-poly1305@openssh.com'],
+                     'MACs': ['hmac-sha2-256-etm@openssh.com', 'hmac-sha2-512-etm@openssh.com'],
+                     'HostKeyAlgorithms': ['ssh-rsa', 'ssh-ed25519'],
+                     'PubkeyAcceptedAlgorithms': ['ssh-ed25519', 'sk-ssh-ed25519@openssh.com', 'ssh-rsa']}
+
+        def run(supported):
+            return run_tasks(tasks + [{'ansible.builtin.debug': {'var': '_desktop_sshd_algorithms'}}], dict(
+                variables, _desktop_ssh_supported={'results': [{'item': k, 'stdout_lines': v} for k, v in supported.items()]}))
+        kept = run(supported)[-1]['_desktop_sshd_algorithms']
+        self.assertEqual(kept['KexAlgorithms'], ['sntrup761x25519-sha512', 'curve25519-sha256', 'ecdh-sha2-nistp521'])
+        self.assertEqual(kept['Ciphers'], variables['ssh_ciphers'].split(','))  # the group_vars order, not ssh's
+        self.assertEqual(kept['HostKeyAlgorithms'], ['ssh-ed25519'])
+        self.assertEqual(kept['PubkeyAcceptedAlgorithms'], ['ssh-ed25519', 'sk-ssh-ed25519@openssh.com'])
+        with self.assertRaisesRegex(AssertionError, 'supports none of the configured MACs'):
+            run(dict(supported, MACs=['hmac-sha1']))
 
     def test_macos_root_commands_are_system_paths(self):
         """sudo keeps /opt/homebrew/bin first on PATH: a bare name under become would run a user-writable binary
