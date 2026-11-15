@@ -1226,7 +1226,13 @@ unset _cd label
 # (crossSessionInbound: accept, claude_cross_session_inbound). FAILs for any managed config dir without it.
 _csi_bad=()
 _csi_seen=0
-for _cd in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-per2"; do
+# the fixed instances plus any other ~/.claude-<name> in use (claude_extra_config_dirs, e.g. a second person's login)
+_csi_dirs=("$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-per2")
+for _cd in "$HOME"/.claude-*/; do
+  _cd=${_cd%/}
+  [[ -f "$_cd/settings.json" && " ${_csi_dirs[*]} " != *" $_cd "* ]] && _csi_dirs+=("$_cd")
+done
+for _cd in "${_csi_dirs[@]}"; do
   [[ -d "$_cd" ]] || continue
   _csi_seen=$((_csi_seen + 1))
   python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("crossSessionInbound") == "accept" else 1)' \
@@ -1240,7 +1246,7 @@ else
   record "claude-cross-session-inbound" "FAIL" \
     "crossSessionInbound is not \"accept\" in settings.json of: ${_csi_bad[*]} — run: make apply CHUNK=agents"
 fi
-unset _cd _csi_bad _csi_seen
+unset _cd _csi_bad _csi_seen _csi_dirs
 if [[ -d "$HOME/.claude-personal" ]]; then
   record "claude-retired-home" "WARN" "$HOME/.claude-personal is no longer managed (no 0700 tmpfiles rule); review and remove it"
 fi

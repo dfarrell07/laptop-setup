@@ -327,6 +327,14 @@ class SmokeTests(unittest.TestCase):
             for name in ['.claude-work', '.claude-per2']:
                 (home / name / 'settings.json').write_text(json.dumps({'crossSessionInbound': 'accept'}))
             self.assertEqual(run(), 'claude-cross-session-inbound PASS')
+            (home / '.claude-second').mkdir()  # claude_extra_config_dirs: checked once it has settings
+            self.assertEqual(run(), 'claude-cross-session-inbound PASS')
+            (home / '.claude-second' / 'settings.json').write_text(json.dumps({'crossSessionInbound': 'hold'}))
+            result = run()
+            self.assertTrue(result.startswith('claude-cross-session-inbound FAIL'), result)
+            self.assertIn('.claude-second', result)
+            (home / '.claude-second' / 'settings.json').write_text(json.dumps({'crossSessionInbound': 'accept'}))
+            self.assertEqual(run(), 'claude-cross-session-inbound PASS')
 
     def test_macos_remote_access_needs_the_key_policy_and_mosh_firewall_rule(self):
         """Remote Login never counts as fine without the key-only policy; it waits for authorized_keys."""
