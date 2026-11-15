@@ -74,7 +74,10 @@ audits it for gaps the automation does not cover yet.
    explicit `make repos-evpn` or `make repos-rh-context` overrides the profile, and does not clone the shared
    `konflux` and `ovnk` categories: add `make repos-konflux` or `make repos-ovnk` when needed. Layouts are in
    `group_vars/all/repos.yml`. Provisioning leaves old source locations alone and does not migrate their state:
-   import saved refs and files, repair worktrees and fix absolute paths.
+   import saved refs and files, repair worktrees and fix absolute paths. Run `gh auth login` before `make repos`:
+   your own GitHub repos and forks fetch and push over HTTPS with gh's token (upstream pushes use SSH and a
+   YubiKey touch), so private clones fail until gh is logged in. `make repos` also turns existing SSH fork
+   remotes into plain HTTPS ones and unshallows clones that the repo list wants with full history.
 3. Recover optional tools with the additive `packages_extra_dnf`, `packages_extra_apt` and `packages_extra_brew`
    overrides (package names; examples in [default.config.yml](../default.config.yml)). Reinstall pipx tools from
    their original specs with the new Python, restore vendor desktop apps and browser PWAs, and restore needed

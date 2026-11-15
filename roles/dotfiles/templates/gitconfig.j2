@@ -121,13 +121,12 @@
 # The empty helper drops helpers set earlier for github.com (the Xcode CLT system gitconfig adds osxkeychain,
 # which can hang on a keychain prompt with nobody at the screen); gh then answers alone. macOS names gh by path:
 # launchd jobs and non-login shells do not have Homebrew on PATH.
+# gh's token only for github.com/<github.user>/ and the read allowlist (~/.config/git/gh-credential): an upstream push
+# gets no token even in a repository whose own core.hooksPath skips the pre-push hook.
 [credential "https://github.com"]
 	helper =
-{% if _system == 'Darwin' %}
-	helper = !{{ dotfiles_homebrew_prefix | trim }}/bin/gh auth git-credential
-{% else %}
-	helper = !gh auth git-credential
-{% endif %}
+	helper = !sh ~/.config/git/gh-credential {{ (dotfiles_homebrew_prefix | trim ~ '/bin/gh') if _system == 'Darwin' else 'gh' }}
+	useHttpPath = true
 
 {% if profile == 'work' %}{% for org in dotfiles_work_src_dirs %}
 [includeIf "gitdir:~/src/{{ org | regex_replace('[^a-zA-Z0-9_-]', '') }}/"]

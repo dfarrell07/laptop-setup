@@ -4,7 +4,10 @@ _repo_hook="$(git rev-parse --git-common-dir 2>/dev/null)/hooks/pre-push"
 _stdin=$(cat)
 # HTTPS pushes (gh's token, no YubiKey) go only to github.com/<github.user>/; anything else on GitHub must use SSH.
 # The gitconfig rewrites take care of that, but an explicit remote pushurl skips pushInsteadOf, so check the real URL.
+# git runs this after it has read the remote's refs, so it stops the push, not the connection. The credential helper
+# (~/.config/git/gh-credential) is the guard that also holds where this hook does not run.
 _url=$(printf '%s' "${2:-}" | tr '[:upper:]' '[:lower:]')
+case "$_url" in *::*) _url=${_url#*::};; esac  # <transport>::<address> (https::https://github.com/...)
 case "$_url" in http://*|https://*)
   _rest=${_url#*://}
   _host=${_rest%%/*}; _host=${_host##*@}; _host=${_host%%:*}; _host=${_host%.}; _host=${_host#www.}
@@ -15,7 +18,7 @@ case "$_url" in http://*|https://*)
   if [ "$_host" = github.com ]; then
     # Only a plain <owner>/<repo> path: no empty, dot or percent-encoded segment can walk to another owner.
     _path=${_rest#*/}; _path=${_path%/}; _owner=${_path%%/*}; _repo=${_path#*/}
-    _me=$(git config --get github.user | tr '[:upper:]' '[:lower:]')
+    _me=$(git config --global --get github.user | tr '[:upper:]' '[:lower:]')
     if [ -z "$_me" ] || [ "$_owner" != "$_me" ] || ! printf '%s' "$_repo" | grep -Eqx '[a-z0-9_.-]+' \
       || [ "$_repo" = . ] || [ "$_repo" = .. ]; then
       printf 'pre-push: refusing an HTTPS push to github.com/%s: only github.com/%s/<repo> takes token pushes; use git pushsk (SSH)\n' \

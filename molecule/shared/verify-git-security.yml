@@ -138,8 +138,9 @@
     - {key: protocol.file.allow, value: user}
     - key: 'credential.https://github.com.helper'
       value: >-
-        !{{ (('/usr/local' if ansible_facts['architecture'] == 'x86_64' else '/opt/homebrew') ~ '/bin/')
-            if ansible_facts['system'] == 'Darwin' else '' }}gh auth git-credential
+        !sh ~/.config/git/gh-credential {{ (('/usr/local' if ansible_facts['architecture'] == 'x86_64' else '/opt/homebrew')
+            ~ '/bin/') if ansible_facts['system'] == 'Darwin' else '' }}gh
+    - {key: 'credential.https://github.com.useHttpPath', value: 'true'}  # the helper guards by repository path
     - {key: 'url.ssh://git@github.com/.pushInsteadOf', value: 'https://github.com/'}  # upstream pushes need the YubiKey
   loop_control:
     label: "{{ item.key }}"
