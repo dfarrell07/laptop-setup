@@ -419,6 +419,7 @@
             that:
               - (dotfiles_user_name | default('CHANGE_ME') != 'CHANGE_ME') and (dotfiles_user_name | default('') | length > 0)
               - (dotfiles_github_user | default('CHANGE_ME') != 'CHANGE_ME') and (dotfiles_github_user | default('') | length > 0)
+              - dotfiles_github_user | default('') is match('^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$')  # url rules, credential guard
               - >-
                 (dotfiles_user_email_personal | default('CHANGE_ME') != 'CHANGE_ME') and
                 (dotfiles_user_email_personal | default('') | length > 0)

@@ -203,15 +203,52 @@ class RenderedConfigTests(unittest.TestCase):
                         f'https://github.com/{user}/../up/r', f'https://github.com/{user}/%2e%2e/up/r',
                         f'https://github.com/{user}/r/../../up/r', f'https://github.com/{user}//up/r',
                         f'https://github.com/{user}/..', f'https://github.com/{user}/r%2fx',
-                        'https://github%2ecom/up/r', f'https://github%2Ecom/{user}/r', 'https://%67ithub.com/up/r']:
+                        'https://github%2ecom/up/r', f'https://github%2Ecom/{user}/r', 'https://%67ithub.com/up/r',
+                        'https::https://github.com/up/r']:
                 self.assertEqual(push(url), 1, url)
             self.assertEqual(push(f'https://github.com/{user}/r.git', os.devnull), 1)  # no github.user: refuse
+
+    def test_credential_helper_gives_the_token_only_to_own_and_allowlisted_repos(self):
+        user = re.search(r'insteadOf = git@github.com:([^/]+)/', self.read('gitconfig')).group(1)
+        with tempfile.TemporaryDirectory() as name:
+            home = Path(name)
+            (home / '.config/git').mkdir(parents=True)
+            shutil.copy(ROOT / 'roles/dotfiles/files/git-gh-credential', home / '.config/git/gh-credential')
+            (home / '.config/git/github-https-read').write_text('priv/readme\n')
+            (home / 'bin').mkdir()
+            (home / 'bin/gh').write_text('#!/bin/sh\ncat >/dev/null\nprintf "username=x\\npassword=TOKEN\\n"\n')
+            (home / 'bin/gh').chmod(0o755)
+            env = dict(os.environ, GIT_CONFIG_GLOBAL=str(self.out / 'gitconfig'), GIT_CONFIG_NOSYSTEM='1',
+                       HOME=name, XDG_CONFIG_HOME=str(home / '.config'), GIT_TERMINAL_PROMPT='0',
+                       GIT_ASKPASS='', SSH_ASKPASS='', PATH=f"{home / 'bin'}:{os.environ['PATH']}")
+            env.pop('GIT_ASKPASS'); env.pop('SSH_ASKPASS')
+
+            def token(url):
+                result = subprocess.run(['git', 'credential', 'fill'], input=f'url={url}\n\n', cwd=name, env=env,
+                                        capture_output=True, text=True, check=False)
+                return 'password=TOKEN' in result.stdout
+            for url in [f'https://github.com/{user}/r.git', f'https://github.com/{user.upper()}/r',
+                        f'https://github.com/{user}/r/', 'https://github.com/priv/readme.git']:
+                self.assertTrue(token(url), url)
+            for url in ['https://github.com/up/r.git', f'https://github.com/{user}x/r', f'https://github.com/{user}/../up/r',
+                        f'https://github.com/{user}/%2e%2e/up/r', f'https://github.com/{user}/r/../../up/r',
+                        f'https://github.com/{user}//up/r', 'https://github.com/priv/other', f'https://github.com/{user}',
+                        'https://github%2ecom/up/r', 'https://github.com/up/r:x', f'https://github.com/{user}/..',
+                        'https://GitHub.com/up/r']:
+                self.assertFalse(token(url), url)
+            # A repo-local github.user cannot widen the owner.
+            subprocess.run(['git', 'init', '-q', name + '/repo'], check=True, env=env)
+            subprocess.run(['git', '-C', name + '/repo', 'config', 'github.user', 'up'], check=True, env=env)
+            self.assertFalse(subprocess.run(['git', 'credential', 'fill'], input='url=https://github.com/up/r\n\n',
+                                            cwd=name + '/repo', env=env, capture_output=True, text=True,
+                                            check=False).stdout.count('TOKEN'))
 
     def test_fork_remotes_use_https_so_agents_can_push(self):
         repos = yaml.safe_load((ROOT / 'group_vars/all/repos.yml').read_text())
         remotes = [remote['url'] for repo in repos['git_repos_public'] for remote in repo.get('extra_remotes', [])]
         self.assertTrue(remotes)
-        self.assertEqual([url for url in remotes if not url.startswith('https://github.com/')], [])
+        prefix = 'https://github.com/{{ dotfiles_github_user }}/'  # a fork is the owner's, over HTTPS
+        self.assertEqual([url for url in remotes if not url.startswith(prefix)], [])
 
     def test_wm_configs_have_no_trailing_comments_after_commands(self):
         for name in ('sway', 'i3'):

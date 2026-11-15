@@ -24,8 +24,9 @@
         - name: Warn that SSH clone failed
           ansible.builtin.debug:
             msg: >-
-              SSH clone of notes repo failed (no SSH key for github.com in ~/.ssh?). Trying HTTPS
-              fallback — pushes then use HTTPS (gh credentials); signed commits still need the SSH signing key.
+              Clone of the notes repo failed (once dotfiles are applied, the owner's GitHub URLs use HTTPS with gh's
+              credentials: run gh auth login; before that, SSH needs a key for github.com in ~/.ssh). Trying the
+              HTTPS URL; signed commits still need the SSH signing key.
 
         - name: Clone notes repo via HTTPS fallback
           block:

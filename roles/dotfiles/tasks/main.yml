@@ -283,6 +283,18 @@
     - git-template-prepare-commit-msg
     - git-template-pre-push
 
+- name: Deploy the GitHub credential helper (gh's token only for the owner's repos and the read allowlist)
+  ansible.builtin.copy:
+    src: git-gh-credential
+    dest: "{{ ansible_facts['user_dir'] }}/.config/git/gh-credential"
+    mode: "0755"
+
+- name: Deploy the GitHub HTTPS read allowlist
+  ansible.builtin.copy:
+    content: "{{ (dotfiles_github_https_read_repos | map('lower') | join('\n') ~ '\n') if dotfiles_github_https_read_repos else '' }}"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/git/github-https-read"
+    mode: "0644"
+
 - name: Deploy git pushsk (push over SSH with the YubiKey key)
   ansible.builtin.copy:
     src: git-pushsk

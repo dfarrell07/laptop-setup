@@ -281,9 +281,9 @@
   ansible.builtin.shell:
     cmd: >-
       set -euo pipefail;
-      old=$(git config --get remote.{{ item.1.name | quote }}.url) || old="";
+      old=$(git config --get-all remote.{{ item.1.name | quote }}.url) || old="";
       if [ "$old" = {{ item.1.url | quote }} ]; then true;
-      elif [ -n "$old" ]; then git remote set-url {{ item.1.name | quote }} {{ item.1.url | quote }} && echo updated;
+      elif [ -n "$old" ]; then git config --replace-all remote.{{ item.1.name | quote }}.url {{ item.1.url | quote }} && echo updated;
       else git remote add {{ item.1.name | quote }} {{ item.1.url | quote }} && echo added; fi;
       if git config --get-all remote.{{ item.1.name | quote }}.pushurl >/dev/null; then
       git config --unset-all remote.{{ item.1.name | quote }}.pushurl && echo updated; fi
