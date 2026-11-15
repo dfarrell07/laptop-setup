@@ -237,11 +237,12 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   system_disable_udf: true             (group_vars/all/vars.yml) — true to kernel-block the udf module (CIS);
 #                                        set false if UDF media (optical discs, UDF-formatted drives) is needed
 #   system_ssh_max_sessions: 10        (roles/system/defaults) — max concurrent SSH sessions per connection
-#                                        (VS Code Remote needs >=10)
+#                                        (VS Code Remote needs >=10); also the Mac's sshd (desktop role)
 #   system_ssh_allow_tcp_forwarding: "local" (roles/system/defaults) — 'local' for VS Code port panel/ssh -L,
 #                                            'remote' for ssh -R, 'yes' for both; also the Mac's sshd (desktop role)
 #   system_ssh_unused_connection_timeout: 3600 (roles/system/defaults) — seconds before idle connection with no open channels is
 #     closed; 3600 (1h) tolerates VS Code Remote SSH and Claude Code idle control masters; set "" to disable (omits directive)
+#     (also the Mac's sshd, desktop role)
 #   system_ssh_allow_agent_forwarding: "no" (roles/system/defaults) — set 'yes' to forward ssh-agent to remote hosts; also the Mac's sshd
 #   system_dot_mode: opportunistic     (roles/system/defaults) — DNSOverTLS mode; 'yes' for strict (fails on port-853-blocked networks);
 #                                        for full enforcement set BOTH system_dot_mode: yes AND system_dnssec_mode: yes together
