@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- {{ ansible_managed }} -->
+<!-- macOS's own sshd, as Remote Login runs it (com.openssh.sshd), on the Linux SSH port: launchd listens and starts
+     sshd per connection; /etc/ssh/sshd_config and its drop-ins apply as usual. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{{ desktop_macos_sshd_label }}</string>
+  <key>Program</key>
+  <string>/usr/libexec/sshd-keygen-wrapper</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>sshd-keygen-wrapper</string>
+  </array>
+  <key>inetdCompatibility</key>
+  <dict>
+    <key>Wait</key>
+    <false/>
+  </dict>
+  <key>Sockets</key>
+  <dict>
+    <key>Listeners</key>
+    <dict>
+      <key>SockServiceName</key>
+      <string>{{ desktop_macos_ssh_port | int }}</string>
+    </dict>
+  </dict>
+  <key>StandardErrorPath</key>
+  <string>/dev/null</string>
+</dict>
+</plist>
