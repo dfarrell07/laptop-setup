@@ -664,6 +664,130 @@ def production_task(path, name):
     return dict(next(t for t in walk(yaml.safe_load((ROOT / path).read_text())) if t.get('name') == name))
 
 
+# Root commands: every task that runs with become (on the task, a block or an include site) is checked unless a `when`
+# limits it to Linux. A term limits it when it is one of these; a `when` list is ANDed, as are the ` and ` parts of a
+# term without ` or `. _packages_linux_x86_work ANDs is_linux (checked in the test).
+LINUX_TERM = re.compile(
+    r"""(is_linux|is_dnf5?|is_apt|is_rhel|is_fedora|csb_rhel|_packages_linux_x86_work|not\s+is_macos
+    |ansible_facts\[['"]system['"]\](\s*\|\s*default\(['"]\w+['"]\))?\s*==\s*['"]Linux['"]
+    )(\s*\|\s*bool)?""", re.X)
+ROOT_COMMAND_MODULES = ('ansible.builtin.command', 'ansible.builtin.shell')
+# run a command in a form not read here, or by a short name that a collection could shadow
+ROOT_REJECTED_MODULES = {'raw', 'script', 'command', 'shell', 'expect', 'ansible.builtin.raw', 'ansible.builtin.script',
+                         'ansible.builtin.expect', 'ansible.legacy.raw', 'ansible.legacy.script', 'ansible.legacy.command',
+                         'ansible.legacy.shell', 'ansible.legacy.expect'}
+INCLUDE_MODULES = ('ansible.builtin.include_tasks', 'ansible.builtin.import_tasks', 'include_tasks', 'import_tasks')
+SHELL_BUILTINS = {'[', '[[', 'test', 'echo', 'printf', 'true', 'false', ':', 'exit', 'return', 'set', 'cd', 'export', 'local',
+                  'read', 'unset', 'shift', 'break', 'continue', 'wait', 'trap', 'umask'}  # no PATH lookup
+SHELL_PREFIX_WORDS = {'if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', '{', '(', 'time', 'exec'}
+SHELL_SKIP_WORDS = {'fi', 'done', '}', ')', 'esac', 'for', 'case'}
+
+
+def linux_only(when):
+    for term in when if isinstance(when, list) else [] if when is None else [when]:
+        term = str(term).strip()
+        parts = [term] if ' or ' in term else re.split(r'\s+and\s+', term)
+        if any(LINUX_TERM.fullmatch(part.strip()) for part in parts):
+            return True
+    return False
+
+
+def shell_command_words(cmd):
+    """The command word of each simple command in a shell string (Jinja expressions kept verbatim)."""
+    jinja = []
+
+    def hide(match):
+        jinja.append(match.group(0))
+        return f'\0{len(jinja) - 1}\0'
+    cmd = re.sub(r'{{.*?}}|{%.*?%}', hide, cmd, flags=re.S)
+    cmd = re.sub(r'\$\(\(.*?\)\)', 'ARITH', cmd, flags=re.S)  # arithmetic, not a command substitution
+    cmd = re.sub(r'\d*[<>]&\d*-?|&>>?', ' ', cmd)  # fd redirections, not a background &
+    words = []
+    for segment in re.split(r'&&|\|\||\$\(|[;|&\n`]', cmd):
+        tokens = segment.split()
+        while tokens and (tokens[0] in SHELL_PREFIX_WORDS or re.match(r'[A-Za-z_]\w*=', tokens[0])):
+            tokens.pop(0)  # keywords and VAR=value assignments before the command
+        if not tokens or tokens[0] in SHELL_SKIP_WORDS or tokens[0].startswith('#'):
+            continue
+        word = tokens[0].lstrip('("\'{').rstrip(')"\'')
+        if word and word not in SHELL_BUILTINS:
+            words.append(re.sub(r'\0(\d+)\0', lambda m: jinja[int(m.group(1))], word))
+    return words
+
+
+class RootCommandScan:
+    """Commands that run as root outside Linux-only `when`s, following blocks and includes."""
+
+    def __init__(self, load=None):
+        self.load = load or (lambda path: yaml.safe_load((ROOT / path).read_text()) or [])
+        self.seen = set()
+        self.commands = []  # (path, task name, command word)
+        self.rejected = []  # (path, task name, module)
+
+    @staticmethod
+    def resolve(path, include):
+        role = path.split('/')[1] if path.startswith('roles/') else None
+        include = str(include).replace('{{ role_path }}', f'roles/{role}').replace('{{ common_project_root }}/', '')
+        if '{{' in include:
+            raise AssertionError(f'{path}: cannot resolve include {include}')
+        if not include.startswith(('roles/', 'common/')):
+            include = str(Path(path).parent / include)  # relative to the including file
+        return os.path.normpath(include)
+
+    def scan(self, path, become=False, linux=False):
+        if (path, become, linux) not in self.seen:
+            self.seen.add((path, become, linux))
+            self.walk(path, self.load(path), become, linux)
+
+    def walk(self, path, tasks, become, linux):
+        for task in tasks or []:
+            task_become = task['become'] in (True, 'true', 'yes') if 'become' in task else become
+            task_linux = linux or linux_only(task.get('when'))
+            for key in ('block', 'rescue', 'always'):
+                self.walk(path, task.get(key), task_become, task_linux)
+            for module in INCLUDE_MODULES:
+                if module in task:
+                    args = task[module]
+                    apply = (args.get('apply') or {}) if isinstance(args, dict) else {}
+                    self.scan(self.resolve(path, args['file'] if isinstance(args, dict) else args),
+                              apply['become'] in (True, 'true', 'yes') if 'become' in apply else task_become, task_linux)
+            if task_become and not task_linux:
+                self.check(path, task)
+
+    def check(self, path, task):
+        name = task.get('name')
+        self.rejected += [(path, name, module) for module in sorted(ROOT_REJECTED_MODULES & set(task))]
+        words = []
+        for module in ROOT_COMMAND_MODULES:
+            if module in task:
+                args = task[module]
+                if isinstance(args, dict) and 'argv' in args:
+                    words.append(str(args['argv'][0]))
+                    continue
+                cmd = args.get('cmd') if isinstance(args, dict) else args
+                if cmd is None:
+                    cmd = (task.get('args') or {}).get('cmd', '')
+                words += shell_command_words(str(cmd))
+        for args in task.values():
+            if isinstance(args, dict) and isinstance(args.get('validate'), str):
+                words += shell_command_words(args['validate'])
+        self.commands += [(path, name, word) for word in words]
+
+
+def scan_root_commands():
+    """Scan every role's tasks and handlers and common/tasks; roles that site.yml runs only on Linux are out of scope."""
+    linux_roles = {role['role'] for play in yaml.safe_load((ROOT / 'site.yml').read_text())
+                   for role in play.get('roles', []) if isinstance(role, dict) and linux_only(role.get('when'))}
+    scan = RootCommandScan()
+    entries = (sorted(ROOT.glob('roles/*/tasks/main.yml')) + sorted(ROOT.glob('roles/*/handlers/*.yml'))
+               + sorted(ROOT.glob('common/tasks/*.yml')) + sorted(ROOT.glob('roles/*/tasks/*.yml')))
+    for file in entries:  # entry points first: an included file is walked with its include sites' become and when
+        path = str(file.relative_to(ROOT))
+        if not any(seen == path for seen, _, _ in scan.seen):
+            scan.scan(path, False, path.startswith('roles/') and path.split('/')[1] in linux_roles)
+    return scan, linux_roles
+
+
 class MacTaskTests(unittest.TestCase):
     def test_stale_mosh_server_entries_are_removed(self):
         """Older Cellar paths of mosh-server go; the current one and other programs stay."""
@@ -745,49 +869,72 @@ class MacTaskTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'supports none of the configured MACs'):
             run(dict(supported, MACs=['hmac-sha1']))
 
-    def test_macos_root_commands_are_system_paths(self):
-        """sudo keeps /opt/homebrew/bin first on PATH: a bare name under become would run a user-writable binary
+    def test_root_commands_are_system_paths(self):
+        """sudo keeps /opt/homebrew/bin first on PATH on a Mac: a bare name under become would run a user-writable binary
         (Homebrew's ssh-keygen also writes host keys to its own etc/, which Apple's sshd never reads)."""
         # tailscaled installs itself as the system daemon: running the Homebrew binary as root is the point
         allowed = {'{{ dotfiles_homebrew_prefix }}/bin/tailscaled'}
+        scan, linux_roles = scan_root_commands()
+        self.assertEqual(linux_roles, {'system', 'repos_dnf', 'distrobox'})  # site.yml runs these only on Linux
+        # LINUX_TERM trusts this name: it must keep ANDing is_linux
+        definition = production_task('roles/packages/tasks/main.yml', 'Set Linux x86 work binary install fact')
+        self.assertIn('and is_linux', definition['ansible.builtin.set_fact']['_packages_linux_x86_work'])
+        self.assertEqual(scan.rejected, [])
+        for path, name, command in scan.commands:
+            self.assertTrue(command.startswith('/') or command in allowed, f'{path}: {name}: {command}')
+        checked = {command for _, _, command in scan.commands}
+        for command in ('/usr/bin/ssh-keygen', '/usr/sbin/sshd', '/bin/launchctl', '/usr/bin/pmset', '/bin/cp',
+                        '/usr/libexec/ApplicationFirewall/socketfilterfw', '/usr/bin/true'):
+            self.assertIn(command, checked)  # the walk reaches the remote-access, power, AeroSpace and probe tasks
 
-        def walk(tasks, become, macos):
-            for task in tasks or []:
-                task_become = task.get('become', become)
-                when = str(task.get('when', ''))
-                task_macos = macos or 'is_macos' in when or 'Darwin' in when
-                for key in ('block', 'rescue', 'always'):
-                    yield from walk(task.get(key), task_become, task_macos)
-                if task_become and task_macos:
-                    yield task
-        files = ['roles/desktop/tasks/main.yml', 'roles/packages/tasks/main.yml', 'roles/packages/tasks/install_brew.yml',
-                 'roles/containers/tasks/main.yml', 'roles/containers/tasks/macos.yml', 'roles/containers/tasks/macos-docker.yml']
-        checked = []
-        for path in files:
-            macos_only = 'macos' in path or path.endswith('install_brew.yml')  # included only on macOS
-            for task in walk(yaml.safe_load((ROOT / path).read_text()), False, macos_only):
-                commands = []
-                for module in ('ansible.builtin.command', 'ansible.builtin.shell'):
-                    args = task.get(module)
-                    if isinstance(args, dict) and 'argv' in args:
-                        commands.append(args['argv'][0])
-                    elif args is not None:
-                        cmd = re.sub(r'{{.*?}}', 'ARG', args.get('cmd') if isinstance(args, dict) else args)
-                        for part in re.split(r'&&|\|\||[;|]', cmd):
-                            words = [w for w in part.split() if w not in ('until', 'while', 'if', 'then', 'do', 'done',
-                                                                          'fi', '!')]
-                            # shell builtins and assignments are not looked up on PATH
-                            if words and not re.match(r'\w+=', words[0]) and words[0] not in ('[', 'exit', 'true', 'false'):
-                                commands.append(words[0])
-                for args in task.values():
-                    if isinstance(args, dict) and isinstance(args.get('validate'), str):
-                        commands.append(args['validate'].split()[0])
-                for command in commands:
-                    checked.append(command)
-                    self.assertTrue(command.startswith('/') or command in allowed, f'{path}: {task.get("name")}: {command}')
-        for command in ('/usr/bin/ssh-keygen', '/usr/sbin/sshd', '/bin/launchctl', '/usr/bin/pmset', '/bin/cp'):
-            self.assertIn(command, checked)  # the walk reaches the remote-access, power and AeroSpace tasks
+    def test_root_command_scan_catches_bare_names(self):
+        """Mutation checks: a bare name in each form the scan reads is reported; Linux-only and non-root ones are not."""
+        def found(tasks, files=None):
+            scan = RootCommandScan(load=lambda path: (files or {})[path])
+            scan.walk('roles/x/tasks/main.yml', tasks, False, False)
+            return [command for _, _, command in scan.commands if not command.startswith('/')], scan.rejected
 
+        root = {'become': True}
+        shell = lambda cmd: [dict(root, **{'ansible.builtin.shell': {'cmd': cmd}})]
+        for cmd in ('launchctl list', '/bin/true\nlaunchctl list', '/bin/true; launchctl list', '/bin/true && launchctl list',
+                    '/bin/true || launchctl list', '/bin/true | launchctl list', '/bin/true & launchctl list',
+                    '/bin/echo "$(launchctl list)"', '/bin/echo `launchctl list`', 'FOO=1 BAR="a b" launchctl list',
+                    'if launchctl list; then /bin/true; fi', 'until launchctl list; do /bin/sleep 1; done',
+                    '/bin/true 2>&1 | launchctl list', '{{ some_bin }} list', '/bin/echo {{ x | quote }}; launchctl list',
+                    '"$cmd" list', 'exec launchctl list', '! launchctl list'):
+            with self.subTest(cmd=cmd):
+                self.assertEqual(len(found(shell(cmd))[0]), 1, cmd)
+        self.assertEqual(found([dict(root, **{'ansible.builtin.shell': 'launchctl list'})])[0], ['launchctl'])
+        self.assertEqual(found([dict(root, **{'ansible.builtin.command': 'launchctl list'})])[0], ['launchctl'])
+        self.assertEqual(found([dict(root, **{'ansible.builtin.command': {'argv': ['launchctl', 'list']}})])[0], ['launchctl'])
+        self.assertEqual(found([dict(root, **{'ansible.builtin.command': None, 'args': {'cmd': 'launchctl list'}})])[0],
+                         ['launchctl'])
+        self.assertEqual(found([dict(root, **{'ansible.builtin.template': {'src': 'a', 'dest': 'b',
+                                                                            'validate': 'sshd -t -f %s'}})])[0], ['sshd'])
+        for module in ('raw', 'script', 'command', 'shell', 'ansible.builtin.raw', 'ansible.builtin.script'):
+            with self.subTest(module=module):
+                self.assertEqual([m for _, _, m in found([dict(root, **{module: '/bin/ls'})])[1]], [module])
+        # become from a block, an include site or include_tasks apply
+        bare = {'ansible.builtin.command': {'argv': ['launchctl']}}
+        self.assertEqual(found([dict(root, block=[bare])])[0], ['launchctl'])
+        self.assertEqual(found([{'become': True, 'block': [{'block': [bare]}], 'rescue': [bare]}])[0], ['launchctl'] * 2)
+        files = {'roles/x/tasks/sub.yml': [bare]}
+        self.assertEqual(found([dict(root, **{'ansible.builtin.import_tasks': 'sub.yml'})], files)[0], ['launchctl'])
+        self.assertEqual(found([{'ansible.builtin.include_tasks': {'file': 'sub.yml', 'apply': {'become': True}}}],
+                               files)[0], ['launchctl'])
+        # not reported: no become, become: false inside a become block, Linux-only (task, block or include site)
+        self.assertEqual(found([bare])[0], [])
+        self.assertEqual(found([dict(root, block=[dict(bare, become=False)])])[0], [])
+        for when in ('is_linux', ['is_macos | default(false) or true', 'is_dnf | bool'], "ansible_facts['system'] == 'Linux'",
+                     "ansible_facts['system'] | default('Linux') == 'Linux' and x", 'is_apt', 'not is_macos'):
+            with self.subTest(when=when):
+                self.assertEqual(found([dict(root, when=when, **bare)])[0], [])
+                self.assertEqual(found([dict(root, when=when, block=[bare])])[0], [])
+                self.assertEqual(found([dict(root, when=when, **{'ansible.builtin.import_tasks': 'sub.yml'})], files)[0], [])
+        # a Linux term ORed with anything else does not limit the task
+        for when in ('is_linux or is_macos', 'is_macos', "ansible_facts['system'] == 'Darwin'", 'not is_linux'):
+            with self.subTest(when=when):
+                self.assertEqual(found([dict(root, when=when, **bare)])[0], ['launchctl'])
 
 if __name__ == '__main__':
     unittest.main()
