@@ -777,14 +777,15 @@ def non_temp_dir():
     return str(path)
 
 
-def run_tasks(tasks, variables):
-    """Run production tasks on localhost with fixture variables; return the json callback's task results."""
+def run_tasks(tasks, variables, check=False):
+    """Run production tasks on localhost with fixture variables (in check mode with check=True); return the json
+    callback's task results."""
     import json
     with tempfile.TemporaryDirectory() as directory:
         playbook = Path(directory) / 'play.yml'
         playbook.write_text(yaml.safe_dump([{'hosts': 'localhost', 'gather_facts': False, 'vars': variables,
                                              'tasks': tasks}]))
-        result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(playbook)], cwd=ROOT,
+        result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(playbook)] + (['--check'] if check else []), cwd=ROOT,
                                 env=dict(os.environ, ANSIBLE_STDOUT_CALLBACK='json',
                                          ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
                                 capture_output=True, text=True, timeout=120)
@@ -982,6 +983,23 @@ def scan_root_commands(site=None):
         if not any(seen == path for seen, _, _ in scan.seen):
             scan.scan(path, become, linux)
     return scan, linux_roles
+
+
+class ClaudeTaskTests(unittest.TestCase):
+    def test_personal_profile_gets_the_project_mode_exclusion_dir(self):
+        """A personal profile without the queue still writes the exclusion list: its directory must be created first."""
+        names = ('Ensure ~/.config/claude directory exists', 'Deploy project permission mode exclusions')
+        tasks = [production_task('roles/claude/tasks/main.yml', name) for name in names]
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Path(directory) / 'home/.config/claude'
+            variables = {'profile': 'personal', 'claude_queue_enabled': False, 'claude_project_mode_override': True,
+                         'claude_project_mode_exclude': ['/x'], 'claude_runtime_config_dir': str(runtime)}
+            results = run_tasks(tasks, variables, check=True)  # a fresh machine's plan: the directory is only simulated
+            self.assertFalse(runtime.exists())
+            self.assertTrue(results[1].get('failed') is not True or results[1].get('ignored'), results[1])
+            run_tasks(tasks, variables)
+            self.assertEqual((runtime / 'project-mode-exclude').read_text().splitlines()[1:], ['/x'])
+            self.assertEqual(runtime.stat().st_mode & 0o777, 0o700)
 
 
 class MacTaskTests(unittest.TestCase):
