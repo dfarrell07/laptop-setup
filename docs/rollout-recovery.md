@@ -115,7 +115,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   SECURITY WARNING) and git template hooks (task output only) happen only in the real run.
 - **macOS:** the chunk disables and stops Apple's ssh-agent, so apps and tmux servers started before it keep a dead
   `SSH_AUTH_SOCK` (and lose keys loaded in Apple's agent) until you log out and back in; new shells use the Homebrew agent.
-  It writes `~/.zshenv` (the PATH for every zsh, including ssh remote commands) and
+  It writes `~/.zshenv` (the PATH for every zsh, including ssh remote commands, plus `KIND_EXPERIMENTAL_PROVIDER=podman`
+  and `DOCKER_HOST` at the podman machine's API socket while it exists) and
   `~/Library/LaunchAgents/<ssh-agent label>.env.plist`, which points launchd's `SSH_AUTH_SOCK` (GUI apps, launchd jobs)
   at the Homebrew agent at each login. Undo: delete both, then `launchctl unsetenv SSH_AUTH_SOCK`.
 - **Undo:** run `make backup` BEFORE the chunk (an older backup predates earlier deploys), then restore the file from that
