@@ -620,7 +620,7 @@ vault-signing-key: guard-not-root
 	@$(if $(filter command line,$(origin KEY)),,KEY="$$HOME/.ssh/id_ed25519_sk_signing" )\
 	sh -c 'if scripts/vault-shared.sh active; then exec scripts/vault-shared.sh signing-key "$$KEY"; fi; \
 	py=$$(command -v python3); "$$py" -I -c "import ansible" 2>/dev/null || py=.venv/bin/python3; \
-	exec "$$py" -I scripts/vault-set-signing-key.py "$$KEY" group_vars/all/vault.yml'
+	"$$py" -I scripts/vault-set-signing-key.py "$$KEY" group_vars/all/vault.yml; rc=$$?; [ $$rc -eq 3 ] && rc=0; exit $$rc'
 
 vault-status:
 	@scripts/vault-shared.sh status

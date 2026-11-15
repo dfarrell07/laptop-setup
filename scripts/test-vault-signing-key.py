@@ -39,7 +39,8 @@ class VaultSigningKey(unittest.TestCase):
         Path(f'{self.key}.pub').write_text(PUBLIC)
 
     def run_script(self, key=None):
-        return subprocess.run([sys.executable, str(self.dir / 'scripts/vault-set-signing-key.py'), str(key or self.key),
+        return subprocess.run([sys.executable, str(self.dir / 'scripts/vault-set-signing-key.py'),
+                               str(self.key if key is None else key),
                                str(self.vault)], cwd=self.dir, env=self.env, capture_output=True, text=True, timeout=60)
 
     def decrypted(self):
@@ -59,8 +60,10 @@ class VaultSigningKey(unittest.TestCase):
         self.assertEqual(values['vault_codex_api_key'], '')
         self.assertTrue(self.vault.read_text().startswith('$ANSIBLE_VAULT'))
         self.assertEqual(self.vault.stat().st_mode & 0o777, 0o600)
+        Path(f'{self.key}.pub').write_text(PUBLIC.replace('signing', 'renamed'))
         self.assertEqual(self.run_script().returncode, 0)  # a second run replaces the block it wrote
         self.assertEqual(self.decrypted()['vault_ssh_signing_key'], PRIVATE)
+        self.assertEqual(self.decrypted()['vault_ssh_signing_key_pub'], PUBLIC.replace('signing', 'renamed').strip())
 
     def test_refuses_files_that_are_not_keys(self):
         before = self.vault.read_bytes()
@@ -72,6 +75,33 @@ class VaultSigningKey(unittest.TestCase):
         self.assertIn('is not a regular file', self.run_script(self.dir / 'missing').stderr)
         self.assertEqual(self.vault.read_bytes(), before)
 
+
+    def test_a_layout_it_cannot_edit_safely_is_left_untouched(self):
+        """The reviewer's repros: a list value, an anchor used elsewhere, a document end marker, a quoted key."""
+        for text in ["vault_ssh_signing_key:\n- a\nvault_list:\n- keep1\n",
+                     "vault_ssh_signing_key: &anc |\n  old\nvault_a: *anc\n",
+                     "vault_a: x\n...\n",
+                     '"vault_ssh_signing_key": old\nvault_a: x\n']:
+            self.vault.write_text(text)
+            subprocess.run([str(VAULT_BIN), 'encrypt', str(self.vault)], env=self.env, check=True, capture_output=True)
+            before = self.vault.read_bytes()
+            result = self.run_script()
+            self.assertNotEqual(result.returncode, 0, text)
+            self.assertIn('cannot edit safely', result.stderr, text)
+            self.assertEqual(self.vault.read_bytes(), before, text)
+
+    def test_the_same_key_again_changes_nothing(self):
+        self.assertEqual(self.run_script().returncode, 0)
+        before = self.vault.read_bytes()
+        again = self.run_script()
+        self.assertEqual(again.returncode, 3)
+        self.assertIn('nothing changed', again.stderr)
+        self.assertEqual(self.vault.read_bytes(), before)
+
+    def test_an_empty_key_is_a_clear_error(self):
+        result = self.run_script(key=' ')
+        self.assertIn('KEY is empty', result.stderr)
+        self.assertNotIn('Traceback', result.stderr)
 
 if __name__ == '__main__':
     unittest.main()

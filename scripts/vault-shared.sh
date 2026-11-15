@@ -561,7 +561,10 @@ cmd_signing_key() {
   before=$(sha256sum "$S/vault.yml")
   py=$(command -v python3)
   "$py" -I -c 'import ansible' 2>/dev/null || py=.venv/bin/python3
-  "$py" -I scripts/vault-set-signing-key.py "$1" "$S/vault.yml"
+  local rc=0
+  "$py" -I scripts/vault-set-signing-key.py "$1" "$S/vault.yml" || rc=$?
+  [[ $rc != 3 ]] || return 0  # already the vault's signing key
+  [[ $rc == 0 ]] || exit "$rc"
   [[ $(sha256sum "$S/vault.yml") != "$before" ]] || { ok "no change"; return 0; }
   publish_change "Vault: signing key"
 }
