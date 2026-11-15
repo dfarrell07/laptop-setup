@@ -450,6 +450,29 @@ class RenderedConfigTests(unittest.TestCase):
         result = subprocess.run([str(sshd), '-t', '-f', str(bad), '-o', f'HostKey={hostkey}'],
                                 capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0, 'sshd -t must reject an unknown algorithm')
+        # the play's sshd -T check on this sshd's output: our drop-in first passes; a drop-in sorting before it, or a
+        # sshd_config without the Include, does not
+        dropins = self.out / 'sshd_config.d'
+        dropins.mkdir(exist_ok=True)
+        shutil.copy(self.out / 'sshd_macos_host', dropins / '000-laptop-setup.conf')
+        effective = self.out / 'sshd_effective'
+        for name, earlier, include, ok in [('ours first', None, True, True),
+                                           ('earlier drop-in', 'PasswordAuthentication yes\n', True, False),
+                                           ('no Include', None, False, False)]:
+            with self.subTest(name):
+                (dropins / '000-aaa.conf').unlink(missing_ok=True)
+                if earlier:
+                    (dropins / '000-aaa.conf').write_text(earlier)
+                effective.write_text(f'HostKey {hostkey}\n' + (f'Include {dropins}/*\n' if include else '')
+                                     + 'PasswordAuthentication yes\nKbdInteractiveAuthentication yes\n')
+                result = subprocess.run([str(sshd), '-T', '-f', str(effective), '-C', 'user=nobody,addr=100.64.0.1,host=x'],
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                if ok:
+                    sshd_effective_check(result.stdout)
+                else:
+                    with self.assertRaisesRegex(AssertionError, 'shows passwordauthentication yes'):
+                        sshd_effective_check(result.stdout)
 
     def test_macos_sshd_dropin_uses_the_algorithms_the_play_kept(self):
         directives = dict(line.split(' ', 1) for line in self.read('sshd_macos_older').splitlines()
@@ -696,6 +719,13 @@ def production_task(path, name):
     return dict(next(t for t in walk(yaml.safe_load((ROOT / path).read_text())) if t.get('name') == name))
 
 
+
+def sshd_effective_check(stdout):
+    """Run the play's check of sshd -T output (raises AssertionError with its message when it fails)."""
+    task = production_task('roles/desktop/tasks/main.yml', 'Check the effective sshd settings are key-only (macOS)')
+    run_tasks([task], {'_desktop_sshd_effective': {'stdout_lines': stdout.splitlines()},
+                       'desktop_macos_sshd_dropin': '/etc/ssh/sshd_config.d/000-laptop-setup.conf'})
+
 # Root commands: every task that runs with become (on the task, a block or an include site) is checked unless a `when`
 # limits it to Linux. A term limits it when it is one of these; a `when` list is ANDed, as are the ` and ` parts of a
 # term without ` or `. _packages_linux_x86_work ANDs is_linux (checked in the test).
@@ -900,6 +930,31 @@ class MacTaskTests(unittest.TestCase):
         self.assertEqual(kept['PubkeyAcceptedAlgorithms'], ['ssh-ed25519', 'sk-ssh-ed25519@openssh.com'])
         with self.assertRaisesRegex(AssertionError, 'supports none of the configured MACs'):
             run(dict(supported, MACs=['hmac-sha1']))
+
+    def test_macos_sshd_effective_settings_must_be_key_only(self):
+        """sshd -T sample output (lowercase keys, one per line): every one of the three settings must be there."""
+        good = ('port 22\npasswordauthentication no\nkbdinteractiveauthentication no\npubkeyauthentication yes\n'
+                'authenticationmethods publickey\nallowusers u@100.64.0.0/10\n')
+        sshd_effective_check(good)
+        for wrong in ('passwordauthentication yes', 'kbdinteractiveauthentication yes', 'authenticationmethods any',
+                      'authenticationmethods publickey,password'):
+            key = wrong.split()[0]
+            with self.subTest(wrong):
+                text = '\n'.join(wrong if line.startswith(key + ' ') else line for line in good.splitlines())
+                with self.assertRaisesRegex(AssertionError, f'shows .*{wrong}'):
+                    sshd_effective_check(text)
+        with self.assertRaisesRegex(AssertionError, 'must Include'):
+            sshd_effective_check('passwordauthentication no\nkbdinteractiveauthentication no\n')
+        # it runs before the job is deployed and (re)loaded, after the drop-in and sshd -t
+        tasks = yaml.safe_load((ROOT / 'roles/desktop/tasks/main.yml').read_text())
+        block = next(t for t in tasks if t.get('name') == 'Apply the sshd login policy and start sshd (macOS)')
+        names = [t['name'] for t in block['block']]
+        read = names.index('Read the effective sshd settings for a tailnet login (macOS)')
+        self.assertLess(names.index('Validate the sshd configuration (macOS)'), read)
+        self.assertEqual(names[read + 1], 'Check the effective sshd settings are key-only (macOS)')
+        self.assertLess(read + 1, names.index('Deploy the sshd launchd job on the SSH port (macOS)'))
+        self.assertEqual(block['block'][read]['ansible.builtin.command']['argv'][:3], ['/usr/sbin/sshd', '-T', '-C'])
+        self.assertIn('addr=100.64.0.1', block['block'][read]['ansible.builtin.command']['argv'][3])
 
     def test_root_commands_are_system_paths(self):
         """sudo keeps /opt/homebrew/bin first on PATH on a Mac: a bare name under become would run a user-writable binary

@@ -634,6 +634,29 @@
         argv: [/usr/sbin/sshd, -t]
       changed_when: false
 
+    # What sshd applies to a tailnet login: a sshd_config without the drop-in Include, or a drop-in sorting before ours
+    # (sshd keeps the first value), would leave passwords on. Checked before the job loads or reloads.
+    - name: Read the effective sshd settings for a tailnet login (macOS)
+      ansible.builtin.command:
+        argv: [/usr/sbin/sshd, -T, -C, "user={{ ansible_facts['user_id'] }},addr=100.64.0.1,host=x"]
+      register: _desktop_sshd_effective
+      changed_when: false
+
+    - name: Check the effective sshd settings are key-only (macOS)
+      ansible.builtin.assert:
+        that: _missing | length == 0
+        fail_msg: >-
+          sshd -T for a tailnet login shows
+          {{ _desktop_sshd_effective.stdout_lines | select('match', '(' ~ _wanted | map('split', ' ') | map('first')
+             | join('|') ~ ') ') | join(', ') }}, not {{ _wanted | join(', ') }}. /etc/ssh/sshd_config must Include
+          sshd_config.d/*, and no file there sorting before {{ desktop_macos_sshd_dropin | basename }} may set these.
+          The job was not (re)loaded.
+        quiet: true
+      vars:
+        _wanted: [passwordauthentication no, kbdinteractiveauthentication no, authenticationmethods publickey]
+        _missing: "{{ _wanted | reject('in', _desktop_sshd_effective.stdout_lines | map('trim') | list) | list }}"
+      when: _desktop_sshd_effective is not skipped  # check mode: the drop-in was not written
+
     - name: Deploy the sshd launchd job on the SSH port (macOS)
       ansible.builtin.template:
         src: sshd-launchd.plist.j2
