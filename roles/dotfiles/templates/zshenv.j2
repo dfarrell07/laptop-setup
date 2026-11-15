@@ -1,0 +1,4 @@
+# {{ ansible_managed }}
+# macOS: ssh and mosh run remote commands through `zsh -c` with PATH=/usr/bin:/bin:/usr/sbin:/sbin and read only this
+# file, not .zshrc: Homebrew goes first so mosh-server and `mac-claude`'s tmux resolve.
+[[ ":$PATH:" == *":{{ dotfiles_homebrew_prefix | trim }}/bin:"* ]] || export PATH="{{ dotfiles_homebrew_prefix | trim }}/bin:$PATH"
