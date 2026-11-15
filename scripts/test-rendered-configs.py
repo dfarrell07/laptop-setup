@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check content of rendered configs and shipped units/hooks (real Ansible engine, no host changes)."""
 import getpass
+import json
 import os
 from pathlib import Path
 import re
@@ -442,6 +443,32 @@ class RenderedConfigTests(unittest.TestCase):
             self.assertIn('"full_text":"CTR 2"', update)
             # pts/0 and pts/3: a second agent process on a terminal is the same session
             self.assertIn('"full_text":"AI 2"', update)
+
+    def test_bar_shows_the_microphone_state_after_volume(self):
+        for wpctl, expect in [('Volume: 0.40 [MUTED]', '"name":"mic","full_text":"MIC muted"'),
+                              ('Volume: 0.40', '"name":"mic","full_text":"MIC on","color":"#FFFF00"'),
+                              (None, None)]:
+            with tempfile.TemporaryDirectory() as name:
+                stubs = Path(name)
+
+                def stub(command, body):
+                    (stubs / command).write_text('#!/bin/sh\n' + body + '\n')
+                    (stubs / command).chmod(0o755)
+                stub('i3status', 'printf \'{"version":1}\\n[\\n[{"name":"volume","full_text":"VOL 40%%"},'
+                                 '{"name":"wireless","full_text":"WIFI"}]\\n\'')
+                stub('wpctl', f'echo "{wpctl}"' if wpctl else 'exit 1')  # exit 1: no input device
+                for quiet in ['nmcli', 'tailscale', 'rpm', 'podman', 'ps']:
+                    stub(quiet, 'exit 1')
+                script = stubs / 'bar-status'
+                script.write_text(self.read('bar_status'))
+                result = subprocess.run(['bash', str(script)], capture_output=True, text=True, timeout=30,
+                                        env=dict(os.environ, PATH=f'{stubs}:/usr/bin:/bin', HOME=name))
+                update = result.stdout.splitlines()[-1]
+                if expect:
+                    self.assertIn('"full_text":"VOL 40%"},{' + expect, update)
+                else:
+                    self.assertNotIn('"name":"mic"', update)
+                json.loads(update)  # still a valid i3bar array
 
     def test_macos_sshd_policy_is_key_only_and_tailnet_only(self):
         text = self.read('sshd_macos')

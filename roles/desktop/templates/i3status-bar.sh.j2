@@ -3,7 +3,8 @@
 # Bar status_command: runs i3status and rewrites each update. Drops the GiB unit from RAM, shortens disk units
 # (893.1G), adds watts to the battery while discharging, and adds fields i3status cannot produce: REBOOT (a core
 # package is newer than the boot), UPD (an automatic update job failed), CSB FAIL (IT's last compliance run failed),
-# STALL (memory pressure), CTR (running rootless Podman containers), AI (interactive agent sessions) and, with
+# STALL (memory pressure), MIC (the default microphone: muted, or on in yellow), CTR (running rootless Podman
+# containers), AI (interactive agent sessions) and, with
 # desktop_i3status_vpn, VPN (active VPN names).
 set -u
 show_vpn={{ desktop_i3status_vpn | bool | ternary('1', '0') }}
@@ -11,6 +12,7 @@ battery=/sys/class/power_supply/BAT{{ desktop_i3status_battery_num | string | re
 {% raw %}
 red='#FF0000'
 green='#00FF00'
+yellow='#FFFF00'
 # Packages whose update only takes effect after a reboot (the set dnf needs-restarting -r checks, trimmed)
 reboot_pkgs=(kernel-core glibc systemd dbus-broker linux-firmware microcode_ctl)
 boot_time=$(awk '/^btime/ {print $2}' /proc/stat)
@@ -69,6 +71,7 @@ reboot_needed() {
 mem_re='\{"name":"memory"[^}]*\}'
 disk_re='\{"name":"disk_info"[^}]*\}'
 bat_re='\{"name":"battery"[^}]*"full_text":"([^"]*)"[^}]*\}'
+vol_re='\{"name":"volume"[^}]*\}'
 
 tick=0
 containers=
@@ -130,6 +133,17 @@ i3status --config "$HOME/.config/i3status/config" | {
       watts=$(($(cat "$battery/power_now" 2>/dev/null || echo 0) / 1000000))
       new=${blk/"\"$text\""/"\"${text% } ${watts}W\""}
       line=${line/"$blk"/"$new"}
+    fi
+
+    # MIC right after VOL: the default microphone's mute state (i3status's volume module follows outputs only).
+    # No field when there is no input device; XF86AudioMicMute toggles it.
+    if [[ $line =~ $vol_re ]] && command -v wpctl >/dev/null; then
+      mic=$(timeout 2 wpctl get-volume @DEFAULT_AUDIO_SOURCE@ 2>/dev/null) || mic=
+      if [[ $mic == Volume:* ]]; then
+        blk=${BASH_REMATCH[0]}
+        if [[ $mic == *MUTED* ]]; then micf=$(field mic 'MIC muted'); else micf=$(field mic 'MIC on' "$yellow"); fi
+        line=${line/"$blk"/"$blk,$micf"}
+      fi
     fi
 
     # CTR, AI and VPN go before the Wi-Fi field (or at the end)
