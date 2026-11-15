@@ -142,6 +142,8 @@ class RenderedConfigTests(unittest.TestCase):
             env = dict(os.environ, GIT_CONFIG_GLOBAL=str(self.out / 'gitconfig'), GIT_CONFIG_NOSYSTEM='1', HOME=name,
                        GIT_SSH_COMMAND=f'sh {fake_ssh}', GIT_TERMINAL_PROMPT='0')
             repo = Path(name) / 'r'
+            (Path(name) / '.config/git').mkdir(parents=True)
+            shutil.copy(ROOT / 'roles/dotfiles/files/git-pushsk', Path(name) / '.config/git/pushsk')
 
             def git(*args, check=True):
                 return subprocess.run(['git', '-C', str(repo), *args], env=env, capture_output=True, text=True,
@@ -159,6 +161,42 @@ class RenderedConfigTests(unittest.TestCase):
                 git('pushsk', remote, check=False)
                 self.assertIn(f'{"up" if remote == "d" else user}/r.git', log.read_text().splitlines()[-1])
                 self.assertIn('-p 22', log.read_text().splitlines()[-1])  # the explicit-port SSH URL
+            # pushsk follows the push URL (fetch from upstream, push to the fork) and refuses -u.
+            git('remote', 'add', 'e', 'https://github.com/up/r.git')
+            git('remote', 'set-url', '--push', 'e', f'git@github.com:{user}/fork.git')
+            git('pushsk', 'e', 'HEAD', check=False)
+            self.assertIn(f'{user}/fork.git', log.read_text().splitlines()[-1])
+            refused = subprocess.run(['git', '-C', str(repo), 'pushsk', 'e', '-u', 'HEAD'], env=env, capture_output=True,
+                                     text=True, check=False)
+            self.assertEqual(refused.returncode, 2, refused.stderr)
+
+    def test_global_pre_push_refuses_https_pushes_outside_own_github_user(self):
+        user = re.search(r'insteadOf = git@github.com:([^/]+)/', self.read('gitconfig')).group(1)
+        hook = ROOT / 'roles/dotfiles/files/git-template-pre-push'
+        with tempfile.TemporaryDirectory() as name:
+            env = dict(os.environ, GIT_CONFIG_GLOBAL=str(self.out / 'gitconfig'), GIT_CONFIG_NOSYSTEM='1', HOME=name)
+            subprocess.run(['git', 'init', '-q', name], check=True, env=env)
+            self.assertEqual(subprocess.run(['git', '-C', name, 'config', 'github.user'], env=env, capture_output=True,
+                                            text=True, check=True).stdout.strip(), user)
+
+            def push(url, global_config=str(self.out / 'gitconfig')):
+                return subprocess.run(['sh', str(hook), 'origin', url], cwd=name, input='',
+                                      env=dict(env, GIT_CONFIG_GLOBAL=global_config), capture_output=True,
+                                      text=True, check=False).returncode
+            for url in [f'https://github.com/{user}/r.git', f'https://github.com/{user.upper()}/r',
+                        f'https://x-access-token:t@github.com/{user}/r.git', f'https://github.com/{user}/r.git/',
+                        f'ssh://git@github.com/up/r.git',
+                        'git@github.com:up/r.git', 'https://gitlab.com/up/r.git', '/srv/r.git']:
+                self.assertEqual(push(url), 0, url)
+            for url in ['https://github.com/up/r.git', 'HTTPS://GitHub.com/up/r', 'https://github.com:443/up/r.git',
+                        'https://www.github.com/up/r', 'https://tok@github.com/up/r.git', 'http://github.com/up/r',
+                        'https://github.com./up/r', 'https://github.com//up/r.git',
+                        f'https://github.com/{user}x/r.git', f'https://github.com/x{user}/r.git',
+                        f'https://github.com/{user}/../up/r', f'https://github.com/{user}/%2e%2e/up/r',
+                        f'https://github.com/{user}/r/../../up/r', f'https://github.com/{user}//up/r',
+                        f'https://github.com/{user}/..', f'https://github.com/{user}/r%2fx']:
+                self.assertEqual(push(url), 1, url)
+            self.assertEqual(push(f'https://github.com/{user}/r.git', os.devnull), 1)  # no github.user: refuse
 
     def test_fork_remotes_use_https_so_agents_can_push(self):
         repos = yaml.safe_load((ROOT / 'group_vars/all/repos.yml').read_text())

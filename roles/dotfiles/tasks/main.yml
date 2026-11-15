@@ -283,6 +283,12 @@
     - git-template-prepare-commit-msg
     - git-template-pre-push
 
+- name: Deploy git pushsk (push over SSH with the YubiKey key)
+  ansible.builtin.copy:
+    src: git-pushsk
+    dest: "{{ ansible_facts['user_dir'] }}/.config/git/pushsk"
+    mode: "0755"
+
 - name: Deploy gh CLI config
   ansible.builtin.copy:
     content: |

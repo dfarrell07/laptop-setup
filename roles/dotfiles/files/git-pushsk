@@ -1,0 +1,28 @@
+#!/bin/sh
+# git pushsk [remote] [push options and refspecs]: push over SSH with the YubiKey-backed key, whatever the remote's
+# URL form; plain git push uses HTTPS (gh's token) for your own GitHub repos only. The remote defaults to the branch's
+# push remote, as for git push. It pushes to an explicit-port SSH URL (ssh://git@github.com:22/...) that no url rewrite
+# matches, then fetches the remote so its tracking refs catch up.
+set -eu
+for _arg in "$@"; do
+  case "$_arg" in
+    -u|--set-upstream) echo "pushsk: -u would record the SSH URL as the upstream; set it with git branch -u" >&2; exit 2;;
+    --) break;;
+  esac
+done
+if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then
+  _remote=$1; shift
+else
+  _branch=$(git symbolic-ref -q --short HEAD || true)
+  _remote=$( { [ -n "$_branch" ] && git config --get "branch.$_branch.pushRemote"; } || git config --get remote.pushDefault \
+    || { [ -n "$_branch" ] && git config --get "branch.$_branch.remote"; } || echo origin)
+fi
+_url=$(git remote get-url --push "$_remote") || { echo "pushsk: $_remote is not a remote" >&2; exit 2; }
+case "$_url" in
+  https://github.com/*) _path=${_url#https://github.com/};;
+  git@github.com:*) _path=${_url#git@github.com:};;
+  ssh://git@github.com/*) _path=${_url#ssh://git@github.com/};;
+  *) echo "pushsk: $_remote ($_url) is not a GitHub remote; use git push" >&2; exit 2;;
+esac
+git push "ssh://git@github.com:22/$_path" "$@"
+git fetch -q "$_remote" || echo "pushsk: pushed; fetching $_remote to update its tracking refs failed" >&2
