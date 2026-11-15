@@ -139,8 +139,9 @@ removed; a file a running session rewrites during the edit is skipped with a war
 
 Codex config and Claude preferences (fullscreen UI, mobile notifications) are seeded once; existing user files are
 kept and not merged with new defaults, except Codex `approval_policy` and `sandbox_mode`, which are reapplied every
-run. A repository's own `.claude/settings.json` or `.codex/config.toml`, or a Codex `profile`, can still override the
-mode for sessions started without a launcher. The global working agreements (Claude `CLAUDE.md`, Codex `AGENTS.md`,
+run. A repository's own `.codex/config.toml`, or a Codex `profile`, can still override the mode for sessions started
+without a launcher; a repository's committed Claude `defaultMode` is overridden in its git-ignored
+`.claude/settings.local.json` (`claude_project_mode_override`). The global working agreements (Claude `CLAUDE.md`, Codex `AGENTS.md`,
 Antigravity `GEMINI.md`) are rendered from the shared [baseline](../roles/common/files/agent-baseline.md) on every
 run (`AGENTS.md` and `GEMINI.md` only while `codex_enabled` / `antigravity_enabled`), so hand edits are overwritten:
 move rules from restored copies into the baseline or a project's own instructions first. Managed Claude

@@ -994,6 +994,19 @@ elif [[ -z "$_mode_bad" ]]; then
 else
   record "claude-default-mode" "WARN" "permissions.defaultMode is not $_claude_mode in:$_mode_bad — run: make apply CHUNK=agents"
 fi
+
+# Repositories (committed .claude/settings.json defaultMode) and autostarted units (systemd user units, LaunchAgents)
+# that would start claude in another mode; the agents chunk overrides the former in settings.local.json.
+_pm_script="$SCRIPT_DIR/../roles/claude/files/claude-project-modes.py"
+if [[ ! -f "$_pm_script" ]]; then
+  record "claude-project-modes" "SKIP" "helper missing: $_pm_script"
+elif _pm_out=$(python3 -I "$_pm_script" --check --mode "$_claude_mode" 2>&1); then
+  record "claude-project-modes" "PASS"
+else
+  _pm_list=$(python3 -c 'import json,sys; print("; ".join(json.load(sys.stdin)["problems"]))' <<<"$_pm_out" 2>/dev/null || echo "$_pm_out")
+  record "claude-project-modes" "WARN" "$_pm_list — run: make apply CHUNK=agents (units: fix their generator)"
+fi
+unset _pm_script _pm_out _pm_list
 unset _claude_mode _mode_bad _mode_seen _mode_got
 
 # Claude directory permissions

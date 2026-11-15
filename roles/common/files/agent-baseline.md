@@ -28,6 +28,9 @@
   conversation history and personal attribution out of public commits and PR prose.
 - Capture durable machine changes in the laptop-setup automation; locate its checkout rather
   than assuming its path.
+- Never commit a `permissions.defaultMode` (or Codex `approval_policy`) in a repository's
+  agent settings, and give autostarted agent sessions an explicit mode flag: a committed mode
+  outranks the machine-wide no-prompt default and makes sessions there ask before each step.
 - Keep reusable skills in their owning repositories. Promote verified lessons into
   instructions or tests, linking instead of repeating; keep project facts and publishing
   exceptions local.

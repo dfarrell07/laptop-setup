@@ -197,13 +197,16 @@ The launchers pass `--dangerously-skip-permissions`; everything else relies on `
 - **The agents chunk was never applied on this machine.** `make verify CHUNK=agents` WARNs `claude-default-mode`
   with the instances whose `permissions.defaultMode` differs. Fix: `make apply CHUNK=agents`, then `make dotfiles`
   for the launchers. The mode is chosen at session start, so restart sessions that were already running.
-- **The repository sets its own mode.** A project's `.claude/settings.json` or `.claude/settings.local.json`
-  `defaultMode` outranks the user setting, and only the command line (or root-owned managed settings) outranks
-  the project. A session started without a launcher in such a repository keeps that repository's mode. Start it
-  with `--dangerously-skip-permissions`, or for an autostarted unit put the flag in its `ExecStart` (the health
-  repository does this per person through `policy.toml` `[sessions] skip_permissions`, then `make up` and a restart
-  of that session's unit). Check a unit with `systemctl --user cat <unit> | grep ExecStart`; the session's footer
-  shows `bypass permissions on`.
+- **The repository sets its own mode.** A project's committed `.claude/settings.json` `defaultMode` outranks the
+  user setting. The agents chunk writes `claude_default_mode` into the git-ignored `.claude/settings.local.json`,
+  which outranks it, in every checkout and worktree under `claude_project_mode_roots` (default: home, 4 levels)
+  whose project settings pick another mode; `claude-project-modes` in `make verify CHUNK=agents` lists the ones
+  left (a repository cloned since the last apply: re-run `make apply CHUNK=agents`). Only the command line (or
+  root-owned managed settings) outranks the local file.
+- **An autostarted unit launches `claude` without a mode flag** into a directory that resolves to another mode.
+  The same check lists such systemd user units and LaunchAgents. Add `--dangerously-skip-permissions` in whatever
+  generates the unit (the health repository's `make up` does this for its sessions), then restart that unit. An
+  explicit `--permission-mode` is treated as deliberate. A session's footer shows `bypass permissions on`.
 - **Deny rules still apply in bypass mode.** A matching rule refuses outright rather than asking; hand-written rules
   from before the agents chunk (`rm -rf /*`, `curl *`, ...) are removed by `claude_retired_deny` on the next apply.
 
