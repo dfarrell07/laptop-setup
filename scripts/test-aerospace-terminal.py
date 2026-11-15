@@ -43,7 +43,13 @@ class AeroSpaceTests(unittest.TestCase):
                     return result.stdout
                 run()
                 expected = f'exec-and-forget open -na {app}'
-                self.assertEqual(tomllib.loads(config.read_text())['mode']['main']['binding']['alt-enter'], expected)
+                bindings = tomllib.loads(config.read_text())['mode']['main']['binding']
+                self.assertEqual(bindings['alt-enter'], expected)
+                for key in ('alt-d', 'alt-ctrl-l'):  # AeroSpace runs exec-and-forget through bash -c
+                    command = bindings[key].removeprefix('exec-and-forget ')
+                    self.assertEqual(subprocess.run(['bash', '-n', '-c', command]).returncode, 0, command)
+                self.assertIn('/opt/homebrew/bin/choose |', bindings['alt-d'])
+                self.assertIn('using {control down, command down}', bindings['alt-ctrl-l'])  # macOS lock-screen shortcut
                 self.assertEqual(re.findall(r'changed=(\d+)', run())[-1], '0')
                 config.write_text(config.read_text().replace(expected, 'exec-and-forget open -na Alacritty') + '\n# keep custom settings\n')
                 run()
