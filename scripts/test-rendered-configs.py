@@ -132,6 +132,23 @@ class RenderedConfigTests(unittest.TestCase):
         self.assertRegex(alias, r'(?m)^\s*fixup = commit -s --fixup$')
         self.assertRegex(alias, r"(?m)^\s*wip = commit -s -m 'WIP: snapshot'$")
 
+    def test_gitconfig_pushes_https_by_default_and_ssh_with_pushsk(self):
+        config = self.read('gitconfig')
+        self.assertNotIn('pushInsteadOf = https://github.com/', config)  # HTTPS by default: gh credentials, agents
+        with tempfile.TemporaryDirectory() as name:
+            env = dict(os.environ, GIT_CONFIG_GLOBAL=str(self.out / 'gitconfig'), GIT_CONFIG_NOSYSTEM='1', HOME=name)
+            subprocess.run(['git', 'init', '-q', name], check=True, env=env)
+            subprocess.run(['git', '-C', name, 'remote', 'add', 'origin', 'https://github.com/o/r.git'], check=True,
+                           env=env)
+            default = subprocess.run(['git', '-C', name, 'remote', 'get-url', '--push', 'origin'], env=env,
+                                     capture_output=True, text=True, check=True).stdout.strip()
+            alias = subprocess.run(['git', '-C', name, 'config', 'alias.pushsk'], env=env, capture_output=True,
+                                   text=True, check=True).stdout.strip()
+            ssh = subprocess.run(alias.lstrip('!').replace(' push', ' remote get-url --push origin').split(),
+                                 cwd=name, env=env, capture_output=True, text=True, check=True).stdout.strip()
+        self.assertEqual(default, 'https://github.com/o/r.git')
+        self.assertEqual(ssh, 'ssh://git@github.com/o/r.git')
+
     def test_wm_configs_have_no_trailing_comments_after_commands(self):
         for name in ('sway', 'i3'):
             for number, line in enumerate(self.read(name).splitlines(), 1):
