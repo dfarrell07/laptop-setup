@@ -1,7 +1,13 @@
 #!/bin/sh
 # Chain to per-repo prepare-commit-msg hook if one exists (core.hooksPath replaces .git/hooks/ lookup).
 # Positional args and stdin are forwarded to the per-repo hook via exec.
-_repo_hook="$(git rev-parse --git-common-dir 2>/dev/null)/hooks/prepare-commit-msg"
+# The repo's own hook: <repo>/<laptop.repoHooks>/prepare-commit-msg when the git_repos role opted the repo in (repos.yml
+# hooks: true; a local setting repo content cannot make), else .git/hooks/prepare-commit-msg.
+_repo_hooks_dir=$(git config --local --get laptop.repoHooks 2>/dev/null || true)
+case "$_repo_hooks_dir" in
+  ""|/*|*..*) _repo_hook="$(git rev-parse --git-common-dir 2>/dev/null)/hooks/prepare-commit-msg" ;;
+  *) _repo_hook="$(git rev-parse --show-toplevel 2>/dev/null)/$_repo_hooks_dir/prepare-commit-msg" ;;
+esac
 if [ -x "$_repo_hook" ]; then
   exec "$_repo_hook" "$@"
 fi

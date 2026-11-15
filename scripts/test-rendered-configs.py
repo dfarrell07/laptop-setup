@@ -243,6 +243,35 @@ class RenderedConfigTests(unittest.TestCase):
                                             cwd=name + '/repo', env=env, capture_output=True, text=True,
                                             check=False).stdout.count('TOKEN'))
 
+    def test_global_hooks_chain_to_repo_hooks_only_when_opted_in(self):
+        with tempfile.TemporaryDirectory() as name:
+            home, repo = Path(name), Path(name) / 'repo'
+            hooks = home / 'hooks'
+            hooks.mkdir()
+            for hook in ('prepare-commit-msg', 'commit-msg'):
+                shutil.copy(ROOT / f'roles/dotfiles/files/git-template-{hook}', hooks / hook)
+                (hooks / hook).chmod(0o755)
+            (home / 'gitconfig').write_text(f'[core]\n\thooksPath = {hooks}\n[user]\n\tname = t\n\temail = t@t\n')
+            env = dict(os.environ, GIT_CONFIG_GLOBAL=str(home / 'gitconfig'), GIT_CONFIG_NOSYSTEM='1', HOME=name)
+            subprocess.run(['git', 'init', '-q', str(repo)], check=True, env=env)
+            (repo / '.githooks').mkdir()
+            marker = home / 'ran'
+            (repo / '.githooks/prepare-commit-msg').write_text(f'#!/bin/sh\necho x >> {marker}\n')
+            (repo / '.githooks/prepare-commit-msg').chmod(0o755)
+
+            def commit(setting):
+                if setting is None:
+                    subprocess.run(['git', '-C', str(repo), 'config', '--unset', 'laptop.repoHooks'], env=env)
+                else:
+                    subprocess.run(['git', '-C', str(repo), 'config', 'laptop.repoHooks', setting], check=True, env=env)
+                subprocess.run(['git', '-C', str(repo), 'commit', '-q', '-s', '--allow-empty', '-m', 'Test: x'],
+                               check=True, env=env)
+                return marker.read_text().count('x') if marker.exists() else 0
+            self.assertEqual(commit(None), 0)  # not opted in: the repo's hooks do not run
+            self.assertEqual(commit('.githooks'), 1)
+            self.assertEqual(commit('../repo/.githooks'), 1)  # a path out of the repo is ignored
+            self.assertEqual(commit('/tmp'), 1)
+
     def test_fork_remotes_use_https_so_agents_can_push(self):
         repos = yaml.safe_load((ROOT / 'group_vars/all/repos.yml').read_text())
         remotes = [remote['url'] for repo in repos['git_repos_public'] for remote in repo.get('extra_remotes', [])]
