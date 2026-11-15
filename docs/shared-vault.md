@@ -66,8 +66,9 @@ too (new tokens and keys, then `make vault-edit`); the new password protects onl
   key in `allowed_signers` (with `valid-before`) so older commits still verify. The repository may hold only regular
   files (no symlinks).
 - **No rollback**: each machine records the last commit it accepted and refuses a history that no longer contains it
-  (a force-push back to an older signed state could bring back a removed key). A brand-new machine has no record yet,
-  so it trusts the newest signed state it is shown; join new machines after a key removal has been pushed.
+  (a force-push back to an older signed state could bring back a removed key). A brand-new machine has no record yet:
+  `make vault-join` shows GitHub's newest vault commit (date and subject) and asks you to confirm it is your latest
+  change before trusting it.
 - **Recipients**: anyone who can push could add their own key, and the next re-encryption would include it. Each
   machine keeps the list it approved (`~/.config/laptop-setup/age-recipients-approved`); `make vault-pull` warns when
   the list changed, and `vault-add-key`/`vault-remove-key` refuse a list with keys this machine never approved until
