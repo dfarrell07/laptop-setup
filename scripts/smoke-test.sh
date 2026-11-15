@@ -99,6 +99,8 @@ _idle_lock=$(_cfg_num desktop_wm_idle_lock_timeout)
 _idle_display=$(_cfg_num desktop_wm_idle_display_timeout)
 [[ "$_idle_lock" =~ ^[0-9]+$ ]] && _idle_lock=$((10#$_idle_lock)) || _idle_lock=3600
 [[ "$_idle_display" =~ ^[0-9]+$ ]] && _idle_display=$((10#$_idle_display)) || _idle_display=3900
+_macos_gnu_tools=true
+grep -qiE '^dotfiles_macos_gnu_tools:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_gnu_tools=false
 _podman_machine=true
 grep -qiE '^containers_macos_machine_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _podman_machine=false
 _docker_shim=true
@@ -618,6 +620,28 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   if [[ -z "$_missing" ]]; then record "macos-dev-tools" "PASS"
   else record "macos-dev-tools" "FAIL" "missing:$_missing — run: make apply CHUNK=packages NOSUDO=1"; fi
   unset _brew _missing _t
+fi
+
+# macOS: zsh that reads no rc file but ~/.zshenv (ssh and mosh remote commands, launchd jobs) gets the managed PATH,
+# and launchd's environment (GUI apps, launchd jobs) points at the managed ssh-agent socket
+if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
+  _brew=$( (brew --prefix) 2>/dev/null || { [[ "$(uname -m)" == arm64 ]] && echo /opt/homebrew || echo /usr/local; })
+  _zpath=$(env -i HOME="$HOME" PATH=/usr/bin:/bin:/usr/sbin:/sbin zsh -c 'print -r -- "$PATH"' 2>/dev/null || true)
+  _missing=""
+  _first() { [[ ":${_zpath%%:"$2":*}:" == *":$1:"* ]]; }  # $1 is on the PATH, ahead of $2
+  _first "$_brew/bin" /usr/bin || _missing+=" $_brew/bin"
+  _first "$HOME/.local/bin" /usr/bin || _missing+=" ~/.local/bin"
+  if $_macos_gnu_tools && [[ -d "$_brew/opt/coreutils/libexec/gnubin" ]]; then
+    _first "$_brew/opt/coreutils/libexec/gnubin" /bin || _missing+=" coreutils-gnubin"
+  fi
+  if [[ -z "$_missing" ]]; then record "macos-zshenv-path" "PASS"
+  else record "macos-zshenv-path" "FAIL" "non-interactive zsh PATH lacks (or puts after the system dirs):$_missing — run: make apply CHUNK=dotfiles"; fi
+  _sock=$(launchctl getenv SSH_AUTH_SOCK 2>/dev/null || true)
+  if [[ "$_sock" == "$HOME/.ssh/ssh-agent.socket" ]]; then record "macos-launchd-ssh-auth-sock" "PASS"
+  # WARN in Molecule: a CI runner's launchd session is not a login session
+  else record "macos-launchd-ssh-auth-sock" "$([[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && echo WARN || echo FAIL)" "launchd SSH_AUTH_SOCK is ${_sock:-unset}, not ~/.ssh/ssh-agent.socket, so GUI apps and launchd jobs miss the agent — run: make apply CHUNK=dotfiles"; fi
+  unset _brew _zpath _missing _sock
+  unset -f _first
 fi
 
 # macOS: containers run in the podman machine VM, which the containers chunk creates and starts at login
@@ -2818,7 +2842,7 @@ if [[ -n "$ONLY" ]]; then
       continue
     fi
     # macOS-only checks have nothing to verify on Linux
-    if $IS_LINUX && [[ " podman-machine docker-shim macos-dev-tools macos-remote-access macos-firewall macos-always-on macos-screen macos-screen-lock tailscaled-daemon " == *" $_only_name "* ]]; then
+    if $IS_LINUX && [[ " podman-machine docker-shim macos-dev-tools macos-zshenv-path macos-launchd-ssh-auth-sock macos-remote-access macos-firewall macos-always-on macos-screen macos-screen-lock tailscaled-daemon " == *" $_only_name "* ]]; then
       $JSON || printf 'N/A   %s (macOS-only check; nothing to verify on Linux)\n' "$_only_name"
       continue
     fi

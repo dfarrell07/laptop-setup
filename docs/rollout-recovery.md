@@ -108,10 +108,14 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Breaks if wrong:** a bad `~/.zshrc`/`~/.bashrc`/`~/.config/git/config` affects every new shell and commit; a bad `~/.ssh/config` affects
   every SSH connection.
 - **Verify:** `make verify CHUNK=dotfiles` (`dotfile-gitconfig`, `git-hooks-path`, `ssh-config-hash-known-hosts`,
-  `ssh-config-github-strict`). `make plan` shows only the creation of the quarantine directories; the moves of unmanaged
-  `environment.d` files (with a SECURITY WARNING) and git template hooks (task output only) happen only in the real run.
+  `ssh-config-github-strict`; on macOS also `macos-zshenv-path` and `macos-launchd-ssh-auth-sock`). `make plan` shows
+  only the creation of the quarantine directories; the moves of unmanaged `environment.d` files (with a SECURITY WARNING)
+  and git template hooks (task output only) happen only in the real run.
 - **macOS:** the chunk disables and stops Apple's ssh-agent, so apps and tmux servers started before it keep a dead
   `SSH_AUTH_SOCK` (and lose keys loaded in Apple's agent) until you log out and back in; new shells use the Homebrew agent.
+  It writes `~/.zshenv` (the PATH for every zsh, including ssh remote commands) and
+  `~/Library/LaunchAgents/<ssh-agent label>.env.plist`, which points launchd's `SSH_AUTH_SOCK` (GUI apps, launchd jobs)
+  at the Homebrew agent at each login. Undo: delete both, then `launchctl unsetenv SSH_AUTH_SOCK`.
 - **Undo:** run `make backup` BEFORE the chunk (an older backup predates earlier deploys), then restore the file from that
   `~/laptop-setup-backup-<timestamp>` directory. Replaced `.zshrc`, `.bashrc`, `.ssh/config`, `.config/git/config` and
   `.config/tmux/tmux.conf` also keep a copy beside them named `<file>.<pid>.<date>@<time>~`. Unmanaged git template hooks and
