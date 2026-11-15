@@ -91,7 +91,9 @@ Never retry automatically. Finish with a list of passed, failed and skipped chun
 
 Check each tool and skip what is already logged in. If an auth step fails with connection errors, ask whether the VPN is up.
 
-- **GitHub CLI**: check `gh auth status`; if missing, owner runs `gh auth login` (HTTPS), then `make packages repos`
+- **GitHub CLI**: check `gh auth status`; if missing, owner runs `gh auth login` (HTTPS), answering No to "Authenticate Git
+  with your GitHub credentials?" (yes replaces the credential guard that keeps gh's token off upstream repos; `make dotfiles`
+  restores it, smoke `git-token-guard` checks it), then `make packages repos`
   (`make notes` too only when `notes_enabled: true` is set in `config.yml`; the notes repo is opt-in)
 - **Notes (transcrypt, only when `notes_enabled`)**: `make notes` warned about the password; if missing,
   `make vault-edit` (after `make vault-init`) to add `vault_notes_transcrypt_password`, then

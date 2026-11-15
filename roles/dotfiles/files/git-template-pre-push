@@ -7,7 +7,8 @@ _stdin=$(cat)
 # git runs this after it has read the remote's refs, so it stops the push, not the connection. The credential helper
 # (~/.config/git/gh-credential) is the guard that also holds where this hook does not run.
 _url=$(printf '%s' "${2:-}" | tr '[:upper:]' '[:lower:]')
-case "$_url" in *::*) _url=${_url#*::};; esac  # <transport>::<address> (https::https://github.com/...)
+# <transport>::<address> (https::https://github.com/...): strip only a leading transport name
+_url=$(printf '%s' "$_url" | sed -E 's#^[a-z0-9+.-]+::##')
 case "$_url" in http://*|https://*)
   _rest=${_url#*://}
   _host=${_rest%%/*}; _host=${_host##*@}; _host=${_host%%:*}; _host=${_host%.}; _host=${_host#www.}
