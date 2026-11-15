@@ -501,7 +501,13 @@ def run_tasks(tasks, variables):
 
 
 def production_task(path, name):
-    return dict(next(t for t in yaml.safe_load((ROOT / path).read_text()) if t.get('name') == name))
+    """A copy of the named task, found inside blocks too."""
+    def walk(tasks):
+        for task in tasks or []:
+            yield task
+            for key in ('block', 'rescue', 'always'):
+                yield from walk(task.get(key))
+    return dict(next(t for t in walk(yaml.safe_load((ROOT / path).read_text())) if t.get('name') == name))
 
 
 class MacTaskTests(unittest.TestCase):
@@ -537,6 +543,28 @@ class MacTaskTests(unittest.TestCase):
                     '_containers_podman_bin_stat': {'stat': podman_stat},
                     '_containers_real_docker': {'results': [{'stat': stat} for stat in docker]}})
                 self.assertEqual(results[1]['_containers_docker_shim_wanted'], wanted)
+
+    def test_macos_sshd_reload_survives_its_session(self):
+        """bootout ends the sessions the job started: bootout and bootstrap run as one detached async job."""
+        names = ('Reload the changed sshd launchd job, detached (macOS)', 'Wait for the sshd launchd job reload (macOS)')
+        tasks = [production_task('roles/desktop/tasks/main.yml', name) for name in names]
+        reload_task, wait = tasks
+        self.assertEqual((reload_task['async'] > 0, reload_task['poll']), (True, 0))
+        with tempfile.TemporaryDirectory() as directory:
+            d = Path(directory)
+            # bootstrap fails twice ("Bootstrap failed: 5" while launchd tears the old job down), then loads it
+            (d / 'launchctl').write_text('#!/bin/sh\necho "$*" >> "$0.log"\n'
+                                         '[ "$1" != bootstrap ] || [ "$(grep -c ^bootstrap "$0.log")" -gt 2 ] || exit 5\n')
+            (d / 'launchctl').chmod(0o755)
+            shell = reload_task['ansible.builtin.shell']
+            shell['cmd'] = shell['cmd'].replace('/bin/launchctl', str(d / 'launchctl'))
+            for task in tasks:
+                task.pop('when')
+            results = run_tasks(tasks, {'desktop_macos_sshd_label': 'com.example.sshd'})
+            self.assertTrue(results[1]['finished'])
+            self.assertEqual(results[1]['rc'], 0)
+            self.assertEqual((d / 'launchctl.log').read_text().splitlines(),
+                             ['bootout system/com.example.sshd'] + ['bootstrap system /Library/LaunchDaemons/com.example.sshd.plist'] * 3)
 
     def test_macos_sshd_keeps_only_the_algorithms_this_mac_supports(self):
         tasks = [production_task('roles/desktop/tasks/main.yml', name) for name in (
@@ -591,7 +619,12 @@ class MacTaskTests(unittest.TestCase):
                         commands.append(args['argv'][0])
                     elif args is not None:
                         cmd = re.sub(r'{{.*?}}', 'ARG', args.get('cmd') if isinstance(args, dict) else args)
-                        commands += [part.split()[0] for part in re.split(r'&&|\|\||[;|]', cmd) if part.split()]
+                        for part in re.split(r'&&|\|\||[;|]', cmd):
+                            words = [w for w in part.split() if w not in ('until', 'while', 'if', 'then', 'do', 'done',
+                                                                          'fi', '!')]
+                            # shell builtins and assignments are not looked up on PATH
+                            if words and not re.match(r'\w+=', words[0]) and words[0] not in ('[', 'exit', 'true', 'false'):
+                                commands.append(words[0])
                 for args in task.values():
                     if isinstance(args, dict) and isinstance(args.get('validate'), str):
                         commands.append(args['validate'].split()[0])
