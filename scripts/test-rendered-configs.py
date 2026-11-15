@@ -284,6 +284,12 @@ class RenderedConfigTests(unittest.TestCase):
                 return subprocess.run(['bash', str(hook), str(message)], cwd=repo, env=env, capture_output=True,
                                       text=True, check=False).returncode
             self.assertEqual(check(Path(name) / 'scratch'), 0)  # under /tmp: a test suite's throwaway repo
+            clone = Path(name) / 'worktree'
+            subprocess.run(['git', 'init', '-q', str(clone)], check=True, env=env)
+            subprocess.run(['git', '-C', str(clone), 'remote', 'add', 'origin', 'https://example.test/r.git'], check=True,
+                           env=env)
+            self.assertEqual(subprocess.run(['bash', str(hook), str(message)], cwd=clone, env=env, capture_output=True,
+                                            check=False).returncode, 1)  # under /tmp but a real clone: rule applies
             with tempfile.TemporaryDirectory(dir=non_temp_dir()) as real:
                 self.assertEqual(check(Path(real) / 'work'), 1)  # a real repository still needs Signed-off-by
 

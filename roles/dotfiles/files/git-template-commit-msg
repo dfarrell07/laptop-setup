@@ -19,8 +19,9 @@ git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 && exit 0
 _top=$(git rev-parse --show-toplevel 2>/dev/null || true)
 # Fixed system temp paths only (macOS's TMPDIR is under /var/folders): a TMPDIR pointing at a broad directory such as
 # ~/tmp would otherwise switch the rule off for real repositories there.
+# A throwaway repository also has no remote: agent worktrees under /tmp are real clones and keep the rule.
 case "$_top" in
-  /tmp/*|/var/tmp/*|/private/tmp/*|/private/var/folders/*|/var/folders/*) exit 0 ;;
+  /tmp/*|/var/tmp/*|/private/tmp/*|/private/var/folders/*|/var/folders/*) [ -n "$(git remote 2>/dev/null)" ] || exit 0 ;;
 esac
 # Require Signed-off-by (enforce 'git commit -s') — checked before any early-exit so reverts are also covered
 if ! grep -q '^Signed-off-by:' "$1"; then
