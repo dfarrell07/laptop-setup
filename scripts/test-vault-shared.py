@@ -494,7 +494,7 @@ class SharedVault(unittest.TestCase):
         (Path(env_b['HOME']) / '.config/git/allowed_signers').write_text(f't@t namespaces="file,github" {pub}\n')
         result = self.shared('b', b, 'join', check=False, VAULT_ALLOWED_SIGNERS=str(self.tmp / 'signers-b'))
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('no SSH signing key', result.stderr)
+        self.assertIn('not signed', result.stderr)  # ssh-keygen refuses the key for the git namespace
 
     def trusted_gpg_home(self):
         """A gpg home holding a key gpg trusts (it made it): what an attacker with a key in your keyring would use."""
@@ -542,6 +542,28 @@ class SharedVault(unittest.TestCase):
         result = self.shared('b', b, 'pull', check=False)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('not signed', result.stderr)
+
+    def test_add_key_refuses_a_deleted_recipients_file(self):
+        a, b = self.joined_pair()
+        (self.tmp / 'secrets-b/recipients').unlink()
+        third = run(['age-keygen']).stdout.split('public key: ')[1].split()[0]
+        result = self.shared('b', b, 'add-key', check=False, RECIPIENT=third)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('uncommitted changes', result.stderr)
+        pushed = run(['git', f'--git-dir={self.remote}', 'show', 'main:recipients']).stdout
+        self.assertIn(self.keys['a'][1], pushed)
+
+    def test_signer_options_reach_ssh_keygen_unchanged(self):
+        """Options ssh-keygen accepts, such as a namespace pattern, keep a key usable (they pass through unchanged)."""
+        a = self.init_a()
+        self.shared('a', a, 'add-key', RECIPIENT=self.keys['b'][1])
+        b = self.machine('b', None)
+        env_b = self.env('b', b)
+        (Path(env_b['HOME']) / '.config/git').mkdir(parents=True)
+        pub = (self.tmp / 'signing.pub').read_text().strip()
+        (Path(env_b['HOME']) / '.config/git/allowed_signers').write_text(f't@t namespaces="file,g*" {pub}\n')
+        self.shared('b', b, 'join', VAULT_ALLOWED_SIGNERS=str(self.tmp / 'signers-b'))
+        self.assertIn('secret-a', self.view('b', b))
 
     def test_a_list_form_pin_is_refused(self):
         a = self.init_a()

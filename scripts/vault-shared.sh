@@ -108,8 +108,11 @@ LAST_SEEN=$CONF/vault-last-seen
 VERIFIED=$CONF/vault-verified-commits
 sync_clone() {
   local target
-  # Modified or added files only: a clone whose first join stopped before checkout shows every file deleted.
-  [[ -z $(git -C "$S" diff HEAD --name-only --diff-filter=AM 2>/dev/null) ]] ||
+  # The working files must be HEAD's exactly (a deleted or renamed recipients file would let add-key drop every other
+  # key), except a clone whose first join stopped before checkout, which has no tracked files at all yet.
+  local present
+  present=$(git -C "$S" ls-files 2>/dev/null | while IFS= read -r f; do [[ ! -e $S/$f ]] || printf x; done)
+  [[ -z $present || -z $(git -C "$S" status --porcelain 2>/dev/null | grep -v '^??') ]] ||
     die "$S has uncommitted changes (an interrupted run?): inspect git -C $S status, then git -C $S checkout -- . to drop them"
   git -C "$S" fetch -q 2>/dev/null || { warn "could not fetch $S (offline?): using the local clone"; verify_all HEAD; return 0; }
   target=$(git -C "$S" rev-parse -q --verify '@{u}^{commit}' 2>/dev/null) || { verify_all HEAD; return 0; }
@@ -145,40 +148,16 @@ new_password() { python3 -c 'import secrets; print(secrets.token_urlsafe(48))'; 
 # could seal a password of their own choosing to your keys. Every commit must carry a signature by one of the owner's
 # SSH signing keys: those in ~/.config/git/allowed_signers, else the ones GitHub lists for the owner (fetched once).
 # A signer list's entries as "<valid-before/valid-after options, comma-separated or empty>|<keytype key>".
+# A signer list's entries as "<options exactly as written, or empty>|<keytype key>", principals dropped (the vault
+# accepts any committer). ssh-keygen itself interprets the options (namespaces, valid-before, verify-required...), so
+# they pass through unchanged; only a certificate authority line is skipped (not a plain signing key).
 signer_entries() {
-  grep -Ev '^[[:space:]]*(#|$)' "$1" 2>/dev/null | awk '
-  # Split an options field on commas outside double quotes (namespaces="file,git").
-  function splitopts(str, out,    n, c, q, cur, x) {
-    n = 0; q = 0; cur = ""
-    for (x = 1; x <= length(str); x++) {
-      c = substr(str, x, 1)
-      if (c == "\"") q = !q
-      if (c == "," && !q) { out[++n] = cur; cur = "" } else cur = cur c
-    }
-    out[++n] = cur
-    return n
-  }
-  {
-    for (i = 1; i <= NF; i++) if ($i ~ /^(sk-)?ssh-[a-z0-9@.-]+$/ && i < NF) break
+  grep -Ev '^[[:space:]]*(#|$)' "$1" 2>/dev/null | awk '{
+    for (i = 2; i <= NF; i++) if ($i ~ /^(sk-)?ssh-[a-z0-9@.-]+$/ && i < NF) break
     if (i > NF) next
-    opts = ""; ns = ""; bad = 0
-    for (k = 2; k < i; k++) {
-      n = splitopts($k, parts)
-      for (m = 1; m <= n; m++) {
-        o = tolower(parts[m])
-        if (o ~ /^namespaces=/) ns = o
-        else if (o ~ /^valid-(before|after)=/) opts = opts (opts == "" ? "" : ",") o
-        else bad = 1  # cert-authority and the like: not a plain signing key
-      }
-    }
-    if (bad) next
-    # A key limited to other namespaces (namespaces="file") never signs vault commits.
-    if (ns != "") {
-      v = ns; sub(/^namespaces=/, "", v); gsub(/"/, "", v)
-      n = split(v, names, ","); hit = 0
-      for (m = 1; m <= n; m++) if (names[m] == "git") hit = 1
-      if (!hit) next
-    }
+    opts = ""
+    for (k = 2; k < i; k++) opts = opts (opts == "" ? "" : " ") $k
+    if (tolower(opts) ~ /(^|,)[[:space:]]*cert-authority/) next
     print opts "|" $i " " $(i + 1)
   }'
 }
@@ -200,7 +179,7 @@ ensure_signers() {
     entries=$(signer_entries "$SIGNERS"); from=cache  # confirmed on an earlier run
   elif [[ -n $user ]] && command -v gh >/dev/null; then
     entries=$(gh api "users/$user/ssh_signing_keys" --jq '.[].key' 2>/dev/null |
-      grep -oE '(sk-)?ssh-[a-z0-9@.-]+ [A-Za-z0-9+/=]+' | sed 's/^/|/' || true)
+      grep -oE '(sk-)?ssh-[a-z0-9@.-]+ [A-Za-z0-9+/=]+' | sed 's/^/namespaces="git"|/' || true)
     from=github
   fi
   [[ -n $entries ]] || die "no SSH signing key to check the shared vault's commits: make dotfiles (writes ~/.config/git/allowed_signers from the vault), or list your signing key on github.com (Settings, SSH and GPG keys, as a Signing Key; not with gh, which would widen its token)"
@@ -209,7 +188,7 @@ ensure_signers() {
     fp=$(printf '%s\n' "$key" | ssh-keygen -lf - 2>/dev/null | awk '{print $2}' || true)
     [[ -n $fp ]] || continue
     if [[ -n $pins ]] && [[ " $pins " != *" $fp "* ]]; then continue; fi
-    kept+="* namespaces=\"git\"${opts:+,$opts} $key"$'\n'
+    kept+="* ${opts:+$opts }$key"$'\n'
     [[ $from == cache ]] || printf '  signer: %s (%s)\n' "$fp" "$from"
   done <<<"$entries"
   [[ -n $kept ]] || die "none of the signing keys from $from match secrets_signing_fingerprints in config.yml"
@@ -269,7 +248,7 @@ txn_rollback() {
   trap '' INT TERM  # a second Ctrl-C must not stop the restore halfway
   # Interrupted while git push was finishing: if GitHub already has the new commit, the change is done, not undone.
   if [[ -n ${TXN_PUSHING:-} ]]; then
-    remote=$(timeout 20 git -C "$S" ls-remote origin "refs/heads/$(git -C "$S" symbolic-ref --short HEAD 2>/dev/null)" 2>/dev/null | cut -f1)
+    remote=$(exec 9>&-; timeout 20 git -C "$S" ls-remote origin "refs/heads/$(git -C "$S" symbolic-ref --short HEAD 2>/dev/null)" 2>/dev/null | cut -f1)
     if [[ $remote == "$TXN_PUSHING" ]]; then
       rm -rf "$TXN_DIR"
       seen "$TXN_PUSHING"
