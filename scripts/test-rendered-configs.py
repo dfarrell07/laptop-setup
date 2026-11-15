@@ -343,33 +343,54 @@ class RenderedConfigTests(unittest.TestCase):
                 self.assertEqual(check(Path(real) / 'work'), 1)  # a real repository still needs Signed-off-by
 
     def test_global_hooks_do_not_loop_with_a_repo_that_calls_them(self):
-        """A repo with its own core.hooksPath whose hooks call the global hooks (Health) runs each hook once."""
+        """A repo with its own core.hooksPath whose hooks call the global hooks (Health) runs each hook once: relative and
+        absolute hooksPath forms, a commit and a real push, and a bare repository's push."""
+        hooks_names = ('pre-commit', 'prepare-commit-msg', 'commit-msg', 'pre-push')
         with tempfile.TemporaryDirectory(dir=non_temp_dir()) as name:
-            home, repo = Path(name), Path(name) / 'repo'
+            home = Path(name)
             hooks = home / 'global'
             hooks.mkdir()
-            for hook in ('pre-commit', 'prepare-commit-msg', 'commit-msg', 'pre-push'):
+            for hook in hooks_names:
                 shutil.copy(ROOT / f'roles/dotfiles/files/git-template-{hook}', hooks / hook)
                 (hooks / hook).chmod(0o755)
             (home / 'gitconfig').write_text(f'[core]\n\thooksPath = {hooks}\n[user]\n\tname = t\n\temail = t@t\n')
             env = dict(os.environ, GIT_CONFIG_GLOBAL=str(home / 'gitconfig'), GIT_CONFIG_NOSYSTEM='1', HOME=name,
                        PATH=f"/nonexistent:{os.environ['PATH']}")
             env.pop('TMPDIR', None)
-            subprocess.run(['git', 'init', '-q', str(repo)], check=True, env=env)
-            subprocess.run(['git', '-C', str(repo), 'config', 'core.hooksPath', '.git/hooks'], check=True, env=env)
-            log = home / 'log'
-            for hook in ('pre-commit', 'prepare-commit-msg', 'commit-msg', 'pre-push'):
-                own = repo / '.git/hooks' / hook
-                own.write_text(f'#!/bin/sh\necho {hook} >> {log}\nexec "{hooks}/{hook}" "$@"\n')
-                own.chmod(0o755)
-            result = subprocess.run(['git', '-C', str(repo), 'commit', '-q', '-s', '--allow-empty', '-m', 'Test: x'],
-                                    env=env, capture_output=True, text=True, timeout=30, check=False)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(sorted(log.read_text().split()), ['commit-msg', 'pre-commit', 'prepare-commit-msg'])
-            pushed = subprocess.run(['sh', str(repo / '.git/hooks/pre-push'), 'origin', '/srv/r.git'], cwd=repo, env=env,
-                                    input='', capture_output=True, text=True, timeout=30, check=False)
+
+            def git(*args, cwd=None):
+                return subprocess.run(['git', *args], cwd=cwd, env=env, capture_output=True, text=True, timeout=60,
+                                      check=False)
+
+            def repo_hooks(directory, log):
+                """Hooks that log, then call the global hook; capped at 5 runs, so a regression ends instead of looping."""
+                directory.mkdir(parents=True, exist_ok=True)
+                for hook in hooks_names:
+                    own = directory / hook
+                    own.write_text(f'#!/bin/sh\necho {hook} >> {log}\n'
+                                   f'[ "$(grep -c . {log})" -lt 5 ] || exit 0\nexec "{hooks}/{hook}" "$@"\n')
+                    own.chmod(0o755)
+
+            git('init', '-q', '--bare', str(home / 'remote.git'))
+            for form in ('relative', 'absolute'):
+                repo, log = home / form, home / f'{form}.log'
+                git('init', '-q', str(repo))
+                path = '.git/hooks' if form == 'relative' else str(repo / '.git/hooks')
+                git('-C', str(repo), 'config', 'core.hooksPath', path)
+                repo_hooks(repo / '.git/hooks', log)
+                committed = git('-C', str(repo), 'commit', '-q', '-s', '--allow-empty', '-m', 'Test: x')
+                self.assertEqual(committed.returncode, 0, committed.stderr)
+                pushed = git('-C', str(repo), 'push', '-q', str(home / 'remote.git'), f'HEAD:{form}')
+                self.assertEqual(pushed.returncode, 0, pushed.stderr)
+                self.assertEqual(sorted(log.read_text().split()), sorted(hooks_names), form)
+            # A bare repository with a relative hooksPath: git resolves it against the git directory.
+            bare, log = home / 'bare.git', home / 'bare.log'
+            git('clone', '-q', '--bare', str(home / 'relative'), str(bare))
+            git('-C', str(bare), 'config', 'core.hooksPath', 'hooks')
+            repo_hooks(bare / 'hooks', log)
+            pushed = git('-C', str(bare), 'push', '-q', str(home / 'remote.git'), 'HEAD:bare')
             self.assertEqual(pushed.returncode, 0, pushed.stderr)
-            self.assertEqual(log.read_text().split().count('pre-push'), 1)
+            self.assertEqual(log.read_text().split(), ['pre-push'])
 
     def test_fork_remotes_use_https_so_agents_can_push(self):
         repos = yaml.safe_load((ROOT / 'group_vars/all/repos.yml').read_text())
@@ -678,10 +699,13 @@ class ShippedFileTests(unittest.TestCase):
 
     def test_commit_msg_hook_chains_repo_hook_from_linked_worktree(self):
         hook = ROOT / 'roles/dotfiles/files/git-template-commit-msg'
-        env = dict(os.environ, GIT_CONFIG_GLOBAL='/dev/null', GIT_CONFIG_SYSTEM='/dev/null',
-                   GIT_AUTHOR_NAME='t', GIT_AUTHOR_EMAIL='t@example.test',
-                   GIT_COMMITTER_NAME='t', GIT_COMMITTER_EMAIL='t@example.test', PATH='/usr/bin:/bin')
         with tempfile.TemporaryDirectory() as directory:
+            # As deployed: the global core.hooksPath is where the global hook lives (else git would run .git/hooks
+            # itself, and the global hook rightly would not chain into the directory git runs from).
+            (Path(directory) / 'gitconfig').write_text(f'[core]\n\thooksPath = {hook.parent}\n')
+            env = dict(os.environ, GIT_CONFIG_GLOBAL=str(Path(directory) / 'gitconfig'), GIT_CONFIG_SYSTEM='/dev/null',
+                       GIT_AUTHOR_NAME='t', GIT_AUTHOR_EMAIL='t@example.test',
+                       GIT_COMMITTER_NAME='t', GIT_COMMITTER_EMAIL='t@example.test', PATH='/usr/bin:/bin')
             repo = Path(directory) / 'repo'
             work = Path(directory) / 'linked'
             run = lambda *a, cwd=repo: subprocess.run(a, cwd=cwd, env=env, check=True, capture_output=True)

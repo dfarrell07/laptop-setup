@@ -8,14 +8,9 @@ case "$_repo_hooks_dir" in
   *) _repo_hook="$(git rev-parse --show-toplevel 2>/dev/null)/$_repo_hooks_dir/pre-push" ;;
 esac
 # A repository whose own core.hooksPath points at that directory runs its hooks itself (and they may call this global
-# hook): chaining back into them would loop, so the chain is skipped. No environment variable can switch this off.
-_hooks_path=$(git config --get core.hooksPath 2>/dev/null || true)
-case "$_hooks_path" in
-  "") ;;
-  "~"/*) _hooks_path="$HOME/${_hooks_path#\~/}" ;;
-  /*) ;;
-  *) _hooks_path="$(git rev-parse --show-toplevel 2>/dev/null)/$_hooks_path" ;;
-esac
+# hook): chaining back into them would loop, so the chain is skipped. git resolves the hooks directory it runs from
+# (core.hooksPath in any form, bare repositories); no environment variable can switch this off.
+_hooks_path=$(git rev-parse --git-path hooks 2>/dev/null || true)
 if [ -n "$_hooks_path" ] && [ -d "$_hooks_path" ] &&
   [ "$(cd "$_hooks_path" && pwd -P)" = "$(cd "$(dirname "$_repo_hook")" 2>/dev/null && pwd -P)" ]; then
   _repo_hook=""
