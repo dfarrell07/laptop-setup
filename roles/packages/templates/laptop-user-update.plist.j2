@@ -7,8 +7,14 @@
 <dict>
   <key>Label</key>
   <string>com.laptop-setup.user-update</string>
+  <!-- The wrapper keeps the log's last 2000 lines, then runs the script appending to it (it would otherwise grow forever) -->
   <key>ProgramArguments</key>
   <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>/usr/bin/tail -n 2000 "$1" &gt; "$1.tmp" 2&gt;/dev/null &amp;&amp; /bin/mv -f "$1.tmp" "$1"; /bin/rm -f "$1.tmp"; exec "$2" &gt;&gt; "$1" 2&gt;&amp;1</string>
+    <string>laptop-user-update</string>
+    <string>{{ ansible_facts['user_dir'] | e }}/.local/state/log/laptop-user-update.log</string>
     <string>{{ ansible_facts['user_dir'] | e }}/.local/bin/laptop-user-update</string>
   </array>
   <key>StartCalendarInterval</key>
@@ -34,9 +40,5 @@
   <integer>15</integer>
   <key>LowPriorityIO</key>
   <true/>
-  <key>StandardOutPath</key>
-  <string>{{ ansible_facts['user_dir'] | e }}/.local/state/log/laptop-user-update.log</string>
-  <key>StandardErrorPath</key>
-  <string>{{ ansible_facts['user_dir'] | e }}/.local/state/log/laptop-user-update.log</string>
 </dict>
 </plist>

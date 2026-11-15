@@ -140,12 +140,31 @@ class AutoUpdateTests(unittest.TestCase):
             script = home / '.local/bin/laptop-user-update'
             self.assertEqual(script.stat().st_mode & 0o777, 0o755)
             agent = plistlib.loads((home / 'Library/LaunchAgents/com.laptop-setup.user-update.plist').read_bytes())
-            self.assertEqual(agent['ProgramArguments'], [str(script)])  # no container argument: no distrobox on macOS
+            # the wrapper, then the log and the script with no container argument (no distrobox on macOS)
+            wrapper, logfile = agent['ProgramArguments'][:3], name + '/.local/state/log/laptop-user-update.log'
+            self.assertEqual(agent['ProgramArguments'][3:], ['laptop-user-update', logfile, str(script)])
+            self.assertEqual(wrapper[:2], ['/bin/sh', '-c'])
+            self.assertNotIn('StandardOutPath', agent)  # the wrapper's own redirection: the log is replaced when trimmed
+            # the wrapper keeps the last 2000 lines, appends the run's output and returns its exit code
+            fake = home / 'fake-update'
+            fake.write_text('#!/bin/sh\necho run; echo oops >&2; exit 3\n')
+            fake.chmod(0o755)
+            trimmed = home / 'trim.log'
+            for lines, kept in [(2500, [f'line {n}' for n in range(501, 2501)]), (3, ['line 1', 'line 2', 'line 3']),
+                                (None, [])]:
+                with self.subTest(lines=lines):
+                    trimmed.unlink(missing_ok=True)
+                    if lines:
+                        trimmed.write_text(''.join(f'line {n}\n' for n in range(1, lines + 1)))
+                    result = subprocess.run(wrapper + ['laptop-user-update', str(trimmed), str(fake)], capture_output=True,
+                                            text=True, env={'PATH': '/usr/bin:/bin'})
+                    self.assertEqual((result.returncode, result.stdout, result.stderr), (3, '', ''))
+                    self.assertEqual(trimmed.read_text().splitlines(), kept + ['run', 'oops'])
+                    self.assertFalse(Path(str(trimmed) + '.tmp').exists())
             self.assertEqual(agent['StartCalendarInterval'], {'Hour': 0, 'Minute': 0})
             self.assertEqual(agent['EnvironmentVariables'], {
                 'LAPTOP_UPDATE_PATH': '/opt/homebrew/bin:/usr/bin:/bin', 'LAPTOP_UPDATE_NPM': '@openai/codex other',
                 'LAPTOP_UPDATE_PIPX_SKIP': 'yamllint ansible-lint'})
-            self.assertEqual(agent['StandardOutPath'], name + '/.local/state/log/laptop-user-update.log')
             self.assertTrue((home / '.local/state/log').is_dir())
 
     def run_updater(self, home, npm_rc=0, container_exists=True, outdated_fails=False, container='fedora-dev'):
