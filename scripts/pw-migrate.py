@@ -20,6 +20,7 @@ import os
 import platform
 import plistlib
 import re
+import resource
 import shlex
 import signal
 import stat
@@ -50,8 +51,15 @@ def wipe(path):
 
 
 def wipe_all():
+    left = []
     while _to_delete:
-        wipe(_to_delete.pop())
+        path = _to_delete.pop()
+        try:
+            wipe(path)
+        except OSError:
+            left.append(path)  # keep going: one failure must not leave the others behind
+    if left:
+        print(f'pw-migrate: could not remove {len(left)} file(s); delete them by hand: {" ".join(left)}', file=sys.stderr)
 
 
 def on_signal(signum, _frame):
@@ -59,16 +67,15 @@ def on_signal(signum, _frame):
     fail(f'interrupted by signal {signum}; export removed', 130)
 
 
-def linux_fs_type(path):
-    real = os.path.realpath(path)
-    best, fstype = '', None
-    with open('/proc/self/mounts', encoding='utf-8') as mounts:
-        for line in mounts:
-            fields = line.split()
-            mount_point = fields[1].replace('\\040', ' ')
-            if (real == mount_point or real.startswith(mount_point.rstrip('/') + '/')) and len(mount_point) >= len(best):
-                best, fstype = mount_point, fields[2]
-    return fstype
+def linux_fs_type(descriptor):
+    """Filesystem of an open file, by its mount ID: no path parsing (escaped names) and no re-resolution."""
+    with open(f'/proc/self/fdinfo/{descriptor}', encoding='utf-8') as fdinfo:
+        mount_id = next(line.split()[1] for line in fdinfo if line.startswith('mnt_id:'))
+    with open('/proc/self/mountinfo', encoding='utf-8') as mountinfo:
+        for line in mountinfo:
+            if line.split()[0] == mount_id:
+                return line.split(' - ', 1)[1].split()[0]
+    return None
 
 
 def macos_on_ramdisk(path):
@@ -87,14 +94,18 @@ def macos_on_ramdisk(path):
 def check_export(path):
     if not path:
         fail('EXPORT is required: make pw-migrate EXPORT=/dev/shm/lastpass.csv', 2)
-    info = os.lstat(path) if os.path.lexists(path) else None
-    if info is None:
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
         fail(f'{path}: not found', 2)
-    if not stat.S_ISREG(info.st_mode):
-        fail(f'{path}: not a regular file (symlinks are refused)', 2)
+    except OSError:
+        fail(f'{path}: cannot open it as a regular file (symlinks are refused)', 2)
+    if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+        os.close(descriptor)
+        fail(f'{path}: not a regular file', 2)
     system = platform.system()
     if system == 'Linux':
-        fstype = linux_fs_type(path)
+        fstype = linux_fs_type(descriptor)
         if fstype not in MEMORY_FS:
             fail(f'{path} is on {fstype or "an unknown filesystem"}, not tmpfs: move it to /dev/shm or '
                  '$XDG_RUNTIME_DIR first (it was not modified)', 2)
@@ -103,10 +114,12 @@ def check_export(path):
             fail(f'{path} is not on a RAM disk: see docs/password-migration.md (it was not modified)', 2)
     else:
         fail(f'unsupported system {system}', 2)
-    os.chmod(path, 0o600)
+    os.fchmod(descriptor, 0o600)
+    os.close(descriptor)
 
 
 def read_rows(path):
+    csv.field_size_limit(16 * 1024 * 1024)  # long secure notes exceed the 128 KiB default
     with open(path, newline='', encoding='utf-8-sig') as handle:
         reader = csv.DictReader(handle)
         missing = LASTPASS_COLUMNS - set(reader.fieldnames or [])
@@ -158,7 +171,7 @@ def strip_totp(path, rows):
 
 def bw(*args):
     """Run bw; return stdout. Its output may contain vault data, so only the exit status is ever shown."""
-    command = shlex.split(os.environ.get('BW_CMD', 'bw')) + list(args)
+    command = shlex.split(os.environ.get('BW_CMD', 'bw')) + ['--nointeraction'] + list(args)
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     if result.returncode:
         fail(f'`bw {args[0]}` failed (exit {result.returncode}); its output is hidden because it may contain '
@@ -182,8 +195,10 @@ def vault_counts():
 
 
 def main():
-    signal.signal(signal.SIGTERM, on_signal)
-    signal.signal(signal.SIGINT, on_signal)
+    # No core dump can carry the rows to disk (systemd-coredump stores them); children (bw) inherit the limit.
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP, signal.SIGQUIT):
+        signal.signal(signum, on_signal)
     path = os.environ.get('EXPORT', '')
     check_export(path)
     dry_run = os.environ.get('DRY_RUN') == '1'

@@ -13,7 +13,7 @@ with `make pw-migrate`, without the plaintext export ever reaching persistent st
    page or Homebrew (`bitwarden-cli`). Avoid the npm package version that shipped a trojan (2026.4.0).
 3. **You** export the LastPass vault as CSV straight into memory and decrypt it there:
    - Linux: save it under `/dev/shm` or `$XDG_RUNTIME_DIR` (both tmpfs), e.g. `/dev/shm/lastpass.csv`.
-   - macOS: create a RAM disk first, `diskutil erasevolume APFS PWMIGRATE $(hdiutil attach -nomount ram://262144)`
+   - macOS: create a RAM disk first, `diskutil erasevolume HFS+ PWMIGRATE $(hdiutil attach -nomount ram://262144)`
      (128 MB), and save it in `/Volumes/PWMIGRATE`. Eject it afterwards: `diskutil eject PWMIGRATE`.
    - Do not open the file in an editor or a viewer, and do not save it anywhere else first: browsers' download
      folders and editors' swap files are on disk.
@@ -28,7 +28,9 @@ with `make pw-migrate`, without the plaintext export ever reaching persistent st
 
 The target refuses an export that is not a regular file on tmpfs/ramfs (Linux) or a `ram://` RAM disk (macOS), and
 leaves such a file untouched so you can move it. It never prints the file's contents, and hides `bw`'s output on
-failure because it can echo rows; only `bw`'s exit status is shown. Agents must not read the export: run the target
+failure because it can echo rows; only `bw`'s exit status is shown. It disables core dumps (which could write the
+rows to disk) and cleans up on Ctrl-C, Ctrl-\\, a closed terminal or SIGTERM. A row it cannot parse ends the run
+and removes the export too, so a failed run means exporting again. Agents must not read the export: run the target
 yourself, or let an agent run it, but never `cat`, `head` or open the file.
 
 ## Options
