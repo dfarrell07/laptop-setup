@@ -41,10 +41,12 @@ vpn_field() {
   fi
 }
 
-# Interactive agent sessions: claude, codex and agy processes on a terminal. Codex leaves app-server daemons
-# running after a session ends; they have no terminal and are not sessions, so they are not counted.
+# Interactive agent sessions: terminals (tmux panes included) running a claude, codex or agy process, each
+# terminal counted once so helper processes a session starts on its own terminal do not inflate the count. Codex
+# leaves app-server daemons running after a session ends; they have no terminal and are not counted.
 agent_sessions() {
-  ps -eo tty=,comm= 2>/dev/null | awk '$1 != "?" && $2 ~ /^(claude|codex|agy)$/ {n++} END {print n + 0}'
+  ps -eo tty=,comm= 2>/dev/null |
+    awk '$1 != "?" && $2 ~ /^(claude|codex|agy)$/ && !seen[$1]++ {n++} END {print n + 0}'
 }
 
 # Automatic update jobs; UPD shows while any of them is in the failed state (journalctl -u / --user -u <unit>).
