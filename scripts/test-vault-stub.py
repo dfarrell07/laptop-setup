@@ -68,7 +68,9 @@ class VaultModeTests(unittest.TestCase):
 
     def run_slice(self, repo):
         source = (ROOT / 'scripts/verify-ansible-args.sh').read_text()
-        body = source[source.index('# vault-mode: begin'):source.index('# vault-mode: end')]
+        begin = source.index('\n# vault-mode: begin\n') + 1  # top level, not inside a branch
+        self.assertLess(begin, source.rindex('\n    exec '), 'the block must run before the command is exec\'d')
+        body = source[begin:source.index('# vault-mode: end')]
         return subprocess.run(['bash', '-c', 'set -euo pipefail; _repo_root="$1"\n' + body, 'slice', str(repo)],
                               capture_output=True, text=True, timeout=30)
 

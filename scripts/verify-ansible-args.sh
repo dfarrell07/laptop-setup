@@ -474,8 +474,8 @@ _vault_yml="${_repo_root}/group_vars/all/vault.yml"
 if [[ -L "$_vault_yml" ]]; then
     echo "SECURITY: group_vars/all/vault.yml is a symlink; replace it with the file itself" >&2
     exit 2
-elif [[ -f "$_vault_yml" && -O "$_vault_yml" ]]; then
-    chmod 600 "$_vault_yml"
+elif [[ -f "$_vault_yml" && -O "$_vault_yml" && -n "$(find "$_vault_yml" -prune ! -perm 600)" ]]; then
+    chmod 600 "$_vault_yml" || { echo "ERROR: could not restore mode 0600 on group_vars/all/vault.yml" >&2; exit 1; }
 fi
 # vault-mode: end
 "${_repo_root}/scripts/verify-collections.sh"
