@@ -33,7 +33,8 @@ The dnf update set is `system_dnf_automatic_upgrade_type` (`default`: all update
 - pipx apps the packages role pins (`packages_user_updates_pipx_skip`: yamllint, ansible-lint) are skipped.
 - macOS: the launchd agent `com.laptop-setup.user-update` runs the same script daily at midnight (or on waking, if the
   Mac slept through it) for npm globals and pipx; there is no dev container. Log:
-  `~/.local/state/log/laptop-user-update.log`; `make verify CHUNK=packages` reports a failed last run.
+  `~/.local/state/log/laptop-user-update.log` (each run keeps its last 2000 lines); `make verify CHUNK=packages` reports
+  a failed last run.
 - Per-user Flatpak installations (`flatpak --user`) are not covered; the automation installs none.
 - GNOME Software also downloads updates in a GNOME session (`org.gnome.software download-updates`); it is not needed
   alongside dnf-automatic and does not run in sway.
