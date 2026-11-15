@@ -36,7 +36,7 @@ export PATH="{{ dotfiles_homebrew_prefix | trim }}/bin:$PATH"
 [[ -d "{{ dotfiles_homebrew_prefix | trim }}/opt/{{ dotfiles_macos_python }}/libexec/bin" ]] && PATH="{{ dotfiles_homebrew_prefix | trim }}/opt/{{ dotfiles_macos_python }}/libexec/bin:$PATH"
 {% if dotfiles_macos_gnu_tools | bool %}
 # GNU coreutils, sed, grep, find, awk and tar ahead of the BSD tools, so commands behave as on Linux
-for _gnubin in coreutils gnu-sed grep findutils gawk gnu-tar; do
+for _gnubin in coreutils gnu-sed grep findutils gawk gnu-tar make; do
   [[ -d "{{ dotfiles_homebrew_prefix | trim }}/opt/$_gnubin/libexec/gnubin" ]] && PATH="{{ dotfiles_homebrew_prefix | trim }}/opt/$_gnubin/libexec/gnubin:$PATH"
 done
 unset _gnubin
