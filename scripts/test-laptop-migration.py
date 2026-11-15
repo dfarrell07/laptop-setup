@@ -450,6 +450,19 @@ class MigrationTests(unittest.TestCase):
                 run_play(Path(name), tasks=selected, variables={**base, 'claude_machine_role': 'work',
                          'claude_machine_profiles': ['work'], 'claude_session_either': {'x': 'mac'}})
 
+    def test_smoke_codex_work_login(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('# Work Codex login (work profile)')
+        end = source.index('  unset _codex_work\nfi\n') + len('  unset _codex_work\nfi\n')
+        for status, profile, expected in [(0, 'work', 'codex-work-login PASS'), (1, 'work', 'codex-work-login FAIL'),
+                                          (1, 'personal', '')]:
+            with self.subTest(status=status, profile=profile):
+                script = ('record() { printf "%s %s\\n" "$1" "$2"; }; _codex_enabled=true; CONTAINER=; _cfg=/dev/null; '
+                          f'profile={profile}; codex() {{ [ "$CODEX_HOME" = "$HOME/.codex" ] || return 9; return {status}; }}; '
+                          'export -f codex;\n' + source[start:end])
+                result = subprocess.run(['bash', '-c', script], capture_output=True, text=True, timeout=30)
+                self.assertEqual(result.stdout.strip(), expected, result.stderr)
+
     def test_smoke_session_placement_flags_misplaced_sessions(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
         start = source.index('# Session placement (claude role')
