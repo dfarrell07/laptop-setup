@@ -96,7 +96,8 @@ claude_queue_enabled: false
 # orchestrator in tmux with Remote Control on. Design: claude-skills plans/session-orchestrator.md, "Boot".
 claude_orchestrator_enabled: false
 # Physical path (no symlink) of a claude-skills checkout that has skills/sessions; it loads as the orchestrator's plugin
-claude_orchestrator_checkout: "{{ ansible_facts['user_dir'] }}/claude-skills"
+claude_orchestrator_checkout: >-
+  {{ git_repos_base_dir | default(ansible_facts['user_dir'] ~ '/src') }}/{{ dotfiles_github_user }}/claude-skills
 claude_orchestrator_name: orchestrator  # session personal-<name>: its tmux session and Remote Control name
 claude_queue_allowed_authors: []  # GitHub logins allowed to trigger queue; MUST set when enabled — empty makes the poller refuse to run
 claude_log_dir: "{{ ansible_facts['user_dir'] }}/.local/state/claude/logs"
