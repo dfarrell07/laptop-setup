@@ -90,6 +90,19 @@
       ansible.builtin.command: nvim --version
       changed_when: false
 
+    - name: Check the AeroSpace launcher's choose is installed (packages_brew choose-gui)
+      ansible.builtin.stat:
+        path: "{{ dotfiles_homebrew_prefix }}/bin/choose"
+      register: verify_choose
+      failed_when: not verify_choose.stat.executable | default(false)
+
+    - name: Check brew vim has clipboard support (packages_brew vim)
+      ansible.builtin.command:
+        argv: ["{{ dotfiles_homebrew_prefix }}/bin/vim", --version]
+      register: verify_vim
+      changed_when: false
+      failed_when: verify_vim.rc != 0 or '+clipboard' not in verify_vim.stdout
+
     - name: Check gitleaks is installed (packages_brew)
       ansible.builtin.command: gitleaks version
       changed_when: false
