@@ -360,8 +360,8 @@ else
   [[ -n "${_timeout_bin:-}" ]] && _to=("$_timeout_bin" 30)
   # Pasteable home for the hint: ~/ for paths under $HOME, shell-quoted otherwise
   _home_disp() { if [[ "$1" == "$HOME"/* ]]; then printf "%s/%q" "~" "${1#"$HOME"/}"; else printf '%q' "$1"; fi; }
-  _claude_homes=("${_claude_home:-$HOME/.claude}")
-  $_claude_home2_off || _claude_homes+=("${_claude_home2:-$HOME/.claude-per2}")
+  _cd=${_claude_home:-$HOME/.claude}; _claude_homes=("${_cd/#\~/$HOME}")
+  _cd=${_claude_home2:-$HOME/.claude-per2}; $_claude_home2_off || _claude_homes+=("${_cd/#\~/$HOME}")
   # config.yml's claude_extra_config_dirs (~/.claude-<name>, as the play asserts), except cwork's Vertex home
   while IFS= read -r _cd; do
     [[ "$_cd" == "$HOME/.claude-"* && "${_cd#"$HOME/.claude-"}" =~ ^[a-z0-9][a-z0-9-]*$ && "$_cd" != "$HOME/.claude-work" \
@@ -369,7 +369,6 @@ else
   done <<<"${_claude_extra_dirs:-}"
   if command -v claude &>/dev/null; then
     for _cd in "${_claude_homes[@]}"; do
-      _cd=${_cd/#\~/$HOME}
       [[ -d "$_cd" ]] || continue
       _rc=0
       env -u CLAUDE_CODE_USE_VERTEX -u ANTHROPIC_VERTEX_PROJECT_ID -u CLOUD_ML_REGION \
