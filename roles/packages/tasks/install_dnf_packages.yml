@@ -24,7 +24,7 @@
                 if not repo_tailscale else packages_networking)
              + (packages_networking_work if profile == 'work' else [])
              + (packages_support_work if profile == 'work' else [])
-             + (packages_fedora_work if profile == 'work' and ansible_distribution == 'Fedora' else [])
+             + (packages_fedora if ansible_distribution == 'Fedora' else [])
              + (['bpfman'] if packages_bpfman_enabled | bool else [])
              + (packages_aws_cli_fedora_work if profile == 'work' and ansible_distribution == 'Fedora' else [])
              + packages_extra_dnf }}

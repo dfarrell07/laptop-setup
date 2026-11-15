@@ -285,8 +285,8 @@ _tool_absent="FAIL"
 [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && _tool_absent="WARN"
 _tools=("kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "jq:jq --version" "tmux:tmux -V" "rg:rg --version" "fzf:fzf --version" "transcrypt:transcrypt --version" "gitleaks:gitleaks version" "direnv:direnv --version")
 if [[ "$profile" == "work" ]]; then _tools+=("kind:kind version" "helm:helm version" "kustomize:kustomize version" "go:go version" "k9s:k9s version" "sops:sops --disable-version-check --version" "oras:oras version"); fi
-# gitlint: Fedora (dnf), Debian (apt) and macOS (brew); not in EPEL, so not on RHEL/Rocky.
-if [[ "$profile" == "work" ]] && ! grep -qE '^ID="?(rhel|rocky|almalinux|centos)' /etc/os-release 2>/dev/null; then
+# gitlint, both profiles: Fedora (dnf), Debian (apt) and macOS (brew); not in EPEL, so not on RHEL/Rocky.
+if ! grep -qE '^ID="?(rhel|rocky|almalinux|centos)' /etc/os-release 2>/dev/null; then
   _tools+=("gitlint:gitlint --version")
 fi
 # Release-management tools installed on Linux work machines only (skopeo from dnf/apt, ec pinned); acli only where
@@ -822,8 +822,8 @@ if command -v vim &>/dev/null; then record "vim-binary" "PASS"
 elif $IS_LINUX; then record "vim-binary" "FAIL" "vim not found — run: make packages"
 else record "vim-binary" "WARN" "vim not found (macOS: system or brew)"; fi
 
-# --- pipx tools (yamllint, ansible-lint, gitlint — installed by packages role via pipx) ---
-for tool in yamllint ansible-lint gitlint; do
+# --- pipx tools (yamllint, ansible-lint — installed by packages role via pipx) ---
+for tool in yamllint ansible-lint; do
   if command -v "$tool" &>/dev/null; then
     if exec_cmd "$tool" --version &>/dev/null; then
       record "pipx-$tool" "PASS"
