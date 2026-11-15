@@ -7,6 +7,19 @@ case "$_repo_hooks_dir" in
   ""|/*|*..*) _repo_hook="$(git rev-parse --git-common-dir 2>/dev/null)/hooks/pre-push" ;;
   *) _repo_hook="$(git rev-parse --show-toplevel 2>/dev/null)/$_repo_hooks_dir/pre-push" ;;
 esac
+# A repository whose own core.hooksPath points at that directory runs its hooks itself (and they may call this global
+# hook): chaining back into them would loop, so the chain is skipped. No environment variable can switch this off.
+_hooks_path=$(git config --get core.hooksPath 2>/dev/null || true)
+case "$_hooks_path" in
+  "") ;;
+  "~"/*) _hooks_path="$HOME/${_hooks_path#\~/}" ;;
+  /*) ;;
+  *) _hooks_path="$(git rev-parse --show-toplevel 2>/dev/null)/$_hooks_path" ;;
+esac
+if [ -n "$_hooks_path" ] && [ -d "$_hooks_path" ] &&
+  [ "$(cd "$_hooks_path" && pwd -P)" = "$(cd "$(dirname "$_repo_hook")" 2>/dev/null && pwd -P)" ]; then
+  _repo_hook=""
+fi
 _stdin=$(cat)
 # HTTPS pushes (gh's token, no YubiKey) go only to github.com/<github.user>/; anything else on GitHub must use SSH.
 # The gitconfig rewrites take care of that, but an explicit remote pushurl skips pushInsteadOf, so check the real URL.
