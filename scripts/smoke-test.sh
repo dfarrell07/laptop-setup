@@ -457,6 +457,24 @@ if [[ -z "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then
       fi
     fi
   fi
+  # Shared vault (docs/shared-vault.md): once the helper is the shared one, the working copy must match the shared
+  # repository's vault and the tools must be here. Never opens anything (no PIN or touch).
+  if [[ -f "$_vp" ]] && grep -qxF '# laptop-setup shared vault helper (scripts/vault-shared.sh)' "$_vp"; then
+    _vs_secrets=$(sed -n "s/^exec age -d -i '[^']*' '\(.*\)\/vault-pass.age'$/\1/p" "$_vp")
+    _vs_ids=$(sed -n "s/^exec age -d -i '\([^']*\)' .*/\1/p" "$_vp")
+    if [[ -z "$_vs_secrets" || ! -f "$_vs_secrets/vault-pass.age" ]]; then
+      record "vault-shared" "FAIL" "vault-pass.sh points at a missing laptop-secrets clone ($_vs_secrets); run: make vault-join"
+    elif ! command -v age >/dev/null || ! command -v age-plugin-yubikey >/dev/null; then
+      record "vault-shared" "FAIL" "age or age-plugin-yubikey is missing, so the vault cannot open; run: make packages"
+    elif ! grep -q '^AGE-PLUGIN-YUBIKEY-' "$_vs_ids" 2>/dev/null; then
+      record "vault-shared" "FAIL" "no YubiKey identity stubs in $_vs_ids; plug in an enrolled key and run: make vault-join"
+    elif ! cmp -s "$_vs_secrets/vault.yml" "$SCRIPT_DIR/../group_vars/all/vault.yml"; then
+      record "vault-shared" "WARN" "group_vars/all/vault.yml differs from the shared vault; run: make vault-pull"
+    else
+      record "vault-shared" "PASS"
+    fi
+    unset _vs_secrets _vs_ids
+  fi
   unset _vp
 fi
 

@@ -174,7 +174,8 @@ runs `git_repos` for one `repo_category`. `make help` lists everything; scenario
 ## Vault
 
 - One vault file, `group_vars/all/vault.yml`; password from a YubiKey via `make setup-yubikeys`; `make vault-edit|vault-view`.
-  `vault-pass.sh` templates: SECURITY.md § "Setting Up vault-pass.sh".
+  `vault-pass.sh` templates: SECURITY.md § "Setting Up vault-pass.sh". Shared across machines (`make vault-share-init`,
+  `vault-join`, `vault-add-key`): [docs/shared-vault.md](docs/shared-vault.md).
 - **Never define `vault_*` variables in `config.yml`**: `include_vars` (precedence 18) outranks `group_vars` and silently shadows the vault
   value. `common/tasks/pre_flight_checks.yml` asserts this.
 - **The GRUB password hash must be vault-sourced** (`system_grub_password_enabled: true`): generate with `grub2-mkpasswd-pbkdf2`, store as

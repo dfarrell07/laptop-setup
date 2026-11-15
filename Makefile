@@ -1,7 +1,8 @@
 .PHONY: status plan apply verify rollout-banner bootstrap-hooks help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check test smoke-test \
        dotfiles packages repos notes \
        ssh desktop system repos_dnf redhat containers claude codex container \
-       container-rebuild csb-audit ssh-keys github-ssh-keys vault-init vault-import vault-edit vault-view update hooks pw-migrate gate \
+       container-rebuild csb-audit ssh-keys github-ssh-keys vault-init vault-import vault-edit vault-view vault-share-init vault-join vault-add-key \
+       vault-remove-key vault-pull vault-status update hooks pw-migrate gate \
        smoke-test-container smoke-test-user \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
        test-scripts test-poller test-gitleaks test-% \
@@ -115,7 +116,10 @@ help:
 	@echo "  github-ssh-keys        Add the YubiKey SSH keys GitHub lacks (asks gh for the key scope)"
 	@echo "  vault-init             Encrypt the vault stub with the SSH keys (after ssh-keys)"
 	@echo "  vault-import FROM=...  Reuse another machine's encrypted vault (file, backup dir or host:path) instead of setup-yubikeys"
-	@echo "  vault-edit             Edit the vault (vault-view: read only)"
+	@echo "  vault-edit             Edit the vault (vault-view: read only); shared once vault-join or vault-share-init ran"
+	@echo "  vault-share-init       Move this machine's vault into the shared laptop-secrets repo (first machine, once)"
+	@echo "  vault-join             Use the shared vault on this machine (vault-pull: fetch changes; vault-status)"
+	@echo "  vault-add-key [NOPIN=1] Enrol the plugged-in YubiKey (vault-remove-key RECIPIENT=age1...: drop one, new password)"
 	@echo "  usb-add                Allow blocked USB devices (USBGuard) and save their rules to config.yml"
 	@echo "  preflight              Check prerequisites and CSB detection"
 	@echo "  backup                 Back up dotfiles and agent config (backup-dry-run: preview)"
@@ -522,6 +526,7 @@ TEST_SCRIPTS := \
 	'.venv/bin/python3 scripts/test-ansible-input-guards.py' \
 	'.venv/bin/python3 scripts/test-usb-add.py' \
 	'.venv/bin/python3 scripts/test-vault-import.py' \
+	'.venv/bin/python3 scripts/test-vault-shared.py' \
 	'.venv/bin/python3 scripts/test-collection-source-verifier.py' \
 	'.venv/bin/python3 scripts/test-rollout.py' \
 	'bash test-var-override.sh'
@@ -577,8 +582,34 @@ vault-import: guard-not-root
 	@[ "$(origin FROM)" = "command line" ] && [ -n "$$FROM" ] || { echo "usage: make vault-import FROM=PATH|HOST:PATH  (an encrypted vault.yml, or a directory with one)" >&2; exit 2; }
 	@scripts/vault-import.sh "$$FROM"
 
+# Once the shared vault is active here (docs/shared-vault.md), edit and view go through it: pull first, and an edit is
+# committed and pushed to the laptop-secrets repository for every machine.
 vault-edit:
-	EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) ansible-vault edit group_vars/all/vault.yml
+	@if scripts/vault-shared.sh active; then scripts/vault-shared.sh edit; else \
+	EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) ansible-vault edit group_vars/all/vault.yml; fi
 
 vault-view:
-	PAGER= ANSIBLE_PAGER= MANPAGER= SYSTEMD_PAGER= EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) ansible-vault view group_vars/all/vault.yml
+	@if scripts/vault-shared.sh active; then scripts/vault-shared.sh view; else \
+	PAGER= ANSIBLE_PAGER= MANPAGER= SYSTEMD_PAGER= EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) ansible-vault view group_vars/all/vault.yml; fi
+
+# Shared vault (docs/shared-vault.md). NOPIN, RECIPIENT and FORCE reach the script through the environment only when
+# given on the command line.
+vault-share-init: guard-not-root
+	@scripts/vault-shared.sh init
+
+vault-join: guard-not-root
+	@scripts/vault-shared.sh join
+
+vault-add-key: guard-not-root
+	@$(if $(filter command line,$(origin RECIPIENT)),,RECIPIENT= )$(if $(filter command line,$(origin FORCE)),,FORCE= )\
+	scripts/vault-shared.sh add-key $(if $(filter command line,$(origin NOPIN)),--no-pin)
+
+vault-remove-key: guard-not-root
+	@[ "$(origin RECIPIENT)" = "command line" ] || { echo "usage: make vault-remove-key RECIPIENT=age1..." >&2; exit 2; }
+	@$(if $(filter command line,$(origin FORCE)),,FORCE= )scripts/vault-shared.sh remove-key "$$RECIPIENT"
+
+vault-pull: guard-not-root
+	@scripts/vault-shared.sh pull
+
+vault-status:
+	@scripts/vault-shared.sh status
