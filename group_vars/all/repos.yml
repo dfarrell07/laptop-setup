@@ -10,6 +10,8 @@
 # Conventions:
 # - origin is the upstream repo over HTTPS; a fork you push to is an extra remote named `fork`
 #   (older entries keep their short names, e.g. dfarrell07_subm, so existing clones stay valid).
+# - Fork remotes are HTTPS too: pushes use gh's credentials, so agents can push to your forks; `git pushsk` pushes
+#   over SSH (YubiKey touch). make repos converts an existing SSH fork remote to the URL listed here.
 # - depth: 1 for reference-only repos; omit it where you rebase or push branches.
 
 git_repos_public:
@@ -51,98 +53,98 @@ git_repos_public:
     category: downstream  # depth omitted: full history required for rebase/fork workflow
     extra_remotes:
       - name: "{{ dotfiles_github_user }}_op"
-        url: "git@github.com:{{ dotfiles_github_user }}/submariner-operator.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/submariner-operator.git"
 
   - url: https://github.com/submariner-io/submariner
     dest: submariner-io/submariner
     category: downstream  # depth omitted: full history required for rebase/fork workflow
     extra_remotes:
       - name: "{{ dotfiles_github_user }}_subm"
-        url: "git@github.com:{{ dotfiles_github_user }}/submariner.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/submariner.git"
 
   - url: https://github.com/submariner-io/admiral
     dest: submariner-io/admiral
     category: downstream
     extra_remotes:
       - name: "{{ dotfiles_github_user }}_ad"
-        url: "git@github.com:{{ dotfiles_github_user }}/admiral.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/admiral.git"
 
   - url: https://github.com/submariner-io/lighthouse
     dest: submariner-io/lighthouse
     category: downstream  # depth omitted: full history required for rebase/fork workflow
     extra_remotes:
       - name: "{{ dotfiles_github_user }}_lh"
-        url: "git@github.com:{{ dotfiles_github_user }}/lighthouse.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/lighthouse.git"
 
   - url: https://github.com/submariner-io/shipyard
     dest: submariner-io/shipyard
     category: downstream
     extra_remotes:
       - name: "{{ dotfiles_github_user }}_sy"
-        url: "git@github.com:{{ dotfiles_github_user }}/shipyard.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/shipyard.git"
 
   - url: https://github.com/submariner-io/cloud-prepare
     dest: submariner-io/cloud-prepare
     category: downstream
     extra_remotes:
       - name: "{{ dotfiles_github_user }}_cp"
-        url: "git@github.com:{{ dotfiles_github_user }}/cloud-prepare.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/cloud-prepare.git"
 
   - url: https://github.com/submariner-io/subctl
     dest: submariner-io/subctl
     category: downstream  # depth omitted: full history required for rebase/fork workflow
     extra_remotes:
       - name: "{{ dotfiles_github_user }}_subctl"
-        url: "git@github.com:{{ dotfiles_github_user }}/subctl.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/subctl.git"
 
   - url: https://github.com/submariner-io/enhancements
     dest: submariner-io/enhancements
     category: downstream
     extra_remotes:
       - name: "{{ dotfiles_github_user }}_enh"
-        url: "git@github.com:{{ dotfiles_github_user }}/enhancements.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/enhancements.git"
 
   - url: https://github.com/submariner-io/submariner-website
     dest: submariner-io/submariner-website
     category: downstream
     extra_remotes:
       - name: "{{ dotfiles_github_user }}_web"
-        url: "git@github.com:{{ dotfiles_github_user }}/submariner-website.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/submariner-website.git"
 
   - url: https://github.com/submariner-io/submariner-charts
     dest: submariner-io/submariner-charts
     category: downstream
     extra_remotes:
       - name: "{{ dotfiles_github_user }}_helm"
-        url: "git@github.com:{{ dotfiles_github_user }}/submariner-charts.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/submariner-charts.git"
 
   - url: https://github.com/submariner-io/releases
     dest: submariner-io/releases
     category: downstream
     extra_remotes:
       - name: "{{ dotfiles_github_user }}_rel"
-        url: "git@github.com:{{ dotfiles_github_user }}/releases.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/releases.git"
 
   - url: https://github.com/submariner-io/get.submariner.io
     dest: submariner-io/get.submariner.io
     category: downstream
     extra_remotes:
       - name: "{{ dotfiles_github_user }}_get"
-        url: "git@github.com:{{ dotfiles_github_user }}/get.submariner.io.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/get.submariner.io.git"
 
   - url: https://github.com/submariner-io/coastguard.git
     dest: submariner-io/coastguard
     category: downstream
     extra_remotes:
       - name: "{{ dotfiles_github_user }}_cg"
-        url: "git@github.com:{{ dotfiles_github_user }}/coastguard.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/coastguard.git"
 
   - url: https://github.com/submariner-io/submariner-diagnostics.git
     dest: submariner-io/submariner-diagnostics
     category: downstream
     extra_remotes:
       - name: "{{ dotfiles_github_user }}_diag"
-        url: "git@github.com:{{ dotfiles_github_user }}/submariner-diagnostics.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/submariner-diagnostics.git"
 
   - url: https://github.com/submariner-io/submariner-bot
     dest: submariner-io/submariner-bot
@@ -155,21 +157,21 @@ git_repos_public:
     category: downstream  # depth omitted: full history required for rebase/fork workflow
     extra_remotes:
       - name: "{{ dotfiles_github_user }}_addon"
-        url: "git@github.com:{{ dotfiles_github_user }}/submariner-addon.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/submariner-addon.git"
 
   - url: https://github.com/stolostron/submariner-release-management
     dest: stolostron/submariner-release-management
     category: downstream
     extra_remotes:
       - name: "{{ dotfiles_github_user }}_relmang"
-        url: "git@github.com:{{ dotfiles_github_user }}/submariner-release-management.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/submariner-release-management.git"
 
   - url: https://github.com/stolostron/submariner-operator-fbc
     dest: stolostron/submariner-operator-fbc
     category: downstream
     extra_remotes:
       - name: "{{ dotfiles_github_user }}_fbc"
-        url: "git@github.com:{{ dotfiles_github_user }}/submariner-operator-fbc.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/submariner-operator-fbc.git"
 
   - url: https://github.com/stolostron/rhacm-docs
     dest: stolostron/rhacm-docs
@@ -177,7 +179,7 @@ git_repos_public:
     category: downstream
     extra_remotes:
       - name: fork
-        url: "git@github.com:{{ dotfiles_github_user }}/rhacm-docs.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/rhacm-docs.git"
 
   - url: https://github.com/stolostron/acmqe-mcn-test
     dest: stolostron/acmqe-mcn-test
@@ -210,7 +212,7 @@ git_repos_public:
     category: ovnk  # depth omitted: full history required for rebase/fork workflow
     extra_remotes:
       - name: "{{ dotfiles_github_user }}_ovnk"
-        url: "git@github.com:{{ dotfiles_github_user }}/ovn-kubernetes.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/ovn-kubernetes.git"
 
   - url: https://github.com/openshift/ovn-kubernetes
     dest: ovnk/openshift/ovn-kubernetes
@@ -222,28 +224,28 @@ git_repos_public:
     category: ovnk
     extra_remotes:
       - name: fork
-        url: "git@github.com:{{ dotfiles_github_user }}/cluster-network-operator.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/cluster-network-operator.git"
 
   - url: https://github.com/openshift/cloud-network-config-controller
     dest: ovnk/openshift/cloud-network-config-controller
     category: ovnk
     extra_remotes:
       - name: fork
-        url: "git@github.com:{{ dotfiles_github_user }}/cloud-network-config-controller.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/cloud-network-config-controller.git"
 
   - url: https://github.com/openshift/multus-cni
     dest: ovnk/openshift/multus-cni
     category: ovnk
     extra_remotes:
       - name: fork
-        url: "git@github.com:{{ dotfiles_github_user }}/multus-cni.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/multus-cni.git"
 
   - url: https://github.com/openshift/ingress-node-firewall
     dest: ovnk/openshift/ingress-node-firewall
     category: ovnk
     extra_remotes:
       - name: fork
-        url: "git@github.com:{{ dotfiles_github_user }}/ingress-node-firewall.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/ingress-node-firewall.git"
 
   - url: https://github.com/k8snetworkplumbingwg/multus-cni
     dest: ovnk/k8snetworkplumbingwg/multus-cni
@@ -300,7 +302,7 @@ git_repos_public:
     category: ovnk
     extra_remotes:
       - name: fork
-        url: "git@github.com:{{ dotfiles_github_user }}/ovn-kubernetes-mcp.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/ovn-kubernetes-mcp.git"
 
   - url: https://github.com/openvswitch/ovs
     dest: ovnk/openvswitch/ovs
@@ -339,7 +341,7 @@ git_repos_public:
     depth: 1
     extra_remotes:
       - name: fork
-        url: "git@github.com:{{ dotfiles_github_user }}/release.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/release.git"
 
   - url: https://github.com/openshift/openshift-docs
     dest: ovnk/openshift/openshift-docs
@@ -371,7 +373,7 @@ git_repos_public:
     category: ovnk
     extra_remotes:
       - name: fork
-        url: "git@github.com:{{ dotfiles_github_user }}/ai-helpers.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/ai-helpers.git"
 
   - url: https://github.com/openshift-eng/ci-test-mapping
     dest: ovnk/openshift-eng/ci-test-mapping
@@ -414,7 +416,7 @@ git_repos_public:
     category: evpn
     extra_remotes:
       - name: fork
-        url: "git@github.com:{{ dotfiles_github_user }}/evpn-gateway-appliance.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/evpn-gateway-appliance.git"
 
   - url: "https://github.com/{{ dotfiles_github_user }}/evpn-gateway-appliance-context.git"
     dest: "evpn/{{ dotfiles_github_user }}/evpn-gateway-appliance-context"
@@ -426,7 +428,7 @@ git_repos_public:
     category: evpn
     extra_remotes:
       - name: fork
-        url: "git@github.com:{{ dotfiles_github_user }}/frr-k8s.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/frr-k8s.git"
 
   - url: https://github.com/metallb/metallb
     dest: evpn/metallb/metallb
@@ -438,7 +440,7 @@ git_repos_public:
     category: evpn
     extra_remotes:
       - name: fork
-        url: "git@github.com:{{ dotfiles_github_user }}/frr.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/frr.git"
 
   - url: https://github.com/openshift/frr
     dest: evpn/openshift/frr
@@ -565,7 +567,7 @@ git_repos_public:
     depth: 1
     extra_remotes:
       - name: fork
-        url: "git@github.com:{{ dotfiles_github_user }}/tekton-integration-catalog.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/tekton-integration-catalog.git"
 
   - url: "https://github.com/konflux-ci/mintmaker-presets"
     dest: "evpn/konflux-ci/mintmaker-presets"
@@ -599,7 +601,7 @@ git_repos_public:
     category: konflux
     extra_remotes:
       - name: fork
-        url: "git@github.com:{{ dotfiles_github_user }}/rhtap-ec-policy.git"
+        url: "https://github.com/{{ dotfiles_github_user }}/rhtap-ec-policy.git"
 
   - url: https://github.com/konflux-ci/olm-operator-konflux-sample
     dest: konflux/konflux-ci/olm-operator-konflux-sample

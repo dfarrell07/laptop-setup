@@ -140,7 +140,7 @@
       value: >-
         !{{ (('/usr/local' if ansible_facts['architecture'] == 'x86_64' else '/opt/homebrew') ~ '/bin/')
             if ansible_facts['system'] == 'Darwin' else '' }}gh auth git-credential
-    - {key: alias.pushsk, value: '!git -c url.ssh://git@github.com/.pushInsteadOf=https://github.com/ push'}
+    - {key: 'url.ssh://git@github.com/.pushInsteadOf', value: 'https://github.com/'}  # upstream pushes need the YubiKey
   loop_control:
     label: "{{ item.key }}"
 
