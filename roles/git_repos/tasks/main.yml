@@ -311,6 +311,8 @@
       { git config --local laptop.repoHooks .githooks; out=updated; };
       if [ -n "$(git config --local --get-all core.hooksPath || true)" ]; then
       git config --local --unset-all core.hooksPath; out=updated; fi;
+      if [ -n "$(git config --local --includes --get-all core.hooksPath || true)" ]; then
+      out="$out included-hooksPath"; fi;
       echo "$out"
     chdir: "{{ git_repos_base_dir }}/{{ item.dest }}"
   loop: "{{ git_repos_filtered | selectattr('hooks', 'defined') | selectattr('hooks') | list }}"
@@ -321,7 +323,18 @@
     - item.url is match('^https://github\\.com/' ~ (dotfiles_github_user | regex_escape) ~ '/')
     - not ansible_check_mode
   register: git_repos_hooks_result
-  changed_when: git_repos_hooks_result.stdout | trim == 'updated'
+  changed_when: "'updated' in git_repos_hooks_result.stdout"
+
+- name: Warn about a core.hooksPath that a local include brings back
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: {{ item.item.dest }} sets core.hooksPath through a file its .git/config includes (include.path or
+      includeIf), which replaces the global hooks (gitleaks, the token-push guard). Remove it there:
+      git -C {{ git_repos_base_dir }}/{{ item.item.dest }} config --local --list --show-origin --includes | grep -i hookspath
+  loop: "{{ git_repos_hooks_result.results | default([]) | selectattr('stdout', 'defined')
+            | selectattr('stdout', 'search', 'included-hooksPath') | list }}"
+  loop_control:
+    label: "{{ item.item.dest }}"
 
 # Last, so one repo that cannot fast-forward does not stop fork remotes being configured
 - name: Fail if any pulls failed
