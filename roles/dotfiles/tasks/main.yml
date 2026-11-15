@@ -556,6 +556,28 @@
       changed_when: _dotfiles_ssh_agent_bootstrap_result.rc == 0
       failed_when: false
 
+    # GUI apps and launchd jobs never read the shell rc files: launchd's own environment points them at the agent.
+    # The LaunchAgent sets it at every login; the setenv below covers the current one.
+    - name: Deploy launchd SSH_AUTH_SOCK plist (macOS)
+      ansible.builtin.template:
+        src: ssh-auth-sock.plist.j2
+        dest: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/{{ dotfiles_ssh_agent_label }}.env.plist"
+        mode: "0644"
+
+    - name: Read launchd SSH_AUTH_SOCK (macOS)  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        argv: [/bin/launchctl, getenv, SSH_AUTH_SOCK]
+      register: _dotfiles_launchd_ssh_auth_sock
+      changed_when: false
+      failed_when: false
+      check_mode: false  # read-only probe
+
+    - name: Point launchd SSH_AUTH_SOCK at the managed agent (macOS)  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        argv: [/bin/launchctl, setenv, SSH_AUTH_SOCK, "{{ ansible_facts['user_dir'] }}/.ssh/ssh-agent.socket"]
+      changed_when: true
+      when: _dotfiles_launchd_ssh_auth_sock.stdout | default('') | trim != ansible_facts['user_dir'] ~ '/.ssh/ssh-agent.socket'
+
 - name: Check if SSH supports post-quantum KEX
   ansible.builtin.command:
     cmd: ssh -Q kex
