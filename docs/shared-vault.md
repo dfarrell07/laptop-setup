@@ -56,17 +56,22 @@ too (new tokens and keys, then `make vault-edit`); the new password protects onl
 
 - **Signatures are the trust anchor.** age does not say who encrypted a file, so anyone who can push could seal a
   password of their choosing to your keys and plant their own vault. Every command that reads the repository fetches
-  first and refuses, before merging anything, any new commit not signed by one of your SSH signing keys (a fresh clone
-  checks its whole history). The keys come from `~/.config/git/allowed_signers`, or, on a machine without them yet,
-  from the signing keys GitHub lists for your account; they are kept in `~/.config/laptop-setup/vault-allowed-signers`.
-  The repository may hold only regular files (no symlinks).
+  first, resolves GitHub's head once, and refuses, before merging anything, unless every commit in its history is
+  signed by one of your SSH signing keys (a clone made by hand is checked the same way). The keys come from
+  `~/.config/git/allowed_signers`, or, on a machine without them yet, from the signing keys GitHub lists for your
+  account after you confirm their fingerprints; they are kept in `~/.config/laptop-setup/vault-allowed-signers`. The
+  repository may hold only regular files (no symlinks).
+- **No rollback**: each machine records the last commit it accepted and refuses a history that no longer contains it
+  (a force-push back to an older signed state could bring back a removed key). A brand-new machine has no record yet,
+  so it trusts the newest signed state it is shown; join new machines after a key removal has been pushed.
 - **Recipients**: anyone who can push could add their own key, and the next re-encryption would include it. Each
   machine keeps the list it approved (`~/.config/laptop-setup/age-recipients-approved`); `make vault-pull` warns when
   the list changed, and `vault-add-key`/`vault-remove-key` refuse a list with keys this machine never approved until
   `FORCE=1` (after checking `git -C ~/src/<user>/laptop-secrets log -p recipients`).
-- **Failures**: `vault-share-init`, `vault-add-key` and `vault-remove-key` change nothing unless they finish: an
-  error or Ctrl-C at a PIN or touch prompt puts the previous helper and files back. A push that loses a race leaves
-  the change committed locally; the message says how to drop it and redo it.
+- **Failures**: `vault-share-init`, `vault-add-key`, `vault-remove-key` and `vault-edit` change nothing unless they
+  push: an error, a failed signature or push, or Ctrl-C at a PIN or touch prompt puts the previous files, commit and
+  helper back, so the command can simply be run again. A failed `vault-edit` keeps the edit, still encrypted, in
+  `~/.config/laptop-setup/vault.yml.unpushed`.
 - **No plaintext on disk**: the password moves only through pipes; the vault's plaintext appears only inside
   `ansible-vault edit` and `view`, as before.
 - **CI** keeps the plaintext stub and `vault-pass-ci.sh`; nothing here changes it.

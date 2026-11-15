@@ -100,16 +100,31 @@ seal_password() {
   mv -f "$tmp" "$S/vault-pass.age"
 }
 
-# Bring the clone up to date before using or changing anything: fetch, check every new commit's signature and the
-# tree, and only then fast-forward (an empty new repository has no upstream yet).
+# Bring the clone up to date before using or changing anything. The upstream commit is resolved once to a SHA; its
+# whole history must be signed (verified SHAs are cached) and descend from the last commit this machine accepted (no
+# rollback to an older signed state, which could bring back a removed key); its tree is checked; and then exactly that
+# SHA is fast-forwarded to. An empty new repository has no upstream yet.
+LAST_SEEN=$CONF/vault-last-seen
+VERIFIED=$CONF/vault-verified-commits
 sync_clone() {
-  git -C "$S" fetch -q 2>/dev/null || { warn "could not fetch $S (offline?): using the local clone"; return 0; }
-  git -C "$S" rev-parse -q --verify '@{u}' >/dev/null 2>&1 || return 0
-  [[ -z $(git -C "$S" rev-list '@{u}..HEAD') ]] ||
-    die "$S has local commits not on GitHub: push them (git -C $S push) or drop them (git -C $S reset --hard @{u})"
-  if git -C "$S" rev-parse -q --verify HEAD >/dev/null 2>&1; then verify_range 'HEAD..@{u}'; else verify_range '@{u}'; fi
-  check_tree '@{u}'
-  git -C "$S" merge -q --ff-only '@{u}' || die "git merge in $S failed: resolve it there (git -C $S status), then re-run"
+  local target
+  git -C "$S" fetch -q 2>/dev/null || { warn "could not fetch $S (offline?): using the local clone"; verify_all HEAD; return 0; }
+  target=$(git -C "$S" rev-parse -q --verify '@{u}^{commit}' 2>/dev/null) || { verify_all HEAD; return 0; }
+  no_rollback "$target"
+  [[ -z $(git -C "$S" rev-list "$target..HEAD") ]] ||
+    die "$S has local commits not on GitHub: push them (git -C $S push) or drop them (git -C $S reset --hard $target)"
+  verify_all "$target"
+  check_tree "$target"
+  git -C "$S" merge -q --ff-only "$target" || die "git merge in $S failed: resolve it there (git -C $S status), then re-run"
+  seen "$target"
+}
+seen() { mkdir -p "$CONF" && printf '%s\n' "$1" >"$LAST_SEEN" && chmod 600 "$LAST_SEEN"; }
+no_rollback() {
+  local last
+  last=$(cat "$LAST_SEEN" 2>/dev/null || true)
+  [[ -z $last ]] && return 0
+  git -C "$S" merge-base --is-ancestor "$last" "$1" 2>/dev/null ||
+    die "GitHub's laptop-secrets no longer contains $last, the last commit this machine accepted: its history was rewritten (a rollback could bring back a removed key). Find out why before using it; to accept it anyway: rm $LAST_SEEN"
 }
 new_password() { python3 -c 'import secrets; print(secrets.token_urlsafe(48))'; }
 
@@ -127,16 +142,29 @@ ensure_signers() {
     keys=$(gh api "users/$user/ssh_signing_keys" --jq '.[].key' 2>/dev/null | grep -oE '(sk-)?ssh-[a-z0-9@.-]+ [A-Za-z0-9+/=]+' || true)
   fi
   [[ -n $keys ]] || die "no SSH signing key to check the shared vault's commits: make dotfiles (allowed_signers), or add your signing key to GitHub (gh ssh-key add --type signing)"
+  if [[ ! -s $HOME/.config/git/allowed_signers ]]; then
+    # Keys GitHub lists are only as trustworthy as the GitHub account that can also push: confirm them by eye.
+    printf 'Commit signing keys GitHub lists for %s:\n' "$user"
+    printf '%s\n' "$keys" | while IFS= read -r k; do printf '%s\n' "$k" | ssh-keygen -lf - 2>/dev/null | sed 's/^/  /'; done
+    [[ -t 0 ]] || die "confirm these in a terminal (or make dotfiles first, which writes ~/.config/git/allowed_signers)"
+    local answer
+    read -r -p "Are these your signing keys (compare with ssh-keygen -lf on your key's .pub)? [y/N] " answer
+    [[ $answer == [yY] ]] || die "not confirmed: nothing was trusted"
+  fi
   printf '%s\n' "$keys" | sed 's/^/* namespaces="git" /' >"$SIGNERS"
   chmod 600 "$SIGNERS"
   ok "commit signers for the shared vault: $SIGNERS ($(wc -l <"$SIGNERS") key(s); check them against yours)"
 }
-verify_range() {  # every commit in $1 must be signed by an allowed signer
+verify_all() {  # every commit reachable from $1 must be signed by an allowed signer
   local c
+  git -C "$S" rev-parse -q --verify "$1^{commit}" >/dev/null 2>&1 || return 0  # nothing committed yet
   ensure_signers
+  mkdir -p "$CONF" && chmod 700 "$CONF" && touch "$VERIFIED" && chmod 600 "$VERIFIED"
   for c in $(git -C "$S" rev-list "$1"); do
+    grep -qxF "$c" "$VERIFIED" && continue
     git -C "$S" -c gpg.ssh.allowedSignersFile="$SIGNERS" verify-commit "$c" >/dev/null 2>&1 ||
-      die "commit $c in $S is not signed by your signing key: nothing was merged. Inspect it (git -C $S show --show-signature $c)"
+      die "commit $c in $S is not signed by your signing key: nothing was merged or used. Inspect it (git -C $S show --show-signature $c)"
+    printf '%s\n' "$c" >>"$VERIFIED"
   done
 }
 # No symlinks or odd files in the repository: the script writes next to them.
@@ -149,6 +177,32 @@ check_tree() {
   done
 }
 
+# A change to the shared repository is all or nothing until it is pushed: txn_begin saves vault.yml, vault-pass.age,
+# recipients and HEAD; any failure or interrupt before txn_end restores them (and drops an unpushed commit).
+txn_begin() {
+  mkdir -p "$CONF" && chmod 700 "$CONF"
+  TXN_DIR=$(mktemp -d "$CONF/txn.XXXXXX")
+  TXN_HEAD=$(git -C "$S" rev-parse -q --verify HEAD 2>/dev/null || true)
+  local f
+  for f in vault.yml vault-pass.age recipients; do [[ ! -f $S/$f ]] || cp -p "$S/$f" "$TXN_DIR/$f"; done
+  trap txn_rollback EXIT
+  trap 'exit 130' INT TERM
+}
+txn_end() { trap - EXIT INT TERM; rm -rf "$TXN_DIR"; }
+txn_rollback() {
+  local rc=$? f
+  for f in vault.yml vault-pass.age recipients; do
+    if [[ -f $TXN_DIR/$f ]]; then cp -p "$TXN_DIR/$f" "$S/$f"; else rm -f "$S/$f"; fi
+  done
+  if [[ -n $TXN_HEAD ]]; then git -C "$S" reset -q "$TXN_HEAD" 2>/dev/null || true
+  elif git -C "$S" rev-parse -q --verify HEAD >/dev/null 2>&1; then git -C "$S" update-ref -d HEAD 2>/dev/null || true; fi
+  git -C "$S" reset -q 2>/dev/null || true
+  rm -rf "$TXN_DIR"
+  [[ -z ${TXN_UNDO:-} ]] || "$TXN_UNDO"
+  warn "stopped before the change was pushed: the shared vault is as it was; run the command again"
+  exit "$rc"
+}
+
 commit_push() {
   local f
   for f in vault.yml vault-pass.age recipients .gitattributes README.md; do
@@ -157,9 +211,9 @@ commit_push() {
   if git -C "$S" diff --cached --quiet; then return 0; fi
   # Signed, always: the other machines refuse an unsigned commit (a touch of the signing YubiKey).
   git -C "$S" commit -q -s -S -m "$1" ||
-    die "signed commit in $S failed (commit signing needs your SSH signing key: make dotfiles); the change is staged there"
-  git -C "$S" push -q || die "push from $S failed. If another machine pushed first, drop this local change with
-       git -C $S fetch && git -C $S reset --hard @{u}, run make vault-pull, then make the change again"
+    die "signed commit in $S failed (commit signing needs your SSH signing key: make dotfiles)"
+  git -C "$S" push -q || die "push from $S failed (offline, or another machine pushed first): run the command again"
+  seen "$(git -C "$S" rev-parse HEAD)"
   ok "committed and pushed: $1"
 }
 
@@ -234,19 +288,20 @@ cmd_add_key() {
   fi
   # The existing list must be approved here before the password is re-encrypted to it plus the new key.
   [[ -z $(recipients_of "$S/recipients") ]] || check_approved
-  local next
-  next=$(mktemp "$S/.recipients.XXXXXX")
+  txn_begin
+  local next=$TXN_DIR/recipients.next
   { [[ ! -f $S/recipients ]] || cat "$S/recipients"; printf '# %s\n%s\n' "$label" "$rec"; } >"$next"
   if [[ -f $S/vault-pass.age ]]; then
     printf 'Re-encrypting the vault password to the new list (an enrolled key opens it: PIN, then touch)...\n'
     local pass
-    pass=$(age -d -i "$IDS" "$S/vault-pass.age") || { rm -f "$next"; die "could not open vault-pass.age with an enrolled key (nothing was changed)"; }
-    printf '%s' "$pass" | seal_password "$next" || { rm -f "$next"; exit 1; }
+    pass=$(age -d -i "$IDS" "$S/vault-pass.age") || die "could not open vault-pass.age with an enrolled key"
+    printf '%s' "$pass" | seal_password "$next"
     unset pass
   fi
-  mv -f "$next" "$S/recipients"
-  approve
+  cp -f "$next" "$S/recipients"
   [[ ! -f $S/vault-pass.age ]] || commit_push "Recipients: add a key"
+  txn_end
+  approve
   ok "recipient added: $rec"
 }
 approve_if_new_file() { [[ -f $APPROVED ]] || approve; }
@@ -261,45 +316,32 @@ cmd_remove_key() {
   check_approved "$rec"
   # Drop the recipient (and its comment line) from a copy, then rotate to the copy: the old password stays readable in
   # git history, so the vault gets a new one.
-  local next
-  next=$(mktemp "$S/.recipients.XXXXXX")
+  txn_begin
+  local next=$TXN_DIR/recipients.next
   awk -v r="$rec" 'BEGIN{c=""} /^[[:space:]]*#/ {c=$0; next} { gsub(/[ \t]/,""); if ($0 != r) { if (c!="") print c; print } c="" }' \
     "$S/recipients" >"$next"
   rotate "Recipients: remove a key, new vault password" "$next"
-}
-
-# A new random password sealed to the recipients file $2, vault.yml rekeyed to it; $2 becomes the recipients list only
-# once both succeeded. A failure leaves the clone as it was.
-rotate() {
-  local list=$2
-  need age age
-  ROT_HELPER=$(mktemp "$PASS_SH.new.XXXXXX") ROT_PASS=$(mktemp "$S/.vault-pass.age.XXXXXX")
-  ROT_OLD=$(mktemp "$S/.vault.yml.XXXXXX") ROT_LIST=$list
-  cp -f "$S/vault.yml" "$ROT_OLD"
-  # Any failure or interrupt before the new files are in place puts vault.yml back and drops the temps.
-  trap rotate_rollback EXIT
-  trap 'exit 130' INT TERM
-  new_password | age -R "$list" -o "$ROT_PASS" || die "age could not encrypt the new password (nothing was changed)"
-  printf '#!/bin/sh\n{ set +x; } 2>/dev/null\nexec age -d -i %q %q\n' "$IDS" "$ROT_PASS" >"$ROT_HELPER"
-  chmod 700 "$ROT_HELPER"
-  "$DISPATCH" ansible-vault rekey --new-vault-password-file "$ROT_HELPER" "$S/vault.yml" ||
-    die "ansible-vault rekey failed (nothing was changed; the key you remove cannot be the only one plugged in)"
-  mv -f "$ROT_PASS" "$S/vault-pass.age"
-  mv -f "$list" "$S/recipients"
-  trap - EXIT INT TERM
-  rm -f "$ROT_HELPER" "$ROT_OLD"
+  txn_end
   approve
-  prove_opens "$S/vault.yml"
   install_local
-  commit_push "$1"
 }
 
-rotate_rollback() {
-  local rc=$?
-  cp -f "$ROT_OLD" "$S/vault.yml" 2>/dev/null || true
-  rm -f "$ROT_HELPER" "$ROT_PASS" "$ROT_OLD" "$ROT_LIST"
-  warn "stopped: the shared vault is as it was"
-  exit "$rc"
+# Inside a transaction: a new random password sealed to the recipients file $2, vault.yml rekeyed to it, both proved
+# to open with a plugged-in key before anything is replaced, then committed and pushed. Any failure or interrupt up to
+# the push restores the previous files (txn_rollback).
+rotate() {
+  local list=$2 helper=$TXN_DIR/helper newpass=$TXN_DIR/vault-pass.age.next
+  need age age
+  new_password | age -R "$list" -o "$newpass" || die "age could not encrypt the new password"
+  printf '#!/bin/sh\n{ set +x; } 2>/dev/null\nexec age -d -i %q %q\n' "$IDS" "$newpass" >"$helper"
+  chmod 700 "$helper"
+  "$DISPATCH" ansible-vault rekey --new-vault-password-file "$helper" "$S/vault.yml" ||
+    die "ansible-vault rekey failed (the key you remove cannot be the only one plugged in)"
+  printf 'Checking the new password opens with a key you keep (PIN, then touch)...\n'
+  age -d -i "$IDS" "$newpass" >/dev/null || die "no plugged-in key opens the new password"
+  cp -f "$newpass" "$S/vault-pass.age"
+  cp -f "$list" "$S/recipients"
+  commit_push "$1"
 }
 
 write_repo_files() {
@@ -323,44 +365,35 @@ cmd_init() {
   [[ -n $(recipients_of "$S/recipients") ]] || die "no recipients: make vault-add-key"
   printf 'Recipients:\n'; recipients_of "$S/recipients" | sed 's/^/  /'
   check_approved
-  local newfile old_helper=$PASS_SH.pre-shared
+  local old_helper=$PASS_SH.pre-shared
   [[ ! -e $old_helper ]] || old_helper=$PASS_SH.pre-shared.$(date +%Y%m%d%H%M%S)
   cp -p "$PASS_SH" "$old_helper"
   cp -p scripts/vault-pass.sh.sha256 "$old_helper.sha256" 2>/dev/null || true
-  # Until the push, any exit (an error, Ctrl-C at a PIN or touch prompt) puts the old helper back and removes the
-  # uncommitted shared files, so init can simply be run again.
-  INIT_OLD=$old_helper
-  trap init_rollback EXIT
-  trap 'exit 130' INT TERM
+  # Until the push, any exit (an error, Ctrl-C at a PIN or touch prompt) restores the shared clone and HEAD and puts
+  # the old helper back, so init can simply be run again.
+  INIT_OLD=$old_helper TXN_UNDO=init_undo
+  txn_begin
   new_password | seal_password
   cp -f -- "$VAULT" "$S/vault.yml" && chmod 600 "$S/vault.yml"
-  newfile=$(mktemp "$PASS_SH.new.XXXXXX")
-  printf '#!/bin/sh\n{ set +x; } 2>/dev/null\nexec age -d -i %q %q\n' "$IDS" "$S/vault-pass.age" >"$newfile"
-  chmod 700 "$newfile"
+  local helper=$TXN_DIR/helper
+  printf '#!/bin/sh\n{ set +x; } 2>/dev/null\nexec age -d -i %q %q\n' "$IDS" "$S/vault-pass.age" >"$helper"
+  chmod 700 "$helper"
   printf 'Re-encrypting the vault: touch the YubiKey for the current password, then PIN and touch for the new one...\n'
-  if ! "$DISPATCH" ansible-vault rekey --new-vault-password-file "$newfile" "$S/vault.yml"; then
-    rm -f "$newfile" "$S/vault.yml" "$S/vault-pass.age"
-    die "ansible-vault rekey failed (nothing was changed)"
-  fi
-  rm -f "$newfile"
+  "$DISPATCH" ansible-vault rekey --new-vault-password-file "$helper" "$S/vault.yml" || die "ansible-vault rekey failed"
   write_helper
   prove_opens "$S/vault.yml"
-  [[ -e $VAULT.pre-shared ]] || cp -p "$VAULT" "$VAULT.pre-shared"
+  [[ -e $VAULT.pre-shared ]] || { cp -p "$VAULT" "$VAULT.pre-shared" && chmod 600 "$VAULT.pre-shared"; }
   write_repo_files
   commit_push "Shared vault: initial"
-  trap - EXIT INT TERM
+  txn_end
   install_local
   ok "the shared vault is active. The old helper is $old_helper and the old vault $VAULT.pre-shared (keep them until"
   printf '       every machine has joined, then delete them). Other machines: make vault-join\n'
 }
 
-init_rollback() {
-  local rc=$?
+init_undo() {
   cp -p "$INIT_OLD" "$PASS_SH" && { [[ ! -f $INIT_OLD.sha256 ]] || cp -p "$INIT_OLD.sha256" scripts/vault-pass.sh.sha256; }
-  rm -f "$S/vault.yml" "$S/vault-pass.age" "$INIT_OLD" "$INIT_OLD.sha256"
-  git -C "$S" reset -q 2>/dev/null || true
-  warn "init stopped: the previous vault helper is back and nothing was pushed; run make vault-share-init again"
-  exit "$rc"
+  rm -f "$INIT_OLD" "$INIT_OLD.sha256"
 }
 
 cmd_join() {
@@ -370,12 +403,13 @@ cmd_join() {
     mkdir -p "$(dirname "$S")"
     git clone -q --no-checkout -- "$SECRETS_REMOTE" "$S" || die "git clone $SECRETS_REMOTE failed (gh auth login? the repo is private)"
     if git -C "$S" rev-parse -q --verify HEAD >/dev/null 2>&1; then
-      verify_range HEAD
+      verify_all HEAD
       check_tree HEAD
       git -C "$S" checkout -q || die "checkout in $S failed"
     fi
   fi
   sync_clone
+  verify_all HEAD  # a clone made by hand: its own commits too
   check_tree HEAD
   [[ -f $S/vault-pass.age && -f $S/vault.yml ]] || die "$S has no shared vault yet: make vault-share-init on the first machine"
   if [[ ! -s $IDS ]]; then identity_stubs || die "no enrolled YubiKey plugged in (age-plugin-yubikey --identity listed none)"; fi
@@ -415,8 +449,22 @@ cmd_edit() {
   before=$(sha256sum "$S/vault.yml")
   EDITOR='' VISUAL='' ANSIBLE_EDITOR='' "$DISPATCH" ansible-vault edit "$S/vault.yml"
   [[ $(sha256sum "$S/vault.yml") != "$before" ]] || { ok "no change"; return 0; }
-  install_local
+  # Keep the edited (still encrypted) vault aside: if the commit or push fails, the clone goes back to GitHub's state
+  # and this copy holds the edit.
+  EDIT_KEEP=$CONF/vault.yml.unpushed
+  cp -p "$S/vault.yml" "$EDIT_KEEP" && chmod 600 "$EDIT_KEEP"
+  local edited=$EDIT_KEEP
+  cp -p "$S/vault.yml" "$edited.tmp" && git -C "$S" checkout -q -- vault.yml
+  TXN_UNDO=edit_undo
+  txn_begin
+  mv -f "$edited.tmp" "$S/vault.yml"
   commit_push "Vault: edit"
+  txn_end
+  rm -f "$EDIT_KEEP"
+  install_local
+}
+edit_undo() {
+  warn "your edit is kept, encrypted, in $EDIT_KEEP: view it with .venv/bin/ansible-vault view --vault-password-file scripts/vault-pass.sh $EDIT_KEEP and redo it with make vault-edit"
 }
 
 cmd_view() {
