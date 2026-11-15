@@ -26,7 +26,7 @@ def helper(*args):
 
 class HelperTests(unittest.TestCase):
     def setUp(self):
-        self.dir = Path(tempfile.mkdtemp())
+        self.dir = Path(tempfile.mkdtemp()).resolve()  # macOS temp dirs sit under /var, a link to /private/var
         self.addCleanup(shutil.rmtree, self.dir)
 
     def test_claude_adds_trust_and_keeps_everything_else(self):
@@ -100,6 +100,7 @@ class RoleTaskTests(unittest.TestCase):
     def test_own_repos_are_trusted_and_upstream_ones_only_with_all(self):
         shared = yaml.safe_load((ROOT / 'group_vars/all/vars.yml').read_text())
         with tempfile.TemporaryDirectory() as name:
+            name = str(Path(name).resolve())  # macOS: /var is a link to /private/var, which trust adds as a second spelling
             home = Path(name)
             state = home / 'settings.json'
             state.write_text('{"trustedWorkspaces": []}')
