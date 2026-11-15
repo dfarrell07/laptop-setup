@@ -193,7 +193,7 @@
         - name: Install AeroSpace.app to /Applications as the user  # noqa: command-instead-of-module
           # cp -r used instead of copy module to preserve symlinks inside the .app bundle
           ansible.builtin.command:
-            argv: [cp, -r, "{{ _aerospace_tmpdir.path }}/AeroSpace-v{{ packages_aerospace_version }}/AeroSpace.app", /Applications/]
+            argv: [/bin/cp, -r, "{{ _aerospace_tmpdir.path }}/AeroSpace-v{{ packages_aerospace_version }}/AeroSpace.app", /Applications/]
           changed_when: true
           when:
             - not _aerospace_app_after.stat.exists
@@ -201,7 +201,7 @@
 
         - name: Install AeroSpace.app to /Applications with sudo  # noqa: command-instead-of-module
           ansible.builtin.command:
-            argv: [cp, -r, "{{ _aerospace_tmpdir.path }}/AeroSpace-v{{ packages_aerospace_version }}/AeroSpace.app", /Applications/]
+            argv: [/bin/cp, -r, "{{ _aerospace_tmpdir.path }}/AeroSpace-v{{ packages_aerospace_version }}/AeroSpace.app", /Applications/]
           become: true
           tags: [become]
           changed_when: true
