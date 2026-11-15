@@ -31,6 +31,9 @@ The dnf update set is `system_dnf_automatic_upgrade_type` (`default`: all update
 - npm: only `packages_user_updates_npm` (default `@openai/codex`) is updated, so a package installed from git or an
   internal registry is never replaced by a same-named public one; a newer prerelease is left alone.
 - pipx apps the packages role pins (`packages_user_updates_pipx_skip`: yamllint, ansible-lint) are skipped.
+- macOS: the launchd agent `com.laptop-setup.user-update` runs the same script daily at midnight (or on waking, if the
+  Mac slept through it) for npm globals and pipx; there is no dev container. Log:
+  `~/.local/state/log/laptop-user-update.log`; `make verify CHUNK=packages` reports a failed last run.
 - Per-user Flatpak installations (`flatpak --user`) are not covered; the automation installs none.
 - GNOME Software also downloads updates in a GNOME session (`org.gnome.software download-updates`); it is not needed
   alongside dnf-automatic and does not run in sway.
