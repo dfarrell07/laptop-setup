@@ -359,6 +359,22 @@ if $IS_LINUX && [[ -z "$CONTAINER" ]]; then
     record "user-updates" "PASS"
   else record "user-updates" "WARN" "laptop-user-update.timer not enabled (make packages)"; fi
 fi
+# macOS: the same script from the launchd agent com.laptop-setup.user-update (GUI login domain, or user domain over SSH)
+if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
+  _uu_label=com.laptop-setup.user-update
+  if $_user_updates_off; then
+    if [[ -f "$HOME/Library/LaunchAgents/$_uu_label.plist" ]]; then
+      record "user-updates" "WARN" "disabled in config but the launchd agent is still installed (make packages removes it)"
+    else record "user-updates" "PASS" "disabled in config"; fi
+  elif [[ "$EUID" -eq 0 ]]; then
+    record "user-updates" "SKIP" "the user's launchd domain is not root's; re-run: make smoke-test-user"
+  elif ! _uu_job=$(launchctl print "gui/$(id -u)/$_uu_label" 2>/dev/null || launchctl print "user/$(id -u)/$_uu_label" 2>/dev/null); then
+    record "user-updates" "WARN" "launchd agent $_uu_label not loaded (make apply CHUNK=packages NOSUDO=1)"
+  elif [[ "$_uu_job" =~ last\ exit\ code\ =\ [1-9] ]]; then
+    record "user-updates" "FAIL" "last run failed: ~/.local/state/log/laptop-user-update.log"
+  else record "user-updates" "PASS"; fi
+  unset _uu_label _uu_job
+fi
 unset _tool_absent _tools
 
 _is_x() { # executable where exec_cmd runs it: inside the container with --container

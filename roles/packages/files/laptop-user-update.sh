@@ -2,7 +2,8 @@
 # Ansible managed (roles/packages) — daily user-space updates run by laptop-user-update.timer: allowlisted npm global
 # packages (Codex) to their latest release, pipx apps other than the role-pinned ones, and the distrobox dev container's
 # packages. Each step logs to the journal (journalctl --user -u laptop-user-update); any failed step fails the unit,
-# which the status bar shows as UPD.
+# which the status bar shows as UPD. On macOS the launchd agent com.laptop-setup.user-update runs it with no container
+# argument and LAPTOP_UPDATE_PATH set to Homebrew's bin, logging to ~/.local/state/log/laptop-user-update.log.
 # Not here, on purpose: SHA256- or GOSUMDB-pinned tools (packages role pins) change only through reviewed pin bumps;
 # Claude Code and agy update themselves.
 set -u
