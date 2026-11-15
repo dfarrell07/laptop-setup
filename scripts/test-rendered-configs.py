@@ -169,6 +169,14 @@ class RenderedConfigTests(unittest.TestCase):
             refused = subprocess.run(['git', '-C', str(repo), 'pushsk', 'e', '-u', 'HEAD'], env=env, capture_output=True,
                                      text=True, check=False)
             self.assertEqual(refused.returncode, 2, refused.stderr)
+            for args in [['e', '-fu', 'HEAD'], ['e', '--set-up', 'HEAD'], ['e', '--force-with-lease', 'HEAD'],
+                         ['e', '--force-with-lease=main', 'HEAD'], ['-f', 'e', 'HEAD']]:
+                refused = subprocess.run(['git', '-C', str(repo), 'pushsk', *args], env=env, capture_output=True,
+                                         text=True, check=False)
+                self.assertEqual(refused.returncode, 2, (args, refused.stderr))
+            lines = len(log.read_text().splitlines())
+            git('pushsk', 'e', f'--force-with-lease=main:{"0" * 40}', 'HEAD', check=False)
+            self.assertEqual(len(log.read_text().splitlines()), lines + 1)  # an explicit lease reaches ssh
 
     def test_global_pre_push_refuses_https_pushes_outside_own_github_user(self):
         user = re.search(r'insteadOf = git@github.com:([^/]+)/', self.read('gitconfig')).group(1)
@@ -194,7 +202,8 @@ class RenderedConfigTests(unittest.TestCase):
                         f'https://github.com/{user}x/r.git', f'https://github.com/x{user}/r.git',
                         f'https://github.com/{user}/../up/r', f'https://github.com/{user}/%2e%2e/up/r',
                         f'https://github.com/{user}/r/../../up/r', f'https://github.com/{user}//up/r',
-                        f'https://github.com/{user}/..', f'https://github.com/{user}/r%2fx']:
+                        f'https://github.com/{user}/..', f'https://github.com/{user}/r%2fx',
+                        'https://github%2ecom/up/r', f'https://github%2Ecom/{user}/r', 'https://%67ithub.com/up/r']:
                 self.assertEqual(push(url), 1, url)
             self.assertEqual(push(f'https://github.com/{user}/r.git', os.devnull), 1)  # no github.user: refuse
 

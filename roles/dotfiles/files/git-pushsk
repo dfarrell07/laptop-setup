@@ -2,17 +2,28 @@
 # git pushsk [remote] [push options and refspecs]: push over SSH with the YubiKey-backed key, whatever the remote's
 # URL form; plain git push uses HTTPS (gh's token) for your own GitHub repos only. The remote defaults to the branch's
 # push remote, as for git push. It pushes to an explicit-port SSH URL (ssh://git@github.com:22/...) that no url rewrite
-# matches, then fetches the remote so its tracking refs catch up.
+# matches, then fetches the remote so its tracking refs catch up. Put options after the remote. A URL push has no
+# tracking ref to lease against, so give the lease explicitly: --force-with-lease=<branch>:<expected sha>.
 set -eu
 for _arg in "$@"; do
   case "$_arg" in
-    -u|--set-upstream) echo "pushsk: -u would record the SSH URL as the upstream; set it with git branch -u" >&2; exit 2;;
     --) break;;
+    -u|--set-u*|-[!-]*u*) echo "pushsk: -u would record the SSH URL as the upstream; set it with git branch -u" >&2; exit 2;;
+    --force-with-l*)
+      case "$_arg" in --force-with-l*=*:*) ;; *)
+        echo "pushsk: give the lease explicitly: --force-with-lease=<branch>:\$(git rev-parse <remote>/<branch>)" >&2
+        exit 2;;
+      esac;;
   esac
 done
 if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then
   _remote=$1; shift
 else
+  for _arg in "$@"; do
+    if [ "${_arg#-}" = "$_arg" ] && git remote get-url "$_arg" >/dev/null 2>&1; then
+      echo "pushsk: put the remote first: git pushsk $_arg [options and refspecs]" >&2; exit 2
+    fi
+  done
   _branch=$(git symbolic-ref -q --short HEAD || true)
   _remote=$( { [ -n "$_branch" ] && git config --get "branch.$_branch.pushRemote"; } || git config --get remote.pushDefault \
     || { [ -n "$_branch" ] && git config --get "branch.$_branch.remote"; } || echo origin)
