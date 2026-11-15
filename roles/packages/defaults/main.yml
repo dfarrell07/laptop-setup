@@ -152,6 +152,7 @@ packages_support_work:
              # (BPF_PROG_TYPE_KPROBE) with EPERM; use tracepoints (tracepoint:...) or uprobes instead,
              # or set system_kernel_lockdown: '' in config.yml + re-run make system for a debug session
   - bpftool  # eBPF program/map introspection
+  - gitlint  # commit message linting; submariner-release-management's make test runs it
 
 packages_apt:
   - git-lfs  # depends on git (pulled in automatically)
@@ -206,6 +207,7 @@ packages_apt_work:
   - tshark  # scripting-safe CLI capture; mirrors packages_networking_work wireshark-cli on Fedora
   - conntrack  # netfilter connection tracking (Debian binary package of conntrack-tools); mirrors Fedora
   - buildah  # OCI image builder; mirrors packages_containers_work on Fedora
+  - gitlint  # mirrors packages_support_work on Fedora
   - skopeo  # container image inspection/copy; mirrors packages_containers_work on Fedora
 
 # Binary downloads — pinned versions with SHA256 verification.
@@ -229,6 +231,19 @@ packages_transcrypt_sha256: "d4723d29cee8781de6fa83e5ad2817ad81241674fb4159db645
 # Linux binary (0.5.1 ships macOS and Windows only; Homebrew has it). Trust on first use: upstream publishes no digest.
 packages_age_plugin_yk_version: "0.5.0"
 packages_age_plugin_yk_sha256: "019b35a13fc81be56d73d0723db0a2082fbd04c936c2c6836381111f7f51b2c3"
+
+# oras (OCI artifacts: submariner-release-management's verify-cve-fixes pulls Clair reports with it); work profile.
+packages_oras_version: "1.3.6"
+packages_oras_sha256: "66fb0ad7206f3f6fa77ed5b552049d364ccf4b50b1684554f731f76302b52ca0"
+packages_oras_sha256_arm64: "b84269e78dfc2d5329a4aab373da3200de95e6c138338cf6c66c10c0a3f248c1"
+
+# acli (Atlassian CLI: Jira for submariner-release-management and the jira skill); work profile, dnf hosts. The rpm
+# is fetched by version and SHA256 and installed as a file, with no third-party repo file (CSB IT flags repos outside
+# its allowlist). The rpm header is unsigned; the pin was cross-checked against Atlassian's GPG-signed repo metadata
+# (repomd primary.xml, https://acli.atlassian.com/linux/rpm/). The internal-mirror path (repos_dnf_acli_baseurl)
+# still works and takes precedence when set.
+packages_acli_version: "1.3.40-stable"
+packages_acli_rpm_sha256: "952cb41746843d71fb7433ce569c8abc0739dc059dcde8f9c4b0dcfa2a482476"
 
 packages_sops_version: "3.13.3"
 packages_sops_sha256: "e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b"
@@ -479,6 +494,8 @@ packages_brew_work:
   - mtr  # requires sudo on macOS for ICMP (raw socket); on Linux, capabilities handle it
   - actionlint  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_actionlint_version pin
   - zizmor      # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_zizmor_version pin
+  - gitlint  # mirrors packages_support_work on Fedora
+  - oras     # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_oras_version pin
 
 # Add native packages without replacing the base lists. Empty on a new machine.
 packages_extra_dnf: []
