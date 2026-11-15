@@ -42,6 +42,20 @@ class InputGuardTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.check(task, {'_claude_instances': [path]}, accepted)
 
+    def test_extra_claude_config_dirs_checked_before_use(self):
+        """The assert runs before the set_fact that concatenates the list, so a string fails with its message."""
+        tasks = yaml.safe_load((ROOT / 'roles/claude/tasks/main.yml').read_text())
+        names = [task.get('name') for task in tasks]
+        check = names.index('Assert extra Claude config dirs are ~/.claude-<name>')
+        self.assertEqual(names[check + 1], 'Set active Claude instance directories')
+        base = {'ansible_facts': {'user_dir': '/home/fixture'}, 'claude_default_config_dir': '/home/fixture/.claude',
+                'claude_personal2_config_dir': '/home/fixture/.claude-per2', 'claude_personal2_instance_enabled': True,
+                'claude_work_config_dir': '/home/fixture/.claude-work', 'profile': 'work'}
+        for value, accepted in [(['/home/fixture/.claude-second'], True), ('/home/fixture/.claude-second', False),
+                                (['/home/fixture/.claude-x y'], False), (['/home/other/.claude-second'], False)]:
+            with self.subTest(value=value):
+                self.check(tasks[check:check + 2], dict(base, claude_extra_config_dirs=value), accepted)
+
     def check(self, task, variables, accepted, env=None):
         with tempfile.TemporaryDirectory() as directory:
             playbook = Path(directory) / 'guard.yml'
