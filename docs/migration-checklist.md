@@ -101,6 +101,11 @@ Homes below are defaults; substitute configured paths and transfer custom homes 
 | `gper` | `agy`, `.gemini`, login in the desktop keyring | Run `gper` and finish the browser sign-in |
 | `gper2` (Linux) | `agy`, `.gemini-per2`, login in a 0600 file, not the keyring | Run `gper2` and finish the browser sign-in |
 
+`make smoke-test-user` warns (`agent-cli-logins`) with the command for each personal Claude home (`cper`, `cper2`) and
+the `oper` Codex home that exists but is not logged in, checked the way the launchers run them. It runs only the
+status commands and never starts a sign-in. It does not check `cwork` (Vertex) or `agy`, which has no status
+command; `owork` has its own check, `codex-work-login`.
+
 `cwork` sources the managed `~/.config/claude/work-env`, which sources a restored
 `~/.config/claude-code-vertex/env.sh` when present and forces Vertex. For GCP, macOS work provisioning installs
 the `gcloud-cli` cask; on DNF hosts set `repo_google_cloud_sdk: true` (any `csb_detected` host skips that

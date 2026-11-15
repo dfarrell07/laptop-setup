@@ -316,6 +316,70 @@ class SmokeTests(unittest.TestCase):
                 (home / name / 'settings.json').write_text(json.dumps({'crossSessionInbound': 'accept'}))
             self.assertEqual(run(), 'claude-cross-session-inbound PASS')
 
+    def test_agent_cli_logins_lists_each_logged_out_home_without_logging_in(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('_logged_out=()')
+        end = source.index('unset _logged_out', start)
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / 'home'
+            tools = Path(directory) / 'tools'
+            calls = Path(directory) / 'calls'
+            home.mkdir()
+            tools.mkdir()
+            # Logged in: only ~/.claude, checked as cper runs it (CLAUDE_CONFIG_DIR set, token variables cleared).
+            (tools / 'claude').write_text(
+                '#!/bin/sh\necho "claude $* ${CLAUDE_CONFIG_DIR-unset}" >> "$CALLS"\n'
+                '[ "$1 $2" = "auth status" ] || exit 9\n[ -z "${ANTHROPIC_API_KEY+x}" ] || exit 0\n'
+                '[ "$CLAUDE_CONFIG_DIR" = "$HOME/.claude" ]\n')
+            (tools / 'codex').write_text(
+                '#!/bin/sh\necho "codex $* $CODEX_HOME" >> "$CALLS"\n[ "$1 $2" = "login status" ] || exit 9\n'
+                '[ -n "${OPENAI_API_KEY+x}" ]\n')
+            for tool in ('claude', 'codex'):
+                (tools / tool).chmod(0o755)
+
+            def run(prelude='', timeout_bin=''):
+                result = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c',
+                    'record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; }; CONTAINER=; ONLY=; _codex_enabled=true; '
+                    '_claude_home2_off=false; _timeout_bin=' + timeout_bin + '; ' + prelude + '\n' + source[start:end]],
+                    env=dict(os.environ, HOME=str(home), CALLS=str(calls), CLAUDE_CONFIG_DIR='/elsewhere',
+                             ANTHROPIC_API_KEY='x', OPENAI_API_KEY='x', PATH=str(tools) + ':' + os.environ['PATH']),
+                    capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                return result.stdout.strip()
+
+            self.assertEqual(run(), 'agent-cli-logins PASS')  # no managed homes yet
+            (home / '.claude').mkdir()
+            self.assertEqual(run(), 'agent-cli-logins PASS')
+            for name in ('.claude-per2', '.codex-personal', '.claude-work'):  # .claude-work: Vertex, not checked
+                (home / name).mkdir()
+            expected = ('agent-cli-logins WARN not logged in, run: CLAUDE_CONFIG_DIR=~/.claude-per2 claude auth login; '
+                        'CODEX_HOME=~/.codex-personal codex login')
+            self.assertEqual(run(), expected)
+            self.assertNotIn('\\~', run())
+            self.assertEqual(run(timeout_bin=shutil.which('timeout') or ''), expected)
+            self.assertNotIn('.claude-work', calls.read_text())
+            self.assertTrue(all(' status ' in line for line in calls.read_text().splitlines()), calls.read_text())
+            # config.yml homes, a disabled second instance, unselected or container runs
+            (home / 'per').mkdir()
+            self.assertEqual(run('_claude_home="~/per"; _claude_home2_off=true; _codex_enabled=false'),
+                             'agent-cli-logins WARN not logged in, run: CLAUDE_CONFIG_DIR=~/per claude auth login')
+            (Path(directory) / 'home2 x').mkdir()  # outside $HOME despite the shared prefix, with a space
+            self.assertEqual(run('_claude_home="' + directory + '/home2 x"; _claude_home2_off=true; _codex_enabled=false'),
+                             'agent-cli-logins WARN not logged in, run: CLAUDE_CONFIG_DIR=' + directory.replace('/', '/')
+                             + '/home2\\ x claude auth login')
+            # a hung status (timeout's 124) is not reported as a logout
+            hang = Path(directory) / 'hang'
+            hang.write_text('#!/bin/sh\nexit 124\n')
+            hang.chmod(0o755)
+            self.assertEqual(run('_claude_home2_off=true; _codex_enabled=false; _claude_home=~/nonexistent', str(hang)),
+                             'agent-cli-logins PASS')
+            self.assertEqual(run('_claude_home2_off=true; _codex_enabled=false', str(hang)),
+                             'agent-cli-logins WARN login status timed out for: ~/.claude')
+            calls.unlink()
+            self.assertEqual(run('ONLY=,codex,'), '')
+            self.assertFalse(calls.exists())
+            self.assertEqual(run('CONTAINER=dev'), 'agent-cli-logins SKIP host-only')
+
     def test_github_ssh_auth_tells_unregistered_key_from_pin_needed(self):
         """A verify-required FIDO2 key always exits 255 under BatchMode: -v output says whether GitHub knows the key."""
         source = (ROOT / 'scripts/smoke-test.sh').read_text()

@@ -160,6 +160,16 @@ _codex_work=$(awk '/^codex_work_config_dir:/ {sub(/^[^:]*:[[:space:]]*/, ""); su
   gsub(/^["\047]|["\047]$/, ""); sub(/[[:space:]]+$/, ""); print; exit}' "$_cfg" 2>/dev/null || true)
 _acli_site=$(awk '/^acli_site:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/[[:space:]]*#.*$/, "");
   gsub(/^["\047]|["\047]$/, ""); sub(/[[:space:]]+$/, ""); print; exit}' "$_cfg" 2>/dev/null || true)
+# Personal agent homes for agent-cli-logins: config.yml overrides, defaults otherwise ("~" expanded there)
+_cfg_value() { awk -v k="$1" '$0 ~ "^" k ":" {sub(/^[^:]*:[[:space:]]*/, ""); sub(/[[:space:]]*#.*$/, "");
+  gsub(/^["\047]|["\047]$/, ""); sub(/[[:space:]]+$/, ""); print; exit}' "$_cfg" 2>/dev/null || true; }
+_claude_home=$(_cfg_value claude_default_config_dir)
+_claude_home2=$(_cfg_value claude_personal2_config_dir)
+_codex_personal=$(_cfg_value codex_personal_config_dir)
+_claude_home2_off=false
+grep -qiE '^claude_personal2_instance_enabled:[[:space:]]*["'"'"']?(false|no|off|n|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null \
+  && _claude_home2_off=true
+unset -f _cfg_value
 _user_updates_off=false
 grep -qiE '^packages_user_updates_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _user_updates_off=true
 unset _cfg
@@ -312,6 +322,57 @@ else
   unset _acli_out
 fi
 unset _acli_site
+# Agent CLI logins (personal Claude homes, personal Codex): logging in is an interactive owner step, so WARN with the
+# command and never start one. Each Claude home is checked as cper/cper2 run it: CLAUDE_CONFIG_DIR set to that home
+# (on macOS the Keychain item depends on it) and the backend and token variables _claude_personal clears unset, so an
+# exported API key cannot pass for a login. The status commands print account details (discarded) and may refresh
+# Claude's state files. Not checked: cwork (Vertex through gcloud), work Codex (codex-work-login), agy (no status
+# command); docs/migration-checklist.md lists their sign-in steps. Runs unless --only leaves it out (claude starts
+# slowly). stdin is /dev/null so no CLI can wait for input; exit 124 (timeout) is reported apart from a logout.
+_logged_out=() _timed_out=()
+if [[ -n "$ONLY" && "$ONLY" != *",agent-cli-logins,"* ]]; then
+  :  # not selected
+elif [[ -n "$CONTAINER" ]]; then
+  record "agent-cli-logins" "SKIP" "host-only"
+else
+  _to=()
+  [[ -n "${_timeout_bin:-}" ]] && _to=("$_timeout_bin" 30)
+  # Pasteable home for the hint: ~/ for paths under $HOME, shell-quoted otherwise
+  _home_disp() { if [[ "$1" == "$HOME"/* ]]; then printf "%s/%q" "~" "${1#"$HOME"/}"; else printf '%q' "$1"; fi; }
+  _claude_homes=("${_claude_home:-$HOME/.claude}")
+  $_claude_home2_off || _claude_homes+=("${_claude_home2:-$HOME/.claude-per2}")
+  if command -v claude &>/dev/null; then
+    for _cd in "${_claude_homes[@]}"; do
+      _cd=${_cd/#\~/$HOME}
+      [[ -d "$_cd" ]] || continue
+      _rc=0
+      env -u CLAUDE_CODE_USE_VERTEX -u ANTHROPIC_VERTEX_PROJECT_ID -u CLOUD_ML_REGION \
+          -u GOOGLE_APPLICATION_CREDENTIALS -u GOOGLE_CLOUD_PROJECT -u ANTHROPIC_BASE_URL -u ANTHROPIC_API_KEY \
+          -u ANTHROPIC_AUTH_TOKEN -u CLAUDE_CODE_OAUTH_TOKEN -u CLAUDE_CODE_USE_BEDROCK -u CLAUDE_CODE_USE_FOUNDRY \
+          CLAUDE_CONFIG_DIR="$_cd" ${_to[@]+"${_to[@]}"} claude auth status &>/dev/null </dev/null || _rc=$?
+      _disp=$(_home_disp "$_cd")
+      if (( _rc == 124 )); then _timed_out+=("$_disp")
+      elif (( _rc != 0 )); then _logged_out+=("CLAUDE_CONFIG_DIR=$_disp claude auth login"); fi
+    done
+  fi
+  _cx=${_codex_personal:-$HOME/.codex-personal}; _cx=${_cx/#\~/$HOME}
+  if $_codex_enabled && command -v codex &>/dev/null && [[ -d "$_cx" ]]; then
+    _rc=0
+    env -u OPENAI_API_KEY -u CODEX_API_KEY -u OPENAI_BASE_URL -u OPENAI_ORG_ID -u OPENAI_PROJECT_ID CODEX_HOME="$_cx" \
+      ${_to[@]+"${_to[@]}"} codex login status &>/dev/null </dev/null || _rc=$?
+    _disp=$(_home_disp "$_cx")
+    if (( _rc == 124 )); then _timed_out+=("$_disp")
+    elif (( _rc != 0 )); then _logged_out+=("CODEX_HOME=$_disp codex login"); fi
+  fi
+  _msg=""
+  (( ${#_logged_out[@]} == 0 )) || _msg="not logged in, run: $(printf '%s; ' "${_logged_out[@]}")"
+  (( ${#_timed_out[@]} == 0 )) || _msg="${_msg}login status timed out for: $(printf '%s; ' "${_timed_out[@]}")"
+  if [[ -z "$_msg" ]]; then record "agent-cli-logins" "PASS"
+  else record "agent-cli-logins" "WARN" "${_msg%; }"; fi
+  unset _to _msg _cd _cx _disp _rc _claude_homes
+  unset -f _home_disp
+fi
+unset _logged_out _timed_out _claude_home _claude_home2 _claude_home2_off _codex_personal
 # Session placement (claude role writes ~/.config/claude-sessions/machine; the launcher decides): no misplaced sessions
 _placement=$HOME/.config/claude-sessions/machine
 _launcher=$(compgen -G "${HOME}/src/*/claude-skills*/skills/sessions/scripts/session.sh" | head -1 || true)
