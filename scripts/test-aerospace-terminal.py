@@ -20,7 +20,7 @@ TEST_TIMEOUT = int(os.environ.get('LAPTOP_SETUP_TEST_TIMEOUT', '0'))
 
 
 class AeroSpaceTests(unittest.TestCase):
-    def test_fresh_repeat_legacy_and_custom_bindings(self):
+    def test_fresh_repeat_and_replaced_hand_edits(self):
         production = yaml.safe_load((ROOT / 'roles/desktop/tasks/main.yml').read_text())
         tasks = copy.deepcopy(next(task['block'] for task in production if task['name'] == 'Deploy AeroSpace configuration (macOS)'))
         for task in tasks:
@@ -70,14 +70,19 @@ class AeroSpaceTests(unittest.TestCase):
                     self.assertEqual(record.read_text() if record.exists() else None, opened)
                 self.assertIn('using {control down, command down}', bindings['alt-ctrl-l'])  # macOS lock-screen shortcut
                 self.assertEqual(re.findall(r'changed=(\d+)', run())[-1], '0')
-                config.write_text(config.read_text().replace(expected, 'exec-and-forget open -na Alacritty') + '\n# keep custom settings\n')
-                run()
-                self.assertIn('# keep custom settings', config.read_text())
-                self.assertEqual(tomllib.loads(config.read_text())['mode']['main']['binding']['alt-enter'], expected)
-                custom = 'exec-and-forget my-custom-terminal'
-                config.write_text(config.read_text().replace(expected, custom))
-                self.assertEqual(re.findall(r'changed=(\d+)', run())[-1], '0')
-                self.assertEqual(tomllib.loads(config.read_text())['mode']['main']['binding']['alt-enter'], custom)
+                # Managed like the Ghostty config: a re-run replaces hand edits and an old seeded copy (template
+                # updates land), keeping the replaced file beside it
+                managed = config.read_text()
+                self.assertTrue(managed.startswith('# Ansible managed\n'), managed[:80])
+                for edited in [managed.replace(expected, 'exec-and-forget open -na Alacritty'),
+                               '# Seeded once by Ansible; edit freely\n' + managed.replace(expected, 'exec-and-forget my-term')]:
+                    for old in config.parent.glob('aerospace.toml.*~'):
+                        old.unlink()
+                    config.write_text(edited)
+                    self.assertEqual(re.findall(r'changed=(\d+)', run())[-1], '1')
+                    self.assertEqual(config.read_text(), managed)
+                    self.assertEqual([b.read_text() for b in config.parent.glob('aerospace.toml.*~')], [edited])
+                    self.assertEqual(re.findall(r'changed=(\d+)', run())[-1], '0')
                 before = config.read_text()
                 for key, value in [('desktop_macos_terminal_app', 'Ghostty; touch /tmp/unsafe-terminal'),
                                    ('desktop_macos_terminal_path', '/tmp/untrusted.app')]:

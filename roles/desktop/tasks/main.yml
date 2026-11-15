@@ -390,26 +390,7 @@
         src: aerospace.toml.j2
         dest: "{{ ansible_facts['user_dir'] }}/.config/aerospace/aerospace.toml"
         mode: "0644"
-        force: false
-
-    - name: Inspect seeded AeroSpace binding before migrating the terminal default
-      ansible.builtin.slurp:
-        src: "{{ ansible_facts['user_dir'] }}/.config/aerospace/aerospace.toml"
-      register: _desktop_aerospace_content
-      check_mode: false
-      failed_when: _desktop_aerospace_content is failed and not ansible_check_mode
-      no_log: true
-
-    - name: Migrate the old factory terminal binding while preserving custom bindings
-      ansible.builtin.lineinfile:
-        path: "{{ ansible_facts['user_dir'] }}/.config/aerospace/aerospace.toml"
-        regexp: "^alt-enter = 'exec-and-forget open -na Alacritty'$"
-        line: "alt-enter = 'exec-and-forget open -na {{ desktop_macos_terminal_app }}'"
-      when:
-        - desktop_terminal in ['ghostty', 'terminal']
-        - >-
-          "alt-enter = 'exec-and-forget open -na Alacritty'" in
-          (_desktop_aerospace_content.content | default('') | b64decode).splitlines()
+        backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
 
     # start-at-login in the config starts AeroSpace from the next login on; this starts it now, in the background
     # and without sudo, so the first run tiles without a logout
