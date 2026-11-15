@@ -15,6 +15,8 @@
 # - depth: 1 for reference-only repos; omit it where you rebase or push branches.
 # - hooks: true on your own repos that ship .githooks: the global git hooks chain to them (never on upstream repos).
 #   They run from whatever branch is checked out (a contributor's PR branch too), as make install-hooks would.
+#   Their hooks must not call the global hook of the same name (it would chain back to them); a repo that needs
+#   that keeps its own core.hooksPath instead (as Health does), which the global hooks never chain into.
 
 git_repos_public:
   # ===== personal =====
