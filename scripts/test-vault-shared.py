@@ -297,6 +297,80 @@ class SharedVault(unittest.TestCase):
         self.shared('b', b, 'join')
         self.assertEqual((b / 'group_vars/all/vault.yml.pre-shared').read_bytes(), own)
 
+    def snapshot(self, name):
+        secrets = self.tmp / f'secrets-{name}'
+        files = {f: (secrets / f).read_bytes() for f in ('recipients', 'vault-pass.age', 'vault.yml') if (secrets / f).exists()}
+        head = run(['git', '-C', str(secrets), 'rev-parse', 'HEAD'], check=False).stdout.strip()
+        return files, head
+
+    # GIT_CONFIG_COUNT injects config for one run: a signing key that does not exist, or an unreachable push URL.
+    NO_SIGNING = dict(GIT_CONFIG_COUNT='1', GIT_CONFIG_KEY_0='user.signingkey', GIT_CONFIG_VALUE_0='/nonexistent')
+    NO_PUSH = dict(GIT_CONFIG_COUNT='1', GIT_CONFIG_KEY_0='remote.origin.pushurl', GIT_CONFIG_VALUE_0='/nonexistent')
+
+    def test_a_hand_made_clone_with_unsigned_history_is_refused(self):
+        a = self.init_a()
+        self.shared('a', a, 'add-key', RECIPIENT=self.keys['b'][1])
+        self.attacker_commit(a)
+        b = self.machine('b', None)
+        run(['git', 'clone', '-q', str(self.remote), str(self.tmp / 'secrets-b')], env=self.env('b', b))
+        result = self.shared('b', b, 'join', check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('not signed', result.stderr)
+        self.assertIn('old-password', (b / 'scripts/vault-pass.sh').read_text())
+
+    def test_a_rollback_to_an_older_signed_commit_is_refused(self):
+        a, b = self.joined_pair()
+        before = run(['git', '-C', str(self.tmp / 'secrets-a'), 'rev-parse', 'HEAD']).stdout.strip()
+        self.shared('a', a, 'edit')
+        self.shared('b', b, 'pull')
+        run(['git', '-C', str(self.tmp / 'secrets-a'), 'push', '-qf', 'origin', f'{before}:main'], env=self.env('a', a))
+        result = self.shared('b', b, 'pull', check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('history was rewritten', result.stderr)
+
+    def test_a_remove_key_whose_commit_fails_restores_everything(self):
+        a = self.init_a()
+        self.shared('a', a, 'add-key', RECIPIENT=self.keys['b'][1])
+        before = self.snapshot('a')
+        failed = self.shared('a', a, 'remove-key', self.keys['b'][1], check=False, **self.NO_SIGNING)
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertEqual(self.snapshot('a'), before)
+        self.assertIn('secret-a', self.view('a', a))
+        self.shared('a', a, 'remove-key', self.keys['b'][1])  # a retry works
+        self.assertNotIn(self.keys['b'][1], (self.tmp / 'secrets-a/recipients').read_text())
+
+    def test_an_add_key_whose_push_fails_restores_everything(self):
+        a = self.init_a()
+        before = self.snapshot('a')
+        failed = self.shared('a', a, 'add-key', check=False, RECIPIENT=self.keys['b'][1], **self.NO_PUSH)
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertEqual(self.snapshot('a'), before)
+        self.shared('a', a, 'add-key', RECIPIENT=self.keys['b'][1])
+        pushed = run(['git', f'--git-dir={self.remote}', 'show', 'main:recipients']).stdout
+        self.assertIn(self.keys['b'][1], pushed)
+
+    def test_an_init_whose_push_fails_rolls_back_including_the_commit(self):
+        a = self.machine('a', 'vault_codex_api_key: secret-a\n')
+        run(['git', 'clone', '-q', str(self.remote), str(self.tmp / 'secrets-a')], env=self.env('a', a))
+        self.shared('a', a, 'add-key', RECIPIENT=self.keys['a'][1])
+        helper = (a / 'scripts/vault-pass.sh').read_text()
+        failed = self.shared('a', a, 'init', check=False, **self.NO_PUSH)
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertEqual((a / 'scripts/vault-pass.sh').read_text(), helper)
+        self.assertFalse((self.tmp / 'secrets-a/vault-pass.age').exists())
+        self.assertEqual(self.snapshot('a')[1], 'HEAD')  # no commit left behind (rev-parse echoes the unborn name)
+        self.shared('a', a, 'init')
+        self.assertIn('secret-a', self.view('a', a))
+
+    def test_an_edit_whose_push_fails_is_kept_aside(self):
+        a = self.init_a()
+        before = self.snapshot('a')
+        failed = self.shared('a', a, 'edit', check=False, **self.NO_PUSH)
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertEqual(self.snapshot('a'), before)
+        kept = Path(self.env('a', a)['XDG_CONFIG_HOME']) / 'laptop-setup/vault.yml.unpushed'
+        self.assertIn('vault_codex_api_key: edited', self.view('a', a, str(kept)))
+
     def test_init_refuses_a_plaintext_vault_and_changes_nothing(self):
         a = self.machine('a', None)
         run(['git', 'clone', '-q', str(self.remote), str(self.tmp / 'secrets-a')], env=self.env('a', a))
