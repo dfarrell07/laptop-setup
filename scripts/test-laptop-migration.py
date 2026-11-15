@@ -634,6 +634,35 @@ class MigrationTests(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, 'at most 32'):
                 run_play(Path(name), tasks=[assert_task], variables={'dotfiles_display_hostname': 'a;b'})
 
+    @unittest.skipUnless(shutil.which('zsh'), 'zsh required')
+    def test_konflux_login_alias_is_work_only_browser_login_with_no_token(self):
+        defaults = yaml.safe_load((ROOT / 'roles/dotfiles/defaults/main.yml').read_text())
+        self.assertEqual(defaults['dotfiles_konflux_api_url'], '')  # the cluster URL stays in the local config.yml
+        url = 'https://api.konflux.example.com:6443/'
+        for profile, value, expected in (('work', url, True), ('personal', url, False), ('work', '', False)):
+            with self.subTest(profile=profile, url=value), tempfile.TemporaryDirectory() as name:
+                directory = Path(name)
+                variables = dict(defaults, ansible_managed='test', ansible_facts={'user_dir': name, 'system': 'Linux'},
+                                 profile=profile, packages_gotoolchain='local', notes_repo_path=name + '/notes',
+                                 claude_runtime_config_dir=name + '/runtime', claude_work_config_dir=name + '/work',
+                                 dotfiles_konflux_api_url=value)
+                config = directory / 'zshrc'
+                run_play(directory, tasks=[{'name': 'Render shell', 'ansible.builtin.template': {
+                    'src': str(ROOT / 'roles/dotfiles/templates/zshrc.j2'), 'dest': str(config), 'mode': '0600'}}],
+                    variables=variables)
+                lines = [line for line in config.read_text().splitlines() if line.startswith('alias konflux-login=')]
+                self.assertEqual(len(lines), int(expected))
+                if not expected:
+                    continue
+                self.assertNotRegex(lines[0], r'(?i)token|sha256~|password')
+                stub = directory / 'bin'
+                stub.mkdir()
+                (stub / 'oc').write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+                (stub / 'oc').chmod(0o700)
+                result = subprocess.run(['zsh', '-f', '-c', lines[0] + '\neval konflux-login'], capture_output=True, text=True,
+                                        env=dict(os.environ, PATH=f'{stub}:{os.environ["PATH"]}'), check=True)
+                self.assertEqual(result.stdout.splitlines(), ['login', '--web', url])
+
     @unittest.skipUnless(shutil.which('zsh'), 'zsh required for launcher regression')
     def test_rendered_shell_accounts_arguments_and_environment(self):
         with tempfile.TemporaryDirectory() as name:
