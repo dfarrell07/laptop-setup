@@ -342,6 +342,35 @@ class RenderedConfigTests(unittest.TestCase):
             with tempfile.TemporaryDirectory(dir=non_temp_dir()) as real:
                 self.assertEqual(check(Path(real) / 'work'), 1)  # a real repository still needs Signed-off-by
 
+    def test_global_hooks_do_not_loop_with_a_repo_that_calls_them(self):
+        """A repo with its own core.hooksPath whose hooks call the global hooks (Health) runs each hook once."""
+        with tempfile.TemporaryDirectory(dir=non_temp_dir()) as name:
+            home, repo = Path(name), Path(name) / 'repo'
+            hooks = home / 'global'
+            hooks.mkdir()
+            for hook in ('pre-commit', 'prepare-commit-msg', 'commit-msg', 'pre-push'):
+                shutil.copy(ROOT / f'roles/dotfiles/files/git-template-{hook}', hooks / hook)
+                (hooks / hook).chmod(0o755)
+            (home / 'gitconfig').write_text(f'[core]\n\thooksPath = {hooks}\n[user]\n\tname = t\n\temail = t@t\n')
+            env = dict(os.environ, GIT_CONFIG_GLOBAL=str(home / 'gitconfig'), GIT_CONFIG_NOSYSTEM='1', HOME=name,
+                       PATH=f"/nonexistent:{os.environ['PATH']}")
+            env.pop('TMPDIR', None)
+            subprocess.run(['git', 'init', '-q', str(repo)], check=True, env=env)
+            subprocess.run(['git', '-C', str(repo), 'config', 'core.hooksPath', '.git/hooks'], check=True, env=env)
+            log = home / 'log'
+            for hook in ('pre-commit', 'prepare-commit-msg', 'commit-msg', 'pre-push'):
+                own = repo / '.git/hooks' / hook
+                own.write_text(f'#!/bin/sh\necho {hook} >> {log}\nexec "{hooks}/{hook}" "$@"\n')
+                own.chmod(0o755)
+            result = subprocess.run(['git', '-C', str(repo), 'commit', '-q', '-s', '--allow-empty', '-m', 'Test: x'],
+                                    env=env, capture_output=True, text=True, timeout=30, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(sorted(log.read_text().split()), ['commit-msg', 'pre-commit', 'prepare-commit-msg'])
+            pushed = subprocess.run(['sh', str(repo / '.git/hooks/pre-push'), 'origin', '/srv/r.git'], cwd=repo, env=env,
+                                    input='', capture_output=True, text=True, timeout=30, check=False)
+            self.assertEqual(pushed.returncode, 0, pushed.stderr)
+            self.assertEqual(log.read_text().split().count('pre-push'), 1)
+
     def test_fork_remotes_use_https_so_agents_can_push(self):
         repos = yaml.safe_load((ROOT / 'group_vars/all/repos.yml').read_text())
         remotes = [remote['url'] for repo in repos['git_repos_public'] for remote in repo.get('extra_remotes', [])]
