@@ -71,6 +71,9 @@ claude_work_plugin_settings:
 # between sessions in different modes. The queue poller pins its own --permission-mode dontAsk. Set "default" to
 # be asked again.
 claude_default_mode: bypassPermissions
+# Messages from your other Claude sessions (SendMessage): accept delivers them whatever either session's permission
+# mode, hold parks them for your review, refuse opts out. Any session on this account can then steer this one.
+claude_cross_session_inbound: accept
 # Bash rules every instance denies outright (a denial never prompts). Prefix rules on the command text: a wrapper
 # such as `env sudo` or `bash -c` is not caught, and sudo still needs a password the agent cannot type. Deny
 # lists are unioned: to drop an entry from existing settings, also add it to claude_retired_deny.

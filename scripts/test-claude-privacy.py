@@ -60,7 +60,7 @@ class ClaudePrivacyTests(unittest.TestCase):
         self.assertIn('merge-claude-settings.py', tasks)
         self.assertIn("item ~ '/settings.json'", tasks)
         self.assertNotRegex(tasks, r'dest:\s*"?\{\{ item \}\}/settings\.local\.json')
-        for key in ['"sandbox"', '"enableAllProjectMcpServers"', '"deny"']:
+        for key in ['"sandbox"', '"enableAllProjectMcpServers"', '"crossSessionInbound"', '"deny"']:
             self.assertIn(key, template)
         self.assertIn('"**/.githooks/**"', defaults)
         self.assertIn('"**/.git/hooks/**"', defaults)
@@ -96,6 +96,7 @@ class ClaudePrivacyTests(unittest.TestCase):
                 bypass = defaults['claude_default_mode'] == 'bypassPermissions'
                 self.assertEqual(rendered.get('skipDangerousModePermissionPrompt'), True if bypass else None)
                 self.assertEqual(rendered['permissions']['defaultMode'], defaults['claude_default_mode'])
+                self.assertEqual(rendered['crossSessionInbound'], 'accept')
                 self.assertEqual(rendered['permissions']['deny'][:len(defaults['claude_deny_bash'])],
                                  defaults['claude_deny_bash'])
                 self.assertTrue(set(defaults['claude_deny_bash']).isdisjoint(defaults['claude_retired_deny']))
