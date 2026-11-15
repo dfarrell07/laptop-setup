@@ -284,9 +284,17 @@ fi
 _tool_absent="FAIL"
 [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && _tool_absent="WARN"
 _tools=("kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "jq:jq --version" "tmux:tmux -V" "rg:rg --version" "fzf:fzf --version" "transcrypt:transcrypt --version" "gitleaks:gitleaks version" "direnv:direnv --version")
-if [[ "$profile" == "work" ]]; then _tools+=("kind:kind version" "helm:helm version" "kustomize:kustomize version" "go:go version" "k9s:k9s version" "sops:sops --disable-version-check --version" "gitlint:gitlint --version" "oras:oras version"); fi
-# Release-management tools installed on Linux work machines only (skopeo from dnf/apt, ec and acli pinned).
-if [[ "$profile" == "work" && "$(uname -s)" == Linux ]]; then _tools+=("skopeo:skopeo --version" "ec:ec version" "acli:acli --version"); fi
+if [[ "$profile" == "work" ]]; then _tools+=("kind:kind version" "helm:helm version" "kustomize:kustomize version" "go:go version" "k9s:k9s version" "sops:sops --disable-version-check --version" "oras:oras version"); fi
+# gitlint: Fedora (dnf), Debian (apt) and macOS (brew); not in EPEL, so not on RHEL/Rocky.
+if [[ "$profile" == "work" ]] && ! grep -qE '^ID="?(rhel|rocky|almalinux|centos)' /etc/os-release 2>/dev/null; then
+  _tools+=("gitlint:gitlint --version")
+fi
+# Release-management tools installed on Linux work machines only (skopeo from dnf/apt, ec pinned); acli only where
+# the packages role installs it (dnf, x86_64; not RHEL CSB, which IT owns), gitlint only on Fedora.
+if [[ "$profile" == "work" && "$(uname -s)" == Linux ]]; then _tools+=("skopeo:skopeo --version" "ec:ec version"); fi
+if [[ "$profile" == "work" && "$(uname -m)" == x86_64 ]] && grep -q '^ID=fedora' /etc/os-release 2>/dev/null; then
+  _tools+=("acli:acli --version")
+fi
 for tool in "${_tools[@]}"; do
   name="${tool%%:*}"; cmd="${tool#*:}"
   # shellcheck disable=SC2086  # intentional word-split: cmd is "binary arg1 arg2"

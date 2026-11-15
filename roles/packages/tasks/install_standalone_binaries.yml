@@ -47,6 +47,7 @@
     - profile == 'work'
     - packages_install_binaries | bool
     - is_dnf
+    - not csb_rhel  # IT owns RHEL CSB hosts: no third-party rpm there
     - ansible_facts['architecture'] == 'x86_64'
     - repos_dnf_acli_baseurl is not defined  # the internal mirror path in repos_dnf installs it instead
   block:
@@ -62,8 +63,17 @@
       failed_when: false
       check_mode: false
 
+    - name: Report acli install not simulated in check mode
+      ansible.builtin.debug:
+        msg: "CHECK MODE: acli {{ packages_acli_version }} would be downloaded (SHA256-pinned) and installed; not simulated."
+      when:
+        - ansible_check_mode
+        - (_acli_rpm.stdout | default('')) != (packages_acli_version | replace('-', '~'))
+
     - name: Download and install the pinned acli rpm
-      when: (_acli_rpm.stdout | default('')) != (packages_acli_version | replace('-', '~'))
+      when:
+        - not ansible_check_mode  # tempfile does not run in check mode
+        - (_acli_rpm.stdout | default('')) != (packages_acli_version | replace('-', '~'))
       # Root-owned 0700 temp dir: nobody else can swap or redirect the verified rpm before dnf reads it.
       become: true
       tags: [become]
@@ -88,6 +98,13 @@
             name: "{{ _acli_tmp.path }}/acli.rpm"
             state: present
             disable_gpg_check: true  # the header is unsigned; the SHA256 pin above is the integrity check
+      rescue:
+        # Like the other downloads: a blocked or failed fetch warns and the rest of the play goes on.
+        - name: Warn that acli was not installed
+          ansible.builtin.debug:
+            msg: >-
+              WARNING: acli {{ packages_acli_version }} was not installed ({{ ansible_failed_result.msg | default('failed') }}).
+              The Jira steps need it: retry with make packages, or install it from https://acli.atlassian.com.
       always:
         - name: Remove the acli rpm directory
           ansible.builtin.file:

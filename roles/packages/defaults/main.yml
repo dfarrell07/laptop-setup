@@ -152,6 +152,9 @@ packages_support_work:
              # (BPF_PROG_TYPE_KPROBE) with EPERM; use tracepoints (tracepoint:...) or uprobes instead,
              # or set system_kernel_lockdown: '' in config.yml + re-run make system for a debug session
   - bpftool  # eBPF program/map introspection
+
+# Fedora-only work packages (not in EPEL, so a RHEL/Rocky transaction would fail on them).
+packages_fedora_work:
   - gitlint  # commit message linting; submariner-release-management's make test runs it
 
 packages_apt:
@@ -207,7 +210,7 @@ packages_apt_work:
   - tshark  # scripting-safe CLI capture; mirrors packages_networking_work wireshark-cli on Fedora
   - conntrack  # netfilter connection tracking (Debian binary package of conntrack-tools); mirrors Fedora
   - buildah  # OCI image builder; mirrors packages_containers_work on Fedora
-  - gitlint  # mirrors packages_support_work on Fedora
+  - gitlint  # mirrors packages_fedora_work
   - skopeo  # container image inspection/copy; mirrors packages_containers_work on Fedora
 
 # Binary downloads — pinned versions with SHA256 verification.
@@ -494,7 +497,7 @@ packages_brew_work:
   - mtr  # requires sudo on macOS for ICMP (raw socket); on Linux, capabilities handle it
   - actionlint  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_actionlint_version pin
   - zizmor      # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_zizmor_version pin
-  - gitlint  # mirrors packages_support_work on Fedora
+  - gitlint  # mirrors packages_fedora_work
   - oras     # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_oras_version pin
 
 # Add native packages without replacing the base lists. Empty on a new machine.
