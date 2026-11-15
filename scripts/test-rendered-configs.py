@@ -224,7 +224,12 @@ class RenderedConfigTests(unittest.TestCase):
             (home / 'bin').mkdir()
             (home / 'bin/gh').write_text('#!/bin/sh\ncat >/dev/null\nprintf "username=x\\npassword=TOKEN\\n"\n')
             (home / 'bin/gh').chmod(0o755)
-            env = dict(os.environ, GIT_CONFIG_GLOBAL=str(self.out / 'gitconfig'), GIT_CONFIG_NOSYSTEM='1',
+            # macOS names gh by its Homebrew path, which would reach the host's real gh: the stub stands in for it
+            helper = re.compile(r'^(\thelper = !sh ~/\.config/git/gh-credential) (\S+)$', re.M)
+            self.assertRegex(helper.search(self.read('gitconfig')).group(2), r'^(gh|/.+/bin/gh)$')
+            gitconfig = home / 'gitconfig'
+            gitconfig.write_text(helper.sub(lambda m: f"{m.group(1)} {home / 'bin/gh'}", self.read('gitconfig')))
+            env = dict(os.environ, GIT_CONFIG_GLOBAL=str(gitconfig), GIT_CONFIG_NOSYSTEM='1',
                        HOME=name, XDG_CONFIG_HOME=str(home / '.config'), GIT_TERMINAL_PROMPT='0',
                        GIT_ASKPASS='', SSH_ASKPASS='', PATH=f"{home / 'bin'}:{os.environ['PATH']}")
             env.pop('GIT_ASKPASS'); env.pop('SSH_ASKPASS')
