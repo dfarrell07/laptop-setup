@@ -83,7 +83,8 @@ and `make apply CHUNK=repos`; until then those hosts and their repos are skipped
    - **Reboot**: lockdown, IOMMU, vsyscall and init_on_free take effect only then; until lockdown=integrity is active, kexec is guarded
      only by the `kexec_load_disabled` sysctl. SSH is then on port 722.
    - `make smoke-test`, then `tailscale up` (browser step).
-   - `gh auth login`, then `make packages repos` (while gh is logged out, the first run reports failed private clones, then
+   - `gh auth login`, answering No to its git-credentials question (yes replaces the token guard that keeps gh's token off
+     upstream repos), then `make packages repos` (while gh is logged out, the first run reports failed private clones, then
      continues). The notes repo is opt-in: set `notes_enabled: true` in `config.yml` first, then `make notes`.
    - Work profile with `oc`: `podman login registry.redhat.io` unless vault `registry_tokens` automates it.
    - Log out and back in for libvirt/kvm group changes; on CSB/hybrid machines run `make container`; re-run `make smoke-test`.
