@@ -434,6 +434,7 @@ packages_brew:
   - flock  # flock(1) (discoteq's, compatible with util-linux's): the claude-skills session launcher locks with it
   - kubectl  # Linux installs it on both profiles (packages_containers_kubectl); unversioned on macOS
   - podman  # Linux packages_containers; macOS runs containers in a podman machine VM
+  - go  # the personal profile clones the ovnk category (Go repos): build and test them here
   - gitleaks  # no work guard — useful for personal repos; actionlint/zizmor are GHA-specific (work-only)
   - gnupg
   # keg-only; provides upstream OpenSSL CLI for s_client/genrsa/vault scripts
@@ -455,7 +456,6 @@ packages_brew_personal: []
 packages_brew_work:
   - awscli
   - ansible  # bootstrap installs for first run; kept here for idempotent reprovisioning — work-profile Macs only
-  - golang
   - kind       # NOTE: unversioned on macOS (brew tracks latest); Linux uses pinned binary via install_binary_downloads.yml
   - helm       # NOTE: unversioned on macOS (brew tracks latest); Linux uses pinned binary via install_binary_downloads.yml
   - kustomize  # NOTE: unversioned on macOS (brew tracks latest); Linux uses pinned binary via install_binary_downloads.yml
