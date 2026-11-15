@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+# The Linux sshd login policy (roles/system/templates/sshd-hardening.conf.j2): keys only, no root, only this user,
+# and here only from tailnet addresses (desktop_macos_ssh_allow_from). Read before 100-macos.conf; sshd keeps the
+# first value it sees.
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+AllowUsers {% for net in desktop_macos_ssh_allow_from %}{{ ansible_facts['user_id'] }}@{{ net }}{{ ' ' if not loop.last }}{% endfor %}
+
+X11Forwarding no

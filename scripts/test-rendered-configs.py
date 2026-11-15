@@ -40,6 +40,8 @@ CASES = {
     'i3status': ('roles/desktop/templates/i3status.conf.j2', {}),
     'bar_status': ('roles/desktop/templates/i3status-bar.sh.j2', {}),
     'audit': ('roles/system/templates/auditd-system.rules.j2', {}),
+    'sshd_macos': ('roles/desktop/templates/sshd-macos.conf.j2', {}),
+    'zshenv': ('roles/dotfiles/templates/zshenv.j2', {'dotfiles_homebrew_prefix': '/opt/homebrew'}),
 }
 BASE = {'real_user_id': 'public-test-user', 'dotfiles_user_name': 'Test User',
         'dotfiles_user_email_work': 'w@example.test', 'dotfiles_user_email_personal': 'p@example.test',
@@ -335,6 +337,31 @@ class RenderedConfigTests(unittest.TestCase):
             self.assertIn('"full_text":"CTR 2"', update)
             # pts/0 and pts/3: a second agent process on a terminal is the same session
             self.assertIn('"full_text":"AI 2"', update)
+
+    def test_macos_sshd_policy_is_key_only_and_tailnet_only(self):
+        text = self.read('sshd_macos')
+        for line in ('PasswordAuthentication no', 'KbdInteractiveAuthentication no', 'PermitRootLogin no'):
+            self.assertIn(line + '\n', text)
+        allow = next(line for line in text.splitlines() if line.startswith('AllowUsers '))
+        users = allow.split()[1:]
+        self.assertEqual([u.split('@', 1)[1] for u in users], ['100.64.0.0/10', 'fd7a:115c:a1e0::/48'])
+        self.assertEqual(len({u.split('@', 1)[0] for u in users}), 1)
+        sshd = Path('/usr/sbin/sshd')
+        if sshd.exists():  # the drop-in parses with this host's sshd (Apple's on macOS)
+            hostkey = self.out / 'hostkey'
+            if not hostkey.exists():
+                subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(hostkey)], check=True)
+            config = self.out / 'sshd_config'
+            config.write_text(f'HostKey {hostkey}\nInclude {self.out / "sshd_macos"}\n')
+            result = subprocess.run([str(sshd), '-t', '-f', str(config)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_zshenv_puts_homebrew_on_the_bare_ssh_path(self):
+        result = subprocess.run(['zsh', '-c', 'source "$1"; print -r -- $PATH', 'zsh', str(self.out / 'zshenv')]
+                                if shutil.which('zsh') else ['true'],
+                                env={'PATH': '/usr/bin:/bin:/usr/sbin:/sbin'}, capture_output=True, text=True)
+        if shutil.which('zsh'):
+            self.assertTrue(result.stdout.startswith('/opt/homebrew/bin:/usr/bin'), result.stdout + result.stderr)
 
     def test_audit_rules_set_backlog_before_rules(self):
         lines = [l for l in self.read('audit').splitlines() if l and not l.startswith('#')]
