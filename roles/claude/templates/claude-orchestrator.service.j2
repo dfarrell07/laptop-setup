@@ -18,8 +18,10 @@ Environment=TMUX_TMPDIR=%t/tmux
 ExecStartPre=-/usr/bin/nm-online -q -t 120
 ExecStartPre=/usr/bin/mkdir -p -m 0700 %t/tmux
 # Forget the last boot's definition: each boot starts a fresh conversation
+# No --allow: the orchestrator runs with skipped permissions like the sessions it starts (an allowlist is no boundary
+# there, and a different permission mode makes Claude Code hold the other sessions' messages to it)
 ExecStartPre=-/bin/bash {{ launcher }} clean personal-{{ name }}
-ExecStart=/bin/bash {{ launcher }} start personal {{ checkout }} --here --name {{ name }} --trust --prompt /claude-skills:sessions --allow "Bash(bash {{ launcher }} *) Skill(claude-skills:sessions)"
+ExecStart=/bin/bash {{ launcher }} start personal {{ checkout }} --here --name {{ name }} --trust --prompt /claude-skills:sessions
 
 [Install]
 WantedBy=default.target
