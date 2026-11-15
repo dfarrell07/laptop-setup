@@ -8,6 +8,10 @@ _url=$(printf '%s' "${2:-}" | tr '[:upper:]' '[:lower:]')
 case "$_url" in http://*|https://*)
   _rest=${_url#*://}
   _host=${_rest%%/*}; _host=${_host##*@}; _host=${_host%%:*}; _host=${_host%.}; _host=${_host#www.}
+  case "$_host" in *%*)  # git and curl decode an escaped host (github%2ecom) before the credential lookup
+    printf 'pre-push: refusing an HTTPS push to a percent-encoded host (%s)\n' "$_host" >&2
+    exit 1
+  esac
   if [ "$_host" = github.com ]; then
     # Only a plain <owner>/<repo> path: no empty, dot or percent-encoded segment can walk to another owner.
     _path=${_rest#*/}; _path=${_path%/}; _owner=${_path%%/*}; _repo=${_path#*/}
