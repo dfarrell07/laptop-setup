@@ -13,6 +13,16 @@ import shutil
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
+BASH = shutil.which('bash')
+
+
+def only_tools(bin_dir, *names):
+    """Link just these host tools into bin_dir: with PATH=bin_dir a slice sees no other host command (a real docker,
+    brew or launchctl in /usr/bin would change its answer)."""
+    bin_dir.mkdir(exist_ok=True)
+    for name in names:
+        (bin_dir / name).symlink_to(shutil.which(name))
+    return bin_dir
 
 
 class SmokeTests(unittest.TestCase):
@@ -389,7 +399,7 @@ class SmokeTests(unittest.TestCase):
         end = source.index('  unset _missing _rl_wait _rl_on _mosh _alf _sshd_policy', start)
         with tempfile.TemporaryDirectory() as directory:
             d = Path(directory).resolve()
-            (d / 'bin').mkdir()
+            only_tools(d / 'bin', 'sed', 'cat', 'awk', 'sort', 'realpath', 'grep')
             (d / 'home/.ssh').mkdir(parents=True)
             (d / 'prefix/bin').mkdir(parents=True)
             mosh = d / 'prefix/bin/mosh-server'
@@ -404,11 +414,11 @@ class SmokeTests(unittest.TestCase):
             (state / 'sshd_config').write_text('Include /etc/ssh/sshd_config.d/*\n')  # not this directory
 
             def run(remote_login, screen_sharing=False, molecule=''):
-                result = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c',
+                result = subprocess.run([BASH, '-eu', '-o', 'pipefail', '-c',
                     'record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; };'
                     f' _macos_remote_login={remote_login} _macos_screen_sharing={screen_sharing};'
                     f' _alf={d}/bin/alf _sshd_policy={policy} _sshd_config={state}/sshd_config;\n' + source[start:end]],
-                    env=dict(os.environ, PATH=f'{d}/bin:' + os.environ['PATH'], HOME=str(d / 'home'),
+                    env=dict(os.environ, PATH=f'{d}/bin', HOME=str(d / 'home'),
                              STATE=str(state), PREFIX=str(d / 'prefix'), MOLECULE_PROJECT_DIRECTORY=molecule),
                     capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
@@ -473,10 +483,10 @@ class SmokeTests(unittest.TestCase):
                 return path
 
             def run():
-                result = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c',
+                result = subprocess.run([BASH, '-eu', '-o', 'pipefail', '-c',
                     'record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; }; _macos_python=python@3.14;\n'
                     + source[start:end]],
-                    env=dict(os.environ, PATH=f'{d}/bin:/usr/bin:/bin', PREFIX=str(prefix)),
+                    env=dict(os.environ, PATH=f'{d}/bin', PREFIX=str(prefix)),
                     capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 return result.stdout.strip()
@@ -496,16 +506,16 @@ class SmokeTests(unittest.TestCase):
         end = source.index('\nfi\n', start)
         with tempfile.TemporaryDirectory() as directory:
             d = Path(directory)
-            (d / 'bin').mkdir()
+            only_tools(d / 'bin', 'grep', 'sed')  # no host docker: /usr/bin/docker would take the PASS branch
             (d / 'home/.local/bin').mkdir(parents=True)
             shim = d / 'home/.local/bin/docker'
             podman = d / 'podman'
 
             def run(machine='true', docker_shim='true', molecule=''):
-                result = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c',
+                result = subprocess.run([BASH, '-eu', '-o', 'pipefail', '-c',
                     'record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; };'
                     f' _podman_machine={machine} _docker_shim={docker_shim};\n' + source[start:end]],
-                    env=dict(os.environ, PATH=f'{d}/bin:/usr/bin:/bin', HOME=str(d / 'home'),
+                    env=dict(os.environ, PATH=f'{d}/bin', HOME=str(d / 'home'),
                              MOLECULE_PROJECT_DIRECTORY=molecule),
                     capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
