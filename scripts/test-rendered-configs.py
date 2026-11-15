@@ -132,22 +132,39 @@ class RenderedConfigTests(unittest.TestCase):
         self.assertRegex(alias, r'(?m)^\s*fixup = commit -s --fixup$')
         self.assertRegex(alias, r"(?m)^\s*wip = commit -s -m 'WIP: snapshot'$")
 
-    def test_gitconfig_pushes_https_by_default_and_ssh_with_pushsk(self):
-        config = self.read('gitconfig')
-        self.assertNotIn('pushInsteadOf = https://github.com/', config)  # HTTPS by default: gh credentials, agents
+    def test_gitconfig_https_for_own_repos_ssh_for_upstream_and_pushsk(self):
+        user = re.search(r'insteadOf = git@github.com:([^/]+)/', self.read('gitconfig')).group(1)
         with tempfile.TemporaryDirectory() as name:
-            env = dict(os.environ, GIT_CONFIG_GLOBAL=str(self.out / 'gitconfig'), GIT_CONFIG_NOSYSTEM='1', HOME=name)
-            subprocess.run(['git', 'init', '-q', name], check=True, env=env)
-            subprocess.run(['git', '-C', name, 'remote', 'add', 'origin', 'https://github.com/o/r.git'], check=True,
-                           env=env)
-            default = subprocess.run(['git', '-C', name, 'remote', 'get-url', '--push', 'origin'], env=env,
-                                     capture_output=True, text=True, check=True).stdout.strip()
-            alias = subprocess.run(['git', '-C', name, 'config', 'alias.pushsk'], env=env, capture_output=True,
-                                   text=True, check=True).stdout.strip()
-            ssh = subprocess.run(alias.lstrip('!').replace(' push', ' remote get-url --push origin').split(),
-                                 cwd=name, env=env, capture_output=True, text=True, check=True).stdout.strip()
-        self.assertEqual(default, 'https://github.com/o/r.git')
-        self.assertEqual(ssh, 'ssh://git@github.com/o/r.git')
+            log = Path(name) / 'ssh-log'
+            fake_ssh = Path(name) / 'fake-ssh'
+            fake_ssh.write_text(f'#!/bin/sh\n[ "$1" = -G ] && exit 0\necho "$@" >> {log}\nexit 1\n')
+            fake_ssh.chmod(0o755)
+            env = dict(os.environ, GIT_CONFIG_GLOBAL=str(self.out / 'gitconfig'), GIT_CONFIG_NOSYSTEM='1', HOME=name,
+                       GIT_SSH_COMMAND=f'sh {fake_ssh}', GIT_TERMINAL_PROMPT='0')
+            repo = Path(name) / 'r'
+
+            def git(*args, check=True):
+                return subprocess.run(['git', '-C', str(repo), *args], env=env, capture_output=True, text=True,
+                                      check=check).stdout.strip()
+            subprocess.run(['git', 'init', '-q', str(repo)], check=True, env=env)
+            git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x')
+            own = f'https://github.com/{user}/r.git'
+            for remote, url, fetch, push in [
+                    ('a', own, own, own), ('b', f'git@github.com:{user}/r.git', own, own),
+                    ('c', f'ssh://git@github.com/{user}/r.git', own, own),
+                    ('d', 'https://github.com/up/r.git', 'https://github.com/up/r.git', 'ssh://git@github.com/up/r.git')]:
+                git('remote', 'add', remote, url)
+                self.assertEqual(git('remote', 'get-url', remote), fetch, url)
+                self.assertEqual(git('remote', 'get-url', '--push', remote), push, url)
+                git('pushsk', remote, check=False)
+                self.assertIn(f'{"up" if remote == "d" else user}/r.git', log.read_text().splitlines()[-1])
+                self.assertIn('-p 22', log.read_text().splitlines()[-1])  # the explicit-port SSH URL
+
+    def test_fork_remotes_use_https_so_agents_can_push(self):
+        repos = yaml.safe_load((ROOT / 'group_vars/all/repos.yml').read_text())
+        remotes = [remote['url'] for repo in repos['git_repos_public'] for remote in repo.get('extra_remotes', [])]
+        self.assertTrue(remotes)
+        self.assertEqual([url for url in remotes if not url.startswith('https://github.com/')], [])
 
     def test_wm_configs_have_no_trailing_comments_after_commands(self):
         for name in ('sway', 'i3'):

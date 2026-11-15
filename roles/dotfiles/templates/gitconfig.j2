@@ -48,10 +48,19 @@
 [rerere]
 	enabled = true
 
+# GitHub transport. Your own repos and forks (github.com/{{ dotfiles_github_user }}/) use HTTPS with gh's credentials
+# (credential helper below), so agents can fetch and push to them without a YubiKey touch. Pushes to anyone else's
+# repos go over SSH, so the YubiKey still guards them. git pushsk [remote] [refspec...] always pushes over SSH (an
+# explicit-port URL no rewrite matches); it takes no --force-with-lease, which needs a remote name.
+[url "ssh://git@github.com/"]
+	pushInsteadOf = https://github.com/
+[url "https://github.com/{{ dotfiles_github_user }}/"]
+	insteadOf = git@github.com:{{ dotfiles_github_user }}/
+	insteadOf = ssh://git@github.com/{{ dotfiles_github_user }}/
+	pushInsteadOf = https://github.com/{{ dotfiles_github_user }}/
+
 [alias]
-	# GitHub pushes default to HTTPS with gh's credentials (credential helper below), which agents can use; pushsk
-	# pushes the same remote over SSH instead, for a YubiKey-backed key (needs a touch): git pushsk [push args]
-	pushsk = !git -c url.ssh://git@github.com/.pushInsteadOf=https://github.com/ push
+	pushsk = "!f() { r=${1:-origin}; [ $# -gt 0 ] && shift; [ $# -gt 0 ] || set -- HEAD; u=$(git remote get-url \"$r\") || return; case $u in https://github.com/*) p=${u#https://github.com/};; git@github.com:*) p=${u#git@github.com:};; ssh://git@github.com/*) p=${u#ssh://git@github.com/};; *) echo \"pushsk: $r is not a GitHub remote\" >&2; return 1;; esac; git push \"ssh://git@github.com:22/$p\" \"$@\"; }; f"
 	logg = log --oneline --graph --decorate --all
 	uncommit = reset HEAD~1
 	unstage = restore --staged
