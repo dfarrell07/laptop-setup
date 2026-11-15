@@ -105,6 +105,9 @@ Homes below are defaults; substitute configured paths and transfer custom homes 
 and any `claude_extra_config_dirs`) and the `oper` Codex home that exists but is not logged in, checked the way the
 launchers run them. It runs only the status commands and never starts a sign-in. It does not check `cwork` (Vertex)
 or `agy`, which has no status command; `owork` has its own check, `codex-work-login`.
+On macOS, `~/.claude` also needs a login with `CLAUDE_CONFIG_DIR` unset (`env -u CLAUDE_CONFIG_DIR claude auth login`):
+Claude keeps that one in a separate Keychain item, and launchd jobs, the desktop app and IDEs start claude without the
+variable. The check warns when only the `cper` login exists.
 
 `cwork` sources the managed `~/.config/claude/work-env`, which sources a restored
 `~/.config/claude-code-vertex/env.sh` when present and forces Vertex. For GCP, macOS work provisioning installs

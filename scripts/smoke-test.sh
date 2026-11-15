@@ -389,7 +389,19 @@ else
           CLAUDE_CONFIG_DIR="$_cd" ${_to[@]+"${_to[@]}"} claude auth status &>/dev/null </dev/null || _rc=$?
       _disp=$(_home_disp "$_cd")
       if (( _rc == 124 )); then _timed_out+=("$_disp")
-      elif (( _rc != 0 )); then _logged_out+=("CLAUDE_CONFIG_DIR=$_disp claude auth login"); fi
+      elif (( _rc != 0 )); then _logged_out+=("CLAUDE_CONFIG_DIR=$_disp claude auth login")
+      elif [[ "$_cd" == "$HOME/.claude" ]]; then
+        # Tools that start claude without CLAUDE_CONFIG_DIR (launchd jobs, the desktop app, IDEs) read the default
+        # login, which macOS keeps in another Keychain item than the one cper's CLAUDE_CONFIG_DIR=~/.claude uses
+        # (Linux shares ~/.claude/.credentials.json, so both agree there). env runs the binary, not the zsh wrapper.
+        _rc=0
+        env -u CLAUDE_CONFIG_DIR -u CLAUDE_CODE_USE_VERTEX -u ANTHROPIC_VERTEX_PROJECT_ID -u CLOUD_ML_REGION \
+            -u GOOGLE_APPLICATION_CREDENTIALS -u GOOGLE_CLOUD_PROJECT -u ANTHROPIC_BASE_URL -u ANTHROPIC_API_KEY \
+            -u ANTHROPIC_AUTH_TOKEN -u CLAUDE_CODE_OAUTH_TOKEN -u CLAUDE_CODE_USE_BEDROCK -u CLAUDE_CODE_USE_FOUNDRY \
+            ${_to[@]+"${_to[@]}"} claude auth status &>/dev/null </dev/null || _rc=$?
+        if (( _rc == 124 )); then _timed_out+=("$_disp (CLAUDE_CONFIG_DIR unset)")
+        elif (( _rc != 0 )); then _logged_out+=("env -u CLAUDE_CONFIG_DIR claude auth login (tools without CLAUDE_CONFIG_DIR)"); fi
+      fi
     done
   fi
   _cx=${_codex_personal:-$HOME/.codex-personal}; _cx=${_cx/#\~/$HOME}
