@@ -551,6 +551,48 @@
   register: _desktop_authorized_keys
   when: is_macos and desktop_macos_remote_login | bool
 
+# The Linux algorithm lists follow Fedora's OpenSSH; an older macOS sshd rejects names it lacks (mlkem768x25519-sha256
+# needs OpenSSH 9.9), so the drop-in keeps the ones this Mac supports. Apple's sshd has no -Q; its ssh, from the same
+# OpenSSH build, lists the same algorithms.
+- name: Read the SSH algorithms this Mac supports (macOS)
+  ansible.builtin.command:
+    argv: [/usr/bin/ssh, -Q, "{{ item }}"]
+  register: _desktop_ssh_supported
+  changed_when: false
+  check_mode: false  # read-only
+  loop: [KexAlgorithms, Ciphers, MACs, HostKeyAlgorithms, PubkeyAcceptedAlgorithms]
+  when:
+    - is_macos and desktop_macos_remote_login | bool
+    - _desktop_authorized_keys.stat.size | default(0) > 0
+
+# In the group_vars order; sshd-macos.conf.j2 falls back to the full lists when this did not run
+- name: Keep the sshd algorithms this Mac supports (macOS)
+  ansible.builtin.set_fact:
+    _desktop_sshd_algorithms: >-
+      {{ _desktop_sshd_algorithms | default({}) | combine({item.item: _wanted[item.item] | map('trim')
+                                                           | select('in', item.stdout_lines | map('trim') | list) | list}) }}
+  vars:
+    _wanted:
+      KexAlgorithms: "{{ ssh_kex_algorithms.split(',') }}"
+      Ciphers: "{{ ssh_ciphers.split(',') }}"
+      MACs: "{{ ssh_macs.split(',') }}"
+      HostKeyAlgorithms: "{{ ssh_host_key_algorithms.split(',') }}"
+      PubkeyAcceptedAlgorithms: "{{ ssh_pubkey_accepted_algorithms }}"
+  loop: "{{ _desktop_ssh_supported.results | default([]) | selectattr('stdout_lines', 'defined') }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Check each sshd algorithm list keeps a supported algorithm (macOS)
+  ansible.builtin.assert:
+    that: _empty | length == 0
+    fail_msg: >-
+      This Mac's OpenSSH (/usr/bin/ssh -Q) supports none of the configured {{ _empty | join(', ') }} (group_vars/all/vars.yml
+      ssh_* lists): sshd would refuse every connection. Update macOS, or add an algorithm it supports to that list.
+    quiet: true
+  vars:
+    _empty: "{{ _desktop_sshd_algorithms | dict2items | rejectattr('value') | map(attribute='key') | list }}"
+  when: _desktop_sshd_algorithms is defined
+
 - name: Apply the sshd login policy and start sshd (macOS)
   when:
     - is_macos and desktop_macos_remote_login | bool

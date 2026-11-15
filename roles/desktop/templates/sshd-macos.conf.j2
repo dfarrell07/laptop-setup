@@ -2,10 +2,14 @@
 # The Linux sshd policy (roles/system/templates/sshd-hardening.conf.j2) where it applies to macOS: keys only (ed25519
 # and FIDO2), no root, only this user and here only from tailnet addresses (desktop_macos_ssh_allow_from), the same
 # limits and algorithms. Read before 100-macos.conf; sshd keeps the first value it sees.
+{# The play keeps the algorithms this Mac's OpenSSH supports (_desktop_sshd_algorithms); without it, the full lists #}
+{% set _alg = _desktop_sshd_algorithms | default({
+     'KexAlgorithms': ssh_kex_algorithms.split(','), 'Ciphers': ssh_ciphers.split(','), 'MACs': ssh_macs.split(','),
+     'HostKeyAlgorithms': ssh_host_key_algorithms.split(','), 'PubkeyAcceptedAlgorithms': ssh_pubkey_accepted_algorithms}) %}
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 AuthenticationMethods publickey
-PubkeyAcceptedAlgorithms {{ ssh_pubkey_accepted_algorithms | map('regex_replace', '[\r\n].*', '') | join(',') }}
+PubkeyAcceptedAlgorithms {{ _alg['PubkeyAcceptedAlgorithms'] | map('regex_replace', '[\r\n].*', '') | join(',') }}
 PermitRootLogin no
 PermitUserEnvironment no
 AllowUsers {% for net in desktop_macos_ssh_allow_from %}{{ ansible_facts['user_id'] }}@{{ net }}{{ ' ' if not loop.last }}{% endfor %}
@@ -18,7 +22,7 @@ AllowAgentForwarding {{ desktop_macos_ssh_allow_agent_forwarding | regex_replace
 AllowTcpForwarding {{ desktop_macos_ssh_allow_tcp_forwarding | regex_replace('[\r\n].*', '') }}
 LogLevel VERBOSE
 
-HostKeyAlgorithms {{ ssh_host_key_algorithms | regex_replace('[\r\n].*', '') }}
-Ciphers {{ ssh_ciphers | regex_replace('[\r\n].*', '') }}
-MACs {{ ssh_macs | regex_replace('[\r\n].*', '') }}
-KexAlgorithms {{ ssh_kex_algorithms | regex_replace('[\r\n].*', '') }}
+HostKeyAlgorithms {{ _alg['HostKeyAlgorithms'] | map('regex_replace', '[\r\n].*', '') | join(',') }}
+Ciphers {{ _alg['Ciphers'] | map('regex_replace', '[\r\n].*', '') | join(',') }}
+MACs {{ _alg['MACs'] | map('regex_replace', '[\r\n].*', '') | join(',') }}
+KexAlgorithms {{ _alg['KexAlgorithms'] | map('regex_replace', '[\r\n].*', '') | join(',') }}
