@@ -149,7 +149,12 @@ signer_entries() {
     opts = ""; ns = ""
     for (k = 1; k < i; k++) if ($k ~ /namespaces=/) ns = $k
     # A key limited to other namespaces (namespaces="file") never signs vault commits.
-    if (ns != "" && ns !~ /namespaces="?([^"]*,)?git(,[^"]*)?"?/) next
+    if (ns != "") {
+      v = ns; sub(/.*namespaces=/, "", v); sub(/^"/, "", v); sub(/".*$/, "", v)
+      n = split(v, names, ","); hit = 0
+      for (m = 1; m <= n; m++) if (names[m] == "git") hit = 1
+      if (!hit) next
+    }
     for (k = 1; k < i; k++) {
       n = split($k, parts, ",")
       for (m = 1; m <= n; m++) if (parts[m] ~ /^valid-(before|after)=/) opts = opts (opts == "" ? "" : ",") parts[m]

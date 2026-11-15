@@ -491,7 +491,7 @@ class SharedVault(unittest.TestCase):
         env_b = self.env('b', b)
         (Path(env_b['HOME']) / '.config/git').mkdir(parents=True)
         pub = (self.tmp / 'signing.pub').read_text().strip()
-        (Path(env_b['HOME']) / '.config/git/allowed_signers').write_text(f't@t namespaces="file" {pub}\n')
+        (Path(env_b['HOME']) / '.config/git/allowed_signers').write_text(f't@t namespaces="file,github" {pub}\n')
         result = self.shared('b', b, 'join', check=False, VAULT_ALLOWED_SIGNERS=str(self.tmp / 'signers-b'))
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('no SSH signing key', result.stderr)
