@@ -147,7 +147,6 @@ new_password() { python3 -c 'import secrets; print(secrets.token_urlsafe(48))'; 
 # Trust comes from commit signatures, not from age: age does not say who encrypted a file, so anyone who can push
 # could seal a password of their own choosing to your keys. Every commit must carry a signature by one of the owner's
 # SSH signing keys: those in ~/.config/git/allowed_signers, else the ones GitHub lists for the owner (fetched once).
-# A signer list's entries as "<valid-before/valid-after options, comma-separated or empty>|<keytype key>".
 # A signer list's entries as "<options exactly as written, or empty>|<keytype key>", principals dropped (the vault
 # accepts any committer). ssh-keygen itself interprets the options (namespaces, valid-before, verify-required...), so
 # they pass through unchanged; only a certificate authority line is skipped (not a plain signing key).
@@ -172,7 +171,7 @@ ensure_signers() {
     die "secrets_signing_fingerprints in config.yml must be one quoted string (\"SHA256:... SHA256:...\"), not a list"
   pins=${VAULT_SIGNING_FINGERPRINTS:-$(printf '%s' "$raw" | sed 's/^secrets_signing_fingerprints:[[:space:]]*//; s/[[:space:]]#.*//; s/^!unsafe[[:space:]]*//' | tr -d "\"'")}
   # Rebuilt every run from allowed_signers (managed by make dotfiles), so a retired key stops being trusted; its
-  # valid-before/valid-after options carry over (they compare the commit's own date, so they are a weak limit).
+  # its options pass through to ssh-keygen (valid-before compares the commit's own date, so it is a weak limit).
   if [[ -s $HOME/.config/git/allowed_signers ]]; then
     entries=$(signer_entries "$HOME/.config/git/allowed_signers"); from=allowed_signers
   elif [[ -s $SIGNERS && -z ${VAULT_SIGNERS_REFRESH:-} ]]; then
@@ -323,6 +322,12 @@ cmd_add_key() {
   need age age
   [[ -d $S/.git ]] || die "$S is not a clone: gh repo create $user/laptop-secrets --private --clone (in ~/src/$user), or make vault-join"
   sync_clone
+  # A repository with history but no vault-pass.age here is a clone whose files are missing: add-key would neither
+  # re-encrypt nor push. Restore them first.
+  if git -C "$S" rev-parse -q --verify HEAD >/dev/null 2>&1 && git -C "$S" cat-file -e HEAD:vault-pass.age 2>/dev/null &&
+    [[ ! -f $S/vault-pass.age ]]; then
+    die "$S is missing its files: make vault-join (or git -C $S checkout -- .) first"
+  fi
   local rec label nopin=false
   [[ ${1:-} == --no-pin ]] && nopin=true
   if [[ -n ${RECIPIENT:-} ]]; then

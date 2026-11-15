@@ -311,7 +311,9 @@
       { git config --local laptop.repoHooks .githooks; out=updated; };
       if [ -n "$(git config --local --get-all core.hooksPath || true)" ]; then
       git config --local --unset-all core.hooksPath; out=updated; fi;
-      if [ -n "$(git config --local --includes --get-all core.hooksPath || true)" ]; then
+      if [ -n "$(git config --worktree --get-all core.hooksPath 2>/dev/null || true)" ]; then
+      git config --worktree --unset-all core.hooksPath; out=updated; fi;
+      if [ "$(git config --get core.hooksPath || true)" != "$(git config --global --get core.hooksPath || true)" ]; then
       out="$out included-hooksPath"; fi;
       echo "$out"
     chdir: "{{ git_repos_base_dir }}/{{ item.dest }}"
@@ -328,9 +330,9 @@
 - name: Warn about a core.hooksPath that a local include brings back
   ansible.builtin.debug:
     msg: >-
-      WARNING: {{ item.item.dest }} sets core.hooksPath through a file its .git/config includes (include.path or
-      includeIf), which replaces the global hooks (gitleaks, the token-push guard). Remove it there:
-      git -C {{ git_repos_base_dir }}/{{ item.item.dest }} config --local --list --show-origin --includes | grep -i hookspath
+      WARNING: {{ item.item.dest }} still has its own core.hooksPath (from a file its .git/config includes, or another
+      scope), which replaces the global hooks (gitleaks, the token-push guard). Find and remove it:
+      git -C {{ git_repos_base_dir }}/{{ item.item.dest }} config --show-origin --show-scope --includes --get-all core.hooksPath
   loop: "{{ git_repos_hooks_result.results | default([]) | selectattr('stdout', 'defined')
             | selectattr('stdout', 'search', 'included-hooksPath') | list }}"
   loop_control:

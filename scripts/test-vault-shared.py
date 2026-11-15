@@ -565,6 +565,15 @@ class SharedVault(unittest.TestCase):
         self.shared('b', b, 'join', VAULT_ALLOWED_SIGNERS=str(self.tmp / 'signers-b'))
         self.assertIn('secret-a', self.view('b', b))
 
+    def test_add_key_refuses_a_clone_whose_files_are_all_gone(self):
+        a, b = self.joined_pair()
+        for f in ('vault.yml', 'vault-pass.age', 'recipients', 'README.md', '.gitattributes'):
+            (self.tmp / 'secrets-b' / f).unlink()
+        third = run(['age-keygen']).stdout.split('public key: ')[1].split()[0]
+        result = self.shared('b', b, 'add-key', check=False, RECIPIENT=third)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('missing its files', result.stderr)
+
     def test_a_list_form_pin_is_refused(self):
         a = self.init_a()
         b = self.machine('b', None)
