@@ -17,9 +17,10 @@ git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 && exit 0
 # Throwaway repositories that test suites create in temp directories commit without sign-off; requiring it there
 # breaks their tests. Only the sign-off rule is skipped: gitleaks and the pre-push guard still run everywhere.
 _top=$(git rev-parse --show-toplevel 2>/dev/null || true)
-_tmp=${TMPDIR:-/tmp}; _tmp=${_tmp%/}
+# Fixed system temp paths only (macOS's TMPDIR is under /var/folders): a TMPDIR pointing at a broad directory such as
+# ~/tmp would otherwise switch the rule off for real repositories there.
 case "$_top" in
-  "$_tmp"/*|/tmp/*|/var/tmp/*|/private/tmp/*|/private/var/folders/*|/var/folders/*) exit 0 ;;
+  /tmp/*|/var/tmp/*|/private/tmp/*|/private/var/folders/*|/var/folders/*) exit 0 ;;
 esac
 # Require Signed-off-by (enforce 'git commit -s') — checked before any early-exit so reverts are also covered
 if ! grep -q '^Signed-off-by:' "$1"; then

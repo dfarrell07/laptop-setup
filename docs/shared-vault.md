@@ -69,7 +69,7 @@ someone who can force-push) and would then write new secrets under a password th
   keys with those fingerprints are trusted, from any source. When you rotate the signing key, keep the old public
   key in `allowed_signers` (with `valid-before`) so older commits still verify; `valid-before` and `valid-after` carry
 over, but they compare the commit's own date, which its author chooses, so they are a weak limit. Only one run at a
-time: the commands take a lock (`flock`; macOS has none, so do not run two at once there). The repository may hold only regular
+time: the commands take a lock (`flock`; Homebrew's on macOS). The repository may hold only regular
   files (no symlinks).
 - **No rollback**: each machine records the last commit it accepted and refuses a history that no longer contains it
   (a force-push back to an older signed state could bring back a removed key). A brand-new machine has no record yet:

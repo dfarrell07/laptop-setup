@@ -146,7 +146,10 @@ signer_entries() {
   grep -Ev '^[[:space:]]*(#|$)' "$1" 2>/dev/null | awk '{
     for (i = 1; i <= NF; i++) if ($i ~ /^(sk-)?ssh-[a-z0-9@.-]+$/ && i < NF) break
     if (i > NF) next
-    opts = ""
+    opts = ""; ns = ""
+    for (k = 1; k < i; k++) if ($k ~ /namespaces=/) ns = $k
+    # A key limited to other namespaces (namespaces="file") never signs vault commits.
+    if (ns != "" && ns !~ /namespaces="?([^"]*,)?git(,[^"]*)?"?/) next
     for (k = 1; k < i; k++) {
       n = split($k, parts, ",")
       for (m = 1; m <= n; m++) if (parts[m] ~ /^valid-(before|after)=/) opts = opts (opts == "" ? "" : ",") parts[m]
@@ -556,10 +559,9 @@ case ${1:-} in active|status|'') ;; *)
   need_dir
   # One run at a time: concurrent runs would share the clone's index, the records and the signer file.
   mkdir -p "$CONF" && chmod 700 "$CONF"
-  if command -v flock >/dev/null; then
-    exec 9>"$CONF/lock"
-    flock -n 9 || die "another vault command is running (lock $CONF/lock)"
-  fi
+  command -v flock >/dev/null || die "flock is not installed: make packages (macOS: brew install flock)"
+  exec 9>"$CONF/lock"
+  flock -n 9 || die "another vault command is running (lock $CONF/lock)"
   ;;
 esac
 case ${1:-} in

@@ -274,8 +274,8 @@ class RenderedConfigTests(unittest.TestCase):
 
     def test_commit_msg_skips_sign_off_only_in_temp_repos(self):
         hook = ROOT / 'roles/dotfiles/files/git-template-commit-msg'
-        with tempfile.TemporaryDirectory() as name:
-            env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1', HOME=name, TMPDIR=name)
+        with tempfile.TemporaryDirectory(dir='/tmp') as name:
+            env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1', HOME=name)
             message = Path(name) / 'msg'
             message.write_text('Test: no sign-off\n')
 
@@ -283,7 +283,7 @@ class RenderedConfigTests(unittest.TestCase):
                 subprocess.run(['git', 'init', '-q', str(repo)], check=True, env=env)
                 return subprocess.run(['bash', str(hook), str(message)], cwd=repo, env=env, capture_output=True,
                                       text=True, check=False).returncode
-            self.assertEqual(check(Path(name) / 'scratch'), 0)  # under TMPDIR: a test suite's throwaway repo
+            self.assertEqual(check(Path(name) / 'scratch'), 0)  # under /tmp: a test suite's throwaway repo
             with tempfile.TemporaryDirectory(dir=non_temp_dir()) as real:
                 self.assertEqual(check(Path(real) / 'work'), 1)  # a real repository still needs Signed-off-by
 
