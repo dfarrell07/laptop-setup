@@ -3,7 +3,7 @@
 
 Usage: run-tests.py [--jobs N] -- 'cmd one' 'cmd two' ...
 Each command runs in its own shell with its output captured; a failure prints that command's full output. JOBS
-(or --jobs) sets the parallelism, default the CPU count; JOBS=1 runs them one by one in the given order. The test
+(or --jobs) sets the parallelism, default the CPU count; JOBS=1 runs them one at a time. The test
 suites use private temporary directories, so they are safe to run side by side.
 """
 import argparse
@@ -24,6 +24,15 @@ def split(command):
     tree = ast.parse(open(script, encoding='utf-8').read())
     tests = [f'{node.name}.{item.name}' for node in tree.body if isinstance(node, ast.ClassDef)
              for item in node.body if isinstance(item, ast.FunctionDef) and item.name.startswith('test')]
+    # Cross-check with unittest's own loader: tests inherited from another module are invisible to ast, and a
+    # split that misses them would silently skip them, so such a suite runs whole.
+    loader = ('import importlib.util, sys, unittest\n'
+              'spec = importlib.util.spec_from_file_location("suite", sys.argv[1])\n'
+              'module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)\n'
+              'print(unittest.defaultTestLoader.loadTestsFromModule(module).countTestCases())')
+    counted = subprocess.run([parts[0], '-c', loader, script], capture_output=True, text=True, check=False)
+    if counted.returncode or counted.stdout.strip() != str(len(tests)):
+        return [command]
     return [f'{command} {test}' for test in tests] or [command]
 
 
@@ -44,7 +53,7 @@ def main():
     commands = []
     for command in args.commands:
         commands += split(command) if any(name in command for name in args.split) else [command]
-    # Longest first: the split pieces and the slow suites start before the quick ones.
+    # The split pieces (from the slowest suites) start first; the rest keep their Makefile order.
     commands.sort(key=lambda command: not any(name in command for name in args.split))
     args.commands = commands
     # Under parallel load the Ansible-driven suites run slower; give their internal deadlines room unless set.

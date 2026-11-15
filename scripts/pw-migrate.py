@@ -302,10 +302,9 @@ def main():
         print('Verify OK: item, login and TOTP counts match; new folders do not exceed the export\'s '
               '(existing folders with the same name are reused). Cards, identities and notes are listed above.')
     finally:
-        wipe_all()
-        if _left:
-            print(f'pw-migrate: FAILED to remove {" ".join(_left)}; delete it by hand', file=sys.stderr)
-            sys.exit(1)
+        wipe_all()  # prints which files it could not remove
+        if _left and sys.exc_info()[0] is None:
+            sys.exit(1)  # only when no other exit (a signal's 130, a failure's 1) is already under way
         if path not in _to_delete and not os.path.exists(path):
             print('Export removed.')
 
