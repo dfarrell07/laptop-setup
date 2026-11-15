@@ -411,15 +411,18 @@ class SmokeTests(unittest.TestCase):
                 return result.stdout.strip()
             self.assertTrue(run('false').startswith('macos-remote-access PASS remote access not managed'))
             (state / 'apps').write_text(f'1 : {mosh} \n')
-            self.assertTrue(run('true').startswith('macos-remote-access WARN Remote Login stays off'))
+            self.assertTrue(run('true').startswith('macos-remote-access WARN sshd stays off'))
             (state / 'apps').write_text('')
             self.assertIn('mosh-server-firewall', run('true'))
             (state / 'apps').write_text(f'1 : {mosh} \n')
             (d / 'home/.ssh/authorized_keys').write_text('sk-ssh-ed25519@openssh.com AAAA k\n')
-            self.assertEqual(run('true'), 'macos-remote-access FAIL missing: Remote-Login — run: make apply CHUNK=desktop (needs sudo)')
-            (state / 'com.openssh.sshd').write_text('')  # on, e.g. from System Settings, without the policy
-            self.assertIn('sshd-key-policy', run('true'))
+            self.assertEqual(run('true'), 'macos-remote-access FAIL missing: sshd — run: make apply CHUNK=desktop (needs sudo)')
+            (state / 'com.openssh.sshd').write_text('')  # Remote Login on from System Settings, without the policy
             self.assertIn('sshd-key-policy', run('false'))
+            self.assertIn('sshd', run('true'))  # and not our job on ssh_port
+            (state / 'com.openssh.sshd').unlink()
+            (state / 'com.laptop-setup.sshd').write_text('')
+            self.assertIn('sshd-key-policy', run('true'))
             (state / 'policy').write_text('')
             self.assertEqual(run('true'), 'macos-remote-access PASS')
             self.assertIn('Screen-Sharing', run('true', 'true'))

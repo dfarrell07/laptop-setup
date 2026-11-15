@@ -614,24 +614,26 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   else record "tailscaled-daemon" "FAIL" "tailscaled system daemon not installed — run: make apply CHUNK=packages (needs sudo)"; fi
 fi
 
-# macOS remote access: Remote Login (sshd) only with the key-only, tailnet-only policy, mosh-server allowed through the
+# macOS remote access: sshd only with the key-only, tailnet-only policy, mosh-server allowed through the
 # app firewall, and Screen Sharing when turned on
 if ! $IS_LINUX && [[ -z "$CONTAINER" ]]; then
   _alf=/usr/libexec/ApplicationFirewall/socketfilterfw _sshd_policy=/etc/ssh/sshd_config.d/000-laptop-setup.conf
   _missing="" _rl_wait=false
-  _rl_on=false; launchctl print system/com.openssh.sshd &>/dev/null && _rl_on=true
-  # Remote Login without the policy takes passwords, however it got turned on
+  # sshd from our job (ssh_port) or from Remote Login (port 22): without the policy it takes passwords
+  _rl_on=false
+  launchctl print system/com.laptop-setup.sshd &>/dev/null && _rl_on=true
+  launchctl print system/com.openssh.sshd &>/dev/null && _rl_on=true
   $_rl_on && [[ ! -f "$_sshd_policy" ]] && _missing+=" sshd-key-policy"
   if $_macos_remote_login; then
     if [[ ! -s "$HOME/.ssh/authorized_keys" ]]; then _rl_wait=true
-    elif ! $_rl_on; then _missing+=" Remote-Login"; fi
+    elif ! launchctl print system/com.laptop-setup.sshd &>/dev/null; then _missing+=" sshd"; fi
     _mosh=$(realpath "$( (brew --prefix) 2>/dev/null || echo /opt/homebrew)/bin/mosh-server" 2>/dev/null) &&
       ! "$_alf" --listapps 2>/dev/null | grep -qF "$_mosh " && _missing+=" mosh-server-firewall"
   fi
   $_macos_screen_sharing && ! launchctl print system/com.apple.screensharing &>/dev/null && _missing+=" Screen-Sharing"
   if [[ -n "$_missing" ]]; then record "macos-remote-access" "FAIL" "missing:$_missing — run: make apply CHUNK=desktop (needs sudo)"
   elif $_rl_wait; then
-    record "macos-remote-access" "WARN" "Remote Login stays off until your SSH key is authorized — run: make apply CHUNK=ssh_client, then make apply CHUNK=desktop"
+    record "macos-remote-access" "WARN" "sshd stays off until your SSH key is authorized — run: make apply CHUNK=ssh_authorized_keys, then make apply CHUNK=desktop"
   elif ! $_macos_remote_login && ! $_macos_screen_sharing; then record "macos-remote-access" "PASS" "remote access not managed (desktop_macos_always_on is off)"
   else record "macos-remote-access" "PASS"; fi
   unset _missing _rl_wait _rl_on _mosh _alf _sshd_policy
