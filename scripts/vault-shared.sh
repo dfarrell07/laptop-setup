@@ -218,6 +218,7 @@ txn_begin() {
 txn_end() { trap - EXIT INT TERM; [[ -z ${TXN_DIR:-} ]] || rm -rf "$TXN_DIR"; TXN_DIR=''; }
 txn_rollback() {
   local rc=$? f remote
+  set +e  # the restore runs to the end even when a step in it fails (offline: ls-remote fails too)
   trap '' INT TERM  # a second Ctrl-C must not stop the restore halfway
   # Interrupted while git push was finishing: if GitHub already has the new commit, the change is done, not undone.
   if [[ -n ${TXN_PUSHING:-} ]]; then

@@ -419,6 +419,26 @@ class SharedVault(unittest.TestCase):
         self.shared('a', a, 'pull')
         self.assertIn('secret-a', self.view('a', a))
 
+    def test_offline_after_the_fetch_still_rolls_back(self):
+        """The push and the follow-up ls-remote both fail (the network dropped): init is undone completely."""
+        a = self.machine('a', 'vault_codex_api_key: secret-a\n')
+        run(['git', 'clone', '-q', str(self.remote), str(self.tmp / 'secrets-a')], env=self.env('a', a))
+        self.shared('a', a, 'add-key', RECIPIENT=self.keys['a'][1])
+        helper = (a / 'scripts/vault-pass.sh').read_text()
+        wrapper = self.tmp / 'offline'
+        wrapper.mkdir()
+        real = shutil.which('git')
+        (wrapper / 'git').write_text(f'#!/bin/sh\nfor a in "$@"; do case "$a" in push|ls-remote) exit 128;; esac; done\n'
+                                     f'exec "{real}" "$@"\n')
+        (wrapper / 'git').chmod(0o755)
+        failed = self.shared('a', a, 'init', check=False, PATH=f'{wrapper}:{self.env("a", a)["PATH"]}')
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn('stopped before the change was pushed', failed.stderr)
+        self.assertEqual((a / 'scripts/vault-pass.sh').read_text(), helper)
+        self.assertEqual(self.snapshot('a')[1], 'HEAD')
+        self.shared('a', a, 'init')
+        self.assertIn('secret-a', self.view('a', a))
+
     def test_init_refuses_a_plaintext_vault_and_changes_nothing(self):
         a = self.machine('a', None)
         run(['git', 'clone', '-q', str(self.remote), str(self.tmp / 'secrets-a')], env=self.env('a', a))
