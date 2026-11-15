@@ -146,6 +146,20 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **macOS undo:** `defaults delete <domain> <key>` for each entry in `desktop_macos_defaults` (macOS defaults return), then
   `killall Dock SystemUIServer`; restore or delete `~/.config/ghostty/config` and `~/.config/aerospace/aerospace.toml`.
 
+### macOS remote access
+
+With `desktop_macos_remote_login` (default: `desktop_macos_always_on`) the desktop chunk runs macOS's sshd from its own launchd job on
+`ssh_port` with a key-only drop-in, and allows mosh-server through the application firewall. Keep a console or Screen Sharing session
+open until you are done. To undo:
+
+1. Set `desktop_macos_remote_login: false` in `config.yml`; later runs then leave these services as they are (never turned off).
+2. Stop sshd: `sudo launchctl bootout system/com.laptop-setup.sshd`, then `sudo rm /Library/LaunchDaemons/com.laptop-setup.sshd.plist`.
+3. Remove the drop-in: `sudo rm /etc/ssh/sshd_config.d/000-laptop-setup.conf`. Remote Login, if you turn it on in System Settings,
+   then takes passwords again.
+4. Remove the firewall entry:
+   `sudo /usr/libexec/ApplicationFirewall/socketfilterfw --remove "$(realpath "$(brew --prefix)/bin/mosh-server")"`
+   (`socketfilterfw --listapps` shows any older Cellar paths of mosh-server; remove those the same way).
+
 ## agents
 
 - **Why:** Claude Code, Codex and Antigravity installs, settings and global instructions.
