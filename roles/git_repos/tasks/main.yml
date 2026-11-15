@@ -281,7 +281,7 @@
   ansible.builtin.shell:
     cmd: >-
       set -euo pipefail;
-      old=$(git remote get-url {{ item.1.name | quote }} 2>/dev/null) || old="";
+      old=$(git config --get remote.{{ item.1.name | quote }}.url) || old="";
       if [ "$old" = {{ item.1.url | quote }} ]; then true;
       elif [ -n "$old" ]; then git remote set-url {{ item.1.name | quote }} {{ item.1.url | quote }} && echo updated;
       else git remote add {{ item.1.name | quote }} {{ item.1.url | quote }} && echo added; fi
