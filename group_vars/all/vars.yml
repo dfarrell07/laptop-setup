@@ -154,6 +154,9 @@ csb_rhel: false
 containers_registries: >-
   {{ ['quay.io'] + (['registry.redhat.io'] if profile == 'work' else []) }}
 
+# macOS podman machine: the containers role creates it; the dotfiles zshenv points DOCKER_HOST at its API socket.
+containers_macos_machine_name: podman-machine-default
+
 # Repo roots the agent CLIs trust without asking "trust this folder?" (Claude Code projects in .claude.json, Codex
 # [projects] trust_level, Antigravity trustedWorkspaces). Trust lets a repo's own agent config (hooks, MCP servers,
 # settings) load without a prompt, so the default covers only repos under your GitHub user; `all` adds every

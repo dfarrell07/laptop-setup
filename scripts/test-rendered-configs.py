@@ -50,6 +50,8 @@ CASES = {
         'PubkeyAcceptedAlgorithms': ['ssh-ed25519', 'sk-ssh-ed25519@openssh.com']}}),
     'sshd_launchd': ('roles/desktop/templates/sshd-launchd.plist.j2', {}),
     'zshenv': ('roles/dotfiles/templates/zshenv.j2', {'dotfiles_homebrew_prefix': '/opt/homebrew'}),
+    'zshenv_machine': ('roles/dotfiles/templates/zshenv.j2', {'dotfiles_homebrew_prefix': '/opt/homebrew',
+                                                           'containers_macos_machine_name': "dev vm's"}),
     # podman from PATH (a stub); the hold file path is replaced per test
     'podman_ensure': ('roles/containers/templates/podman-machine-ensure.sh.j2', {
         'containers_podman_bin': 'podman', 'containers_macos_machine_hold_file': '/HOLD-FILE-PLACEHOLDER'}),
@@ -415,6 +417,30 @@ class RenderedConfigTests(unittest.TestCase):
             result = subprocess.run(['zsh', '-f', '-c', 'source "$1"; PATH=/usr/bin:/bin:$PATH; _laptop_path; print -r -- $PATH',
                                      'zsh', str(zshenv)], env={'PATH': bare, 'HOME': str(home)}, capture_output=True, text=True)
             self.assertEqual(result.stdout.strip().split(':'), expected, result.stderr)
+
+    @unittest.skipUnless(shutil.which('zsh'), 'zsh required')
+    def test_zshenv_points_docker_clients_at_the_podman_machine_socket(self):
+        import socket
+        tmp = Path(tempfile.mkdtemp(dir='/tmp'))  # short: a unix socket path is limited to ~104 bytes
+        self.addCleanup(shutil.rmtree, tmp)
+        (tmp / 'podman').mkdir()
+
+        def env_after(case):
+            result = subprocess.run(['zsh', '-f', '-c', 'source "$1"; print -r -- "${DOCKER_HOST-unset}|$KIND_EXPERIMENTAL_PROVIDER"',
+                                     'zsh', str(self.out / case)], env={'PATH': '/usr/bin:/bin', 'HOME': str(tmp),
+                                     'TMPDIR': f'{tmp}/'}, capture_output=True, text=True)
+            self.assertEqual(result.stderr, '')
+            return result.stdout.strip()
+        self.assertEqual(env_after('zshenv'), 'unset|podman')  # no machine running: no DOCKER_HOST
+        for case, name in [('zshenv', 'podman-machine-default'), ('zshenv_machine', "dev vm's")]:
+            path = tmp / 'podman' / f'{name}-api.sock'
+            server = socket.socket(socket.AF_UNIX)
+            server.bind(str(path))
+            self.addCleanup(server.close)
+            self.assertEqual(env_after(case), f'unix://{path}|podman')
+        (tmp / 'podman/podman-machine-default-api.sock').unlink()
+        (tmp / 'podman/podman-machine-default-api.sock').write_text('')  # a plain file, not the machine's socket
+        self.assertEqual(env_after('zshenv'), 'unset|podman')
 
     def test_launchd_ssh_auth_sock_names_the_ssh_agent_socket(self):
         agent = self.read('ssh_agent_plist')
