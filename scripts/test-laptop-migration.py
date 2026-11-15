@@ -760,18 +760,29 @@ print -r -- "PARENT:$CLAUDE_CODE_USE_VERTEX:$CODEX_HOME:$ANTHROPIC_API_KEY:${DBU
             self.assertEqual(tmux_records[0]['args'], ['--remote-control'])
             self.assertEqual(tmux_records[1]['args'], ['--remote-control', '--worktree', 'fixture-worktree'])
             defaults['ansible_facts']['system'] = 'Darwin'
-            run_play(directory, tasks=[{'name': 'Render work macOS shell', 'ansible.builtin.template': {
-                'src': str(ROOT / 'roles/dotfiles/templates/zshrc.j2'), 'dest': str(config), 'mode': '0600'}}],
-                variables=defaults)
+            run_play(directory, tasks=[{'name': 'Render work macOS ' + rc, 'ansible.builtin.template': {
+                'src': str(ROOT / f'roles/dotfiles/templates/{rc}.j2'), 'dest': str(directory / rc), 'mode': '0600'}}
+                for rc in ['zshrc', 'zshenv']], variables=defaults)
             subprocess.run(['zsh', '-n', str(config)], check=True)
             content = config.read_text()
-            self.assertIn('/opt/homebrew/bin:$PATH', content)
             self.assertNotIn('gper2()', content)  # Linux only: the Keychain would share gper's login
-            path_exports = '\n'.join(line for line in content.splitlines() if line.startswith('export PATH='))
+            # A login shell: ~/.zshenv, then /etc/zprofile's path_helper puts the system directories first, then .zshrc.
+            brew = directory / 'brew'
+            (brew / 'opt/coreutils/libexec/gnubin').mkdir(parents=True)
+            zshenv = directory / 'zshenv'
+            zshenv.write_text(zshenv.read_text().replace('/opt/homebrew', str(brew)))
+            lines = content.splitlines()
+            first = next(i for i, line in enumerate(lines) if '_laptop_path' in line and not line.startswith('#'))
+            last = next(i for i, line in enumerate(lines) if line.startswith('typeset -U path PATH'))
             effective_path = subprocess.check_output([shutil.which('zsh'), '-f', '-c',
-                path_exports + '\nprint -r -- "$PATH"'], env=dict(os.environ, HOME=name), text=True).strip().split(':')
+                'source "$1"; PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH\n'
+                + '\n'.join(lines[first:last + 1]) + '\nprint -r -- "$PATH"', 'zsh', str(zshenv)],
+                env={'HOME': name, 'PATH': '/usr/bin:/bin:/usr/sbin:/sbin'}, text=True).strip().split(':')
             self.assertEqual(effective_path[0], name + '/.local/bin')
-            self.assertLess(effective_path.index(name + '/go/bin'), effective_path.index('/opt/homebrew/bin'))
+            self.assertLess(effective_path.index(name + '/go/bin'), effective_path.index(f'{brew}/bin'))
+            self.assertLess(effective_path.index(f'{brew}/opt/coreutils/libexec/gnubin'), effective_path.index('/bin'))
+            self.assertLess(effective_path.index(f'{brew}/bin'), effective_path.index('/usr/bin'))
+            self.assertEqual(len(effective_path), len(set(effective_path)))
             launchers = content[content.index('_claude_check_base_url()'):content.index('# --- Device access')]
             probe.write_text(launchers + '\ncwork mac-work\noper mac-personal\n')
             mac_result = subprocess.run([shutil.which('zsh'), '-f', str(probe)], env=env,

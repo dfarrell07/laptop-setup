@@ -51,6 +51,8 @@ CASES = {
     # podman from PATH (a stub); the hold file path is replaced per test
     'podman_ensure': ('roles/containers/templates/podman-machine-ensure.sh.j2', {
         'containers_podman_bin': 'podman', 'containers_macos_machine_hold_file': '/HOLD-FILE-PLACEHOLDER'}),
+    'ssh_agent_plist': ('roles/dotfiles/templates/ssh-agent.plist.j2', {'dotfiles_homebrew_prefix': '/opt/homebrew'}),
+    'ssh_auth_sock_plist': ('roles/dotfiles/templates/ssh-auth-sock.plist.j2', {}),
 }
 BASE = {'real_user_id': 'public-test-user', 'dotfiles_user_name': 'Test User',
         'dotfiles_user_email_work': 'w@example.test', 'dotfiles_user_email_personal': 'p@example.test',
@@ -381,12 +383,42 @@ class RenderedConfigTests(unittest.TestCase):
             result = subprocess.run(['plutil', '-lint', str(self.out / 'sshd_launchd')], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_zshenv_puts_homebrew_on_the_bare_ssh_path(self):
-        result = subprocess.run(['zsh', '-c', 'source "$1"; print -r -- $PATH', 'zsh', str(self.out / 'zshenv')]
-                                if shutil.which('zsh') else ['true'],
-                                env={'PATH': '/usr/bin:/bin:/usr/sbin:/sbin'}, capture_output=True, text=True)
-        if shutil.which('zsh'):
-            self.assertTrue(result.stdout.startswith('/opt/homebrew/bin:/usr/bin'), result.stdout + result.stderr)
+    @unittest.skipUnless(shutil.which('zsh'), 'zsh required')
+    def test_zshenv_sets_the_managed_path_on_the_bare_ssh_path(self):
+        with tempfile.TemporaryDirectory() as name:
+            home, brew = Path(name) / 'home', Path(name) / 'brew'
+            gnubins = ['make', 'gnu-tar', 'gawk', 'findutils', 'grep', 'gnu-sed', 'coreutils']
+            for tool in gnubins:
+                (brew / 'opt' / tool / 'libexec/gnubin').mkdir(parents=True)
+            (brew / 'opt/python@3.14/libexec/bin').mkdir(parents=True)
+            zshenv = home / '.zshenv'
+            home.mkdir()
+            zshenv.write_text(self.read('zshenv').replace('/opt/homebrew', str(brew)))
+            bare = '/usr/bin:/bin:/usr/sbin:/sbin'
+            # zsh -c with no rc file but ~/.zshenv, as ssh and mosh run remote commands
+            result = subprocess.run(['zsh', '-c', 'print -r -- $PATH'], env={'PATH': bare, 'HOME': str(home)},
+                                    capture_output=True, text=True)
+            expected = ([f'{home}/.local/bin', f'{home}/go/bin'] + [f'{brew}/opt/{t}/libexec/gnubin' for t in gnubins]
+                        + [f'{brew}/opt/python@3.14/libexec/bin', f'{brew}/bin'] + bare.split(':'))
+            self.assertEqual(result.stdout.strip().split(':'), expected, result.stderr)
+            # sourcing it again (nested shells, .zshrc after path_helper) moves the entries back to the front, once each
+            result = subprocess.run(['zsh', '-f', '-c', 'source "$1"; PATH=/usr/bin:/bin:$PATH; _laptop_path; print -r -- $PATH',
+                                     'zsh', str(zshenv)], env={'PATH': bare, 'HOME': str(home)}, capture_output=True, text=True)
+            self.assertEqual(result.stdout.strip().split(':'), expected, result.stderr)
+
+    def test_launchd_ssh_auth_sock_names_the_ssh_agent_socket(self):
+        agent = self.read('ssh_agent_plist')
+        env = self.read('ssh_auth_sock_plist')
+        socket = re.search(r'<string>-a</string>\s*<string>([^<]+)</string>', agent).group(1)
+        self.assertTrue(socket.endswith('/.ssh/ssh-agent.socket'), socket)
+        arguments = re.findall(r'<string>([^<]*)</string>', env.split('<array>')[1].split('</array>')[0])
+        self.assertEqual(arguments, ['/bin/launchctl', 'setenv', 'SSH_AUTH_SOCK', socket])
+        self.assertIn('<key>RunAtLoad</key>', env)
+        self.assertNotIn('KeepAlive', env)  # a one-shot at login: kept alive, launchd would rerun it forever
+        if shutil.which('plutil'):
+            for name in ('ssh_agent_plist', 'ssh_auth_sock_plist'):
+                result = subprocess.run(['plutil', '-lint', str(self.out / name)], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_podman_machine_ensure_starts_only_a_stopped_provisioned_machine(self):
         with tempfile.TemporaryDirectory() as directory:
