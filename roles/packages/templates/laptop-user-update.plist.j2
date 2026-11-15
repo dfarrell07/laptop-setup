@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- {{ ansible_managed }} -->
+<!-- Daily user-space updates (npm globals, pipx), the macOS counterpart of laptop-user-update.timer. There is no dev
+     container to upgrade, so no container argument. A run missed while the Mac slept starts when it wakes. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.laptop-setup.user-update</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{ ansible_facts['user_dir'] | e }}/.local/bin/laptop-user-update</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>0</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- the script runs only system tools: Homebrew's npm and pipx, then the system directories -->
+    <key>LAPTOP_UPDATE_PATH</key>
+    <string>{{ dotfiles_homebrew_prefix | trim | e }}/bin:/usr/bin:/bin</string>
+    <key>LAPTOP_UPDATE_NPM</key>
+    <string>{{ packages_user_updates_npm | join(' ') | e }}</string>
+    <key>LAPTOP_UPDATE_PIPX_SKIP</key>
+    <string>{{ packages_user_updates_pipx_skip | join(' ') | e }}</string>
+  </dict>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>Nice</key>
+  <integer>15</integer>
+  <key>LowPriorityIO</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>{{ ansible_facts['user_dir'] | e }}/.local/state/log/laptop-user-update.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{ ansible_facts['user_dir'] | e }}/.local/state/log/laptop-user-update.log</string>
+</dict>
+</plist>
