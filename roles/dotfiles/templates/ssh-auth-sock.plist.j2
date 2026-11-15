@@ -1,17 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- {{ ansible_managed }} -->
-<!-- At login, points launchd's environment (GUI apps, launchd jobs) at the socket of the managed ssh-agent
-     LaunchAgent, in place of Apple's agent, which the dotfiles role disables. -->
+<!-- At login, sets launchd's environment for GUI apps and launchd jobs started afterwards, as environment.d does on
+     Linux: SSH_AUTH_SOCK at the managed ssh-agent (in place of Apple's agent, which the dotfiles role disables), and
+     PATH as ~/.zshenv builds it (zsh -c reads only ~/.zshenv), so apps such as the Claude desktop app and the shells
+     they start find Homebrew and the GNU tools. -->
 <plist version="1.0">
 <dict>
   <key>Label</key>
   <string>{{ dotfiles_ssh_agent_label | e }}.env</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/bin/launchctl</string>
-    <string>setenv</string>
-    <string>SSH_AUTH_SOCK</string>
+    <string>/bin/zsh</string>
+    <string>-c</string>
+    <string>/bin/launchctl setenv SSH_AUTH_SOCK "$1" &amp;&amp; /bin/launchctl setenv PATH "$PATH"</string>
+    <string>zsh</string>
     <string>{{ ansible_facts['user_dir'] }}/.ssh/ssh-agent.socket</string>
   </array>
   <key>RunAtLoad</key>

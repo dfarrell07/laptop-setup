@@ -736,6 +736,12 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   else record "macos-launchd-ssh-auth-sock" "$([[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && echo WARN || echo FAIL)" "launchd SSH_AUTH_SOCK is ${_sock:-unset}, not ~/.ssh/ssh-agent.socket, so GUI apps and launchd jobs miss the agent — run: make apply CHUNK=dotfiles"; fi
   unset _brew _zpath _missing _sock
   unset -f _first
+  # GUI apps and launchd jobs get launchd's PATH, which the dotfiles LaunchAgent sets to what ~/.zshenv builds
+  _want=$(env -i HOME="$HOME" PATH=/usr/bin:/bin:/usr/sbin:/sbin zsh -c 'print -r -- $PATH' 2>/dev/null || true)
+  _have=$(launchctl getenv PATH 2>/dev/null || true)
+  if [[ -n "$_want" && "$_have" == "$_want" ]]; then record "macos-launchd-path" "PASS"
+  else record "macos-launchd-path" "$([[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && echo WARN || echo FAIL)" "launchd PATH is not the ~/.zshenv PATH, so GUI apps (the Claude desktop app's shells too) miss Homebrew and the GNU tools — run: make apply CHUNK=dotfiles, then restart those apps"; fi
+  unset _want _have
 fi
 
 # macOS: the AeroSpace config is the managed one (the desktop chunk replaces seeded or hand-edited copies), and AeroSpace,
@@ -2966,7 +2972,7 @@ if [[ -n "$ONLY" ]]; then
       continue
     fi
     # macOS-only checks have nothing to verify on Linux
-    if $IS_LINUX && [[ " podman-machine docker-shim macos-dev-tools macos-zshenv-path macos-launchd-ssh-auth-sock aerospace-running aerospace-config macos-git-difftool macos-remote-access macos-firewall macos-always-on macos-screen macos-screen-lock tailscaled-daemon usr-local-bin " == *" $_only_name "* ]]; then
+    if $IS_LINUX && [[ " podman-machine docker-shim macos-dev-tools macos-zshenv-path macos-launchd-ssh-auth-sock macos-launchd-path aerospace-running aerospace-config macos-git-difftool macos-remote-access macos-firewall macos-always-on macos-screen macos-screen-lock tailscaled-daemon usr-local-bin " == *" $_only_name "* ]]; then
       $JSON || printf 'N/A   %s (macOS-only check; nothing to verify on Linux)\n' "$_only_name"
       continue
     fi
