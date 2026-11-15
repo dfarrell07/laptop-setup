@@ -60,7 +60,8 @@ dotfiles_direnv_disable_stdin: true  # blocks interactive prompts in .envrc; ups
 
 is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml; used in tasks/main.yml, not templates
 is_macos: false  # fallback; authoritative value in group_vars/all/vars.yml; used in tasks/main.yml, not templates
-# macOS: GNU coreutils, sed, grep, findutils, gawk and tar (Homebrew gnubin) ahead of the BSD tools in shells
+# macOS: GNU coreutils, sed, grep, findutils, gawk, tar and make (Homebrew gnubin) ahead of the BSD tools in shells
+# (Apple make is 3.81: no --output-sync, which `make gate` uses)
 dotfiles_macos_gnu_tools: true
 # macOS: the Homebrew Python whose unversioned python/python3/pip lead PATH (matches packages_pipx_python)
 dotfiles_macos_python: python@3.14
