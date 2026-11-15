@@ -508,7 +508,8 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   if ! $_podman_machine; then record "podman-machine" "PASS" "containers_macos_machine_enabled is off"
   elif ! command -v podman &>/dev/null; then record "podman-machine" "FAIL" "podman not installed — run: make apply CHUNK=packages"
   elif [[ "$(podman machine inspect --format '{{.State}}' "$_podman_machine_name" 2>/dev/null)" != running ]]; then
-    record "podman-machine" "FAIL" "podman machine not running — run: make apply CHUNK=containers (or podman machine start)"
+    # WARN in Molecule (_tool_absent): CI runners cannot run the VM
+    record "podman-machine" "$_tool_absent" "podman machine not running — run: make apply CHUNK=containers (or podman machine start)"
   elif podman info &>/dev/null; then record "podman-machine" "PASS"
   else record "podman-machine" "FAIL" "podman machine running but unreachable — check ~/.local/state/log/podman-machine.log"; fi
 fi
