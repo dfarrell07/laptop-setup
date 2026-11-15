@@ -1,11 +1,14 @@
 ---
 # roles/containers/tasks/macos-docker.yml
 # macOS: a `docker` command that runs podman, like the podman-docker package on Linux. It sits in ~/.local/bin, ahead
-# of every other docker on PATH, so it is removed again when a real docker appears or the shim or machine is off.
+# of every other docker on PATH, so it is removed again when a real docker appears, podman is missing or the shim or
+# machine is off.
 
+# follow: a dangling or non-executable docker (a leftover Docker Desktop link) is not a real one
 - name: Look for a real docker command (macOS)
   ansible.builtin.stat:
     path: "{{ item }}"
+    follow: true
   loop:
     - "{{ dotfiles_homebrew_prefix }}/bin/docker"
     - /usr/local/bin/docker  # Docker Desktop, Rancher Desktop
@@ -14,11 +17,26 @@
     - /Applications/Docker.app/Contents/Resources/bin/docker
   register: _containers_real_docker
 
+- name: Look for podman, the shim's target (macOS)
+  ansible.builtin.stat:
+    path: "{{ containers_podman_bin }}"
+    follow: true
+  register: _containers_podman_bin_stat
+
 - name: Decide whether the docker shim is wanted (macOS)
   ansible.builtin.set_fact:
     _containers_docker_shim_wanted: >-
       {{ containers_macos_docker_shim | bool and containers_macos_machine_enabled | bool
-         and _containers_real_docker.results | selectattr('stat.exists') | list | length == 0 }}
+         and _containers_podman_bin_stat.stat.executable | default(false)
+         and _containers_real_docker.results | map(attribute='stat') | selectattr('exists')
+             | selectattr('executable', 'defined') | selectattr('executable') | list | length == 0 }}
+
+- name: Create ~/.local/bin for the docker shim (macOS)
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.local/bin"
+    state: directory
+    mode: "0755"
+  when: _containers_docker_shim_wanted | bool
 
 - name: Deploy the docker-to-podman shim (macOS)
   ansible.builtin.copy:
