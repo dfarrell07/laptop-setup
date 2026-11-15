@@ -20,9 +20,10 @@ with `make pw-migrate`, without the plaintext export ever reaching persistent st
 4. **Dry run**: `make pw-migrate EXPORT=/dev/shm/lastpass.csv DRY_RUN=1 KEEP_EXPORT=1` prints only counts (items,
    logins, secure notes, folders, shared-folder items, TOTP seeds, attachments) and keeps the file for the real run.
 5. **Import**: `make pw-migrate EXPORT=/dev/shm/lastpass.csv` prints the counts and the vault's current counts,
-   asks before importing, runs `bw import lastpasscsv`, then verifies: the vault's item, secure-note and TOTP counts
+   asks before importing, runs `bw import lastpasscsv`, then verifies: the vault's item, login and TOTP counts
    must grow by exactly the export's, and new folders must not exceed the export's. It removes the export (and the
-   TOTP-stripped copy it made next to it) whether it succeeds, fails or is interrupted.
+   TOTP-stripped copy it made next to it) whether it succeeds, fails, is interrupted or you decline (add
+   `KEEP_EXPORT=1` to keep it on decline).
 6. **You** check a few entries in the Bitwarden app, then finish the steps in the table below.
 
 The target refuses an export that is not a regular file on tmpfs/ramfs (Linux) or a `ram://` RAM disk (macOS), and
@@ -48,7 +49,9 @@ yourself, or let an agent run it, but never `cat`, `head` or open the file.
 | Shared folders | Become ordinary `Shared-...` folders; sharing is lost | Re-share via a Bitwarden organization if needed |
 | Passkeys | LastPass passkeys do not export | Register new passkeys (both YubiKeys) on each site |
 | Folder nesting | LastPass `a\b` folders become Bitwarden `a/b` names | Tidy in the Bitwarden app if needed |
-| Form fills, identities, payment cards | Not in the CSV export | Re-enter by hand, or skip |
+| Form fills | Not in the CSV export | Re-enter by hand, or skip |
+| Payment cards, addresses | Imported as Bitwarden card and identity items (from LastPass typed notes) | Check them in the app |
+| Other typed notes (bank, passport, licence) | Become typed items or secure notes, depending on Bitwarden | Check them in the app |
 | Password history, favourites | History is not exported; `fav` maps to favourite | None needed |
 | Old passwords | The 2022 LastPass breach exposed the vaults | Rotate every password after the move (full credential refresh) |
 
