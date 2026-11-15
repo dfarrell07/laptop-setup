@@ -1,7 +1,7 @@
 .PHONY: status plan apply verify rollout-banner bootstrap-hooks help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check test smoke-test \
        dotfiles packages repos notes \
        ssh desktop system repos_dnf redhat containers claude codex container \
-       container-rebuild csb-audit ssh-keys github-ssh-keys vault-init vault-edit vault-view update hooks \
+       container-rebuild csb-audit ssh-keys github-ssh-keys vault-init vault-edit vault-view update hooks pw-migrate \
        smoke-test-container smoke-test-user \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
        test-scripts test-poller test-gitleaks test-% \
@@ -316,6 +316,11 @@ ssh-keys: guard-not-root
 github-ssh-keys: guard-not-root
 	scripts/github-ssh-keys.sh
 
+# LastPass -> Bitwarden: EXPORT=<decrypted LastPass CSV on tmpfs/RAM disk>; DRY_RUN=1 counts only. Prints counts only and
+# removes the export when it ends (docs/password-migration.md). Needs `bw` logged in and unlocked (BW_SESSION).
+pw-migrate: guard-not-root
+	@python3 scripts/pw-migrate.py
+
 # With USBGuard running: allow blocked USB devices now and save their rules. Otherwise: only save
 # rules for connected devices no rule covers yet. Rules go to config.yml for the next `make apply CHUNK=sys_usbguard`.
 usb-add: guard-not-root
@@ -489,6 +494,7 @@ test-scripts: .venv
 	.venv/bin/python3 scripts/test-workflow-guards.py
 	.venv/bin/python3 scripts/test-pinned-git.py
 	.venv/bin/python3 scripts/test-auto-updates.py
+	.venv/bin/python3 scripts/test-pw-migrate.py
 	.venv/bin/python3 scripts/test-hook-baselines.py
 	.venv/bin/python3 scripts/test-commit-message.py
 	.venv/bin/python3 scripts/test-bootstrap-hooks.py

@@ -71,6 +71,7 @@ variables and feature toggles. Secrets live in the Ansible vault (`group_vars/al
 | [references/troubleshooting.md](references/troubleshooting.md) | Common failures by symptom (chunk errors, SSH, DNS, PAM, containers) |
 | [docs/migration-checklist.md](docs/migration-checklist.md) | Moving from an old laptop |
 | [docs/multi-machine.md](docs/multi-machine.md) | Agent sessions on several machines working on this repo together |
+| [docs/password-migration.md](docs/password-migration.md) | LastPass to Bitwarden import (`make pw-migrate`) without the export touching disk |
 | [docs/agent-config.md](docs/agent-config.md) | Claude, Codex and Antigravity configuration: findings and proposals |
 | [docs/auto-updates.md](docs/auto-updates.md) | What updates itself, how, where it logs, and what stays manual |
 | [SECURITY.md](SECURITY.md) | Threat model, vault, hooks, supply chain, hardening scope |
