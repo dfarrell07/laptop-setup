@@ -43,6 +43,9 @@ CASES = {
     'sshd_macos': ('roles/desktop/templates/sshd-macos.conf.j2', {}),
     'sshd_launchd': ('roles/desktop/templates/sshd-launchd.plist.j2', {}),
     'zshenv': ('roles/dotfiles/templates/zshenv.j2', {'dotfiles_homebrew_prefix': '/opt/homebrew'}),
+    # podman from PATH (a stub); the hold file path is replaced per test
+    'podman_ensure': ('roles/containers/templates/podman-machine-ensure.sh.j2', {
+        'containers_podman_bin': 'podman', 'containers_macos_machine_hold_file': '/HOLD-FILE-PLACEHOLDER'}),
 }
 BASE = {'real_user_id': 'public-test-user', 'dotfiles_user_name': 'Test User',
         'dotfiles_user_email_work': 'w@example.test', 'dotfiles_user_email_personal': 'p@example.test',
@@ -353,6 +356,41 @@ class RenderedConfigTests(unittest.TestCase):
         if shutil.which('zsh'):
             self.assertTrue(result.stdout.startswith('/opt/homebrew/bin:/usr/bin'), result.stdout + result.stderr)
 
+    def test_podman_machine_ensure_starts_only_a_stopped_provisioned_machine(self):
+        with tempfile.TemporaryDirectory() as directory:
+            d = Path(directory)
+            (d / 'bin').mkdir()
+            # machine inspect prints $STATE / $LASTUP (fails when $STATE is unset: no machine); start is logged
+            (d / 'bin/podman').write_text(
+                '#!/bin/sh\n'
+                'case "$1 $2" in\n'
+                '  "machine inspect") [ -n "${STATE:-}" ] || exit 125\n'
+                '    case "$4" in *State*) echo "$STATE" ;; *LastUp*) echo "$LASTUP" ;; esac ;;\n'
+                '  "machine start") echo "start $3" >> "$LOG" ;;\n'
+                '  *) exit 2 ;;\n'
+                'esac\n')
+            (d / 'bin/podman').chmod(0o755)
+            hold = d / 'hold'
+            script = d / 'ensure'
+            script.write_text(self.read('podman_ensure').replace('/HOLD-FILE-PLACEHOLDER', str(hold)))
+            log = d / 'log'
+
+            def run(**state):
+                log.write_text('')
+                result = subprocess.run(['sh', str(script)], capture_output=True, text=True, timeout=30,
+                                        env={'PATH': f'{d}/bin:/usr/bin:/bin', 'LOG': str(log), **state})
+                return result.returncode, result.stdout, log.read_text()
+            booted = '2026-11-14 09:00:00.000000 +0000 UTC'
+            self.assertEqual(run(STATE='running', LASTUP=booted), (0, '', ''))
+            rc, out, started = run(STATE='stopped', LASTUP=booted)
+            self.assertEqual((rc, started), (0, 'start podman-machine-default\n'))
+            self.assertTrue(out.endswith(' starting podman-machine-default\n'), out)
+            self.assertEqual(run(STATE='stopped', LASTUP='0001-01-01 00:00:00 +0000 UTC'), (0, '', ''))  # never booted
+            self.assertEqual(run(STATE='stopped', LASTUP=''), (0, '', ''))
+            self.assertEqual(run(), (0, '', ''))  # no machine yet
+            hold.write_text('')
+            self.assertEqual(run(STATE='stopped', LASTUP=booted), (0, '', ''))
+
     def test_audit_rules_set_backlog_before_rules(self):
         lines = [l for l in self.read('audit').splitlines() if l and not l.startswith('#')]
         self.assertEqual(lines.count('-b 8192'), 1)
@@ -426,11 +464,31 @@ class ShippedFileTests(unittest.TestCase):
                                     capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0, 'missing Signed-off-by must be rejected')
 
-class MacFirewallTaskTests(unittest.TestCase):
+def run_tasks(tasks, variables):
+    """Run production tasks on localhost with fixture variables; return the json callback's task results."""
+    import json
+    with tempfile.TemporaryDirectory() as directory:
+        playbook = Path(directory) / 'play.yml'
+        playbook.write_text(yaml.safe_dump([{'hosts': 'localhost', 'gather_facts': False, 'vars': variables,
+                                             'tasks': tasks}]))
+        result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(playbook)], cwd=ROOT,
+                                env=dict(os.environ, ANSIBLE_STDOUT_CALLBACK='json',
+                                         ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
+                                capture_output=True, text=True, timeout=120)
+    if result.returncode:
+        raise AssertionError(result.stdout + result.stderr)
+    output = json.JSONDecoder().raw_decode(result.stdout)[0]  # warnings may follow the JSON
+    return [t['hosts']['localhost'] for t in output['plays'][0]['tasks']]
+
+
+def production_task(path, name):
+    return dict(next(t for t in yaml.safe_load((ROOT / path).read_text()) if t.get('name') == name))
+
+
+class MacTaskTests(unittest.TestCase):
     def test_stale_mosh_server_entries_are_removed(self):
         """Older Cellar paths of mosh-server go; the current one and other programs stay."""
-        tasks = yaml.safe_load((ROOT / 'roles/desktop/tasks/main.yml').read_text())
-        task = dict(next(t for t in tasks if t.get('name') == 'Remove stale mosh-server entries from the macOS firewall'))
+        task = production_task('roles/desktop/tasks/main.yml', 'Remove stale mosh-server entries from the macOS firewall')
         argv = task.pop('ansible.builtin.command')['argv']
         self.assertEqual(argv[:2], ['/usr/libexec/ApplicationFirewall/socketfilterfw', '--remove'])
         for key in ('become', 'tags', 'changed_when'):
@@ -441,22 +499,25 @@ class MacFirewallTaskTests(unittest.TestCase):
         listing = (f'ALF: total number of apps = 4\n\n1 : /Applications/Tailscale.app \n \t (Allow incoming connections)\n\n'
                    f'2 : {old} \n \t (Allow incoming connections)\n\n3 : {current} \n \t (Allow incoming connections)\n\n'
                    f'4 : /opt/homebrew/Cellar/mosh-extra/1/bin/mosh-server \n \t (Allow incoming connections)\n')
-        variables = {'is_macos': True, 'desktop_macos_firewall_allow': ['/opt/homebrew/bin/mosh-server'],
-                     '_desktop_fw_apps': {'stdout': listing},
-                     '_desktop_fw_allow_paths': {'results': [{'rc': 0, 'stdout': current}]}}
-        with tempfile.TemporaryDirectory() as directory:
-            playbook = Path(directory) / 'play.yml'
-            playbook.write_text(yaml.safe_dump([{'hosts': 'localhost', 'gather_facts': False, 'vars': variables,
-                                                 'tasks': [task]}]))
-            result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(playbook)], cwd=ROOT,
-                                    env=dict(os.environ, ANSIBLE_STDOUT_CALLBACK='json',
-                                             ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
-                                    capture_output=True, text=True, timeout=120)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        import json
-        output = json.JSONDecoder().raw_decode(result.stdout)[0]  # warnings may follow the JSON
-        results = output['plays'][0]['tasks'][0]['hosts']['localhost']['results']
-        self.assertEqual([r['msg'] for r in results], [old])
+        results = run_tasks([task], {
+            'is_macos': True, 'desktop_macos_firewall_allow': ['/opt/homebrew/bin/mosh-server'],
+            '_desktop_fw_apps': {'stdout': listing}, '_desktop_fw_allow_paths': {'results': [{'rc': 0, 'stdout': current}]}})
+        self.assertEqual([r['msg'] for r in results[0]['results']], [old])
+
+    def test_docker_shim_needs_podman_and_no_runnable_docker(self):
+        task = production_task('roles/containers/tasks/macos-docker.yml', 'Decide whether the docker shim is wanted (macOS)')
+        podman = {'exists': True, 'executable': True}
+        dangling = {'exists': False}  # follow: true on a link to nowhere
+        for docker, podman_stat, wanted in [([dangling], podman, True), ([{'exists': True, 'executable': False}], podman, True),
+                                            ([dangling, {'exists': True, 'executable': True}], podman, False),
+                                            ([dangling], {'exists': False}, False),
+                                            ([dangling], {'exists': True, 'executable': False}, False)]:
+            with self.subTest(docker=docker, podman=podman_stat):
+                results = run_tasks([task, {'ansible.builtin.debug': {'var': '_containers_docker_shim_wanted'}}], {
+                    'containers_macos_docker_shim': True, 'containers_macos_machine_enabled': True,
+                    '_containers_podman_bin_stat': {'stat': podman_stat},
+                    '_containers_real_docker': {'results': [{'stat': stat} for stat in docker]}})
+                self.assertEqual(results[1]['_containers_docker_shim_wanted'], wanted)
 
 
 if __name__ == '__main__':
