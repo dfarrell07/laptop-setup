@@ -467,6 +467,17 @@ done
 if "$_is_syntax_only"; then
     export SKIP_GPG_VERIFY=1
 fi
+# vault-mode: begin
+# A checkout or branch switch recreates the tracked vault.yml placeholder under the umask (0644), and the pre-flight
+# requires 0600, so every run restores it. Only tightens, only a regular file this user owns, never through a symlink.
+_vault_yml="${_repo_root}/group_vars/all/vault.yml"
+if [[ -L "$_vault_yml" ]]; then
+    echo "SECURITY: group_vars/all/vault.yml is a symlink; replace it with the file itself" >&2
+    exit 2
+elif [[ -f "$_vault_yml" && -O "$_vault_yml" ]]; then
+    chmod 600 "$_vault_yml"
+fi
+# vault-mode: end
 "${_repo_root}/scripts/verify-collections.sh"
 
 # All checks passed — exec the remaining arguments (ansible-playbook or molecule with its args).
