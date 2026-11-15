@@ -19,18 +19,25 @@ reprogramming the others, and a spare can open by touch alone.
 
 ## Set up
 
+Before anything else on each machine: `gh auth login` (the repository is private), and commit signing working
+(`make dotfiles` after the vault's signing key is in place; every commit to the shared repository is signed, a touch of
+the signing YubiKey).
+
 1. **First machine, once** (the one with the current vault and a YubiKey):
    `gh repo create <user>/laptop-secrets --private --clone` (run in `~/src/<user>`), then `make vault-share-init`. It
    enrols the plugged-in YubiKey if none is listed, seals a new random password to it, re-encrypts the vault with that
    password, switches `vault-pass.sh` and pushes. The old helper and vault stay beside the originals
    (`scripts/vault-pass.sh.pre-shared.*`, `group_vars/all/vault.yml.pre-shared`) until every machine has joined.
-2. **Every other YubiKey**: plug it in and run `make vault-add-key` (`NOPIN=1` for a spare kept somewhere safe: touch
+2. **Every other YubiKey**: plug in only that key and run `make vault-add-key` (`NOPIN=1` for a spare kept somewhere safe: touch
    only). The first use on a key makes its age slot; a key with firmware 5.7 or later first gets a PIN-protected TDES
    management key, because the plugin cannot use the factory AES one. Re-encrypting the password needs a key that is
    already enrolled; the plugin asks for it.
 3. **Every other machine**: `make packages` (age and the plugin), then `make vault-join` with an enrolled key plugged
-   in. A machine that had its own encrypted vault keeps it as `group_vars/all/vault.yml.pre-shared`: move any values
-   only it has with `make vault-edit`, then delete the file.
+   in. A machine that had its own encrypted vault keeps it as `group_vars/all/vault.yml.pre-shared` (and its old helper
+   as `scripts/vault-pass.sh.pre-shared`): read it with
+   `.venv/bin/ansible-vault view --vault-password-file scripts/vault-pass.sh.pre-shared group_vars/all/vault.yml.pre-shared`
+   (the make wrapper refuses that option on purpose), move any values only it has with `make vault-edit`, then delete
+   both files.
 
 ## Day to day
 
@@ -41,23 +48,33 @@ reprogramming the others, and a spare can open by touch alone.
 ## Losing a key
 
 `make vault-remove-key RECIPIENT=age1yubikey1...` drops it and rotates: a new random password sealed to the remaining
-keys and the vault re-encrypted with it. The removed key still opens old commits, so treat every secret the vault held
-as exposed if the key was stolen, not just lost: rotate those secrets too.
+keys and the vault re-encrypted with it (plug in a key you keep, not the one you remove). The removed key still opens
+old commits, so if a key was stolen, or a machine that had the vault was compromised, rotate the secrets themselves
+too (new tokens and keys, then `make vault-edit`); the new password protects only what is written after it.
 
 ## Trust
 
+- **Signatures are the trust anchor.** age does not say who encrypted a file, so anyone who can push could seal a
+  password of their choosing to your keys and plant their own vault. Every command that reads the repository fetches
+  first and refuses, before merging anything, any new commit not signed by one of your SSH signing keys (a fresh clone
+  checks its whole history). The keys come from `~/.config/git/allowed_signers`, or, on a machine without them yet,
+  from the signing keys GitHub lists for your account; they are kept in `~/.config/laptop-setup/vault-allowed-signers`.
+  The repository may hold only regular files (no symlinks).
 - **Recipients**: anyone who can push could add their own key, and the next re-encryption would include it. Each
   machine keeps the list it approved (`~/.config/laptop-setup/age-recipients-approved`); `make vault-pull` warns when
   the list changed, and `vault-add-key`/`vault-remove-key` refuse a list with keys this machine never approved until
   `FORCE=1` (after checking `git -C ~/src/<user>/laptop-secrets log -p recipients`).
-- **Commits**: with `gpg.ssh.allowedSignersFile` configured, `vault-pull` and `vault-join` refuse an unsigned or
-  badly signed head; without it they warn.
+- **Failures**: `vault-share-init`, `vault-add-key` and `vault-remove-key` change nothing unless they finish: an
+  error or Ctrl-C at a PIN or touch prompt puts the previous helper and files back. A push that loses a race leaves
+  the change committed locally; the message says how to drop it and redo it.
 - **No plaintext on disk**: the password moves only through pipes; the vault's plaintext appears only inside
   `ansible-vault edit` and `view`, as before.
 - **CI** keeps the plaintext stub and `vault-pass-ci.sh`; nothing here changes it.
 
 ## Platform notes
 
-- Linux x86_64 gets `age-plugin-yubikey` 0.5.0, the newest release with a Linux binary (SHA256-pinned, trust on first
-  use); macOS gets 0.5.1 from Homebrew. Both read the same keys and files.
+- Linux x86_64 gets `age-plugin-yubikey` 0.5.0, the newest release with a Linux binary on GitHub (SHA256-pinned; upstream
+  publishes no digest, so the pin is from two downloads); macOS gets 0.5.1 from Homebrew. Both read the same keys and
+  files.
+- `make vault-view` works offline from the working copy; changes need the network.
 - The plugin talks to the key through `pcscd` (installed and enabled with the YubiKey packages).

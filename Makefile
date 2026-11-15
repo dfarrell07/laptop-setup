@@ -603,7 +603,7 @@ vault-join: guard-not-root
 
 vault-add-key: guard-not-root
 	@$(if $(filter command line,$(origin RECIPIENT)),,RECIPIENT= )$(if $(filter command line,$(origin FORCE)),,FORCE= )\
-	scripts/vault-shared.sh add-key $(if $(filter command line,$(origin NOPIN)),--no-pin)
+	scripts/vault-shared.sh add-key $(if $(filter command line,$(origin NOPIN)),$(if $(filter 1,$(NOPIN)),--no-pin))
 
 vault-remove-key: guard-not-root
 	@[ "$(origin RECIPIENT)" = "command line" ] || { echo "usage: make vault-remove-key RECIPIENT=age1..." >&2; exit 2; }
