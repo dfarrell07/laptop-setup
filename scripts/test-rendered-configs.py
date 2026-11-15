@@ -217,6 +217,25 @@ class RenderedConfigTests(unittest.TestCase):
             config.write_text(f'HostKey {hostkey}\nInclude {self.out / "sshd_macos"}\n')
             result = subprocess.run([str(sshd), '-t', '-f', str(config)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
+            # the task's validate command, sshd -t -f <drop-in alone>; it runs as root (become) with the default host
+            # keys, here a readable one stands in for them
+            result = subprocess.run([str(sshd), '-t', '-f', str(self.out / 'sshd_macos'), '-o', f'HostKey={hostkey}'],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            bad = self.out / 'sshd_macos_bad'
+            bad.write_text(text.replace('Ciphers ', 'Ciphers no-such-cipher,'))
+            result = subprocess.run([str(sshd), '-t', '-f', str(bad), '-o', f'HostKey={hostkey}'],
+                                    capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0, 'sshd -t must reject an unknown algorithm')
+
+    def test_macos_sshd_dropin_is_validated_before_it_lands(self):
+        tasks = yaml.safe_load((ROOT / 'roles/desktop/tasks/main.yml').read_text())
+        block = next(t for t in tasks if t.get('name') == 'Apply the sshd login policy and start sshd (macOS)')
+        self.assertNotIn('rescue', block)  # nothing deletes the live drop-in
+        names = [t['name'] for t in block['block']]
+        deploy = block['block'][names.index('Deploy the sshd login policy drop-in (macOS)')]
+        self.assertEqual(deploy['ansible.builtin.template']['validate'], '/usr/sbin/sshd -t -f %s')
+        self.assertLess(names.index('Create missing SSH host keys (macOS)'), names.index(deploy['name']))
 
     def test_macos_sshd_job_listens_on_the_linux_ssh_port(self):
         text = self.read('sshd_launchd')
