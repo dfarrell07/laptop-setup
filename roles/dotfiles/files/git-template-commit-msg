@@ -14,6 +14,13 @@ if [ -x "$_repo_hook" ]; then
 fi
 # Merge commits (including conflict-resolution commits) are not sign-off checked; git merge --signoff still adds one.
 git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 && exit 0
+# Throwaway repositories that test suites create in temp directories commit without sign-off; requiring it there
+# breaks their tests. Only the sign-off rule is skipped: gitleaks and the pre-push guard still run everywhere.
+_top=$(git rev-parse --show-toplevel 2>/dev/null || true)
+_tmp=${TMPDIR:-/tmp}; _tmp=${_tmp%/}
+case "$_top" in
+  "$_tmp"/*|/tmp/*|/var/tmp/*|/private/tmp/*|/private/var/folders/*|/var/folders/*) exit 0 ;;
+esac
 # Require Signed-off-by (enforce 'git commit -s') — checked before any early-exit so reverts are also covered
 if ! grep -q '^Signed-off-by:' "$1"; then
   echo "ERROR: Missing Signed-off-by — use --signoff / -s with your git command" >&2

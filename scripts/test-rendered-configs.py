@@ -272,6 +272,21 @@ class RenderedConfigTests(unittest.TestCase):
             self.assertEqual(commit('../repo/.githooks'), 1)  # a path out of the repo is ignored
             self.assertEqual(commit('/tmp'), 1)
 
+    def test_commit_msg_skips_sign_off_only_in_temp_repos(self):
+        hook = ROOT / 'roles/dotfiles/files/git-template-commit-msg'
+        with tempfile.TemporaryDirectory() as name:
+            env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1', HOME=name, TMPDIR=name)
+            message = Path(name) / 'msg'
+            message.write_text('Test: no sign-off\n')
+
+            def check(repo):
+                subprocess.run(['git', 'init', '-q', str(repo)], check=True, env=env)
+                return subprocess.run(['bash', str(hook), str(message)], cwd=repo, env=env, capture_output=True,
+                                      text=True, check=False).returncode
+            self.assertEqual(check(Path(name) / 'scratch'), 0)  # under TMPDIR: a test suite's throwaway repo
+            with tempfile.TemporaryDirectory(dir=non_temp_dir()) as real:
+                self.assertEqual(check(Path(real) / 'work'), 1)  # a real repository still needs Signed-off-by
+
     def test_fork_remotes_use_https_so_agents_can_push(self):
         repos = yaml.safe_load((ROOT / 'group_vars/all/repos.yml').read_text())
         remotes = [remote['url'] for repo in repos['git_repos_public'] for remote in repo.get('extra_remotes', [])]
@@ -375,7 +390,7 @@ class ShippedFileTests(unittest.TestCase):
         """The global hook runs in every repo: it must require sign-off but not this repo's style."""
         hook = ROOT / 'roles/dotfiles/files/git-template-commit-msg'
         env = dict(os.environ, GIT_CONFIG_GLOBAL='/dev/null', GIT_CONFIG_SYSTEM='/dev/null', PATH='/usr/bin:/bin')
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory(dir=non_temp_dir()) as directory:  # under /tmp the sign-off rule is skipped
             subprocess.run(['git', 'init', '-q', directory], env=env, check=True)
             msg = Path(directory) / 'msg'
             for subject in ('ovnkube: fix leak in node controller', 'Fix typo.', 'Added a test'):
@@ -387,6 +402,13 @@ class ShippedFileTests(unittest.TestCase):
             result = subprocess.run(['bash', str(hook), str(msg)], cwd=directory, env=env,
                                     capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0, 'missing Signed-off-by must be rejected')
+
+def non_temp_dir():
+    """A directory outside every temp location, for repositories the global hooks treat as real."""
+    path = Path.home() / '.cache/laptop-setup-tests'
+    path.mkdir(parents=True, exist_ok=True)
+    return str(path)
+
 
 if __name__ == '__main__':
     unittest.main()
