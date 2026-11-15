@@ -397,7 +397,27 @@ class SharedVault(unittest.TestCase):
         result = self.shared('b', b, 'join', check=False, VAULT_JOIN_CONFIRMED='')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('confirm the newest vault change', result.stderr)
-        self.assertIn('Recipients: add a key', result.stdout)  # what it would trust is shown
+        self.assertIn('Recipients: add a key', result.stderr)  # what it would trust is shown
+
+    def test_an_interrupt_after_the_push_landed_keeps_the_change(self):
+        a = self.init_a()
+        self.shared('a', a, 'add-key', RECIPIENT=self.keys['b'][1])
+        # A git that completes the push, then dies as if Ctrl-C arrived while it was finishing.
+        wrapper = self.tmp / 'gitwrap'
+        wrapper.mkdir()
+        real = shutil.which('git')
+        (wrapper / 'git').write_text(f'#!/bin/sh\nfor a in "$@"; do [ "$a" = push ] && {{ "{real}" "$@"; exit 130; }}; done\n'
+                                     f'exec "{real}" "$@"\n')
+        (wrapper / 'git').chmod(0o755)
+        path = f'{wrapper}:{self.env("a", a)["PATH"]}'
+        result = self.shared('a', a, 'remove-key', self.keys['b'][1], check=False, PATH=path)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('reached GitHub', result.stderr)
+        pushed = run(['git', f'--git-dir={self.remote}', 'show', 'main:recipients']).stdout
+        self.assertNotIn(self.keys['b'][1], pushed)
+        self.assertNotIn(self.keys['b'][1], (self.tmp / 'secrets-a/recipients').read_text())  # not rolled back
+        self.shared('a', a, 'pull')
+        self.assertIn('secret-a', self.view('a', a))
 
     def test_init_refuses_a_plaintext_vault_and_changes_nothing(self):
         a = self.machine('a', None)
