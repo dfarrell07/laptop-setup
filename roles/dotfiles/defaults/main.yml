@@ -70,6 +70,10 @@ is_macos: false  # fallback; authoritative value in group_vars/all/vars.yml; use
 # macOS: GNU coreutils, sed, grep, findutils, gawk, tar and make (Homebrew gnubin) ahead of the BSD tools in shells
 # (Apple make is 3.81: no --output-sync, which `make gate` uses)
 dotfiles_macos_gnu_tools: true
+# macOS: GUI apps and launchd jobs get the shell PATH too (the login LaunchAgent publishes it). With this false they get
+# it without the GNU tools first, for apps whose build scripts expect BSD flags (Xcode Run Script phases); on by default
+# so agents in the Claude desktop app use the same tools as in a terminal
+dotfiles_macos_launchd_gnu_tools: true
 # macOS: the Homebrew Python whose unversioned python/python3/pip lead PATH (matches packages_pipx_python)
 dotfiles_macos_python: python@3.14
 dotfiles_homebrew_prefix: /opt/homebrew  # fallback; authoritative value in group_vars/all/vars.yml; Intel x86 uses /usr/local (set there)

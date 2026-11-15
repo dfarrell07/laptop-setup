@@ -104,6 +104,8 @@ grep -qiE '^dotfiles_macos_gnu_tools:[[:space:]]*(false|no|off)([[:space:]]|$)' 
 _podman_machine=true
 grep -qiE '^containers_macos_machine_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _podman_machine=false
 _docker_shim=true
+_launchd_gnu=true  # dotfiles_macos_launchd_gnu_tools: GUI apps get the GNU tools first too
+grep -qiE '^dotfiles_macos_launchd_gnu_tools:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _launchd_gnu=false
 grep -qiE '^containers_macos_docker_shim:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _docker_shim=false
 _macos_python=$(awk -F: '/^dotfiles_macos_python:/{sub(/#.*/, "", $2); gsub(/[[:space:]"'"'"']/, "", $2); print $2}' "$_cfg" 2>/dev/null || true)
 [[ "$_macos_python" =~ ^python@[0-9.]+$ ]] || _macos_python=python@3.14
@@ -747,10 +749,11 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   unset _brew _zpath _missing _sock
   unset -f _first
   # GUI apps and launchd jobs get launchd's PATH, which the dotfiles LaunchAgent sets to what ~/.zshenv builds
-  _want=$(env -i HOME="$HOME" PATH=/usr/bin:/bin:/usr/sbin:/sbin zsh -c 'print -r -- $PATH' 2>/dev/null || true)
+  if $_launchd_gnu; then _want=$(env -i HOME="$HOME" PATH=/usr/bin:/bin:/usr/sbin:/sbin zsh -c 'print -r -- $PATH' 2>/dev/null || true)
+  else _want=$(env -i HOME="$HOME" PATH=/usr/bin:/bin:/usr/sbin:/sbin zsh -c 'print -r -- ${(j.:.)path:#*/libexec/gnubin}' 2>/dev/null || true); fi
   _have=$(launchctl getenv PATH 2>/dev/null || true)
   if [[ -n "$_want" && "$_have" == "$_want" ]]; then record "macos-launchd-path" "PASS"
-  else record "macos-launchd-path" "$([[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && echo WARN || echo FAIL)" "launchd PATH is not the ~/.zshenv PATH, so GUI apps (the Claude desktop app's shells too) miss Homebrew and the GNU tools — run: make apply CHUNK=dotfiles, then restart those apps"; fi
+  else record "macos-launchd-path" "$([[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && echo WARN || echo FAIL)" "launchd PATH is not the ~/.zshenv PATH, so GUI apps (the Claude desktop app's shells too) miss Homebrew and the GNU tools, or a later packages run added Homebrew dirs — run: make apply CHUNK=dotfiles, then restart those apps"; fi
   unset _want _have
 fi
 
