@@ -30,7 +30,10 @@ import sys
 LASTPASS_COLUMNS = {'url', 'username', 'password', 'totp', 'extra', 'name', 'grouping', 'fav'}
 SECURE_NOTE_URL = 'http://sn'
 MEMORY_FS = {'tmpfs', 'ramfs'}
+CLEANUP_SIGNALS = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP, signal.SIGQUIT)
 _to_delete = []
+_export_id = None  # (st_dev, st_ino) of the export check_export approved
+_import_started = False
 
 
 def fail(message, code=1):
@@ -38,33 +41,51 @@ def fail(message, code=1):
     sys.exit(code)
 
 
+def open_checked(path, flags):
+    """Reopen without following symlinks; the export must still be the file check_export approved."""
+    descriptor = os.open(path, flags | os.O_NOFOLLOW)
+    info = os.fstat(descriptor)
+    if path == os.environ.get('EXPORT') and _export_id and (info.st_dev, info.st_ino) != _export_id:
+        os.close(descriptor)
+        raise OSError(f'{path} was replaced after it was checked')
+    return descriptor
+
+
 def wipe(path):
     """Overwrite then unlink. On a memory filesystem the overwrite only shortens the window; it never hurts."""
     try:
-        size = os.path.getsize(path)
-        with open(path, 'r+b', buffering=0) as handle:
-            handle.write(b'\0' * size)
-            os.fsync(handle.fileno())
-        os.unlink(path)
+        descriptor = open_checked(path, os.O_WRONLY)
     except FileNotFoundError:
-        pass
+        return
+    with os.fdopen(descriptor, 'wb', buffering=0) as handle:
+        handle.write(b'\0' * os.fstat(descriptor).st_size)
+        os.fsync(descriptor)
+    os.unlink(path)
 
 
 def wipe_all():
+    # Signals wait until the wipe is done: a handler running mid-wipe would exit before this path is removed.
+    previous = signal.pthread_sigmask(signal.SIG_BLOCK, CLEANUP_SIGNALS)
     left = []
-    while _to_delete:
-        path = _to_delete.pop()
-        try:
-            wipe(path)
-        except OSError:
-            left.append(path)  # keep going: one failure must not leave the others behind
+    try:
+        for path in reversed(list(_to_delete)):
+            try:
+                wipe(path)
+            except OSError:
+                left.append(path)  # keep going: one failure must not leave the others behind
+            _to_delete.remove(path)
+    finally:
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous)
     if left:
         print(f'pw-migrate: could not remove {len(left)} file(s); delete them by hand: {" ".join(left)}', file=sys.stderr)
 
 
 def on_signal(signum, _frame):
+    kept = os.environ.get('EXPORT', '') not in _to_delete
     wipe_all()
-    fail(f'interrupted by signal {signum}; export removed', 130)
+    note = ('; the vault may already hold part of the import: review it before retrying, a second import duplicates '
+            'items' if _import_started else '')
+    fail(f'interrupted by signal {signum}; export {"kept" if kept else "removed"}{note}', 130)
 
 
 def linux_fs_type(descriptor):
@@ -115,17 +136,35 @@ def check_export(path):
     else:
         fail(f'unsupported system {system}', 2)
     os.fchmod(descriptor, 0o600)
+    global _export_id
+    info = os.fstat(descriptor)
+    _export_id = (info.st_dev, info.st_ino)
     os.close(descriptor)
 
 
 def read_rows(path):
     csv.field_size_limit(16 * 1024 * 1024)  # long secure notes exceed the 128 KiB default
-    with open(path, newline='', encoding='utf-8-sig') as handle:
+    with os.fdopen(open_checked(path, os.O_RDONLY), newline='', encoding='utf-8-sig') as handle:
         reader = csv.DictReader(handle)
         missing = LASTPASS_COLUMNS - set(reader.fieldnames or [])
         if missing:
             fail(f'not a LastPass CSV export: missing columns {sorted(missing)}')
-        return list(reader)
+        rows = list(reader)
+    if not rows:
+        fail('the export has no entries; nothing to import')
+    return rows
+
+
+def warn_disk_swap():
+    """tmpfs pages and this process's memory can be swapped out; zram stays in RAM."""
+    try:
+        with open('/proc/swaps', encoding='utf-8') as swaps:
+            disk = [line.split()[0] for line in swaps.readlines()[1:] if not line.startswith('/dev/zram')]
+    except OSError:
+        return
+    if disk:
+        print(f'  WARNING: disk swap is active ({", ".join(disk)}); the export can reach it unless it is encrypted. '
+              'Consider `sudo swapoff -a` for the run.')
 
 
 def note_type(row):
@@ -197,7 +236,7 @@ def vault_counts():
 def main():
     # No core dump can carry the rows to disk (systemd-coredump stores them); children (bw) inherit the limit.
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-    for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP, signal.SIGQUIT):
+    for signum in CLEANUP_SIGNALS:
         signal.signal(signum, on_signal)
     path = os.environ.get('EXPORT', '')
     check_export(path)
@@ -208,6 +247,8 @@ def main():
         rows = read_rows(path)
         expected = counts(rows)
         report('LastPass export (counts only):', expected)
+        if platform.system() == 'Linux':
+            warn_disk_swap()
         strip = os.environ.get('STRIP_TOTP', '1') != '0'
         if expected['totp'] and strip:
             print(f'  -> {expected["totp"]} TOTP seeds will NOT be imported (STRIP_TOTP=0 keeps them); move them '
@@ -225,6 +266,8 @@ def main():
                 print('Not imported.' + (' Export kept (KEEP_EXPORT=1).' if path not in _to_delete else ''))
                 return
         source = strip_totp(path, rows) if strip and expected['totp'] else path
+        global _import_started
+        _import_started = True
         bw('import', 'lastpasscsv', source)
         after = vault_counts()
         delta = {key: after[key] - before[key] for key in after}
