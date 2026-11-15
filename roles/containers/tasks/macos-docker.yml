@@ -4,11 +4,13 @@
 # of every other docker on PATH, so it is removed again when a real docker appears, podman is missing or the shim or
 # machine is off.
 
-# follow: a dangling or non-executable docker (a leftover Docker Desktop link) is not a real one
+# follow: a dangling or non-executable docker (a leftover Docker Desktop link) is not a real one, nor is one the user
+# cannot reach (a root-only /usr/local/bin): stat errors count as no docker
 - name: Look for a real docker command (macOS)
   ansible.builtin.stat:
     path: "{{ item }}"
     follow: true
+  failed_when: false
   loop:
     - "{{ dotfiles_homebrew_prefix }}/bin/docker"
     - /usr/local/bin/docker  # Docker Desktop, Rancher Desktop
@@ -28,7 +30,7 @@
     _containers_docker_shim_wanted: >-
       {{ containers_macos_docker_shim | bool and containers_macos_machine_enabled | bool
          and _containers_podman_bin_stat.stat.executable | default(false)
-         and _containers_real_docker.results | map(attribute='stat') | selectattr('exists')
+         and _containers_real_docker.results | selectattr('stat', 'defined') | map(attribute='stat') | selectattr('exists')
              | selectattr('executable', 'defined') | selectattr('executable') | list | length == 0 }}
 
 - name: Create ~/.local/bin for the docker shim (macOS)
