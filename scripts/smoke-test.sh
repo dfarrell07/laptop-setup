@@ -255,6 +255,22 @@ elif exec_cmd codex --version &>/dev/null; then
 else
   record "codex" "$_tool_absent" "not found — run: make codex"
 fi
+# Work Codex login (work profile): delegate's codex:work target and owork need it; the codex role logs it in from
+# vault_codex_api_key. `codex login status` prints only the method (a key masked), never the credential.
+if [[ "$profile" == "work" ]] && $_codex_enabled; then
+  _codex_work=$(sed -nE 's/^codex_work_config_dir:[[:space:]]*["'"'"']?([^"'"'"'#]+)["'"'"']?.*/\1/p' "${_cfg:-/dev/null}" 2>/dev/null | head -1)
+  _codex_work=${_codex_work:-$HOME/.codex}; _codex_work=${_codex_work/#\~/$HOME}
+  if [[ -n "$CONTAINER" ]]; then
+    record "codex-work-login" "SKIP" "host-only"
+  elif ! command -v codex &>/dev/null; then
+    record "codex-work-login" "SKIP" "codex not installed"
+  elif CODEX_HOME="$_codex_work" codex login status &>/dev/null; then
+    record "codex-work-login" "PASS"
+  else
+    record "codex-work-login" "FAIL" "work Codex ($_codex_work) is not logged in: add vault_codex_api_key (make vault-edit), then make codex"
+  fi
+  unset _codex_work
+fi
 # Session placement (claude role writes ~/.config/claude-sessions/machine; the launcher decides): no misplaced sessions
 _placement=$HOME/.config/claude-sessions/machine
 _launcher=$(compgen -G "${HOME}/src/*/claude-skills*/skills/sessions/scripts/session.sh" | head -1 || true)
