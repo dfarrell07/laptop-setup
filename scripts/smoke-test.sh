@@ -503,6 +503,17 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   else record "tailscaled-daemon" "FAIL" "tailscaled system daemon not installed — run: make apply CHUNK=packages (needs sudo)"; fi
 fi
 
+# macOS developer tools the ovnk projects need: unversioned python, autotools (OVS/OVN boot.sh), pkg-config
+if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
+  _brew=$( (brew --prefix) 2>/dev/null || echo /opt/homebrew)
+  _missing=""
+  [[ -x "$_brew/opt/python@3.14/libexec/bin/python" ]] || _missing+=" python(python@3.14)"
+  for _t in autoreconf automake glibtoolize pkg-config; do [[ -x "$_brew/bin/$_t" ]] || _missing+=" $_t"; done
+  if [[ -z "$_missing" ]]; then record "macos-dev-tools" "PASS"
+  else record "macos-dev-tools" "FAIL" "missing:$_missing — run: make apply CHUNK=packages NOSUDO=1"; fi
+  unset _brew _missing _t
+fi
+
 # macOS: containers run in the podman machine VM, which the containers chunk creates and starts at login
 if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   if ! $_podman_machine; then record "podman-machine" "PASS" "containers_macos_machine_enabled is off"
@@ -512,6 +523,9 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
     record "podman-machine" "$([[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && echo WARN || echo FAIL)" "podman machine not running — run: make apply CHUNK=containers (or podman machine start)"
   elif podman info &>/dev/null; then record "podman-machine" "PASS"
   else record "podman-machine" "FAIL" "podman machine running but unreachable — check ~/.local/state/log/podman-machine.log"; fi
+  if ! $_podman_machine; then record "docker-shim" "PASS" "containers_macos_machine_enabled is off"
+  elif [[ -x "$HOME/.local/bin/docker" || -x "$(command -v docker 2>/dev/null)" ]]; then record "docker-shim" "PASS"
+  else record "docker-shim" "FAIL" "no docker command — run: make apply CHUNK=containers"; fi
 fi
 
 # ssh-agent has a FIDO2 sk-ssh-ed25519 key loaded (use -L for full pubkey: -l shows ED25519-SK not sk-ssh-ed25519)
@@ -2625,7 +2639,7 @@ if [[ -n "$ONLY" ]]; then
       continue
     fi
     # macOS-only checks have nothing to verify on Linux
-    if $IS_LINUX && [[ " podman-machine macos-firewall macos-always-on macos-screen macos-screen-lock tailscaled-daemon " == *" $_only_name "* ]]; then
+    if $IS_LINUX && [[ " podman-machine docker-shim macos-dev-tools macos-firewall macos-always-on macos-screen macos-screen-lock tailscaled-daemon " == *" $_only_name "* ]]; then
       $JSON || printf 'N/A   %s (macOS-only check; nothing to verify on Linux)\n' "$_only_name"
       continue
     fi

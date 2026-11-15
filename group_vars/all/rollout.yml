@@ -20,7 +20,7 @@ rollout_catalog:
   packages:
     desc: Packages, pinned binaries, Go tools, pipx, krew, daily user-space updater
     risk: low
-    verify_macos: [tailscaled-daemon]
+    verify_macos: [tailscaled-daemon, macos-dev-tools]
   ssh_client:
     desc: Pinned known_hosts and vault-backed SSH and signing keys
     risk: low
@@ -52,7 +52,7 @@ rollout_catalog:
     sudo: false
     requires: [packages]
     verify: [fqin-enforcement, containers-policy]
-    verify_macos: [podman-machine]
+    verify_macos: [podman-machine, docker-shim]
   distrobox:
     desc: Dev container provisioning
     risk: low
