@@ -333,13 +333,15 @@ class SmokeTests(unittest.TestCase):
                 (d / 'bin' / name).write_text('#!/bin/sh\n' + body + '\n')
                 (d / 'bin' / name).chmod(0o755)
             state = d / 'state'
-            state.mkdir()
+            (state / 'sshd_config.d').mkdir(parents=True)
+            policy = state / 'sshd_config.d/000-laptop-setup.conf'
+            (state / 'sshd_config').write_text('Include /etc/ssh/sshd_config.d/*\n')  # not this directory
 
             def run(remote_login, screen_sharing=False):
-                result = subprocess.run(['bash', '-u', '-c',
+                result = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c',
                     'record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; };'
                     f' _macos_remote_login={remote_login} _macos_screen_sharing={screen_sharing};'
-                    f' _alf={d}/bin/alf _sshd_policy={state}/policy;\n' + source[start:end]],
+                    f' _alf={d}/bin/alf _sshd_policy={policy} _sshd_config={state}/sshd_config;\n' + source[start:end]],
                     env=dict(os.environ, PATH=f'{d}/bin:' + os.environ['PATH'], HOME=str(d / 'home'),
                              STATE=str(state), PREFIX=str(d / 'prefix')),
                     capture_output=True, text=True)
@@ -354,12 +356,32 @@ class SmokeTests(unittest.TestCase):
             (d / 'home/.ssh/authorized_keys').write_text('sk-ssh-ed25519@openssh.com AAAA k\n')
             self.assertEqual(run('true'), 'macos-remote-access FAIL missing: sshd — run: make apply CHUNK=desktop (needs sudo)')
             (state / 'com.openssh.sshd').write_text('')  # Remote Login on from System Settings, without the policy
-            self.assertIn('sshd-key-policy', run('false'))
+            self.assertTrue(run('false').startswith('macos-remote-access FAIL missing: sshd-key-policy'))
             self.assertIn('sshd', run('true'))  # and not our job on ssh_port
             (state / 'com.openssh.sshd').unlink()
             (state / 'com.laptop-setup.sshd').write_text('')
             self.assertIn('sshd-key-policy', run('true'))
-            (state / 'policy').write_text('')
+            policy.write_text('# PasswordAuthentication no\n')
+            self.assertIn('sshd-key-policy(PasswordAuthentication-no)', run('true'))
+            policy.write_text('PasswordAuthentication no\nKbdInteractiveAuthentication no\n')
+            self.assertIn('sshd-key-policy(not-included-by-sshd_config)', run('true'))
+            (state / 'sshd_config').write_text(f'Include {state}/sshd_config.d/*\nAuthorizedKeysFile .ssh/authorized_keys\n')
+            self.assertEqual(run('true'), 'macos-remote-access PASS')
+            (state / 'sshd_config').write_text('Include sshd_config.d/*\nPasswordAuthentication yes\n')  # relative; after ours
+            self.assertEqual(run('true'), 'macos-remote-access PASS')
+            (state / 'sshd_config').write_text(f'kbdinteractiveauthentication=yes\nInclude {state}/sshd_config.d/*\n')
+            self.assertIn('sshd-password-auth(sshd_config)', run('true'))
+            (state / 'sshd_config').write_text(f'Include {state}/sshd_config.d/*\n')
+            (state / 'sshd_config.d/100-macos.conf').write_text('PasswordAuthentication yes\n')  # sorts after ours
+            (state / 'sshd_config.d/.hidden.conf').write_text('PasswordAuthentication yes\n')  # sshd's * skips it
+            self.assertEqual(run('true'), 'macos-remote-access PASS')
+            (state / 'sshd_config.d/000-early.conf').write_text('UsePAM yes\n')  # C order: 000-e before 000-l
+            result = run('true')
+            self.assertIn('sshd-key-policy-first(000-early.conf sorts before it)', result)
+            self.assertNotIn('sshd-password-auth', result)
+            (state / 'sshd_config.d/000-early.conf').write_text('  ChallengeResponseAuthentication yes\n')
+            self.assertIn('sshd-password-auth(000-early.conf)', run('true'))
+            (state / 'sshd_config.d/000-early.conf').unlink()
             self.assertEqual(run('true'), 'macos-remote-access PASS')
             self.assertIn('Screen-Sharing', run('true', 'true'))
 
