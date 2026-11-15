@@ -769,10 +769,19 @@ ROOT_REJECTED_MODULES = {'raw', 'script', 'command', 'shell', 'expect', 'ansible
                          'ansible.builtin.expect', 'ansible.legacy.raw', 'ansible.legacy.script', 'ansible.legacy.command',
                          'ansible.legacy.shell', 'ansible.legacy.expect'}
 INCLUDE_MODULES = ('ansible.builtin.include_tasks', 'ansible.builtin.import_tasks', 'include_tasks', 'import_tasks')
+INCLUDE_ROLE_MODULES = ('ansible.builtin.include_role', 'ansible.builtin.import_role', 'include_role', 'import_role')
+FALSE_WORDS = {'false', 'no', 'off', '0', 'n', 'f'}
 SHELL_BUILTINS = {'[', '[[', 'test', 'echo', 'printf', 'true', 'false', ':', 'exit', 'return', 'set', 'cd', 'export', 'local',
                   'read', 'unset', 'shift', 'break', 'continue', 'wait', 'trap', 'umask'}  # no PATH lookup
 SHELL_PREFIX_WORDS = {'if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', '{', '(', 'time', 'exec'}
 SHELL_SKIP_WORDS = {'fi', 'done', '}', ')', 'esac', 'for', 'case'}
+
+
+def become_on(value):
+    """Fail closed: a become value that is not clearly false (a template, "True", an empty value, ...) counts as root."""
+    if value is False or (isinstance(value, int) and not isinstance(value, bool) and value == 0):
+        return False
+    return not (isinstance(value, str) and value.strip().lower() in FALSE_WORDS)
 
 
 def linux_only(when):
@@ -808,7 +817,13 @@ def shell_command_words(cmd):
 
 
 class RootCommandScan:
-    """Commands that run as root outside Linux-only `when`s, following blocks and includes."""
+    """Commands that run as root outside Linux-only `when`s, following blocks, include/import_tasks and
+    include/import_role (tasks_from; that role's handlers are scanned as entry points).
+
+    Known limits, not scanned: site.yml's own play tasks (pre_tasks, tasks, post_tasks); a bare name behind a full-path
+    wrapper, since only the first word of each simple command is read (/bin/sh -c 'launchctl ...', ... | /usr/bin/xargs
+    launchctl, /usr/bin/env launchctl); become set through the ansible_become variable or the command line.
+    """
 
     def __init__(self, load=None):
         self.load = load or (lambda path: yaml.safe_load((ROOT / path).read_text()) or [])
@@ -833,7 +848,7 @@ class RootCommandScan:
 
     def walk(self, path, tasks, become, linux):
         for task in tasks or []:
-            task_become = task['become'] in (True, 'true', 'yes') if 'become' in task else become
+            task_become = become_on(task['become']) if 'become' in task else become
             task_linux = linux or linux_only(task.get('when'))
             for key in ('block', 'rescue', 'always'):
                 self.walk(path, task.get(key), task_become, task_linux)
@@ -842,7 +857,17 @@ class RootCommandScan:
                     args = task[module]
                     apply = (args.get('apply') or {}) if isinstance(args, dict) else {}
                     self.scan(self.resolve(path, args['file'] if isinstance(args, dict) else args),
-                              apply['become'] in (True, 'true', 'yes') if 'become' in apply else task_become, task_linux)
+                              become_on(apply['become']) if 'become' in apply else task_become, task_linux)
+            for module in INCLUDE_ROLE_MODULES:
+                if module in task:
+                    args = task[module] if isinstance(task[module], dict) else {'name': task[module]}
+                    apply = args.get('apply') or {}
+                    role, tasks_from = str(args.get('name')), str(args.get('tasks_from') or 'main')
+                    if '{{' in role + tasks_from:
+                        raise AssertionError(f'{path}: cannot resolve role {role} tasks_from {tasks_from}')
+                    tasks_from += '' if tasks_from.endswith(('.yml', '.yaml')) else '.yml'
+                    self.scan(f'roles/{role}/tasks/{tasks_from}',
+                              become_on(apply['become']) if 'become' in apply else task_become, task_linux)
             if task_become and not task_linux:
                 self.check(path, task)
 
@@ -866,17 +891,32 @@ class RootCommandScan:
         self.commands += [(path, name, word) for word in words]
 
 
-def scan_root_commands():
-    """Scan every role's tasks and handlers and common/tasks; roles that site.yml runs only on Linux are out of scope."""
-    linux_roles = {role['role'] for play in yaml.safe_load((ROOT / 'site.yml').read_text())
-                   for role in play.get('roles', []) if isinstance(role, dict) and linux_only(role.get('when'))}
+def site_roles(site):
+    """{role: (become, linux)} from site.yml's plays: become from the role entry, else the play (Play 1's play-level
+    become); Linux-only when every entry of the role has a Linux-only `when`."""
+    roles = {}
+    for play in site:
+        for entry in play.get('roles', []):
+            entry = entry if isinstance(entry, dict) else {'role': entry}
+            become = become_on(entry['become']) if 'become' in entry else become_on(play.get('become', False))
+            old_become, old_linux = roles.get(entry['role'], (False, True))
+            roles[entry['role']] = (old_become or become, old_linux and linux_only(entry.get('when')))
+    return roles
+
+
+def scan_root_commands(site=None):
+    """Scan every role's tasks and handlers and common/tasks; roles that site.yml runs only on Linux are out of scope,
+    and a role site.yml runs with become starts with it."""
+    roles = site_roles(site if site is not None else yaml.safe_load((ROOT / 'site.yml').read_text()))
+    linux_roles = {role for role, (_, linux) in roles.items() if linux}
     scan = RootCommandScan()
     entries = (sorted(ROOT.glob('roles/*/tasks/main.yml')) + sorted(ROOT.glob('roles/*/handlers/*.yml'))
                + sorted(ROOT.glob('common/tasks/*.yml')) + sorted(ROOT.glob('roles/*/tasks/*.yml')))
     for file in entries:  # entry points first: an included file is walked with its include sites' become and when
         path = str(file.relative_to(ROOT))
+        become, linux = roles.get(path.split('/')[1], (False, False)) if path.startswith('roles/') else (False, False)
         if not any(seen == path for seen, _, _ in scan.seen):
-            scan.scan(path, False, path.startswith('roles/') and path.split('/')[1] in linux_roles)
+            scan.scan(path, become, linux)
     return scan, linux_roles
 
 
@@ -1103,6 +1143,47 @@ class MacTaskTests(unittest.TestCase):
         for when in ('is_linux or is_macos', 'is_macos', "ansible_facts['system'] == 'Darwin'", 'not is_linux'):
             with self.subTest(when=when):
                 self.assertEqual(found([dict(root, when=when, **bare)])[0], ['launchctl'])
+        # become fails closed: anything not clearly false is root, on a task, a block or include_tasks apply
+        for value in (True, 'True', 'yes', 'on', 1, '{{ needs_root }}', "{{ x | default(false) }}", None, 'maybe'):
+            with self.subTest(become=value):
+                self.assertEqual(found([dict(bare, become=value)])[0], ['launchctl'])
+                self.assertEqual(found([{'become': value, 'block': [bare]}])[0], ['launchctl'])
+                self.assertEqual(found([{'ansible.builtin.include_tasks': {'file': 'sub.yml', 'apply': {'become': value}}}],
+                                       files)[0], ['launchctl'])
+        for value in (False, 'false', 'False', 'no', 'NO', 'off', 0, '0', 'n'):
+            with self.subTest(become=value):
+                self.assertEqual(found([dict(bare, become=value)])[0], [])
+                self.assertEqual(found([dict(root, block=[dict(bare, become=value)])])[0], [])
+        # include_role and import_role: tasks_from, apply, the include site's become and when
+        files = {'roles/y/tasks/main.yml': [bare], 'roles/y/tasks/other.yml': [{'ansible.builtin.shell': 'killall x'}]}
+        for module in INCLUDE_ROLE_MODULES:
+            with self.subTest(module=module):
+                self.assertEqual(found([dict(root, **{module: {'name': 'y'}})], files)[0], ['launchctl'])
+                self.assertEqual(found([dict(root, **{module: {'name': 'y', 'tasks_from': 'other'}})], files)[0], ['killall'])
+                self.assertEqual(found([{module: {'name': 'y'}}], files)[0], [])
+                self.assertEqual(found([dict(root, when='is_linux', **{module: {'name': 'y'}})], files)[0], [])
+                with self.assertRaisesRegex(AssertionError, 'cannot resolve role'):
+                    found([dict(root, **{module: {'name': '{{ role_name_var }}'}})], files)
+        self.assertEqual(found([{'ansible.builtin.include_role': {'name': 'y', 'apply': {'become': True}}}], files)[0],
+                         ['launchctl'])
+        self.assertEqual(found([dict(root, **{'ansible.builtin.include_role': 'y'})], files)[0], ['launchctl'])
+
+    def test_root_command_scan_follows_site_role_become(self):
+        """A role site.yml runs with become (on the role, or from the play) is scanned as root; Linux-only only when
+        every entry of the role is."""
+        roles = site_roles([{'become': True, 'roles': [{'role': 'a'}, {'role': 'b', 'become': False}]},
+                            {'roles': ['c', {'role': 'd', 'become': '{{ x }}'}, {'role': 'e', 'when': 'is_linux'},
+                                       {'role': 'f', 'when': 'is_linux', 'become': 'True'}, {'role': 'f'}]}])
+        self.assertEqual(roles, {'a': (True, False), 'b': (False, False), 'c': (False, False), 'd': (True, False),
+                                 'e': (False, True), 'f': (True, False)})
+        site = yaml.safe_load((ROOT / 'site.yml').read_text())
+        bare = lambda scan: sorted({c for _, _, c in scan.commands if not c.startswith('/') and '{{' not in c})
+        self.assertEqual(bare(scan_root_commands(site)[0]), [])
+        for play in site:
+            for entry in play.get('roles', []):
+                if entry['role'] == 'desktop':
+                    entry['become'] = True
+        self.assertIn('killall', bare(scan_root_commands(site)[0]))  # the desktop role's non-root tasks
 
 if __name__ == '__main__':
     unittest.main()
