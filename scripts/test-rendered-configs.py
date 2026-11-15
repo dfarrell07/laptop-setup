@@ -499,5 +499,38 @@ def non_temp_dir():
     return str(path)
 
 
+class MacFirewallTaskTests(unittest.TestCase):
+    def test_stale_mosh_server_entries_are_removed(self):
+        """Older Cellar paths of mosh-server go; the current one and other programs stay."""
+        tasks = yaml.safe_load((ROOT / 'roles/desktop/tasks/main.yml').read_text())
+        task = dict(next(t for t in tasks if t.get('name') == 'Remove stale mosh-server entries from the macOS firewall'))
+        argv = task.pop('ansible.builtin.command')['argv']
+        self.assertEqual(argv[:2], ['/usr/libexec/ApplicationFirewall/socketfilterfw', '--remove'])
+        for key in ('become', 'tags', 'changed_when'):
+            task.pop(key, None)
+        task['ansible.builtin.debug'] = {'msg': argv[2]}
+        current = '/opt/homebrew/Cellar/mosh/1.4.0_32/bin/mosh-server'
+        old = '/opt/homebrew/Cellar/mosh/1.4.0_31/bin/mosh-server'
+        listing = (f'ALF: total number of apps = 4\n\n1 : /Applications/Tailscale.app \n \t (Allow incoming connections)\n\n'
+                   f'2 : {old} \n \t (Allow incoming connections)\n\n3 : {current} \n \t (Allow incoming connections)\n\n'
+                   f'4 : /opt/homebrew/Cellar/mosh-extra/1/bin/mosh-server \n \t (Allow incoming connections)\n')
+        variables = {'is_macos': True, 'desktop_macos_firewall_allow': ['/opt/homebrew/bin/mosh-server'],
+                     '_desktop_fw_apps': {'stdout': listing},
+                     '_desktop_fw_allow_paths': {'results': [{'rc': 0, 'stdout': current}]}}
+        with tempfile.TemporaryDirectory() as directory:
+            playbook = Path(directory) / 'play.yml'
+            playbook.write_text(yaml.safe_dump([{'hosts': 'localhost', 'gather_facts': False, 'vars': variables,
+                                                 'tasks': [task]}]))
+            result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(playbook)], cwd=ROOT,
+                                    env=dict(os.environ, ANSIBLE_STDOUT_CALLBACK='json',
+                                             ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
+                                    capture_output=True, text=True, timeout=120)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        import json
+        output = json.JSONDecoder().raw_decode(result.stdout)[0]  # warnings may follow the JSON
+        results = output['plays'][0]['tasks'][0]['hosts']['localhost']['results']
+        self.assertEqual([r['msg'] for r in results], [old])
+
+
 if __name__ == '__main__':
     unittest.main()
