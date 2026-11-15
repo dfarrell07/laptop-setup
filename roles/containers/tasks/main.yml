@@ -582,3 +582,7 @@
 - name: Podman machine (macOS)
   ansible.builtin.include_tasks: macos.yml
   when: is_macos and containers_macos_machine_enabled | bool
+
+- name: Docker shim (macOS)
+  ansible.builtin.include_tasks: macos-docker.yml
+  when: is_macos

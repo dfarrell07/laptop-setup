@@ -101,6 +101,10 @@ _idle_display=$(_cfg_num desktop_wm_idle_display_timeout)
 [[ "$_idle_display" =~ ^[0-9]+$ ]] && _idle_display=$((10#$_idle_display)) || _idle_display=3900
 _podman_machine=true
 grep -qiE '^containers_macos_machine_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _podman_machine=false
+_docker_shim=true
+grep -qiE '^containers_macos_docker_shim:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _docker_shim=false
+_macos_python=$(awk -F: '/^dotfiles_macos_python:/{sub(/#.*/, "", $2); gsub(/[[:space:]"'"'"']/, "", $2); print $2}' "$_cfg" 2>/dev/null || true)
+[[ "$_macos_python" =~ ^python@[0-9.]+$ ]] || _macos_python=python@3.14
 _podman_machine_name=$(awk -F: '/^containers_macos_machine_name:/{sub(/#.*/, "", $2); gsub(/[[:space:]"'"'"']/, "", $2); print $2}' "$_cfg" 2>/dev/null || true)
 [[ "$_podman_machine_name" =~ ^[A-Za-z0-9._-]+$ ]] || _podman_machine_name=podman-machine-default
 grep -qiE '^desktop_macos_always_on:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_always_on=true
@@ -546,9 +550,9 @@ fi
 # macOS developer tools the ovnk projects need: unversioned python, autotools (OVS/OVN boot.sh), pkg-config,
 # and GNU make (Apple make 3.81 lacks --output-sync)
 if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
-  _brew=$( (brew --prefix) 2>/dev/null || echo /opt/homebrew)
+  _brew=$( (brew --prefix) 2>/dev/null || { [[ "$(uname -m)" == arm64 ]] && echo /opt/homebrew || echo /usr/local; })
   _missing=""
-  [[ -x "$_brew/opt/python@3.14/libexec/bin/python" ]] || _missing+=" python(python@3.14)"
+  [[ -x "$_brew/opt/$_macos_python/libexec/bin/python" ]] || _missing+=" python($_macos_python)"
   for _t in autoreconf automake glibtoolize pkg-config; do [[ -x "$_brew/bin/$_t" ]] || _missing+=" $_t"; done
   [[ -x "$_brew/opt/make/libexec/gnubin/make" ]] || _missing+=" make(GNU)"
   if [[ -z "$_missing" ]]; then record "macos-dev-tools" "PASS"
@@ -566,6 +570,7 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   elif podman info &>/dev/null; then record "podman-machine" "PASS"
   else record "podman-machine" "FAIL" "podman machine running but unreachable — check ~/.local/state/log/podman-machine.log"; fi
   if ! $_podman_machine; then record "docker-shim" "PASS" "containers_macos_machine_enabled is off"
+  elif ! $_docker_shim; then record "docker-shim" "PASS" "containers_macos_docker_shim is off"
   elif [[ -x "$HOME/.local/bin/docker" || -x "$(command -v docker 2>/dev/null)" ]]; then record "docker-shim" "PASS"
   else record "docker-shim" "FAIL" "no docker command — run: make apply CHUNK=containers"; fi
 fi
