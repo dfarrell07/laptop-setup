@@ -152,6 +152,12 @@ _notes_repo_name=$(awk -F': ' '/^notes_repo_name:/{gsub(/[[:space:]"'"'"']/, "",
 [[ -n "${HOME:-}" ]] || { echo "Error: HOME is not set" >&2; exit 2; }
 _notes_dir="$HOME/$_notes_repo_name"
 USER="${USER:-$(id -un)}"  # cron/env -i runs leave USER unset; later checks use it under set -u
+# Read before _cfg goes away: the work Codex home (value up to an inline comment, quotes and spaces trimmed) and the
+# user-updater opt-out.
+_codex_work=$(awk '/^codex_work_config_dir:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/[[:space:]]*#.*$/, "");
+  gsub(/^["\047]|["\047]$/, ""); sub(/[[:space:]]+$/, ""); print; exit}' "$_cfg" 2>/dev/null || true)
+_user_updates_off=false
+grep -qiE '^packages_user_updates_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _user_updates_off=true
 unset _cfg
 # Check tools as the login shell finds them: make verify runs with make's PATH, which lacks the user bin
 # directories the dotfiles PATH puts first (the claude, codex and agy CLIs live there).
@@ -267,9 +273,46 @@ elif exec_cmd codex --version &>/dev/null; then
 else
   record "codex" "$_tool_absent" "not found — run: make codex"
 fi
+# Work Codex login (work profile): delegate's codex:work target and owork need it; the codex role logs it in from
+# vault_codex_api_key. `codex login status` prints only the method (a key masked), never the credential.
+if [[ "$profile" != "work" ]] || ! $_codex_enabled; then
+  record "codex-work-login" "PASS" "not applicable (personal profile or Codex disabled)"
+else
+  _codex_work=${_codex_work:-$HOME/.codex}; _codex_work=${_codex_work/#\~/$HOME}
+  if [[ -n "$CONTAINER" ]]; then
+    record "codex-work-login" "SKIP" "host-only"
+  elif ! command -v codex &>/dev/null; then
+    record "codex-work-login" "SKIP" "codex not installed"
+  elif CODEX_HOME="$_codex_work" codex login status &>/dev/null; then
+    record "codex-work-login" "PASS"
+  else
+    record "codex-work-login" "FAIL" "work Codex ($_codex_work) is not logged in: add vault_codex_api_key (make vault-edit), then make codex"
+  fi
+  unset _codex_work
+fi
+# Session placement (claude role writes ~/.config/claude-sessions/machine; the launcher decides): no misplaced sessions
+_placement=$HOME/.config/claude-sessions/machine
+_launcher=$(compgen -G "${HOME}/src/*/claude-skills*/skills/sessions/scripts/session.sh" | head -1 || true)
+if [[ -n "$CONTAINER" ]]; then
+  record "claude-session-placement" "SKIP" "host-only check"
+elif [[ ! -f "$_placement" ]]; then
+  record "claude-session-placement" "PASS" "placement off (claude_machine_role unset)"
+elif [[ -z "$_launcher" ]]; then
+  record "claude-session-placement" "SKIP" "session launcher not found under ~/src/*/claude-skills*"
+elif ! _sessions=$(bash "$_launcher" ls 2>/dev/null); then
+  record "claude-session-placement" "WARN" "session launcher ls failed: $_launcher"
+else
+  # ls lines: <session> <running|stopped|failed> [misplaced] <dir>; any misplaced session, running or not, fails
+  _misplaced=$(awk '$3 == "misplaced" {print $1}' <<<"$_sessions" | paste -sd' ' -)
+  if [[ -n "$_misplaced" ]]; then
+    record "claude-session-placement" "FAIL" "sessions on the wrong machine: $_misplaced (session.sh stop, then start on the right one)"
+  else record "claude-session-placement" "PASS"; fi
+fi
+unset _placement _launcher _misplaced _sessions
+
 # Daily user-space updater (packages role; docs/auto-updates.md): Linux host only
 if $IS_LINUX && [[ -z "$CONTAINER" ]]; then
-  if grep -qiE '^packages_user_updates_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "${_cfg:-/dev/null}" 2>/dev/null; then
+  if $_user_updates_off; then
     if [[ ! ("$EUID" -eq 0 && -n "${SUDO_USER:-}") ]] && systemctl --user is-enabled laptop-user-update.timer &>/dev/null; then
       record "user-updates" "WARN" "disabled in config but the timer is still enabled (make packages removes it)"
     else record "user-updates" "PASS" "disabled in config"; fi

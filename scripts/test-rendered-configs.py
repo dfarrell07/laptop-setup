@@ -132,6 +132,23 @@ class RenderedConfigTests(unittest.TestCase):
         self.assertRegex(alias, r'(?m)^\s*fixup = commit -s --fixup$')
         self.assertRegex(alias, r"(?m)^\s*wip = commit -s -m 'WIP: snapshot'$")
 
+    def test_gitconfig_pushes_https_by_default_and_ssh_with_pushsk(self):
+        config = self.read('gitconfig')
+        self.assertNotIn('pushInsteadOf = https://github.com/', config)  # HTTPS by default: gh credentials, agents
+        with tempfile.TemporaryDirectory() as name:
+            env = dict(os.environ, GIT_CONFIG_GLOBAL=str(self.out / 'gitconfig'), GIT_CONFIG_NOSYSTEM='1', HOME=name)
+            subprocess.run(['git', 'init', '-q', name], check=True, env=env)
+            subprocess.run(['git', '-C', name, 'remote', 'add', 'origin', 'https://github.com/o/r.git'], check=True,
+                           env=env)
+            default = subprocess.run(['git', '-C', name, 'remote', 'get-url', '--push', 'origin'], env=env,
+                                     capture_output=True, text=True, check=True).stdout.strip()
+            alias = subprocess.run(['git', '-C', name, 'config', 'alias.pushsk'], env=env, capture_output=True,
+                                   text=True, check=True).stdout.strip()
+            ssh = subprocess.run(alias.lstrip('!').replace(' push', ' remote get-url --push origin').split(),
+                                 cwd=name, env=env, capture_output=True, text=True, check=True).stdout.strip()
+        self.assertEqual(default, 'https://github.com/o/r.git')
+        self.assertEqual(ssh, 'ssh://git@github.com/o/r.git')
+
     def test_wm_configs_have_no_trailing_comments_after_commands(self):
         for name in ('sway', 'i3'):
             for number, line in enumerate(self.read(name).splitlines(), 1):
@@ -156,7 +173,7 @@ class RenderedConfigTests(unittest.TestCase):
             stub('i3status', 'printf \'{"version":1}\\n[\\n[{"name":"wireless","full_text":"WIFI"}]\\n\'')
             stub('podman', 'printf "a1\\nb2\\n"')
             stub('ps', 'printf "pts/0    claude\\n?        codex\\n?        codex\\npts/3    codex\\n'
-                       '?        agy\\npts/4    node\\npts/5    zsh\\n"')
+                       '?        agy\\npts/4    node\\npts/5    zsh\\npts/3    codex\\npts/0    agy\\n"')
             for quiet in ['nmcli', 'tailscale', 'rpm']:
                 stub(quiet, 'exit 1')
             script = stubs / 'bar-status'
@@ -165,6 +182,7 @@ class RenderedConfigTests(unittest.TestCase):
                                     env=dict(os.environ, PATH=f'{stubs}:/usr/bin:/bin', HOME=name))
             update = result.stdout.splitlines()[-1]
             self.assertIn('"full_text":"CTR 2"', update)
+            # pts/0 and pts/3: a second agent process on a terminal is the same session
             self.assertIn('"full_text":"AI 2"', update)
 
     def test_audit_rules_set_backlog_before_rules(self):

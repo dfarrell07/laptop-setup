@@ -1,7 +1,7 @@
 .PHONY: status plan apply verify rollout-banner bootstrap-hooks help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check test smoke-test \
        dotfiles packages repos notes \
        ssh desktop system repos_dnf redhat containers claude codex container \
-       container-rebuild csb-audit ssh-keys github-ssh-keys vault-init vault-import vault-edit vault-view update hooks \
+       container-rebuild csb-audit ssh-keys github-ssh-keys vault-init vault-import vault-edit vault-view update hooks pw-migrate gate \
        smoke-test-container smoke-test-user \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
        test-scripts test-poller test-gitleaks test-% \
@@ -317,6 +317,11 @@ ssh-keys: guard-not-root
 github-ssh-keys: guard-not-root
 	scripts/github-ssh-keys.sh
 
+# LastPass -> Bitwarden: EXPORT=<decrypted LastPass CSV on tmpfs/RAM disk>; DRY_RUN=1 counts only. Prints counts only and
+# removes the export when it ends (docs/password-migration.md). Needs `bw` logged in and unlocked (BW_SESSION).
+pw-migrate: guard-not-root
+	@python3 scripts/pw-migrate.py
+
 # With USBGuard running: allow blocked USB devices now and save their rules. Otherwise: only save
 # rules for connected devices no rule covers yet. Rules go to config.yml for the next `make apply CHUNK=sys_usbguard`.
 usb-add: guard-not-root
@@ -482,43 +487,55 @@ commitlint:
 test: shellcheck test-scripts test-poller test-fedora test-rocky test-debian test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role test-ssti-guard
 
 # Run the hook tests and scripts/test-*.py suites.
+TEST_SCRIPTS := \
+	'bash scripts/test-hooks-security.sh' \
+	'.venv/bin/python3 scripts/test-config-parser.py' \
+	'.venv/bin/python3 scripts/test-pre-push.py' \
+	'.venv/bin/python3 scripts/test-vault-stub.py' \
+	'.venv/bin/python3 scripts/test-workflow-guards.py' \
+	'.venv/bin/python3 scripts/test-pinned-git.py' \
+	'.venv/bin/python3 scripts/test-auto-updates.py' \
+	'.venv/bin/python3 scripts/test-pw-migrate.py' \
+	'.venv/bin/python3 scripts/test-hook-baselines.py' \
+	'.venv/bin/python3 scripts/test-commit-message.py' \
+	'.venv/bin/python3 scripts/test-bootstrap-hooks.py' \
+	'.venv/bin/python3 scripts/test-aerospace-terminal.py' \
+	'.venv/bin/python3 scripts/test-audit-policy.py' \
+	'.venv/bin/python3 scripts/test-brew-update.py' \
+	'.venv/bin/python3 scripts/test-chrony-template.py' \
+	'.venv/bin/python3 scripts/test-kernel-cmdline.py' \
+	'.venv/bin/python3 scripts/test-podman-distrobox.py' \
+	'.venv/bin/python3 scripts/test-ssh-known-hosts.py' \
+	'.venv/bin/python3 scripts/test-sshd-template.py' \
+	'.venv/bin/python3 scripts/test-sysctl-template.py' \
+	'.venv/bin/python3 scripts/test-rendered-configs.py' \
+	'.venv/bin/python3 scripts/test-module-args.py' \
+	'.venv/bin/python3 scripts/test-pam-faillock-debian.py' \
+	'.venv/bin/python3 scripts/test-critical-assertions.py' \
+	'.venv/bin/python3 scripts/test-claude-settings-merge.py' \
+	'.venv/bin/python3 scripts/test-agent-trust.py' \
+	'.venv/bin/python3 scripts/test-smoke-test.py' \
+	'.venv/bin/python3 scripts/test-workstation-audit.py' \
+	'.venv/bin/python3 scripts/test-go-checksum.py' \
+	'.venv/bin/python3 scripts/test-laptop-migration.py' \
+	'.venv/bin/python3 scripts/test-claude-privacy.py' \
+	'.venv/bin/python3 scripts/test-ansible-input-guards.py' \
+	'.venv/bin/python3 scripts/test-usb-add.py' \
+	'.venv/bin/python3 scripts/test-vault-import.py' \
+	'.venv/bin/python3 scripts/test-collection-source-verifier.py' \
+	'.venv/bin/python3 scripts/test-rollout.py' \
+	'bash test-var-override.sh'
+
+# Suites run in parallel (one per CPU; JOBS=1 for serial order); each failure prints its full output. The
+# TEST_SPLIT suites, the slowest, run one process per test method.
+TEST_SPLIT := test-laptop-migration.py test-workstation-audit.py test-ansible-input-guards.py
+
 test-scripts: .venv
-	bash scripts/test-hooks-security.sh
-	.venv/bin/python3 scripts/test-config-parser.py
-	.venv/bin/python3 scripts/test-pre-push.py
-	.venv/bin/python3 scripts/test-vault-stub.py
-	.venv/bin/python3 scripts/test-workflow-guards.py
-	.venv/bin/python3 scripts/test-pinned-git.py
-	.venv/bin/python3 scripts/test-auto-updates.py
-	.venv/bin/python3 scripts/test-hook-baselines.py
-	.venv/bin/python3 scripts/test-commit-message.py
-	.venv/bin/python3 scripts/test-bootstrap-hooks.py
-	.venv/bin/python3 scripts/test-aerospace-terminal.py
-	.venv/bin/python3 scripts/test-audit-policy.py
-	.venv/bin/python3 scripts/test-brew-update.py
-	.venv/bin/python3 scripts/test-chrony-template.py
-	.venv/bin/python3 scripts/test-kernel-cmdline.py
-	.venv/bin/python3 scripts/test-podman-distrobox.py
-	.venv/bin/python3 scripts/test-ssh-known-hosts.py
-	.venv/bin/python3 scripts/test-sshd-template.py
-	.venv/bin/python3 scripts/test-sysctl-template.py
-	.venv/bin/python3 scripts/test-rendered-configs.py
-	.venv/bin/python3 scripts/test-module-args.py
-	.venv/bin/python3 scripts/test-pam-faillock-debian.py
-	.venv/bin/python3 scripts/test-critical-assertions.py
-	.venv/bin/python3 scripts/test-claude-settings-merge.py
-	.venv/bin/python3 scripts/test-agent-trust.py
-	.venv/bin/python3 scripts/test-smoke-test.py
-	.venv/bin/python3 scripts/test-workstation-audit.py
-	.venv/bin/python3 scripts/test-go-checksum.py
-	.venv/bin/python3 scripts/test-laptop-migration.py
-	.venv/bin/python3 scripts/test-claude-privacy.py
-	.venv/bin/python3 scripts/test-ansible-input-guards.py
-	.venv/bin/python3 scripts/test-usb-add.py
-	.venv/bin/python3 scripts/test-vault-import.py
-	.venv/bin/python3 scripts/test-collection-source-verifier.py
-	.venv/bin/python3 scripts/test-rollout.py
-	bash test-var-override.sh
+	.venv/bin/python3 scripts/run-tests.py $(addprefix --split ,$(TEST_SPLIT)) -- $(TEST_SCRIPTS)
+
+# Local pre-commit gate: lint, syntax-check, check-vars-sync and test-scripts side by side.
+gate: .venv
+	$(MAKE) --no-print-directory -j4 --output-sync=target lint syntax-check check-vars-sync test-scripts
 
 # Regression checks for the pinned secret scanner configuration.
 test-gitleaks:

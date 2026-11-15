@@ -93,6 +93,15 @@ claude_retired_deny:
 
 claude_enable_all_project_mcp_servers: false  # true = auto-trust all project-local MCP servers; false = prompt (more secure)
 
+# Session placement (read by the session launcher, claude-skills/skills/sessions): which Claude sessions run on this
+# machine. role '' (default) writes no file, so nothing is restricted. role work|personal; profiles = launcher
+# profiles that run here (work laptop: [work]; personal machine: [personal, personal2]); either = sessions that can run
+# on either machine, keyed by the launcher name without its profile prefix, with the role that runs them now (flip one
+# value, apply on both machines). Same either map on every machine.
+claude_machine_role: ''
+claude_machine_profiles: []
+claude_session_either: {}
+
 claude_queue_enabled: false
 
 # Session orchestrator at boot (Linux): a systemd user unit runs the claude-skills sessions launcher, which starts the

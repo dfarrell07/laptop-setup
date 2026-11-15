@@ -425,6 +425,79 @@ class MigrationTests(unittest.TestCase):
                          roles=['antigravity'])
             self.assertFalse((Path(name) / '.gemini').exists())
 
+    def test_session_placement_file_and_validation(self):
+        tasks = yaml.safe_load((ROOT / 'roles/claude/tasks/main.yml').read_text())
+        names = ['Validate session placement settings', 'Create the session launcher config directory',
+                 'Write the session placement file the launcher reads',
+                 'Remove the session placement file when placement is off']
+        selected = [t for t in tasks if t.get('name') in names]
+        self.assertEqual(len(selected), 4)
+        with tempfile.TemporaryDirectory() as name:
+            base = {'ansible_facts': {'user_dir': name}, 'ansible_managed': 'test'}
+            placement = Path(name) / '.config/claude-sessions/machine'
+            run_play(Path(name), tasks=selected, variables={**base, 'claude_machine_role': 'work',
+                     'claude_machine_profiles': ['work'], 'claude_session_either': {'promotion': 'personal',
+                                                                                   'evpn-7504': 'work'}})
+            lines = placement.read_text().splitlines()
+            self.assertIn('role=work', lines)
+            self.assertIn('profiles=work', lines)
+            either = next(line for line in lines if line.startswith('either='))
+            self.assertEqual(sorted(either[len('either='):].split()), ['evpn-7504:work', 'promotion:personal'])
+            run_play(Path(name), tasks=selected, variables={**base, 'claude_machine_role': '',
+                     'claude_machine_profiles': [], 'claude_session_either': {}})
+            self.assertFalse(placement.exists())  # placement off: the launcher is unrestricted
+            with self.assertRaisesRegex(AssertionError, 'claude_session_either a map'):
+                run_play(Path(name), tasks=selected, variables={**base, 'claude_machine_role': 'work',
+                         'claude_machine_profiles': ['work'], 'claude_session_either': {'x': 'mac'}})
+
+    def test_smoke_codex_work_login(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('# Work Codex login (work profile)')
+        end = source.index('  unset _codex_work\nfi\n') + len('  unset _codex_work\nfi\n')
+        for status, profile, expected in [(0, 'work', 'codex-work-login PASS'), (1, 'work', 'codex-work-login FAIL'),
+                                          (1, 'personal', 'codex-work-login PASS')]:
+            with self.subTest(status=status, profile=profile):
+                script = ('record() { printf "%s %s\\n" "$1" "$2"; }; _codex_enabled=true; CONTAINER=; _codex_work=; '
+                          f'profile={profile}; codex() {{ [ "$CODEX_HOME" = "$HOME/.codex" ] || return 9; return {status}; }}; '
+                          'export -f codex;\n' + source[start:end])
+                result = subprocess.run(['bash', '-c', script], capture_output=True, text=True, timeout=30)
+                self.assertEqual(result.stdout.strip(), expected, result.stderr)
+
+    def test_smoke_reads_config_values_before_dropping_the_config_path(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('_codex_work=$(awk')
+        end = source.index('unset _cfg', start)
+        with tempfile.TemporaryDirectory() as name:
+            config = Path(name) / 'config.yml'
+            config.write_text("codex_work_config_dir: '/x/work home'   # custom\npackages_user_updates_enabled: false\n")
+            result = subprocess.run(['bash', '-c', f'_cfg={config}\n' + source[start:end]
+                                     + 'printf "%s|%s" "$_codex_work" "$_user_updates_off"'],
+                                    capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.stdout, '/x/work home|true', result.stderr)
+
+    def test_smoke_session_placement_flags_misplaced_sessions(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('# Session placement (claude role')
+        end = source.index('unset _placement _launcher _misplaced')
+        for listing, expected in [('personal-startups running misplaced /x\nwork-evpn running /y\n',
+                                   'claude-session-placement FAIL sessions on the wrong machine: personal-startups'),
+                                  ('work-evpn running /y\n', 'claude-session-placement PASS'),
+                                  ('x running misplaced /a\n" ; exit 1 ; printf "', 'claude-session-placement WARN')]:
+            with self.subTest(expected=expected), tempfile.TemporaryDirectory() as name:
+                home = Path(name)
+                (home / '.config/claude-sessions').mkdir(parents=True)
+                (home / '.config/claude-sessions/machine').write_text('role=work\n')
+                launcher = home / 'src/owner/claude-skills/skills/sessions/scripts/session.sh'
+                launcher.parent.mkdir(parents=True)
+                launcher.write_text(f'printf "{listing}"\n')
+                script = ('record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; }; CONTAINER=;\n'
+                          + source[start:end])
+                result = subprocess.run(['bash', '-c', script], env=dict(os.environ, HOME=name),
+                                        capture_output=True, text=True, timeout=30)
+                self.assertTrue(result.stdout.startswith(expected), result.stdout + result.stderr)
+                self.assertNotIn('work-evpn', result.stdout)
+                self.assertNotIn('misplaced /a', result.stdout)
+
     def test_claude_baseline_scopes_plugins_and_preserves_cli_preferences(self):
         production = yaml.safe_load((ROOT / 'roles/claude/tasks/main.yml').read_text())
         selected = [task for task in production if task.get('name') in [

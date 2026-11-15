@@ -558,6 +558,43 @@
     - is_linux
     - not (system_is_container)  # files do not exist in containers (deploy was skipped)
 
+- name: Validate session placement settings
+  ansible.builtin.assert:
+    that:
+      - claude_machine_role in ['', 'work', 'personal']
+      - claude_machine_profiles is sequence and claude_machine_profiles is not string
+      - claude_machine_profiles | difference(['work', 'personal', 'personal2']) | length == 0
+      - claude_session_either is mapping
+      - claude_session_either.keys() | reject('match', '^[A-Za-z0-9_-]+$') | list | length == 0
+      - claude_session_either.values() | difference(['work', 'personal']) | length == 0
+    fail_msg: >-
+      claude_machine_role must be '', work or personal; claude_machine_profiles a list of work, personal, personal2;
+      claude_session_either a map of session names (letters, digits, '_', '-') to work or personal.
+
+- name: Create the session launcher config directory
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.config/claude-sessions"
+    state: directory
+    mode: "0755"
+  when: claude_machine_role | length > 0
+
+- name: Write the session placement file the launcher reads
+  ansible.builtin.copy:
+    dest: "{{ ansible_facts['user_dir'] }}/.config/claude-sessions/machine"
+    mode: "0644"
+    content: |
+      # {{ ansible_managed }} (roles/claude: claude_machine_role, claude_machine_profiles, claude_session_either)
+      role={{ claude_machine_role }}
+      profiles={{ claude_machine_profiles | join(' ') }}
+      either={% for name, role in claude_session_either | dictsort %}{{ name }}:{{ role }}{{ ' ' if not loop.last else '' }}{% endfor %}
+  when: claude_machine_role | length > 0
+
+- name: Remove the session placement file when placement is off
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.config/claude-sessions/machine"
+    state: absent
+  when: claude_machine_role | length == 0
+
 - name: Remove task queue poller script (when disabled)
   ansible.builtin.file:
     path: "{{ claude_queue_poller_path }}"

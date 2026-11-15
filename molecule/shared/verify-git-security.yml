@@ -140,7 +140,7 @@
       value: >-
         !{{ (('/usr/local' if ansible_facts['architecture'] == 'x86_64' else '/opt/homebrew') ~ '/bin/')
             if ansible_facts['system'] == 'Darwin' else '' }}gh auth git-credential
-    - {key: 'url.ssh://git@github.com/.pushinsteadof', value: 'https://github.com/'}
+    - {key: alias.pushsk, value: '!git -c url.ssh://git@github.com/.pushInsteadOf=https://github.com/ push'}
   loop_control:
     label: "{{ item.key }}"
 
