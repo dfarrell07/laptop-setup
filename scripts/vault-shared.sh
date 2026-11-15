@@ -121,9 +121,18 @@ sync_clone() {
 }
 seen() { mkdir -p "$CONF" && printf '%s\n' "$1" >"$LAST_SEEN" && chmod 600 "$LAST_SEEN"; }
 no_rollback() {
-  local last
+  local last answer
   last=$(cat "$LAST_SEEN" 2>/dev/null || true)
-  [[ -z $last ]] && return 0
+  if [[ -z $last ]]; then
+    # A machine with no record yet cannot tell a rolled-back history from the real one: show what it would trust.
+    printf 'The shared vault on GitHub is at:\n'
+    git -C "$S" log -1 --format='  %h %ci %s' "$1"
+    [[ -z ${VAULT_JOIN_CONFIRMED:-} ]] || return 0
+    [[ -t 0 ]] || die "confirm the newest vault change in a terminal (make vault-join)"
+    read -r -p "Is that the newest change you made to the vault? [y/N] " answer
+    [[ $answer == [yY] ]] || die "not confirmed: nothing was used"
+    return 0
+  fi
   git -C "$S" merge-base --is-ancestor "$last" "$1" 2>/dev/null ||
     die "GitHub's laptop-secrets no longer contains $last, the last commit this machine accepted: its history was rewritten (a rollback could bring back a removed key). Find out why before using it; to accept it anyway: rm $LAST_SEEN"
 }
@@ -138,7 +147,8 @@ ensure_signers() {
   local keys='' from='' pins
   # Optional pin (config.yml secrets_signing_fingerprints: "SHA256:... SHA256:..."; public values): only keys with
   # these fingerprints are ever trusted, from any source.
-  pins=${VAULT_SIGNING_FINGERPRINTS:-$(awk -F': *' '/^secrets_signing_fingerprints:/ { v=$2; sub(/#.*/, "", v); gsub(/[\047"]/, "", v); print v; exit }' config.yml 2>/dev/null || true)}
+  pins=${VAULT_SIGNING_FINGERPRINTS:-$(sed -n 's/^secrets_signing_fingerprints:[[:space:]]*//p' config.yml 2>/dev/null | head -n 1 |
+    sed 's/[[:space:]]#.*//; s/^!unsafe[[:space:]]*//' | tr -d "\"'" || true)}
   # Rebuilt every run from allowed_signers (managed by make dotfiles), so a retired key stops being trusted.
   if [[ -s $HOME/.config/git/allowed_signers ]]; then
     keys=$(grep -Ev '^[[:space:]]*(#|$)' "$HOME/.config/git/allowed_signers" | grep -oE '(sk-)?ssh-[a-z0-9@.-]+ [A-Za-z0-9+/=]+' || true)
@@ -177,7 +187,7 @@ verify_all() {  # every commit reachable from $1 must be signed by an allowed si
   for c in $(git -C "$S" rev-list "$1"); do
     grep -qxF "$c" "$VERIFIED" && continue
     # An SSH signature only: verify-commit would also accept an OpenPGP one from any key gpg trusts.
-    git -C "$S" cat-file commit "$c" | grep -q '^gpgsig -----BEGIN SSH SIGNATURE-----' &&
+    git -C "$S" cat-file commit "$c" | sed '/^$/q' | grep -q '^gpgsig -----BEGIN SSH SIGNATURE-----' &&
       git -C "$S" -c gpg.ssh.allowedSignersFile="$SIGNERS" verify-commit "$c" >/dev/null 2>&1 ||
       die "commit $c in $S is not signed by your signing key: nothing was merged or used. Inspect it (git -C $S show --show-signature $c)"
     printf '%s\n' "$c" >>"$VERIFIED"
@@ -204,9 +214,11 @@ txn_begin() {
   trap txn_rollback EXIT
   trap 'exit 130' INT TERM
 }
-txn_end() { trap - EXIT INT TERM; rm -rf "$TXN_DIR"; }
+txn_end() { trap - EXIT INT TERM; [[ -z ${TXN_DIR:-} ]] || rm -rf "$TXN_DIR"; TXN_DIR=''; }
 txn_rollback() {
   local rc=$? f
+  trap '' INT TERM  # a second Ctrl-C must not stop the restore halfway
+  [[ -z ${TXN_UNDO:-} ]] || "$TXN_UNDO"
   for f in vault.yml vault-pass.age recipients; do
     if [[ -f $TXN_DIR/$f ]]; then cp -p "$TXN_DIR/$f" "$S/$f"; else rm -f "$S/$f"; fi
   done
@@ -214,7 +226,6 @@ txn_rollback() {
   elif git -C "$S" rev-parse -q --verify HEAD >/dev/null 2>&1; then git -C "$S" update-ref -d HEAD 2>/dev/null || true; fi
   git -C "$S" reset -q 2>/dev/null || true
   rm -rf "$TXN_DIR"
-  [[ -z ${TXN_UNDO:-} ]] || "$TXN_UNDO"
   warn "stopped before the change was pushed: the shared vault is as it was; run the command again"
   exit "$rc"
 }
@@ -229,6 +240,7 @@ commit_push() {
   git -C "$S" commit -q -s -S -m "$1" ||
     die "signed commit in $S failed (commit signing needs your SSH signing key: make dotfiles)"
   git -C "$S" push -q || die "push from $S failed (offline, or another machine pushed first): run the command again"
+  txn_end  # pushed: from here on nothing may roll the clone back
   seen "$(git -C "$S" rev-parse HEAD)"
   ok "committed and pushed: $1"
 }
@@ -472,7 +484,7 @@ cmd_edit() {
   [[ $(sha256sum "$S/vault.yml") != "$before" ]] || { ok "no change"; return 0; }
   # Keep the edited (still encrypted) vault aside: if the commit or push fails, the clone goes back to GitHub's state
   # and this copy holds the edit.
-  EDIT_KEEP=$CONF/vault.yml.unpushed
+  EDIT_KEEP=$CONF/vault.yml.unpushed.$(date +%Y%m%d%H%M%S)
   cp -p "$S/vault.yml" "$EDIT_KEEP" && chmod 600 "$EDIT_KEEP"
   local edited=$EDIT_KEEP
   cp -p "$S/vault.yml" "$edited.tmp" && git -C "$S" checkout -q -- vault.yml
