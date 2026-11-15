@@ -484,6 +484,18 @@ class SharedVault(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('not signed', result.stderr)
 
+    def test_a_key_limited_to_another_namespace_is_not_a_vault_signer(self):
+        a = self.init_a()
+        self.shared('a', a, 'add-key', RECIPIENT=self.keys['b'][1])
+        b = self.machine('b', None)
+        env_b = self.env('b', b)
+        (Path(env_b['HOME']) / '.config/git').mkdir(parents=True)
+        pub = (self.tmp / 'signing.pub').read_text().strip()
+        (Path(env_b['HOME']) / '.config/git/allowed_signers').write_text(f't@t namespaces="file" {pub}\n')
+        result = self.shared('b', b, 'join', check=False, VAULT_ALLOWED_SIGNERS=str(self.tmp / 'signers-b'))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('no SSH signing key', result.stderr)
+
     def test_a_list_form_pin_is_refused(self):
         a = self.init_a()
         b = self.machine('b', None)
