@@ -343,7 +343,7 @@ else
   unset _acli_out
 fi
 unset _acli_site
-# Agent CLI logins (personal Claude homes, personal Codex): logging in is an interactive owner step, so WARN with the
+# Agent CLI logins (personal Claude homes, extra Claude dirs, personal Codex): logging in is an interactive owner step, so WARN with the
 # command and never start one. Each Claude home is checked as cper/cper2 run it: CLAUDE_CONFIG_DIR set to that home
 # (on macOS the Keychain item depends on it) and the backend and token variables _claude_personal clears unset, so an
 # exported API key cannot pass for a login. The status commands print account details (discarded) and may refresh
@@ -362,6 +362,11 @@ else
   _home_disp() { if [[ "$1" == "$HOME"/* ]]; then printf "%s/%q" "~" "${1#"$HOME"/}"; else printf '%q' "$1"; fi; }
   _claude_homes=("${_claude_home:-$HOME/.claude}")
   $_claude_home2_off || _claude_homes+=("${_claude_home2:-$HOME/.claude-per2}")
+  # config.yml's claude_extra_config_dirs (~/.claude-<name>, as the play asserts), except cwork's Vertex home
+  while IFS= read -r _cd; do
+    [[ "$_cd" == "$HOME/.claude-"* && "${_cd#"$HOME/.claude-"}" =~ ^[a-z0-9][a-z0-9-]*$ && "$_cd" != "$HOME/.claude-work" \
+       && " ${_claude_homes[*]} " != *" $_cd "* ]] && _claude_homes+=("$_cd")
+  done <<<"${_claude_extra_dirs:-}"
   if command -v claude &>/dev/null; then
     for _cd in "${_claude_homes[@]}"; do
       _cd=${_cd/#\~/$HOME}
