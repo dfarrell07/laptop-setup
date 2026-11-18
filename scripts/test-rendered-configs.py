@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 
 import yaml
@@ -56,7 +57,8 @@ CASES = {
                                                            'containers_macos_machine_name': "dev vm's"}),
     # podman from PATH (a stub); the hold file path is replaced per test
     'podman_ensure': ('roles/containers/templates/podman-machine-ensure.sh.j2', {
-        'containers_podman_bin': 'podman', 'containers_macos_machine_hold_file': '/HOLD-FILE-PLACEHOLDER'}),
+        'containers_podman_bin': 'podman', 'containers_macos_machine_hold_file': '/HOLD-FILE-PLACEHOLDER',
+        'containers_macos_machine_trim_stamp': '/TRIM-STAMP-PLACEHOLDER'}),
     'ssh_agent_plist': ('roles/dotfiles/templates/ssh-agent.plist.j2', {'dotfiles_homebrew_prefix': '/opt/homebrew'}),
     'ssh_auth_sock_plist': ('roles/dotfiles/templates/ssh-auth-sock.plist.j2', {}),
 }
@@ -670,7 +672,7 @@ class RenderedConfigTests(unittest.TestCase):
                 result = subprocess.run(['plutil', '-lint', str(self.out / name)], capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_podman_machine_ensure_starts_only_a_stopped_provisioned_machine(self):
+    def test_podman_machine_ensure_starts_a_stopped_machine_and_trims_a_running_one(self):
         with tempfile.TemporaryDirectory() as directory:
             d = Path(directory)
             (d / 'bin').mkdir()
@@ -681,21 +683,35 @@ class RenderedConfigTests(unittest.TestCase):
                 '  "machine inspect") [ -n "${STATE:-}" ] || exit 125\n'
                 '    case "$4" in *State*) echo "$STATE" ;; *LastUp*) echo "$LASTUP" ;; esac ;;\n'
                 '  "machine start") echo "start $3" >> "$LOG" ;;\n'
+                '  "machine ssh") echo "ssh $3 $4 sock=${SSH_AUTH_SOCK:-}" >> "$LOG"; exit "${SSH_RC:-0}" ;;\n'
                 '  *) exit 2 ;;\n'
                 'esac\n')
             (d / 'bin/podman').chmod(0o755)
             hold = d / 'hold'
             script = d / 'ensure'
-            script.write_text(self.read('podman_ensure').replace('/HOLD-FILE-PLACEHOLDER', str(hold)))
+            stamp = d / 'trimmed'
+            script.write_text(self.read('podman_ensure').replace('/HOLD-FILE-PLACEHOLDER', str(hold))
+                              .replace('/TRIM-STAMP-PLACEHOLDER', str(stamp)))
             log = d / 'log'
 
             def run(**state):
                 log.write_text('')
                 result = subprocess.run(['sh', str(script)], capture_output=True, text=True, timeout=30,
-                                        env={'PATH': f'{d}/bin:/usr/bin:/bin', 'LOG': str(log), **state})
+                                        env={'PATH': f'{d}/bin:/usr/bin:/bin', 'LOG': str(log),
+                                             'SSH_AUTH_SOCK': '/agent.sock', **state})
                 return result.returncode, result.stdout, log.read_text()
             booted = '2026-11-14 09:00:00.000000 +0000 UTC'
-            self.assertEqual(run(STATE='running', LASTUP=booted), (0, '', ''))
+            trimmed = 'ssh podman-machine-default sudo fstrim -a sock=\n'  # without the agent's socket
+            self.assertEqual(run(STATE='running', LASTUP=booted), (0, '', trimmed))  # no stamp yet: trims
+            self.assertTrue(stamp.exists())
+            self.assertEqual(run(STATE='running', LASTUP=booted), (0, '', ''))  # trimmed within the hour
+            os.utime(stamp, (time.time() - 2 * 3600,) * 2)
+            self.assertEqual(run(STATE='running', LASTUP=booted), (0, '', trimmed))  # stamp older than an hour
+            stamp.unlink()
+            rc, out, log_text = run(STATE='running', LASTUP=booted, SSH_RC='1')
+            self.assertEqual((rc, log_text), (0, trimmed))
+            self.assertTrue(out.endswith(' trimming podman-machine-default failed\n'), out)
+            self.assertTrue(stamp.exists())  # a failed trim waits for the next interval, not every check
             rc, out, started = run(STATE='stopped', LASTUP=booted)
             self.assertEqual((rc, started), (0, 'start podman-machine-default\n'))
             self.assertTrue(out.endswith(' starting podman-machine-default\n'), out)
@@ -704,6 +720,8 @@ class RenderedConfigTests(unittest.TestCase):
             self.assertEqual(run(), (0, '', ''))  # no machine yet
             hold.write_text('')
             self.assertEqual(run(STATE='stopped', LASTUP=booted), (0, '', ''))
+            stamp.unlink()
+            self.assertEqual(run(STATE='running', LASTUP=booted), (0, '', ''))  # on hold: left alone, not trimmed
 
     def test_audit_rules_set_backlog_before_rules(self):
         lines = [l for l in self.read('audit').splitlines() if l and not l.startswith('#')]

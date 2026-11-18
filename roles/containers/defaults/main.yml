@@ -29,6 +29,10 @@ containers_macos_docker_shim: true
 containers_macos_machine_check_seconds: 300
 containers_macos_machine_hold_file: "{{ ansible_facts['user_dir'] }}/.local/state/podman-machine.hold"
 containers_macos_machine_ensure_script: "{{ ansible_facts['user_dir'] }}/.local/libexec/podman-machine-ensure"
+# The VM's disk file grows as images are written and never shrinks on its own (Fedora CoreOS trims weekly), so
+# the same check also trims a running machine's filesystem at most this often, returning freed space to macOS. 0: off.
+containers_macos_machine_trim_hours: 1
+containers_macos_machine_trim_stamp: "{{ ansible_facts['user_dir'] }}/.local/state/podman-machine.trimmed"
 containers_podman_bin: "{{ dotfiles_homebrew_prefix | default('/opt/homebrew') }}/bin/podman"
 
 system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml

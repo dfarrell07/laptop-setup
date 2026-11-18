@@ -1,12 +1,25 @@
 #!/bin/sh
 # {{ ansible_managed }}
 # Run by the podman machine LaunchAgent at login and every {{ containers_macos_machine_check_seconds | int }}s: starts the
-# machine only when it is stopped, was provisioned (booted once by the play) and is not on hold. Logs only when it acts.
-# Keep it stopped on purpose: touch {{ containers_macos_machine_hold_file }}
+# machine only when it is stopped, was provisioned (booted once by the play) and is not on hold, and trims a running
+# one's disk (containers_macos_machine_trim_hours). Logs only when it starts it or a trim fails.
+# Keep it stopped (and untrimmed) on purpose: touch {{ containers_macos_machine_hold_file }}
 podman={{ containers_podman_bin | quote }}
 name={{ containers_macos_machine_name | quote }}
 [ -e {{ containers_macos_machine_hold_file | quote }} ] && exit 0
 state=$("$podman" machine inspect --format '{{ '{{' }}.State{{ '}}' }}' "$name" 2>/dev/null) || exit 0  # no machine yet: the play creates it
+if [ "$state" = running ]; then
+  # At most every {{ containers_macos_machine_trim_hours | int }}h (the stamp's age). No SSH_AUTH_SOCK: podman uses its own key, not the agent,
+  # whose confirm prompt refuses a headless request.
+  hours={{ containers_macos_machine_trim_hours | int }}
+  stamp={{ containers_macos_machine_trim_stamp | quote }}
+  if [ "$hours" -gt 0 ] && [ -z "$(find "$stamp" -mmin -$((hours * 60)) 2>/dev/null)" ]; then
+    touch "$stamp"
+    SSH_AUTH_SOCK= "$podman" machine ssh "$name" 'sudo fstrim -a' >/dev/null 2>&1 ||
+      echo "$(date '+%Y-%m-%d %H:%M:%S') trimming $name failed"
+  fi
+  exit 0
+fi
 [ "$state" = stopped ] || exit 0
 # never booted: the first boot provisions the VM and must run under the play, which waits for it
 case "$("$podman" machine inspect --format '{{ '{{' }}.LastUp{{ '}}' }}' "$name" 2>/dev/null)" in ''|0001-01-01*) exit 0 ;; esac
