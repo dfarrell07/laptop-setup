@@ -4,4 +4,11 @@
 
 ## Claude-specific
 
-- In `rm`, use literal absolute paths: `$VAR`, `./*` and subdirectory-glob targets always prompt.
+- Bypass mode still asks before any removal Claude Code cannot check, even for a command that deletes
+  nothing. To avoid the prompt:
+  - In `rm`, use literal absolute paths: `$VAR`, `./*` and subdirectory-glob targets always prompt.
+  - Run `rm` as its own top-level command, never inside an `sh -c`, `bash -c`, `zsh -c` or
+    `podman run ... sh -c` script.
+  - Write a program longer than a few lines to a scratchpad file and run that file, not a heredoc. Use
+    only syntax that bash and zsh read the same way, with no zsh-only nested expansions such as
+    `${${x#a}%b}`.
