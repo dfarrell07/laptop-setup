@@ -210,6 +210,10 @@ The launchers pass `--dangerously-skip-permissions`; everything else relies on `
   explicit `--permission-mode` is treated as deliberate. A session's footer shows `bypass permissions on`.
 - **Deny rules still apply in bypass mode.** A matching rule refuses outright rather than asking; hand-written rules
   from before the agents chunk (`rm -rf /*`, `curl *`, ...) are removed by `claude_retired_deny` on the next apply.
+- **The built-in removal check asks even in bypass mode.** It fires on `rm` with a `$VAR` or glob target, `rm`
+  inside an `sh -c` script, and any command Claude Code cannot parse the way the shell will (most often a heredoc),
+  even one that deletes nothing. Permission rules cannot allow it. The managed `CLAUDE.md` tells agents
+  how to avoid it. The denial text in a session's transcript ends with `What was flagged:` and the reason.
 
 Timers or sessions that fail right after a crash or power loss with `object file .git/objects/... is empty`: the
 unclean shutdown left zero-byte loose objects, and `git add` treats them as already stored. Back up `.git`, move the
