@@ -56,6 +56,7 @@
   changed_when: _tmp_remount_result.rc == 0
   when:
     - not system_is_container  # noexec on /tmp breaks Ansible temp-dir creation in containers
+    - system_tmp_opts.rc == 0  # /tmp is its own mount; on the root filesystem (RHEL default) there is nothing to remount
     - >-
       'nosuid' not in (system_tmp_opts.stdout | default('')) or
       'nodev' not in (system_tmp_opts.stdout | default('')) or
@@ -70,7 +71,15 @@
     'nodev' not in _tmp_verify.stdout or
     (system_tmp_noexec | bool and not csb_rhel and 'noexec' not in _tmp_verify.stdout)
   changed_when: false
-  when: not system_is_container
+  # Fedora mounts /tmp as tmpfs, so a missing mount there (tmp.mount masked) fails this check.
+  when: not system_is_container and (system_tmp_opts.rc == 0 or is_fedora)
+
+- name: Warn that /tmp is not a separate mount
+  ansible.builtin.debug:
+    msg: >-
+      /tmp is on the root filesystem, so nosuid/nodev cannot be applied to it alone. The tmp.mount drop-in
+      takes effect only once tmp.mount is active (systemctl unmask tmp.mount; systemctl enable tmp.mount; reboot).
+  when: not system_is_container and system_tmp_opts.rc != 0 and not is_fedora
 
 - name: Warn that system_tmp_noexec may break Play 2 become tasks
   ansible.builtin.debug:
