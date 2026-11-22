@@ -107,9 +107,6 @@ CROSS_ROLE_MIRROR_KEYS = {
     "repo_mullvad": [
         REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
     ],
-    "repo_docker_ce": [
-        REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
-    ],
     "repo_redhat": [
         REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
     ],
