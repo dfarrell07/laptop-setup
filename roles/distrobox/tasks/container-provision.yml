@@ -310,6 +310,9 @@
 # host install (the packages role puts oc/kubectl in /usr/local/bin) and break it once this
 # container is removed. A real file in ~/.local/bin is never overwritten either; only an existing
 # distrobox wrapper (marked '# distrobox_binary') is refreshed.
+# A tool built into the shared $HOME (golangci-lint in ~/go/bin, on the host PATH via dotfiles) needs a
+# wrapper only where the host cannot run it (fapolicyd, a newer container glibc); otherwise a stale
+# wrapper is deleted. The probe is the same `version --short` the install guard above uses.
 - name: Export container tools to host
   ansible.builtin.shell:
     cmd: |
@@ -317,6 +320,12 @@
       dest="$HOME/.local/bin/$TOOL"
       if [ -e "/run/host/usr/local/bin/$TOOL" ] || [ -e "/run/host/usr/bin/$TOOL" ]; then
         echo "skip: host already provides $TOOL"
+      elif [ "${SRC#"$HOME"/}" != "$SRC" ] && distrobox-host-exec "$SRC" version --short >/dev/null 2>&1; then
+        if [ -e "$dest" ] && grep -q '^# distrobox_binary' "$dest"; then
+          distrobox-export --bin "$SRC" --export-path "$HOME/.local/bin" --delete ||
+            { echo "could not delete the stale wrapper $dest" >&2; exit 1; }
+        fi
+        echo "skip: the host runs $SRC itself"
       elif [ -e "$dest" ] && ! grep -q '^# distrobox_binary' "$dest"; then
         echo "skip: $dest is not a distrobox wrapper"
       else
