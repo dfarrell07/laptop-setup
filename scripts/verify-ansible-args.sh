@@ -308,9 +308,10 @@ _keep_ok_hosts=""
 _keep_result_format=""
 [[ "${ANSIBLE_DISPLAY_OK_HOSTS:-}" =~ ^(true|false)$ ]] && _keep_ok_hosts="$ANSIBLE_DISPLAY_OK_HOSTS"
 [[ "${ANSIBLE_CALLBACK_RESULT_FORMAT:-}" =~ ^(json|yaml)$ ]] && _keep_result_format="$ANSIBLE_CALLBACK_RESULT_FORMAT"
-while IFS= read -r _v; do
+# Bash builtin expansion, not compgen | grep: PATH is still the caller's here, and a shadowing grep could keep them.
+for _v in "${!ANSIBLE_@}"; do
     unset "$_v"
-done < <(compgen -e | grep '^ANSIBLE_' || true)
+done
 [[ -z "$_keep_ok_hosts" ]] || export ANSIBLE_DISPLAY_OK_HOSTS="$_keep_ok_hosts"
 [[ -z "$_keep_result_format" ]] || export ANSIBLE_CALLBACK_RESULT_FORMAT="$_keep_result_format"
 unset _v _keep_ok_hosts _keep_result_format
@@ -460,6 +461,7 @@ export ANSIBLE_BECOME_USER=root  # pin become_user — ANSIBLE_BECOME_USER env v
 # (--syntax-check) where provisioning tasks are not executed. Integration tests
 # use the explicit CI exception after independent Galaxy verification. Production
 # provisioning requires the key.
+unset SKIP_GPG_VERIFY  # only this wrapper may set it (below); an inherited one would soften verify-collections.sh
 _is_syntax_only=false
 for _arg in "${args[@]}"; do
     [[ "$_arg" == '--syntax-check' ]] && _is_syntax_only=true && break
