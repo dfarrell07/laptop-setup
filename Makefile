@@ -518,6 +518,7 @@ TEST_SCRIPTS := \
 	'.venv/bin/python3 scripts/test-pam-faillock-debian.py' \
 	'.venv/bin/python3 scripts/test-critical-assertions.py' \
 	'.venv/bin/python3 scripts/test-claude-settings-merge.py' \
+	'.venv/bin/python3 scripts/test-claude-file-heredoc-guard.py' \
 	'.venv/bin/python3 scripts/test-claude-project-modes.py' \
 	'.venv/bin/python3 scripts/test-agent-trust.py' \
 	'.venv/bin/python3 scripts/test-smoke-test.py' \

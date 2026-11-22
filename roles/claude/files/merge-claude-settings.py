@@ -8,7 +8,8 @@ Prints "changed" or "unchanged". Exits non-zero (and leaves the file alone) when
 the existing file or the policy is not a JSON object.
 
 Merge rules: user keys are kept; permissions.deny is the de-duplicated union
-(policy entries first, retired policy entries dropped); permissions.allow/ask stay the user's; every other policy
+(policy entries first, retired policy entries dropped); permissions.allow/ask stay the user's; hooks keep the user's
+entries and replace earlier managed ones (a hook running the same script as a policy hook); every other policy
 key (sandbox, enableAllProjectMcpServers, env keys) overrides
 the user's value, merging dictionaries recursively. --defaults (plugin declarations)
 only adds absent keys and absent marketplace or plugin entries, so a user's entry,
@@ -17,6 +18,7 @@ including a disabled plugin, is never changed. --retire names further deny entri
 """
 import json
 import os
+import shlex
 import sys
 import tempfile
 import time
@@ -63,10 +65,41 @@ def fill_missing(base, defaults):
     return result
 
 
+def hook_script(hook):
+    """The script a hook command runs (its last word), or None (not a dict, empty, unbalanced quotes: the user's)."""
+    try:
+        return shlex.split(hook.get('command', ''))[-1]
+    except (AttributeError, IndexError, ValueError):
+        return None
+
+
+def merge_hooks(current, policy_hooks):
+    """Per event: the user's matcher groups without earlier copies of the policy's hooks (same script), then the
+    policy's groups. A group left with no hooks is dropped; anything else is kept as it is."""
+    result = dict(current) if isinstance(current, dict) else {}
+    for event, groups in policy_hooks.items():
+        managed = {hook_script(h) for g in groups for h in g.get('hooks', [])} - {None}
+        existing = result.get(event)
+        existing = [existing] if isinstance(existing, dict) else existing  # one group written without its list
+        kept = []
+        for group in existing if isinstance(existing, list) else []:
+            if isinstance(group, dict) and isinstance(group.get('hooks'), list) and group['hooks']:
+                hooks = [h for h in group['hooks'] if hook_script(h) not in managed]
+                if not hooks:
+                    continue
+                group = dict(group, hooks=hooks)
+            kept.append(group)
+        result[event] = kept + list(groups)
+    return result
+
+
 def merge(existing, policy, retire=()):
     policy = dict(policy)
     perms = policy.pop('permissions', {})
+    hooks = policy.pop('hooks', None)
     merged = deep_merge(existing, policy)
+    if hooks is not None:
+        merged['hooks'] = merge_hooks(existing.get('hooks'), hooks)
     current = merged.get('permissions', {})
     if not isinstance(current, dict):
         fail('existing "permissions" is not an object; refusing to overwrite it')

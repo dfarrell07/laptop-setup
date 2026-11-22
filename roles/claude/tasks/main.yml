@@ -268,6 +268,19 @@
     that: claude_cross_session_inbound in ['accept', 'hold', 'refuse']
     fail_msg: "claude_cross_session_inbound={{ claude_cross_session_inbound }} must be accept, hold or refuse."
 
+- name: Ensure the Claude hook directory exists
+  ansible.builtin.file:
+    path: "{{ claude_hook_dir }}"
+    state: directory
+    mode: "0700"
+
+# Writing a file through a Bash heredoc can stall an agent on a removal-check prompt that bypass mode cannot answer
+- name: Deploy the file-heredoc guard hook
+  ansible.builtin.copy:
+    src: claude-file-heredoc-guard.py
+    dest: "{{ claude_hook_dir }}/file-heredoc-guard.py"
+    mode: "0644"
+
 # The helper runs on the target with the target's Python (inline via -c: the controller path
 # ansible_playbook_python does not exist inside containers or on remote hosts).
 - name: Merge security policy into instance settings.json

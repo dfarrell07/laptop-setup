@@ -163,6 +163,28 @@ class MergeTests(unittest.TestCase):
         for bad in (['--retire', '{}'], ['--retire', 'not-json'], ['--retire', '["x", 1]'], ['--retire']):
             self.assertNotEqual(run(self.path, POLICY, *bad).returncode, 0, bad)
 
+    def test_hooks_keep_user_entries_and_replace_earlier_managed_ones(self):
+        guard = {'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': '/usr/bin/python3 -I /h/hooks/new.py'}]}
+        mine = {'matcher': 'Edit', 'hooks': [{'type': 'command', 'command': 'my-lint "unbalanced'}]}
+        neighbour = {'matcher': 'Edit', 'hooks': [{'type': 'command', 'command': '/h/hooks/my-own.sh'}]}  # same dir
+        old = {'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': 'python3 /h/hooks/new.py'}]}  # earlier copy
+        self.path.write_text(json.dumps({'hooks': {'PreToolUse': [mine, neighbour, old], 'Stop': [mine]}}))
+        policy = dict(POLICY, hooks={'PreToolUse': [guard]})
+        self.assertEqual(run(self.path, policy).returncode, 0)
+        self.assertEqual(self.load()['hooks'], {'PreToolUse': [mine, neighbour, guard], 'Stop': [mine]})
+        self.assertEqual(run(self.path, policy).stdout.strip(), 'unchanged')
+        # a user hook sharing a group with an earlier copy stays; odd entries stay as they are
+        shared = {'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': '/u/mine.sh'},
+                                               {'type': 'command', 'command': 'python3 /h/hooks/new.py'}]}
+        self.path.write_text(json.dumps({'hooks': {'PreToolUse': [shared, 'odd', {'matcher': 'x'}]}}))
+        self.assertEqual(run(self.path, policy).returncode, 0)
+        self.assertEqual(self.load()['hooks']['PreToolUse'], [
+            {'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': '/u/mine.sh'}]}, 'odd', {'matcher': 'x'}, guard])
+        for value, kept in [('oops', []), (None, []), (mine, [mine])]:  # a lone group dict is kept as a list
+            self.path.write_text(json.dumps({'hooks': {'PreToolUse': value}}))
+            self.assertEqual(run(self.path, policy).returncode, 0)
+            self.assertEqual(self.load()['hooks'], {'PreToolUse': kept + [guard]})
+
     def test_defaults_must_be_an_object(self):
         self.assertNotEqual(run(self.path, POLICY, '--defaults', '[]').returncode, 0)
         self.assertNotEqual(run(self.path, POLICY, '--defaults').returncode, 0)
