@@ -117,8 +117,9 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   `SSH_AUTH_SOCK` (and lose keys loaded in Apple's agent) until you log out and back in; new shells use the Homebrew agent.
   It writes `~/.zshenv` (the PATH for every zsh, including ssh remote commands, plus `KIND_EXPERIMENTAL_PROVIDER=podman`
   and `DOCKER_HOST` at the podman machine's API socket while it exists) and
-  `~/Library/LaunchAgents/<ssh-agent label>.env.plist`, which points launchd's `SSH_AUTH_SOCK` (GUI apps, launchd jobs)
-  at the Homebrew agent at each login. Undo: delete both, then `launchctl unsetenv SSH_AUTH_SOCK`.
+  `~/Library/LaunchAgents/<ssh-agent label>.env.plist`, which at each login points launchd's `SSH_AUTH_SOCK` (GUI apps,
+  launchd jobs) at the Homebrew agent and sets launchd's `PATH` from `~/.zshenv`. Undo: delete both, then
+  `launchctl unsetenv SSH_AUTH_SOCK` and `launchctl unsetenv PATH`.
 - **Undo:** run `make backup` BEFORE the chunk (an older backup predates earlier deploys), then restore the file from that
   `~/laptop-setup-backup-<timestamp>` directory. Replaced `.zshrc`, `.bashrc`, `.ssh/config`, `.config/git/config` and
   `.config/tmux/tmux.conf` also keep a copy beside them named `<file>.<pid>.<date>@<time>~`. Unmanaged git template hooks and
@@ -226,8 +227,11 @@ open until you are done. To undo:
   `/etc/containers/registries.conf` (it lists unqualified search registries) and `containers_enforce_fqin_override: false` (the default),
   the drop-in is skipped, `fqin-enforcement` is WARN and the command exits 1; that is expected. Set the override to `true` to enforce.
 - **macOS:** the chunk creates the podman machine VM (`containers_macos_machine_*`), starts it and loads
-  `~/Library/LaunchAgents/com.laptop-setup.podman-machine.plist`, which starts it at each login. Undo:
-  `launchctl bootout gui/$(id -u)/com.laptop-setup.podman-machine`, delete the plist, then `podman machine rm`. A VM
+  `~/Library/LaunchAgents/com.laptop-setup.podman-machine.plist`. Every 5 minutes it runs
+  `~/.local/libexec/podman-machine-ensure`, which starts a stopped machine unless `~/.local/state/podman-machine.hold`
+  exists (touch it before `podman machine stop` to keep the machine stopped) and trims a running machine's disk hourly.
+  Undo: `launchctl bootout gui/$(id -u)/com.laptop-setup.podman-machine`, delete the plist and the ensure script, then
+  `podman machine rm`. A VM
   whose first boot was interrupted lands in emergency mode: `podman machine rm -f`, then re-run the chunk.
 - **Undo:** if `distrobox` is enabled, remove it from `rollout_enable` as well (it requires `containers`; `make containers` refuses the
   config otherwise). Then set `containers_policy_enabled: false` and/or `containers_enforce_fqin: false` (and
