@@ -41,6 +41,7 @@ CASES = {
     'gitconfig_linux': ('roles/dotfiles/templates/gitconfig.j2', {'ansible_facts': {'system': 'Linux'}}),
     'gitconfig_darwin': ('roles/dotfiles/templates/gitconfig.j2', {'ansible_facts': {'system': 'Darwin'}}),
     'sway': ('roles/desktop/templates/sway.config.j2', {}),
+    'swaylock': ('roles/desktop/templates/swaylock.config.j2', {}),
     'i3': ('roles/desktop/templates/i3.config.j2', {}),
     'i3status': ('roles/desktop/templates/i3status.conf.j2', {}),
     'bar_status': ('roles/desktop/templates/i3status-bar.sh.j2', {}),
@@ -445,6 +446,19 @@ class RenderedConfigTests(unittest.TestCase):
             self.assertIn('"full_text":"CTR 2"', update)
             # pts/0 and pts/3: a second agent process on a terminal is the same session
             self.assertIn('"full_text":"AI 2"', update)
+
+    def test_sway_lock_and_idle_policy(self):
+        sway = self.read('sway')
+        for line in ('for_window [app_id=".*"] inhibit_idle fullscreen', 'for_window [class=".*"] inhibit_idle fullscreen'):
+            self.assertIn(line + '\n', sway)
+        self.assertIn('ignore-empty-password\n', self.read('swaylock'))
+        if shutil.which('sway'):
+            # sway 1.9 (Ubuntu 24.04) opens a seat even for -C; the headless backend needs none.
+            with tempfile.TemporaryDirectory() as runtime:
+                result = subprocess.run(['sway', '-C', '-c', str(self.out / 'sway')], capture_output=True, text=True,
+                                        timeout=30, env=dict(os.environ, XDG_RUNTIME_DIR=runtime,
+                                                             WLR_BACKENDS='headless', WLR_RENDERER='pixman'))
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_bar_shows_the_microphone_state_after_volume(self):
         for wpctl, expect in [('Volume: 0.40 [MUTED]', '"name":"mic","full_text":"MIC muted"'),
