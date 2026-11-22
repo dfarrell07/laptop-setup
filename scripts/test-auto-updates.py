@@ -122,7 +122,9 @@ class AutoUpdateTests(unittest.TestCase):
                  f'  "bootstrap gui/501") touch {home}/loaded ;;\n'
                  f'  "bootout gui/501/com.laptop-setup.user-update") rm {home}/loaded ;;\n'
                  '  *) exit 1 ;;\nesac\n')
+            # role_path for the shared launchd helper's include; the stub stands in for its /bin/launchctl too
             variables = {'ansible_facts': {'user_dir': name, 'user_uid': '501'}, 'ansible_managed': 'test',
+                         'role_path': str(ROOT / 'roles/packages'), '_launchd_agent_launchctl': str(stubs / 'launchctl'),
                          'is_linux': False, 'is_macos': True, 'dotfiles_homebrew_prefix': '/opt/homebrew',
                          'packages_user_updates_calendar': 'daily', 'packages_user_updates_container': 'fedora-dev',
                          'packages_user_updates_pipx_skip': ['yamllint', 'ansible-lint'],

@@ -332,13 +332,14 @@
       changed_when: true
       when: _packages_brew_previous_domain_job.rc == 0
 
-    - name: Check the registered Homebrew update job
+    - name: Check for a disabled Homebrew update job
       ansible.builtin.command:
         argv: [launchctl, print, "{{ _packages_brew_launchd_domain }}/com.laptop-setup.homebrew-update"]
       register: _packages_brew_update_job
       changed_when: false
       check_mode: false
       failed_when: false
+      when: packages_brew_autoupdate_interval | int == 0  # the enabled job is loaded by launchd-agent.yml
 
     - name: Ensure Homebrew update support directories exist
       ansible.builtin.file:
@@ -358,25 +359,20 @@
       register: _packages_brew_update_plist
       when: packages_brew_autoupdate_interval | int > 0
 
-    - name: Unload the update job when its configuration changes or is disabled
+    - name: Unload the disabled update job
       ansible.builtin.command:
         argv: [launchctl, bootout, "{{ _packages_brew_launchd_domain }}/com.laptop-setup.homebrew-update"]
       changed_when: true
-      when:
-        - _packages_brew_update_job.rc == 0
-        - _packages_brew_update_plist.changed | default(false) or packages_brew_autoupdate_interval | int == 0
+      when: packages_brew_autoupdate_interval | int == 0 and _packages_brew_update_job.rc == 0
 
     - name: Register the periodic metadata update job
-      ansible.builtin.command:
-        argv:
-          - launchctl
-          - bootstrap
-          - "{{ _packages_brew_launchd_domain }}"
-          - "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.laptop-setup.homebrew-update.plist"
-      changed_when: true
-      when:
-        - packages_brew_autoupdate_interval | int > 0
-        - _packages_brew_update_job.rc != 0 or _packages_brew_update_plist.changed
+      ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/launchd-agent.yml"
+      vars:
+        _launchd_agent_label: com.laptop-setup.homebrew-update
+        _launchd_agent_plist: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.laptop-setup.homebrew-update.plist"
+        _launchd_agent_changed: "{{ _packages_brew_update_plist is changed }}"
+        _launchd_agent_domain: "{{ _packages_brew_launchd_domain }}"
+      when: packages_brew_autoupdate_interval | int > 0
 
     - name: Remove the disabled update agent
       ansible.builtin.file:

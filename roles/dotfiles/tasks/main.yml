@@ -549,20 +549,14 @@
         src: ssh-agent.plist.j2
         dest: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/{{ dotfiles_ssh_agent_label }}.plist"
         mode: "0644"
-      notify: Reload ssh-agent launchd (macOS)
+      register: _dotfiles_ssh_agent_plist
 
-    - name: Load SSH agent launchd plist (macOS)  # noqa: command-instead-of-module
-      # 'launchctl bootstrap' is the modern replacement for the deprecated
-      # 'launchctl load -w' (deprecated since macOS 10.10 Yosemite).
-      # rc==0 means newly bootstrapped (changed); rc!=0 means already running (no change).
-      # failed_when: false handles the non-zero exit when the agent is already bootstrapped.
-      ansible.builtin.command:
-        cmd: >-
-          launchctl bootstrap gui/{{ ansible_facts['user_uid'] }}
-          {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/{{ dotfiles_ssh_agent_label }}.plist
-      register: _dotfiles_ssh_agent_bootstrap_result
-      changed_when: _dotfiles_ssh_agent_bootstrap_result.rc == 0
-      failed_when: false
+    - name: Load the SSH agent launch agent (macOS)
+      ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/launchd-agent.yml"
+      vars:
+        _launchd_agent_label: "{{ dotfiles_ssh_agent_label }}"
+        _launchd_agent_plist: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/{{ dotfiles_ssh_agent_label }}.plist"
+        _launchd_agent_changed: "{{ _dotfiles_ssh_agent_plist is changed }}"
 
     # GUI apps and launchd jobs never read the shell rc files: launchd's own environment points them at the agent.
     # The LaunchAgent sets it at every login; the setenv below covers the current one.
