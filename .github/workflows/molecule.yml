@@ -42,7 +42,7 @@ jobs:
             echo "ansible=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          ANSIBLE_PATHS='^(roles/|common/|group_vars/|site\.yml|ansible\.cfg|default\.config\.yml'
+          ANSIBLE_PATHS='^(roles/|common/|group_vars/|inventory/|site\.yml|pre-flight\.yml|ansible\.cfg|default\.config\.yml'
           ANSIBLE_PATHS+='|requirements\.yml|requirements-test\.(txt|lock)|molecule/|scripts/'
           ANSIBLE_PATHS+='|collections-dist/|Makefile$|\.github/scripts/'
           ANSIBLE_PATHS+='|\.github/workflows/molecule\.yml|\.github/actions/)'

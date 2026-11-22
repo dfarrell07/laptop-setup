@@ -13,7 +13,30 @@ ROOT = Path(__file__).resolve().parent.parent
 JOBS = yaml.safe_load((ROOT / '.github/workflows/linting.yml').read_text())['jobs']
 
 
+# Top-level paths that cannot change what the molecule scenarios converge, so a PR touching only them may skip molecule
+MOLECULE_SKIPPABLE = {'.ansible-lint', '.claude', '.githooks', '.github', '.gitignore', '.gitleaks.toml', '.gpg-enforcement',
+                      '.markdownlint.yml', '.npmrc', '.yamllint', 'AGENTS.md', 'CLAUDE.md', 'LICENSE', 'Makefile.sha256',
+                      'README.md', 'SECURITY.md', 'commitlint.config.js', 'docs', 'package-lock.json', 'package.json',
+                      'references', 'test-var-override.sh'}
+
+
 class WorkflowGuardTests(unittest.TestCase):
+    def test_every_top_level_path_runs_molecule_or_is_listed_as_skippable(self):
+        steps = yaml.safe_load((ROOT / '.github/workflows/molecule.yml').read_text())['jobs']['changes']['steps']
+        script = next(s['run'] for s in steps if s.get('id') == 'filter')
+        assignments = '\n'.join(l for l in script.splitlines() if l.strip().startswith('ANSIBLE_PATHS'))
+        tracked = subprocess.run(['git', 'ls-files'], cwd=ROOT, capture_output=True, text=True, check=True).stdout
+        tops = {}
+        for path in tracked.splitlines():
+            top, _, rest = path.partition('/')
+            tops.setdefault(top, path if rest else top)  # a directory is probed through one of its files
+        for top, probe in sorted(tops.items()):
+            with self.subTest(path=top):
+                runs = subprocess.run(['bash', '-c', assignments + '\ngrep -Eq "$ANSIBLE_PATHS" <<< "$1"', '_', probe]).returncode == 0
+                self.assertTrue(runs != (top in MOLECULE_SKIPPABLE),
+                                f'{top}: ' + ('listed as skippable but runs molecule' if runs else
+                                             'skips molecule: add it to ANSIBLE_PATHS or MOLECULE_SKIPPABLE'))
+
     def test_hook_reads_and_documentation_are_allowed_but_writes_fail(self):
         script = JOBS['git-config-guards']['steps'][2]['run']
         cases = [('# git config --local core.hooksPath /dev/null\n', True),
