@@ -670,6 +670,25 @@ class RenderedConfigTests(unittest.TestCase):
         (tmp / 'podman/podman-machine-default-api.sock').write_text('')  # a plain file, not the machine's socket
         self.assertEqual(env_after('zshenv'), 'unset|podman')
 
+    def test_launchd_ssh_agent_starts_over_a_stale_socket(self):
+        # A SIGKILL or power loss leaves the socket file behind; ssh-agent -a will not bind over it.
+        import plistlib
+        import socket
+        args = plistlib.loads(self.read('ssh_agent_plist').encode())['ProgramArguments']
+        with tempfile.TemporaryDirectory() as directory:
+            stale = Path(directory) / 's.sock'
+            dead = socket.socket(socket.AF_UNIX)
+            dead.bind(str(stale))
+            dead.close()
+            agent = Path(directory) / 'ssh-agent'  # binds like ssh-agent: fails if the path exists
+            agent.write_text('#!/usr/bin/env python3\nimport socket, sys\n'
+                             'socket.socket(socket.AF_UNIX).bind(sys.argv[sys.argv.index("-a") + 1])\n')
+            agent.chmod(0o755)
+            args = [str(agent) if a.endswith('/bin/ssh-agent') else str(stale) if a.endswith('/ssh-agent.socket')
+                    else a for a in args]
+            result = subprocess.run(args, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_launchd_ssh_auth_sock_names_the_ssh_agent_socket(self):
         agent = self.read('ssh_agent_plist')
         env = self.read('ssh_auth_sock_plist')
