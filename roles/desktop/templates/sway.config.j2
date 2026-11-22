@@ -48,6 +48,9 @@ exec swayidle -w \
     before-sleep 'swaylock -f' \
     lock 'swaylock -f' \
     idlehint {{ desktop_wm_idle_lock_timeout | int }}
+# A fullscreen window (a video, a shared screen) keeps the session from idling.
+for_window [app_id=".*"] inhibit_idle fullscreen
+for_window [class=".*"] inhibit_idle fullscreen
 
 # Floating window drag/resize with mouse
 floating_modifier $mod
