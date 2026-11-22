@@ -43,7 +43,8 @@ audits it for gaps the automation does not cover yet.
 1. Follow the README quick start through `make bootstrap`, then `cp default.config.yml config.yml`; merge reviewed
    source overrides into it. The Claude native install also needs a reviewed `claude_install_sha256` and
    `claude_pinned_version`; the pin does not freeze later auto-updates.
-2. Reuse the encrypted vault with your existing hardware keys: `make vault-import FROM=HOST:PATH` (or a local file, or
+2. Once the shared vault exists ([shared-vault.md](shared-vault.md)), `make packages` then `make vault-join` instead of
+   this step. Otherwise reuse the encrypted vault with your existing hardware keys: `make vault-import FROM=HOST:PATH` (or a local file, or
    a `make backup` directory). It writes the standard `scripts/vault-pass.sh` (it holds no secret, so it is never
    copied), fetches the vault, has you touch a YubiKey to prove it opens, then installs it 0600 and marks it
    skip-worktree (`make vault-init`, so git never commits it). Nothing changes unless a key opens the vault. Check with

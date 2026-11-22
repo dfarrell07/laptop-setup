@@ -94,7 +94,7 @@ make status                 # chunks on/off (rollout_enable); list: group_vars/a
 make plan CHUNK=x           # preview one chunk (--check --diff); whole enabled list: make check
 make apply CHUNK=x          # apply one enabled chunk (high-risk ones need a typed name and a terminal)
 make apply CHUNK=x NOSUDO=1 # same, no sudo prompt: skips root-only (become) tasks; a later sudo run applies them
-make verify CHUNK=x         # smoke checks for that chunk (all enabled if no CHUNK); fails on WARN/SKIP; sys_* need sudo; exits 1 for chunks with no check (packages desktop repos redhat repos_dnf): use make plan
+make verify CHUNK=x         # smoke checks for that chunk (all enabled if no CHUNK); fails on WARN/SKIP; sys_* need sudo; exits 1 for chunks with no check (repos redhat repos_dnf; packages desktop on Linux): use make plan
 make all | offline | minimal  # full / no binary downloads / dotfiles+ssh+repos only, no sudo
 make update                 # reinstall vendored collections + full run with git_repos_pull=true
 make check                  # full sudo dry run; runs preflight first
@@ -174,7 +174,7 @@ runs `git_repos` for one `repo_category`. `make help` lists everything; scenario
 ## Vault
 
 - One vault file, `group_vars/all/vault.yml`; password from a YubiKey via `make setup-yubikeys`; `make vault-edit|vault-view`.
-  `vault-pass.sh` templates: SECURITY.md § "Setting Up vault-pass.sh". Shared across machines (`make vault-share-init`,
+  `vault-pass.sh` is written by `scripts/write-vault-pass.sh`. Shared across machines (`make vault-share-init`,
   `vault-join`, `vault-add-key`): [docs/shared-vault.md](docs/shared-vault.md).
 - **Never define `vault_*` variables in `config.yml`**: `include_vars` (precedence 18) outranks `group_vars` and silently shadows the vault
   value. `common/tasks/pre_flight_checks.yml` asserts this.

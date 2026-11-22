@@ -70,7 +70,7 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Breaks if wrong:** a pinned-binary download can fail (the run warns and goes on). System-level effects: starts and enables `tailscaled`;
   adds you to the `libvirt` and `kvm` groups (`libvirt` membership is root-equivalent; active after the next login); enables
   `virtqemud.socket` and `virtnetworkd.socket`; overwrites same-named files in `/usr/local/bin` with no backup.
-- **Verify:** no check mapped. `make plan CHUNK=packages` shows changed=0 for the dnf, pipx and single-file downloads (kind) only:
+- **Verify:** no check mapped on Linux (macOS has one). `make plan CHUNK=packages` shows changed=0 for the dnf, pipx and single-file downloads (kind) only:
   check mode silently skips the helm, kustomize and k9s archives, the standalone binaries, Go tools, krew plugins and the group add.
   Check those with `scripts/smoke-test.sh --user-only --only sops,transcrypt,krew,kind,helm,kustomize,k9s` and
   `/usr/local/bin/gitleaks version` (a bare `gitleaks` may be the `make bootstrap-hooks` copy in `~/.local/bin`).
@@ -82,7 +82,7 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   Then `sudo gpasswd -d "$USER" libvirt; sudo gpasswd -d "$USER" kvm`,
   `sudo systemctl disable --now tailscaled virtqemud.socket virtnetworkd.socket`, and delete what the role placed outside dnf:
   the pinned files in `/usr/local/bin` (oc, kubectl, opm, kind, helm, kustomize, k9s, transcrypt, sops, gitleaks, actionlint, zizmor,
-  operator-sdk, cosign, tkn, ec), `/var/lib/ansible-packages`, the Go tools it installed in `~/go/bin`, `~/.local/bin/subctl*`,
+  operator-sdk, cosign, tkn, ec, oras), the acli rpm (`sudo dnf remove acli`), `/var/lib/ansible-packages`, the Go tools it installed in `~/go/bin`, `~/.local/bin/subctl*`,
   `pipx uninstall yamllint ansible-lint`, and `~/.krew` (this also removes krew plugins you added yourself). Stop the updater with
   `systemctl --user disable --now laptop-user-update.timer`, then delete `~/.local/bin/laptop-user-update` and
   `~/.config/systemd/user/laptop-user-update.{service,timer}` (or set `packages_user_updates_enabled: false`). On macOS:
@@ -138,7 +138,7 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Why:** GNOME, sway, i3 or AeroSpace configuration. Apply it with `make apply CHUNK=desktop`: the role target `make desktop` also applies
   `login_shell` (zsh and, for an SSSD account, the sssd override) whenever that chunk is enabled.
 - **Breaks if wrong:** a bad compositor config can leave the session unusable; keys that IT or `sys_baseline` lock are ignored.
-- **Verify:** no check is mapped, so `make verify CHUNK=desktop` exits 1 (state unknown) by design. Pass criterion: `make plan
+- **Verify:** no check is mapped on Linux (macOS has one), so `make verify CHUNK=desktop` exits 1 (state unknown) by design. Pass criterion: `make plan
   CHUNK=desktop` shows changed=0 and no dconf warning, then log in again from a TTY or second session.
 - **Before:** `dconf dump / > ~/dconf-before.ini` (the system snapshot block also takes it; do it before the first desktop run).
 - **Undo:** `dconf reset <key>` for each key the role wrote (`/org/gnome/desktop/interface/color-scheme` under sway; the

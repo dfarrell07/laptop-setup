@@ -19,9 +19,9 @@ reprogramming the others, and a spare can open by touch alone.
 
 ## Set up
 
-Before anything else on each machine: `gh auth login` (the repository is private), and commit signing working
-(`make dotfiles` after the vault's signing key is in place; every commit to the shared repository is signed, a touch of
-the signing YubiKey).
+Before anything else on each machine: `gh auth login` (the repository is private), `make packages` (age and
+age-plugin-yubikey), and commit signing working (`make vault-signing-key`, then `make dotfiles`; every commit to the
+shared repository is signed, a touch of the signing YubiKey).
 
 1. **First machine, once** (the one with the current vault and a YubiKey):
    `gh repo create <user>/laptop-secrets --private --clone` (run in `~/src/<user>`), then `make vault-share-init`. It

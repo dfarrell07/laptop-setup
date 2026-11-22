@@ -361,6 +361,10 @@ encrypted file back (in that order, so the encrypted vault is never a stageable 
 
 ### Lost or Compromised YubiKey
 
+Shared vault ([docs/shared-vault.md](docs/shared-vault.md)): each YubiKey is its own age recipient, so drop a lost one
+with `make vault-remove-key RECIPIENT=age1...` (new password, nothing to reprogram). The rest of this section is for the
+per-machine HMAC-SHA1 vault.
+
 `make setup-yubikeys` enforces a recovery path:
 
 1. **Hardware redundancy (recommended)** — program 2+ YubiKeys in one session with the same secret and store them separately; any one
@@ -435,8 +439,9 @@ Auth keys: move `~/.ssh/id_ed25519_sk`, its `.pub` and `id_ed25519_sk_backup*` a
 
 Then:
 
-1. Run `make vault-edit` and update `vault_ssh_auth_key`, `vault_ssh_auth_key_pub`, `vault_ssh_signing_key`, `vault_ssh_signing_key_pub`
-   (multi-line key files go in as YAML block scalars, `vault_ssh_auth_key: |` with every line indented; see the `vault.yml` header)
+1. Run `make vault-signing-key` for the signing key (it copies the key files in; nothing to paste), then `make vault-edit` and
+   update `vault_ssh_auth_key` and `vault_ssh_auth_key_pub` (multi-line key files go in as YAML block scalars,
+   `vault_ssh_auth_key: |` with every line indented; see the `vault.yml` header)
 2. Run `make apply CHUNK=ssh_client`, then `make apply CHUNK=ssh_authorized_keys` (at the console, second session open);
    `authorized_keys` is written with `exclusive: true`, so the old key is removed from this machine. Then `make apply CHUNK=dotfiles`
    rewrites `~/.config/git/allowed_signers` with the new signing key.

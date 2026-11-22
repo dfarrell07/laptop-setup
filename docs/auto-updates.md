@@ -52,7 +52,8 @@ The dnf update set is `system_dnf_automatic_upgrade_type` (`default`: all update
 | gitleaks in `~/.local/bin` | SHA256-pinned by `make bootstrap-hooks` | bump the pin, `make bootstrap-hooks` |
 | krew and its plugins | Pinned manifests; krew is kept from self-upgrading | bump the pin, `make packages` |
 | oh-my-zsh, forgit | Pinned to commit SHAs; oh-my-zsh's updater is disabled | bump the SHA, `make dotfiles` |
-| google-cloud-cli, acli | Held by `dnf versionlock` | bump the lock, `make repos_dnf` |
+| google-cloud-cli; acli from an internal mirror | Held by `dnf versionlock` | bump the lock, `make repos_dnf` |
+| acli (default) | SHA256-pinned rpm | bump `packages_acli_version` and `packages_acli_rpm_sha256`, `make packages` |
 | Dev container base image | Pinned by digest; packages inside update daily | bump the digest, `make container-rebuild` |
 | Other container images | Pulled by the projects that use them; no container opts into `podman auto-update` | `podman pull` |
 | Ansible collections | Vendored with checksums | `make vendor-collections` |
