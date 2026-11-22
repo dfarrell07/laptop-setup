@@ -106,32 +106,10 @@
         mode: "0644"
       register: _containers_machine_plist
 
-    - name: Check the podman machine LaunchAgent (macOS)  # noqa: command-instead-of-module
-      ansible.builtin.command:
-        argv: [launchctl, print, "gui/{{ ansible_facts['user_uid'] }}/{{ containers_macos_machine_label }}"]
-      register: _containers_machine_agent
-      changed_when: false
-      failed_when: false
-      check_mode: false
-
-    - name: Unload the changed podman machine LaunchAgent (macOS)  # noqa: command-instead-of-module
-      ansible.builtin.command:
-        argv: [launchctl, bootout, "gui/{{ ansible_facts['user_uid'] }}/{{ containers_macos_machine_label }}"]
-      changed_when: true
-      when: _containers_machine_agent.rc == 0 and _containers_machine_plist is changed
-
     # bootstrap runs the agent now (RunAtLoad), which starts the machine
-    - name: Load the podman machine LaunchAgent (macOS)  # noqa: command-instead-of-module
-      ansible.builtin.command:
-        argv:
-          - launchctl
-          - bootstrap
-          - "gui/{{ ansible_facts['user_uid'] }}"
-          - "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/{{ containers_macos_machine_label }}.plist"
-      changed_when: true
-      # bootout returns before launchd finishes tearing the job down ("Bootstrap failed: 5")
-      register: _containers_machine_bootstrap
-      retries: 5
-      delay: 2
-      until: _containers_machine_bootstrap.rc == 0
-      when: _containers_machine_agent.rc != 0 or _containers_machine_plist is changed
+    - name: Load the podman machine LaunchAgent (macOS)
+      ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/launchd-agent.yml"
+      vars:
+        _launchd_agent_label: "{{ containers_macos_machine_label }}"
+        _launchd_agent_plist: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/{{ containers_macos_machine_label }}.plist"
+        _launchd_agent_changed: "{{ _containers_machine_plist is changed }}"

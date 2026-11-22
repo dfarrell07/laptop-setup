@@ -81,28 +81,10 @@
       failed_when: false
       check_mode: false  # read-only probe
 
-    - name: Check the registered user update job (macOS)  # noqa: command-instead-of-module
-      ansible.builtin.command:
-        argv: [/bin/launchctl, print, "{{ _packages_user_update_domain }}/com.laptop-setup.user-update"]
-      register: _packages_user_update_job
-      changed_when: false
-      failed_when: false
-      check_mode: false  # read-only probe
-
-    - name: Unload the user update job when its agent changed (macOS)  # noqa: command-instead-of-module
-      ansible.builtin.command:
-        argv: [/bin/launchctl, bootout, "{{ _packages_user_update_domain }}/com.laptop-setup.user-update"]
-      changed_when: true
-      when:
-        - _packages_user_update_job.rc == 0
-        - _packages_user_update_plist is changed
-
-    - name: Register the user update job (macOS)  # noqa: command-instead-of-module
-      ansible.builtin.command:
-        argv:
-          - /bin/launchctl
-          - bootstrap
-          - "{{ _packages_user_update_domain }}"
-          - "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.laptop-setup.user-update.plist"
-      changed_when: true
-      when: _packages_user_update_job.rc != 0 or _packages_user_update_plist is changed
+    - name: Register the user update job (macOS)
+      ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/launchd-agent.yml"
+      vars:
+        _launchd_agent_label: com.laptop-setup.user-update
+        _launchd_agent_plist: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.laptop-setup.user-update.plist"
+        _launchd_agent_changed: "{{ _packages_user_update_plist is changed }}"
+        _launchd_agent_domain: "{{ _packages_user_update_domain }}"
