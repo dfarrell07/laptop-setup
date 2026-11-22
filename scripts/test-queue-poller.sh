@@ -285,7 +285,7 @@ assert_contains "integration: queued→processing"  \
   "issue edit 7 --repo test/q --remove-label queued --add-label processing" "$_int_gh"
 assert_contains "integration: pr create called"   "pr create"          "$_int_gh"
 assert_contains "integration: default tool allowlist, permission mode pinned" \
-  "claude -p --permission-mode dontAsk --allowedTools Read,Edit,Write,Bash(git add *),Bash(git commit *),Bash(git diff *),Bash(git log *),Bash(git status) --max-turns" "$_int_gh"
+  "claude -p --permission-mode dontAsk --allowedTools Read,Edit,Write,Bash(git add *),Bash(git commit *),Bash(git diff),Bash(git diff --cached),Bash(git diff --stat),Bash(git log --oneline -20),Bash(git status) --max-turns" "$_int_gh"
 assert_contains "integration: processing→done"    "--add-label done"   "$_int_gh"
 assert_contains "integration: issue closed"       "issue close 7"      "$_int_gh"
 assert_contains "integration: completed log line" "Issue #7 completed" "$_int_out"

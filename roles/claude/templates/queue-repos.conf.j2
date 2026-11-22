@@ -18,6 +18,8 @@
 #
 # REPO_ALLOWED_TOOLS controls what Claude Code is permitted to call.
 # Use a restrictive allow-list; omit Bash entirely for read-only review tasks.
+# Grant git diff/log only in exact forms (`git diff --output=<file>` writes anywhere), and never pair Edit or Write
+# with a build tool (Bash(make *), npm, pytest...): the agent can edit what that tool runs, which is code execution.
 #
 # Task queue repo: {{ claude_queue_repo if claude_queue_repo else '<set claude_queue_repo in config.yml>' }}
 # GitHub user:     {{ dotfiles_github_user }}
@@ -26,10 +28,10 @@
 #
 # REPO_PATH[laptop-setup]="{{ ansible_facts['user_dir'] }}/laptop-setup"
 # REPO_REMOTE[laptop-setup]="{{ dotfiles_github_user }}/laptop-setup"
-# REPO_ALLOWED_TOOLS[laptop-setup]="Read,Edit,Write,Bash(git add *),Bash(git commit *),Bash(git diff *),Bash(make lint),Bash(make syntax-check)"
+# REPO_ALLOWED_TOOLS[laptop-setup]="Read,Edit,Write,Bash(git add *),Bash(git commit *),Bash(git diff),Bash(git diff --stat)"
 # REPO_DEFAULT_BRANCH[laptop-setup]="main"
 #
 # REPO_PATH[my-project]="{{ ansible_facts['user_dir'] }}/repos/my-project"
 # REPO_REMOTE[my-project]="{{ dotfiles_github_user }}/my-project"
-# REPO_ALLOWED_TOOLS[my-project]="Read,Edit,Write,Bash(git add *),Bash(git commit *),Bash(git diff *)"
+# REPO_ALLOWED_TOOLS[my-project]="Read,Edit,Write,Bash(git add *),Bash(git commit *),Bash(git diff)"
 # REPO_DEFAULT_BRANCH[my-project]="main"
