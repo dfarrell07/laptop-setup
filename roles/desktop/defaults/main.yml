@@ -24,7 +24,6 @@ desktop_wm_idle_lock_timeout: 3600  # seconds idle before lock (owner choice, ab
 desktop_wm_idle_display_timeout: 3900  # seconds idle before display off; must exceed the lock timeout
 # macOS from the same two: the screen saver starts (and, with sysadminctl -screenLock immediate, locks) at the lock
 # timeout, and the display sleeps at the display timeout (pmset counts minutes; AC power only)
-desktop_macos_screensaver_idle_seconds: "{{ desktop_wm_idle_lock_timeout | int }}"
 desktop_macos_display_sleep_minutes: "{{ ((desktop_wm_idle_display_timeout | int) / 60) | round(0, 'ceil') | int }}"
 desktop_wm_lock_color: "000000"     # screen lock background color (hex, no #) — used by swaylock (Sway) and i3lock (i3)
 desktop_sway_keyboard_layout: ''  # e.g. us, de, fr — empty omits xkb_layout (sway/XKB default)
@@ -282,10 +281,6 @@ desktop_gnome_ui_dconf:
 # 50/s gives 13 and 1 (below the System Settings slider limits of 15 and 2). Both apply at the next login.
 desktop_macos_key_repeat: "{{ [((1000 / (desktop_wm_repeat_rate | int)) / 15) | round | int, 1] | max }}"
 desktop_macos_initial_key_repeat: "{{ [((desktop_wm_repeat_delay | int) / 15) | round | int, 1] | max }}"
-desktop_macos_auto_quote_substitution: false  # NSAutomaticQuoteSubstitutionEnabled — disable smart quotes
-desktop_macos_auto_dash_substitution: false   # NSAutomaticDashSubstitutionEnabled — disable smart dashes
-desktop_macos_finder_show_all_extensions: true  # AppleShowAllExtensions — show all file extensions in Finder
-desktop_macos_finder_show_posix_path: true      # _FXShowPosixPathInTitle — show full path in Finder title bar
 desktop_macos_dark_mode: true  # Dark appearance, like Adwaita-dark on Linux (applies after logout); false leaves it unmanaged
 desktop_macos_dock_autohide: true  # tiling-WM layout: the Dock stays out of the way
 desktop_macos_screenshot_dir: "{{ ansible_facts['user_dir'] }}/Pictures"  # Linux grim writes here too
@@ -300,22 +295,11 @@ desktop_macos_defaults:
     key: InitialKeyRepeat
     type: int
     value: "{{ desktop_macos_initial_key_repeat }}"
-  - domain: NSGlobalDomain
-    key: NSAutomaticQuoteSubstitutionEnabled
-    type: bool
-    value: "{{ desktop_macos_auto_quote_substitution }}"
-  - domain: NSGlobalDomain
-    key: NSAutomaticDashSubstitutionEnabled
-    type: bool
-    value: "{{ desktop_macos_auto_dash_substitution }}"
-  - domain: com.apple.finder
-    key: AppleShowAllExtensions
-    type: bool
-    value: "{{ desktop_macos_finder_show_all_extensions }}"
-  - domain: com.apple.finder
-    key: _FXShowPosixPathInTitle
-    type: bool
-    value: "{{ desktop_macos_finder_show_posix_path }}"
+  # No smart quotes or dashes; Finder shows every extension and the full path in its title bar.
+  - {domain: NSGlobalDomain, key: NSAutomaticQuoteSubstitutionEnabled, type: bool, value: false}
+  - {domain: NSGlobalDomain, key: NSAutomaticDashSubstitutionEnabled, type: bool, value: false}
+  - {domain: com.apple.finder, key: AppleShowAllExtensions, type: bool, value: true}
+  - {domain: com.apple.finder, key: _FXShowPosixPathInTitle, type: bool, value: true}
   # Holding a key repeats it (hjkl in vim) instead of opening the accent picker.
   - {domain: NSGlobalDomain, key: ApplePressAndHoldEnabled, type: bool, value: false}
   # Entries with manage: false are skipped, so a toggle that is off leaves the user's own choice alone.
@@ -382,7 +366,7 @@ desktop_macos_defaults:
   - domain: com.apple.screensaver
     key: idleTime
     type: int
-    value: "{{ desktop_macos_screensaver_idle_seconds }}"
+    value: "{{ desktop_wm_idle_lock_timeout | int }}"
     host: currentHost
   # No .DS_Store files on network shares and USB drives
   - {domain: com.apple.desktopservices, key: DSDontWriteNetworkStores, type: bool, value: true}

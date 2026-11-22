@@ -69,7 +69,6 @@
       community.general.homebrew_cask:
         name: >-
           {{ packages_brew_cask
-             + (['lulu'] if packages_brew_cask_lulu_enabled | bool else [])
              + (packages_brew_cask_work if profile == 'work' else [])
              + (packages_brew_cask_personal if profile != 'work' else []) }}
         state: present
@@ -88,13 +87,6 @@
         msg: >-
           Homebrew cask installation failed: {{ ansible_failed_result.msg | default('unknown error') }}.
           Check network connectivity and cask names, then re-run provisioning.
-
-- name: Remind user to approve LuLu system extension
-  ansible.builtin.debug:
-    msg: >-
-      LuLu installed. Open System Settings > Privacy & Security > System Extensions
-      and approve LuLu to activate the application firewall.
-  when: is_macos and packages_brew_cask_lulu_enabled | bool and _packages_brew_casks.changed | default(false)
 
 - name: AeroSpace window manager present at {{ packages_aerospace_version }}
   # Downloads the upstream GitHub Release zip and verifies against packages_aerospace_sha256,
