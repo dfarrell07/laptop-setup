@@ -70,7 +70,8 @@ RHEL CSB and Debian skip it). If the machine does not boot, follow [Rescue boot]
 ## Vault password file missing
 
 `ERROR! The vault password file .../scripts/vault-pass.sh was not found`: the file is gitignored. Run `make bootstrap` (creates a stub),
-then `make setup-yubikeys` or follow `SECURITY.md` "Setting Up vault-pass.sh". `make preflight` reports stub, valid, too short or empty.
+then `make setup-yubikeys` or follow `SECURITY.md` "Setting Up vault-pass.sh"; once the shared vault exists, `make vault-join`
+instead (docs/shared-vault.md). `make preflight` reports stub, valid, too short or empty.
 
 ## system: USBGuard Blocks YubiKey or Keyboard
 
