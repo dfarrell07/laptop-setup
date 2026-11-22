@@ -30,12 +30,11 @@ verifier:
   name: ansible
 
 scenario:
-  # Idempotence is intentionally excluded: packages_go_install always reports
-  # changed (no version-check guard — see packages role comment), so a second
-  # converge run will fire and fail the idempotence gate.
+  # Idempotence covers the binary installers and the Go build-info guard (a second converge builds nothing).
   test_sequence:
     - dependency
     - create
     - converge
+    - idempotence
     - verify
     - destroy

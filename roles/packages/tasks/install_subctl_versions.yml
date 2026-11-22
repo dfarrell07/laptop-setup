@@ -42,6 +42,7 @@
         prefix: ansible_subctl_
         path: "{{ ansible_facts['user_dir'] }}/.cache"
       register: _subctl_tmpdir
+      changed_when: false  # private scratch dir, removed in the same run: not machine state
 
     - name: Install subctl version
       ansible.builtin.command:
@@ -146,3 +147,4 @@
         path: "{{ _subctl_tmpdir.path }}"
         state: absent
       when: _subctl_tmpdir.path is defined
+      changed_when: false  # private scratch dir, removed in the same run: not machine state
