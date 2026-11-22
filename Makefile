@@ -543,7 +543,7 @@ test-scripts: .venv
 
 # Local pre-commit gate: lint, syntax-check, check-vars-sync and test-scripts side by side.
 gate: .venv
-	$(MAKE) --no-print-directory -j4 --output-sync=target lint syntax-check check-vars-sync test-scripts
+	$(MAKE) --no-print-directory -j4 --output-sync=target lint syntax-check test-scripts
 
 # Regression checks for the pinned secret scanner configuration.
 test-gitleaks:

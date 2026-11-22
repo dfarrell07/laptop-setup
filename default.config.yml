@@ -51,7 +51,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     SELinux policy for bpfman, so the daemon runs unconfined despite SELinux Enforcing mode. Without Mandatory
 #     Access Control, a compromised bpfman can load arbitrary kernel code via eBPF. Only enable on machines where
 #     eBPF development explicitly requires the daemon; prefer manual bpftool for one-off debugging.
-#   packages_brew_yubikey: [ykman]               (roles/packages/defaults) — macOS YubiKey brew packages;
+#   packages_brew_yubikey: [ykman, age, age-plugin-yubikey, flock]  (roles/packages/defaults) — macOS YubiKey brew packages;
 #     ykpers unavailable on Homebrew; use ykman otp calculate (hex challenge) in vault-pass.sh — see SECURITY.md
 #   repo_gh_cli: true                  (group_vars/all/vars.yml) — no-op on Fedora (gh in standard repos); RHEL/Rocky only, not RHEL CSB
 #   repo_google_chrome: false          (group_vars/all/vars.yml) — opt in; Chrome repo adds dnf metadata overhead
@@ -60,8 +60,6 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   repo_rpmfusion_nonfree: false      (group_vars/all/vars.yml) — Fedora-only; NVIDIA drivers, non-free firmware; opt in explicitly
 #   repo_tailscale: true               (group_vars/all/vars.yml) — VPN mesh; skip on air-gapped machines or when using a different VPN
 #     (false also drops the tailscale package; list tailscale in packages_extra_dnf to keep it)
-#   repo_docker_ce: false              (group_vars/all/vars.yml) — prefer Podman; adds the docker-ce repo only
-#     (no task installs docker-ce; not added on RHEL CSB)
 #   repo_mullvad: true                 (group_vars/all/vars.yml) — personal profile, non-CSB Fedora only (skipped on work, RHEL/Rocky, CSB)
 #   repo_redhat: true                  (group_vars/all/vars.yml) — internal Red Hat RPM mirror; needs repos_dnf_redhat_baseurl set
 #   system_install_usbguard: true      (group_vars/all/vars.yml) — USBGuard USB device authorization; set false on VM/USB-less machines

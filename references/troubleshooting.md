@@ -170,8 +170,7 @@ processes can use `bpf()` (including package-manager dependencies) once unprivil
   `/etc/fapolicyd/fapolicyd.conf`; use the RPM-installed distrobox (or Toolbx, the role's fallback).
 - **Ansible `AnsiballZ_*.py: Operation not permitted`:** `ansible.cfg` sets `pipelining = true`; run from the repo root so it loads.
 - **Chrome and Tailscale repos on CSB:** both are skipped on any CSB (Tailscale installs from the base Fedora repos; IT owns the
-  Chrome repo file, which the disabled-repo cleanup leaves alone). The opt-in Docker CE repo (`repo_docker_ce`) is skipped on RHEL
-  CSB only. Other repo failures print only a
+  Chrome repo file, which the disabled-repo cleanup leaves alone). Other repo failures print only a
   `REPO SETUP FAILED` warning; only the acli and Red Hat internal repos record IT-ticket text (RHEL CSB). Use the container for those tools.
 - **Login shell stays `/bin/bash` on an SSSD account:** the role writes `override_shell` to `/etc/sssd/conf.d/90-laptop-setup-shell.conf`
   only if `sssd.conf` or `conf.d` has a `[domain/...]` section. Otherwise add `override_shell = /bin/zsh` to the `[domain/...]`

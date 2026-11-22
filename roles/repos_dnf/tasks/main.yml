@@ -155,34 +155,6 @@
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
 
-- name: Add Docker CE repo
-  when:
-    - repo_docker_ce
-    - not csb_rhel  # CSB: Podman is the corporate standard; Docker CE repo not permitted on RHEL CSB
-  block:
-    - name: Add docker-ce repo
-      ansible.builtin.yum_repository:
-        name: docker-ce
-        description: Docker CE Stable
-        baseurl: "https://download.docker.com/linux/{{ _docker_distro }}/$releasever/$basearch/stable"
-        gpgcheck: true
-        repo_gpgcheck: true
-        gpgkey: "https://download.docker.com/linux/{{ _docker_distro }}/gpg"
-        enabled: true
-      vars:
-        _docker_distro: >-
-          {{ 'fedora' if is_fedora
-             else ('centos' if ansible_facts['distribution'] in ['Rocky', 'AlmaLinux', 'CentOS']
-             else 'rhel') }}
-  rescue:
-    - name: Warn Docker CE repo failed (non-CSB network error)
-      ansible.builtin.debug:
-        msg: >-
-          REPO SETUP FAILED: Add Docker CE repository in role repos_dnf.
-          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
-          This is likely a transient network error (DNS timeout, expired GPG key).
-          Continuing playbook execution.
-
 - name: Add acli repo
   # URL-as-toggle: task is enabled by defining repos_dnf_acli_baseurl in config.yml
   # (not a repo_X boolean, because the URL is an internal secret)
@@ -514,7 +486,6 @@
       - {repo: google-chrome, pkg: google-chrome-stable, toggle: repo_google_chrome, enabled: "{{ repo_google_chrome }}"}
       - {repo: google-cloud-cli, pkg: google-cloud-cli, toggle: repo_google_cloud_sdk, enabled: "{{ repo_google_cloud_sdk }}"}
       - {repo: mullvad, pkg: mullvad-vpn, toggle: repo_mullvad, enabled: "{{ repo_mullvad }}"}
-      - {repo: docker-ce, pkg: docker-ce, toggle: repo_docker_ce, enabled: "{{ repo_docker_ce }}"}
       - {repo: tailscale-stable, pkg: tailscale, toggle: repo_tailscale, enabled: "{{ repo_tailscale }}"}
   block:
     - name: Keep disabled third-party repos whose packages are installed
