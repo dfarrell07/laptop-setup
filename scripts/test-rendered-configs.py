@@ -604,6 +604,9 @@ class RenderedConfigTests(unittest.TestCase):
         text = self.read('sshd_launchd')
         self.assertIn('<string>722</string>', text)  # ssh_port, which the client config uses for the Mac
         self.assertIn('<string>/usr/libexec/sshd-keygen-wrapper</string>', text)
+        import plistlib
+        # one root sshd per connection: cap them like Apple's ssh.plist, or a connection flood spawns without limit
+        self.assertEqual(plistlib.loads(text.encode())['inetdCompatibility'], {'Wait': False, 'Instances': 42})
         if shutil.which('plutil'):
             result = subprocess.run(['plutil', '-lint', str(self.out / 'sshd_launchd')], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
