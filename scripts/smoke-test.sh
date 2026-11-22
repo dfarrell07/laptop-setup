@@ -223,9 +223,12 @@ exec_cmd() { # execute locally or inside container
   fi
 }
 
+# sysctl lives in /usr/sbin, which a non-root PATH lacks on Debian.
+_sysctl() { PATH="$PATH:/usr/sbin:/sbin" sysctl "$@"; }
+
 _sysctl_check() {
   local k="$1" v="$2" n="$3"; local got
-  got=$(PATH="$PATH:/usr/sbin:/sbin" sysctl -n "$k" 2>/dev/null || echo "?")
+  got=$(_sysctl -n "$k" 2>/dev/null || echo "?")
   if [[ "$got" == "$v" ]]; then record "$n" "PASS"
   elif [[ "$got" == "?" && "$EUID" -ne 0 ]]; then
     record "$n" "WARN" "$k unreadable as non-root (re-run with sudo to verify value=$v)"
@@ -2485,16 +2488,16 @@ EOF
   fi
 
   # kernel.core_pattern safety — must begin with | (pipe to handler), never a raw path
-  _core_pattern="$(sysctl -n kernel.core_pattern 2>/dev/null || echo '?')"
+  _core_pattern="$(_sysctl -n kernel.core_pattern 2>/dev/null || echo '?')"
   if [[ "$_core_pattern" == "|"* ]]; then record "core-pattern" "PASS"
   else record "core-pattern" "FAIL" "kernel.core_pattern='$_core_pattern' does not start with | (pipe handler required; raw core files expose data)"; fi
 
   # inotify limits (required for IDE/file-watcher tools — system role sets these)
-  _inotify_watches=$(sysctl -n fs.inotify.max_user_watches 2>/dev/null || echo "0")
+  _inotify_watches=$(_sysctl -n fs.inotify.max_user_watches 2>/dev/null || echo "0")
   if [[ "$_inotify_watches" -ge 1048576 ]] 2>/dev/null; then record "inotify-max-user-watches" "PASS"
   else record "inotify-max-user-watches" "FAIL" "fs.inotify.max_user_watches=$_inotify_watches, expected >=1048576 (run: make apply CHUNK=sys_sysctl)"; fi
   unset _inotify_watches
-  _inotify_instances=$(sysctl -n fs.inotify.max_user_instances 2>/dev/null || echo "0")
+  _inotify_instances=$(_sysctl -n fs.inotify.max_user_instances 2>/dev/null || echo "0")
   if [[ "$_inotify_instances" -ge 8192 ]] 2>/dev/null; then record "inotify-max-user-instances" "PASS"
   else record "inotify-max-user-instances" "FAIL" "fs.inotify.max_user_instances=$_inotify_instances, expected >=8192 (run: make apply CHUNK=sys_sysctl)"; fi
   unset _inotify_instances
@@ -2751,7 +2754,7 @@ EOF
   _sysctl_check "kernel.io_uring_disabled" "${_io_uring_expected:-1}" "sysctl-io-uring-disabled"
   _sysctl_check "kernel.dmesg_restrict"              "1" "sysctl-dmesg-restrict"
   # unprivileged_bpf: 1=disabled(write-once), 2=disabled(resettable). Both are valid.
-  _bpf_disabled=$(sysctl -n kernel.unprivileged_bpf_disabled 2>/dev/null) || true
+  _bpf_disabled=$(_sysctl -n kernel.unprivileged_bpf_disabled 2>/dev/null) || true
   if [[ -n "$_bpf_disabled" && "$_bpf_disabled" -ge 1 ]]; then record "sysctl-bpf-restrict" "PASS"
   elif [[ -z "$_bpf_disabled" && "$EUID" -ne 0 ]]; then record "sysctl-bpf-restrict" "WARN" "unreadable as non-root"
   else record "sysctl-bpf-restrict" "FAIL" "kernel.unprivileged_bpf_disabled=$_bpf_disabled expected >=1"; fi
@@ -2789,7 +2792,7 @@ EOF
     "net.bridge.bridge-nf-call-iptables|sysctl-bridge-nf-iptables|reboot or: modprobe br_netfilter && sysctl --system" \
     "net.bridge.bridge-nf-call-ip6tables|sysctl-bridge-nf-ip6tables|br_netfilter not loaded — IPv6 NetworkPolicy enforcement broken for OVN-K"; do
     _key="${_item%%|*}"; _rest="${_item#*|}"; _label="${_rest%%|*}"; _loaded_warn="${_rest#*|}"
-    _val=$(sysctl -n "$_key" 2>/dev/null) || true
+    _val=$(_sysctl -n "$_key" 2>/dev/null) || true
     if [[ "$_val" == "1" ]]; then record "$_label" "PASS"
     elif [[ -z "$_val" ]]; then
       if [[ ! -f /etc/modules-load.d/br_netfilter.conf ]]; then
@@ -2883,7 +2886,7 @@ EOF
   _sysctl_check "net.ipv4.ip_forward" "${_ip_fwd_expected:-1}" "sysctl-ip-forward"
   if [[ "$profile" == "work" ]]; then
   # nf_conntrack_max: module-gated sysctl — WARN if nf_conntrack not yet loaded, FAIL if loaded but wrong
-  _nfct=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null) || true
+  _nfct=$(_sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null) || true
   if [[ -z "$_nfct" ]]; then record "sysctl-conntrack-max" "WARN" "nf_conntrack module not loaded (net.netfilter.nf_conntrack_max unavailable)"
   elif [[ "$_nfct" -ge "524288" ]]; then record "sysctl-conntrack-max" "PASS"
   else record "sysctl-conntrack-max" "FAIL" "net.netfilter.nf_conntrack_max=$_nfct expected >=524288"; fi
