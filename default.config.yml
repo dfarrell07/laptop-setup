@@ -326,9 +326,11 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   containers_nofile_limit: 65536  (roles/containers/defaults) — global soft open-file limit
 #   containers_nofile_hard_limit: '{{ containers_nofile_limit | int * 8 }}'  (roles/containers/defaults) — hard-limit override;
 #                                        change only when the 8x ratio is wrong
-#   containers_prune_enabled: false  (roles/containers/defaults) — enable periodic podman container/image prune timer;
-#                                        set true to remove stopped non-distrobox containers and dangling images (volumes are kept)
+#   containers_prune_enabled: false  (roles/containers/defaults) — periodic podman prune (Linux timer; macOS: the podman
+#                                        machine, weekly); removes stopped containers (non-distrobox on Linux) and dangling
+#                                        images (volumes are kept)
 #   containers_prune_schedule: weekly  (roles/containers/defaults) — OnCalendar for podman-prune.timer; any systemd calendar expression
+#                                        (Linux; macOS prunes the podman machine weekly from its 5-minute check)
 #                                        e.g. "daily", "*-*-* 03:00:00", "Mon *-*-* 04:00:00"
 #   DO NOT override containers_registries directly — use containers_registries_extra to append
 #                                        without replacing the computed default. Overriding

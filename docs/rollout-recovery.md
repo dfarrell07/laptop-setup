@@ -236,7 +236,7 @@ open until you are done. To undo:
 - **Undo:** if `distrobox` is enabled, remove it from `rollout_enable` as well (it requires `containers`; `make containers` refuses the
   config otherwise). Then set `containers_policy_enabled: false` and/or `containers_enforce_fqin: false` (and
   `containers_environment_d_enabled: false` to remove
-  `~/.config/environment.d/containers.conf`, `containers_prune_enabled: false` to stop `podman-prune.timer`) in `config.yml`,
+  `~/.config/environment.d/containers.conf`, `containers_prune_enabled: false` to stop `podman-prune.timer`, or on macOS the machine's weekly prune) in `config.yml`,
   run `make containers`
   (removes `~/.config/containers/policy.json` and `registries.conf.d/50-fqin.conf`, keeping no backup). The flags do not touch the rest of
   the chunk: run `systemctl --user disable --now podman.socket`, and restore the pre-chunk `~/.config/containers/containers.conf` from its
