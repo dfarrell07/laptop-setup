@@ -236,10 +236,10 @@ jobs:
       - name: Set up CI environment
         uses: ./.github/actions/ci-setup
 
-      - name: Install zsh for migration launcher regression tests
+      - name: Install packages the script regression tests run (zsh launchers, age, sway -C)
         run: |
           sudo apt-get update
-          sudo apt-get install --yes zsh dconf-cli dbus-x11 python3-gi python3-psutil age
+          sudo apt-get install --yes zsh dconf-cli dbus-x11 python3-gi python3-psutil age sway
 
       - name: Run script regression tests
         env:
