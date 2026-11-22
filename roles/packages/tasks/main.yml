@@ -485,6 +485,7 @@
         prefix: ansible_krew_plugins_
         path: "{{ ansible_facts['user_dir'] }}/.cache"
       register: _krew_plugin_tmpdir
+      changed_when: false  # private scratch dir, removed in the same run: not machine state
 
     - name: Install essential krew plugins from pinned manifests
       ansible.builtin.include_tasks: install_krew_plugin.yml
@@ -537,3 +538,4 @@
         path: "{{ _krew_plugin_tmpdir.path }}"
         state: absent
       when: _krew_plugin_tmpdir.path is defined
+      changed_when: false  # private scratch dir, removed in the same run: not machine state

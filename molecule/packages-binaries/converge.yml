@@ -20,7 +20,7 @@
         packages_go_install:
           - "github.com/submariner-io/subctl/cmd@v{{ packages_subctl_version }}"
         packages_go_install_work: []              # clear work-profile go tools
-        packages_security_yubikey: []             # skip YubiKey packages in CI
+        packages_security_yubikey: [pcsc-lite-libs]  # age-plugin-yubikey's runtime library; no other YubiKey packages
         packages_networking: []                   # avoid dnf repo dependencies
         packages_networking_work: []              # avoid dnf repo dependencies
         packages_support_work: []                 # avoid dnf repo dependencies

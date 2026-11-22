@@ -195,6 +195,63 @@
     - {path: .cache, mode: '0700'}
   when: _golang_available | default(false)
 
+# A tool is rebuilt only when its installed binary's build info (go version -m) does not show the
+# pinned package path and module version, or was built by a Go older than the current toolchain (stdlib
+# security fixes reach the tools). An unchanged run builds nothing and reports ok.
+- name: Read the current Go toolchain version
+  ansible.builtin.command:
+    argv: [go, env, GOVERSION]
+  register: _packages_go_toolchain
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe
+  when: _golang_available | default(false)
+
+- name: Read the build info of installed Go tools
+  ansible.builtin.command:
+    argv:
+      - go
+      - version
+      - -m
+      - >-
+        {{ ansible_facts['user_dir'] }}/go/bin/{{ 'subctl' if item in _packages_subctl_go_modules
+           else (item.rsplit('@', 1)[0] | regex_replace(_go_major_suffix_re, '') | basename) }}
+  vars:
+    _go_major_suffix_re: '/v([2-9]|[1-9][0-9]+)$'  # go install drops a /vN (N >= 2) module suffix
+  loop: "{{ packages_go_install + (packages_go_install_work | default([]) if profile == 'work' else []) }}"
+  loop_control:
+    label: "{{ item | regex_replace('(/cmd)?@.*', '') | basename }}"
+  register: _packages_go_built
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe
+  when: _golang_available | default(false)
+
+- name: Start an empty list of Go tools to build
+  ansible.builtin.set_fact:
+    _packages_go_todo: []
+
+- name: List Go tools whose installed build differs from the pin or predates the toolchain
+  vars:
+    _out: "{{ item.stdout | default('') }}"
+    _path_re: '(?m)^\s+path\s+'
+    _mod_re: '(?m)^\s+mod\s+\S+\s+'
+    _end_re: '(\s|$)'
+    _built_re: '^\S+: go[0-9.]+'  # first line: "<binary>: go1.26.10[-X:...]"
+    _built_prefix_re: '^\S+: go'
+    _built_go: "{{ (_out | regex_search(_built_re) or '') | regex_replace(_built_prefix_re, '') }}"
+    _current_go: "{{ (_packages_go_toolchain.stdout | default('')) | regex_replace('^go', '') | regex_replace('[^0-9.].*$', '') }}"
+  ansible.builtin.set_fact:
+    _packages_go_todo: >-
+      {{ _packages_go_todo
+         + ([] if (_out is search(_path_re ~ (item.item.rsplit('@', 1)[0] | regex_escape) ~ '$')
+                   and _out is search(_mod_re ~ (item.item.rsplit('@', 1)[1] | regex_escape) ~ _end_re)
+                   and (_current_go == '' or (_built_go != '' and _built_go is version(_current_go, '>='))))
+            else [item.item]) }}
+  loop: "{{ _packages_go_built.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | regex_replace('(/cmd)?@.*', '') | basename }}"
+
 - name: Create private subctl build directory
   ansible.builtin.tempfile:
     state: directory
@@ -203,13 +260,13 @@
   register: _packages_subctl_go_tmpdir
   when:
     - _golang_available | default(false)
-    - _packages_subctl_go_modules | length > 0
+    - _packages_go_online
+    - _packages_go_todo | intersect(_packages_subctl_go_modules) | length > 0
 
 - name: Install selected Go modules and the subctl CLI
   block:
     - name: Install Go tools
-      # No 'creates:' guard — version bumps would be silently ignored. Pinned versions
-      # with warm cache are fast. Every run reports as changed (false positive, accepted).
+      # Only tools whose installed build differs from the pin (_packages_go_todo, above).
       # Do NOT add @latest entries: unpinned versions change silently between runs.
       ansible.builtin.command:
         argv: >-
@@ -244,7 +301,7 @@
         CGO_CXXFLAGS: ''  # clear inherited flags; prevent CGO_CXXFLAGS injection
         CGO_LDFLAGS: ''  # clear inherited flags; prevent CGO_LDFLAGS injection
         CGO_ENABLED: '1'  # explicit; some tools (subctl, golangci-lint) require CGO
-      loop: "{{ packages_go_install + (packages_go_install_work | default([]) if profile == 'work' else []) }}"
+      loop: "{{ _packages_go_todo }}"
       loop_control:
         label: "{{ item | regex_replace('(/cmd)?@.*', '') | basename }}"
       register: packages_go_results
