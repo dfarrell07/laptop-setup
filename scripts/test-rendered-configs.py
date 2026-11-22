@@ -60,6 +60,10 @@ CASES = {
     'podman_ensure': ('roles/containers/templates/podman-machine-ensure.sh.j2', {
         'containers_podman_bin': 'podman', 'containers_macos_machine_hold_file': '/HOLD-FILE-PLACEHOLDER',
         'containers_macos_machine_trim_stamp': '/TRIM-STAMP-PLACEHOLDER'}),
+    'podman_ensure_prune': ('roles/containers/templates/podman-machine-ensure.sh.j2', {
+        'containers_podman_bin': 'podman', 'containers_macos_machine_hold_file': '/HOLD-FILE-PLACEHOLDER',
+        'containers_macos_machine_trim_stamp': '/TRIM-STAMP-PLACEHOLDER', 'containers_prune_enabled': True,
+        'containers_macos_machine_prune_stamp': '/PRUNE-STAMP-PLACEHOLDER'}),
     'ssh_agent_plist': ('roles/dotfiles/templates/ssh-agent.plist.j2', {'dotfiles_homebrew_prefix': '/opt/homebrew'}),
     'ssh_auth_sock_plist': ('roles/dotfiles/templates/ssh-auth-sock.plist.j2', {}),
 }
@@ -737,6 +741,43 @@ class RenderedConfigTests(unittest.TestCase):
             self.assertEqual(run(STATE='stopped', LASTUP=booted), (0, '', ''))
             stamp.unlink()
             self.assertEqual(run(STATE='running', LASTUP=booted), (0, '', ''))  # on hold: left alone, not trimmed
+
+    def test_podman_machine_ensure_prunes_weekly_before_trimming(self):
+        self.assertNotIn('system prune', self.read('podman_ensure'))  # containers_prune_enabled defaults off
+        with tempfile.TemporaryDirectory() as directory:
+            d = Path(directory)
+            (d / 'bin').mkdir()
+            (d / 'bin/podman').write_text(
+                '#!/bin/sh\n'
+                'case "$1 $2" in\n'
+                '  "machine inspect") echo running ;;\n'
+                '  "system prune") echo "prune $3 sock=${SSH_AUTH_SOCK:-}" >> "$LOG"; exit "${PRUNE_RC:-0}" ;;\n'
+                '  "machine ssh") echo "trim" >> "$LOG" ;;\n'
+                'esac\n')
+            (d / 'bin/podman').chmod(0o755)
+            script, log, pruned, trimmed = d / 'ensure', d / 'log', d / 'pruned', d / 'trimmed'
+            script.write_text(self.read('podman_ensure_prune').replace('/HOLD-FILE-PLACEHOLDER', str(d / 'hold'))
+                              .replace('/TRIM-STAMP-PLACEHOLDER', str(trimmed))
+                              .replace('/PRUNE-STAMP-PLACEHOLDER', str(pruned)))
+
+            def run(**env):
+                log.write_text('')
+                trimmed.unlink(missing_ok=True)
+                result = subprocess.run(['sh', str(script)], capture_output=True, text=True, timeout=30,
+                                        env={'PATH': f'{d}/bin:/usr/bin:/bin', 'LOG': str(log),
+                                             'SSH_AUTH_SOCK': '/agent.sock', **env})
+                return result.stdout, log.read_text()
+            self.assertEqual(run(), ('', 'prune --force sock=\ntrim\n'))  # first run: prune, then trim
+            self.assertEqual(run(), ('', 'trim\n'))  # pruned within the week
+            os.utime(pruned, (time.time() - 8 * 86400,) * 2)
+            self.assertEqual(run(), ('', 'prune --force sock=\ntrim\n'))
+            os.utime(pruned, (time.time() - 8 * 86400,) * 2)
+            out, logged = run(PRUNE_RC='1')
+            self.assertTrue(out.endswith(' pruning podman-machine-default failed\n'), out)
+            self.assertEqual(logged, 'prune --force sock=\ntrim\n')  # a failed prune still trims
+            (d / 'hold').write_text('')
+            os.utime(pruned, (time.time() - 8 * 86400,) * 2)
+            self.assertEqual(run(), ('', ''))  # on hold: left alone
 
     def test_audit_rules_set_backlog_before_rules(self):
         lines = [l for l in self.read('audit').splitlines() if l and not l.startswith('#')]

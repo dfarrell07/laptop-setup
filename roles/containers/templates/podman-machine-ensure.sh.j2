@@ -2,13 +2,25 @@
 # {{ ansible_managed }}
 # Run by the podman machine LaunchAgent at login and every {{ containers_macos_machine_check_seconds | int }}s: starts the
 # machine only when it is stopped, was provisioned (booted once by the play) and is not on hold, and trims a running
-# one's disk (containers_macos_machine_trim_hours). Logs only when it starts it or a trim fails.
+# one's disk (containers_macos_machine_trim_hours), pruning it weekly first when containers_prune_enabled. Logs only
+# when it starts it or a trim or prune fails.
 # Keep it stopped (and untrimmed) on purpose: touch {{ containers_macos_machine_hold_file }}
 podman={{ containers_podman_bin | quote }}
 name={{ containers_macos_machine_name | quote }}
 [ -e {{ containers_macos_machine_hold_file | quote }} ] && exit 0
 state=$("$podman" machine inspect --format '{{ '{{' }}.State{{ '}}' }}' "$name" 2>/dev/null) || exit 0  # no machine yet: the play creates it
 if [ "$state" = running ]; then
+{% if containers_prune_enabled | bool %}
+  # containers_prune_enabled: weekly, like Linux's podman-prune.timer (containers_prune_schedule is systemd-only).
+  # Stopped containers and dangling images; volumes are kept. Before the trim, which then returns the space. It prunes the
+  # default connection's storage (rootful on a rootful machine, where the images are).
+  pstamp={{ containers_macos_machine_prune_stamp | quote }}
+  if [ -z "$(find "$pstamp" -mtime -7 2>/dev/null)" ]; then
+    touch "$pstamp"
+    SSH_AUTH_SOCK= "$podman" system prune --force >/dev/null 2>&1 ||
+      echo "$(date '+%Y-%m-%d %H:%M:%S') pruning $name failed"
+  fi
+{% endif %}
   # At most every {{ containers_macos_machine_trim_hours | int }}h (the stamp's age). No SSH_AUTH_SOCK: podman uses its own key, not the agent,
   # whose confirm prompt refuses a headless request.
   hours={{ containers_macos_machine_trim_hours | int }}

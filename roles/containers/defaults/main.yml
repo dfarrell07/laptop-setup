@@ -33,6 +33,7 @@ containers_macos_machine_ensure_script: "{{ ansible_facts['user_dir'] }}/.local/
 # the same check also trims a running machine's filesystem at most this often, returning freed space to macOS. 0: off.
 containers_macos_machine_trim_hours: 1
 containers_macos_machine_trim_stamp: "{{ ansible_facts['user_dir'] }}/.local/state/podman-machine.trimmed"
+containers_macos_machine_prune_stamp: "{{ ansible_facts['user_dir'] }}/.local/state/podman-machine.pruned"
 containers_podman_bin: "{{ dotfiles_homebrew_prefix | default('/opt/homebrew') }}/bin/podman"
 
 system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml
