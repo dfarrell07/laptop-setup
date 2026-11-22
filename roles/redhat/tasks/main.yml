@@ -92,9 +92,13 @@
   tags: [become]
   register: _splunk_shell_result
   ignore_errors: true
+  # getent with fail_key: false reports a missing account as None; the user module would create it.
+  # A non-login shell already set (by IT, or /usr/bin/nologin) is left alone.
   when:
     - csb_rhel
-    - redhat_splunk_service_account in (ansible_facts.getent_passwd | default({}))
+    - (ansible_facts.getent_passwd | default({}))[redhat_splunk_service_account] | default(none) is not none
+    - ansible_facts.getent_passwd[redhat_splunk_service_account][5]
+      not in ['/sbin/nologin', '/usr/sbin/nologin', '/usr/bin/nologin', '/bin/false']
 
 - name: Record splunk account hardening failure
   ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
