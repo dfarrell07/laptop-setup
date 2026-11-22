@@ -288,7 +288,7 @@ fi
 # smoke run exits 0 and the assert in verify-smoke.yml passes.
 _tool_absent="FAIL"
 [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && _tool_absent="WARN"
-_tools=("kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "jq:jq --version" "tmux:tmux -V" "rg:rg --version" "fzf:fzf --version" "transcrypt:transcrypt --version" "gitleaks:gitleaks version" "direnv:direnv --version")
+_tools=("kubectl:kubectl version --client" "podman:$($IS_LINUX && echo 'podman info' || echo 'podman --version')" "claude:claude --version" "gh:gh --version" "jq:jq --version" "tmux:tmux -V" "rg:rg --version" "fzf:fzf --version" "transcrypt:transcrypt --version" "gitleaks:gitleaks version" "direnv:direnv --version")
 if [[ "$profile" == "work" ]]; then _tools+=("kind:kind version" "helm:helm version" "kustomize:kustomize version" "go:go version" "k9s:k9s version" "sops:sops --disable-version-check --version" "oras:oras version"); fi
 # gitlint, both profiles: Fedora (dnf), Debian (apt) and macOS (brew); not in EPEL, so not on RHEL/Rocky.
 if ! grep -qE '^ID="?(rhel|rocky|almalinux|centos)' /etc/os-release 2>/dev/null; then
@@ -347,10 +347,10 @@ if [[ "$profile" != "work" || -z "$_acli_site" ]]; then
 elif [[ -n "$CONTAINER" ]]; then
   record "acli-auth" "SKIP" "host-only"
 elif ! command -v acli &>/dev/null; then
-  record "acli-auth" "WARN" "acli_site is set but acli is not installed: make packages"
+  record "acli-auth" "WARN" "acli_site is set but acli is not installed: $($IS_LINUX && echo 'make packages' || echo 'brew tap atlassian/homebrew-acli && brew install acli')"
 else
   _acli_out=""
-  if _acli_out=$(timeout 20 acli jira auth status 2>/dev/null) && grep -qF "$_acli_site" <<<"$_acli_out"; then
+  if _acli_out=$(${_timeout_bin:+"$_timeout_bin" 20} acli jira auth status 2>/dev/null) && grep -qF "$_acli_site" <<<"$_acli_out"; then
     record "acli-auth" "PASS"
   else
     record "acli-auth" "WARN" "acli (jira) is not logged in to $_acli_site: add vault_acli_api_token (make vault-edit), then make claude from a desktop session (expired tokens too)"
@@ -749,7 +749,7 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   _brew=$( (brew --prefix) 2>/dev/null || { [[ "$(uname -m)" == arm64 ]] && echo /opt/homebrew || echo /usr/local; })
   _zpath=$(env -i HOME="$HOME" PATH=/usr/bin:/bin:/usr/sbin:/sbin zsh -c 'print -r -- "$PATH"' 2>/dev/null || true)
   _missing=""
-  _first() { [[ ":${_zpath%%:"$2":*}:" == *":$1:"* ]]; }  # $1 is on the PATH, ahead of $2
+  _first() { local p=":$_zpath:"; [[ "${p%%:"$2":*}:" == *":$1:"* ]]; }  # $1 is on the PATH, ahead of $2
   _first "$_brew/bin" /usr/bin || _missing+=" $_brew/bin"
   _first "$HOME/.local/bin" /usr/bin || _missing+=" ~/.local/bin"
   if $_macos_gnu_tools && [[ -d "$_brew/opt/coreutils/libexec/gnubin" ]]; then
@@ -793,7 +793,9 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   elif ! command -v podman &>/dev/null; then record "podman-machine" "FAIL" "podman not installed — run: make apply CHUNK=packages"
   elif [[ "$(podman machine inspect --format '{{.State}}' "$_podman_machine_name" 2>/dev/null)" != running ]]; then
     # WARN in Molecule: CI runners cannot run the VM
-    record "podman-machine" "$([[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && echo WARN || echo FAIL)" "podman machine not running — run: make apply CHUNK=containers (or podman machine start)"
+    # the default containers_macos_machine_hold_file
+    if [[ -e "$HOME/.local/state/podman-machine.hold" ]]; then record "podman-machine" "WARN" "podman machine stopped and on hold (rm ~/.local/state/podman-machine.hold to let the launch agent start it)"
+    else record "podman-machine" "$([[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && echo WARN || echo FAIL)" "podman machine not running — run: make apply CHUNK=containers (or podman machine start)"; fi
   elif podman info &>/dev/null; then record "podman-machine" "PASS"
   else record "podman-machine" "FAIL" "podman machine running but unreachable — check ~/.local/state/log/podman-machine.log"; fi
   if ! $_podman_machine; then record "docker-shim" "PASS" "containers_macos_machine_enabled is off"
@@ -815,7 +817,6 @@ _ssh_add_rc=0
 if [[ -n "$_timeout_bin" ]]; then _ssh_add_out=$("$_timeout_bin" 10 ssh-add -L 2>/dev/null) || _ssh_add_rc=$?
 else _ssh_add_out=$(ssh-add -L 2>/dev/null) || _ssh_add_rc=$?; fi
 [[ "$_ssh_add_rc" -eq 124 ]] && _ssh_add_rc=2  # timed out: treat as unreachable agent
-unset _timeout_bin
 # match the key-type field, not the free-text comment
 if printf '%s\n' "$_ssh_add_out" | grep -q '^sk-ssh-ed25519@openssh.com '; then record "ssh-agent-key" "PASS"
 elif [[ "$_ssh_add_rc" -eq 2 ]]; then
@@ -906,16 +907,22 @@ if [[ -f "$_gc" ]] && grep -q 'Ansible managed' "$_gc"; then
     _tg_dir=$(mktemp -d)
     printf '#!/bin/sh\ncat >/dev/null\nprintf "username=x\\npassword=smoke-sentinel\\n"\n' > "$_tg_dir/gh"
     chmod 0700 "$_tg_dir/gh"
-    if (cd "$_tg_dir" && printf 'url=https://github.com/torvalds/linux.git\n\n' \
-        | env -u GIT_ASKPASS -u SSH_ASKPASS PATH="$_tg_dir:$PATH" GIT_TERMINAL_PROMPT=0 \
-          timeout 20 git credential fill 2>/dev/null | grep -q '^password='); then
+    _tg_rc=0
+    # 0: a helper handed over a token, 1: none, 124: timed out (pipefail would report grep's status: read PIPESTATUS)
+    (cd "$_tg_dir" || exit 2; set +e +o pipefail
+     printf 'url=https://github.com/torvalds/linux.git\n\n' \
+       | env -u GIT_ASKPASS -u SSH_ASKPASS PATH="$_tg_dir:$PATH" GIT_TERMINAL_PROMPT=0 \
+         ${_timeout_bin:+"$_timeout_bin" 20} git credential fill 2>/dev/null | grep -q '^password='
+     _s=("${PIPESTATUS[@]}"); [[ ${_s[2]} -eq 0 ]] && exit 0; [[ ${_s[1]} -eq 124 ]] && exit 124; exit 1) || _tg_rc=$?
+    if [[ $_tg_rc -eq 0 ]]; then
       record "git-token-guard" "FAIL" "a git credential helper hands a token to upstream GitHub repos (gh auth setup-git or a [credential] helper in ~/.config/git/config or ~/.gitconfig); run: make dotfiles, and answer No to gh's git question"
-    else record "git-token-guard" "PASS"; fi
+    elif [[ $_tg_rc -eq 1 ]]; then record "git-token-guard" "PASS"
+    else record "git-token-guard" "WARN" "git credential fill timed out or could not run; the guard could not be checked"; fi
     rm -rf "$_tg_dir"
-    unset _tg_dir
+    unset _tg_dir _tg_rc
   fi
 fi
-unset _gc
+unset _gc _timeout_bin
 # git identity files and includeIf routing
 _gc_work="$HOME/.config/git/config-work"
 _gc_personal="$HOME/.config/git/config-personal"
