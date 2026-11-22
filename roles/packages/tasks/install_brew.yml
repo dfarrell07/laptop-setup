@@ -42,6 +42,10 @@
       async: 1800  # a fresh Mac builds/pours ~35 formulas in this one call
       poll: 10
       register: _packages_brew_formulas
+      # a download that fails on a DNS or network blip (CI runners hit this) succeeds on a retry
+      retries: 2
+      delay: 15
+      until: _packages_brew_formulas is succeeded
   rescue:
     - name: Warn Homebrew package install failed (will fail play)
       ansible.builtin.debug:
@@ -75,6 +79,9 @@
       async: 600
       poll: 10
       register: _packages_brew_casks
+      retries: 2  # as for formulas: the ghostty download failed on runner DNS
+      delay: 15
+      until: _packages_brew_casks is succeeded
   rescue:
     - name: Warn Homebrew cask package install failed (will fail play)
       ansible.builtin.debug:
