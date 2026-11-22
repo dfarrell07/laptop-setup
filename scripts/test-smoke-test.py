@@ -642,6 +642,9 @@ class SmokeTests(unittest.TestCase):
             self.assertIn('coreutils-gnubin', path)
             self.assertNotIn('coreutils-gnubin', run(late, sock, gnu='false')[0])  # GNU tools turned off
             self.assertIn('~/.local/bin', run('', sock)[0])  # no ~/.zshenv
+            # Everything appended after the system PATH, so /usr/bin is first and nothing precedes it
+            self.assertTrue(run(f'path=($path {home}/.local/bin {brew}/bin)\n', sock, gnu='false')[0]
+                            .startswith('macos-zshenv-path FAIL'))
             self.assertTrue(run(good, '')[1].startswith('macos-launchd-ssh-auth-sock FAIL launchd SSH_AUTH_SOCK is unset'))
             apple = '/private/tmp/com.apple.launchd.x/Listeners'
             self.assertTrue(run(good, apple)[1].startswith('macos-launchd-ssh-auth-sock FAIL'))
