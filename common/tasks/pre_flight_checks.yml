@@ -392,7 +392,7 @@
           when: "'redhat_splunk_nologin_shell' in (_config_raw | default({}))"
           ansible.builtin.assert:
             that:
-              - redhat_splunk_nologin_shell in ['/sbin/nologin', '/usr/sbin/nologin', '/bin/false']
+              - redhat_splunk_nologin_shell in ['/sbin/nologin', '/usr/sbin/nologin', '/usr/bin/nologin', '/bin/false']
             fail_msg: >-
               SECURITY: redhat_splunk_nologin_shell is set to '{{ redhat_splunk_nologin_shell }}'
               in config.yml. This variable controls the shell assigned to the splunk service account
