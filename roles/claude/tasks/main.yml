@@ -422,14 +422,6 @@
     - is_macos
     - claude_queue_enabled | bool
 
-- name: Install util-linux for flock (macOS, queue enabled)
-  community.general.homebrew:
-    name: util-linux
-    state: present
-  when:
-    - claude_queue_enabled | bool
-    - is_macos
-
 - name: Deploy queue-repos.conf stub (first run only — edit to add repos)
   ansible.builtin.template:
     src: queue-repos.conf.j2

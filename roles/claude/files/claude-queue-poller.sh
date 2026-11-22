@@ -114,7 +114,7 @@ mark_issue_failed() {
   log "Issue #$issue_num failed"
 }
 
-# macOS Homebrew coreutils installs GNU timeout as gtimeout (launchd PATH has no gnubin)
+# gtimeout covers a Homebrew coreutils that installs only g-prefixed names
 TIMEOUT_BIN=$(command -v timeout || command -v gtimeout) || { echo "timeout/gtimeout not found" >&2; exit 1; }
 
 # --- Main ---
