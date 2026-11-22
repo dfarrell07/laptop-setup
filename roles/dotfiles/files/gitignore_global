@@ -19,9 +19,10 @@ __pycache__/
 .mypy_cache/
 .pytest_cache/
 
-# C / eBPF build artifacts
+# C / eBPF build artifacts (the ! line keeps directories such as conf.d/ visible)
 *.o
 *.d
+!*.d/
 *.a
 
 # Go test binaries (go test -c output, never committed)
@@ -41,9 +42,11 @@ target/
 # Log files
 *.log
 
-# ctags / etags index files (C and Go development)
+# ctags / etags index files (C and Go development), not tags/ directories
 tags
 TAGS
+!tags/
+!TAGS/
 
 # Claude Code per-checkout permission overrides (personal; project settings.json is shared)
 **/.claude/settings.local.json
