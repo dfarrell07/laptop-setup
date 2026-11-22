@@ -730,6 +730,23 @@ class RenderedConfigTests(unittest.TestCase):
 
 
 class ShippedFileTests(unittest.TestCase):
+    def test_global_gitignore_ignores_build_files_not_directories(self):
+        with tempfile.TemporaryDirectory() as name:
+            repo = Path(name)
+            for path in ('conf.d/a.conf', 'tags/post.md', 'dep.d', 'tags', 'TAGS', 'main.o'):
+                (repo / path).parent.mkdir(parents=True, exist_ok=True)
+                if path != 'tags':
+                    (repo / path).touch()
+            (repo / 'sub').mkdir()
+            (repo / 'sub/tags').touch()
+            env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1', HOME=name)
+            subprocess.run(['git', 'init', '-q', name], env=env, check=True)
+            result = subprocess.run(['git', '-c', f'core.excludesFile={ROOT / "roles/dotfiles/files/gitignore_global"}',
+                                     'status', '--porcelain', '-uall'], cwd=name, env=env, capture_output=True,
+                                    text=True, check=True)
+            self.assertEqual(sorted(line[3:] for line in result.stdout.splitlines()),
+                             ['conf.d/a.conf', 'tags/post.md'])
+
     def test_units_hardening_matches_selinux_constraints(self):
         aide = (ROOT / 'roles/system/files/aide-check.service').read_text()
         active = [l for l in aide.splitlines() if not l.lstrip().startswith('#')]
