@@ -459,6 +459,7 @@ class RenderedConfigTests(unittest.TestCase):
                 stub('i3status', 'printf \'{"version":1}\\n[\\n[{"name":"volume","full_text":"VOL 40%%"},'
                                  '{"name":"wireless","full_text":"WIFI"}]\\n\'')
                 stub('wpctl', f'echo "{wpctl}"' if wpctl else 'exit 1')  # exit 1: no input device
+                stub('timeout', 'shift; exec "$@"')  # GNU timeout is not in macOS /usr/bin
                 for quiet in ['nmcli', 'tailscale', 'rpm', 'podman', 'ps']:
                     stub(quiet, 'exit 1')
                 script = stubs / 'bar-status'
