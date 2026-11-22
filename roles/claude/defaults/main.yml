@@ -168,6 +168,7 @@ claude_deny_sensitive:
   - "~/.gitconfig"
   - "~/.config/git/config"
   - "~/.vault_pass*"
+  - "~/laptop-setup-backup-*/**"  # scripts/backup.sh copies ~/.ssh, credentials and tokens here
   - "~/.netrc"
   - "~/.git-credentials"
   - "~/.pypirc"
@@ -248,6 +249,8 @@ claude_deny_write_only:
   - "~/.config/autostart/**"
   - "~/Library/LaunchAgents/**"
   - "~/.config/git/template/hooks/**"  # Git hooks deployed by dotfiles; must not be overwritten by Claude
+  - "~/.config/git/allowed_signers"  # the vault trusts these keys for its commits (scripts/vault-shared.sh)
+  - "~/.config/laptop-setup/**"  # vault trust state: approved age recipients and the signer cache
   - "**/.githooks/**"  # Repos here use core.hooksPath=.githooks; a planted hook runs on the next git command
   - "**/.git/hooks/**"  # Per-repo hook files; Write + git config --local core.hooksPath enables hook injection
   - "**/.claude/settings.json"  # Project settings load hooks, MCP servers and permissions on the next start
