@@ -219,7 +219,8 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
 
   TARGET_DIR="${REPO_PATH[$REPO_SHORT]}"
   TARGET_REMOTE="${REPO_REMOTE[$REPO_SHORT]}"
-  TOOLS="${REPO_ALLOWED_TOOLS[$REPO_SHORT]:-Read,Edit,Write,Bash(git add *),Bash(git commit *),Bash(git diff *),Bash(git log *),Bash(git status)}"
+  # Exact git diff/log forms: their --output=<file> writes anywhere (~/.config/zsh/local.zsh runs in every shell)
+  TOOLS="${REPO_ALLOWED_TOOLS[$REPO_SHORT]:-Read,Edit,Write,Bash(git add *),Bash(git commit *),Bash(git diff),Bash(git diff --cached),Bash(git diff --stat),Bash(git log --oneline -20),Bash(git status)}"
   DEFAULT_BRANCH="${REPO_DEFAULT_BRANCH[$REPO_SHORT]:-main}"
   PROMPT=$(extract_issue_body "$ISSUE_BODY")
 
