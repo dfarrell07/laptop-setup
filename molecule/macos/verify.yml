@@ -209,7 +209,7 @@
     - name: Assert SSH agent plist runs ssh-agent in the foreground with a socket
       ansible.builtin.assert:
         that:
-          - (verify_ssh_plist_content.stdout | from_json).ProgramArguments[0].endswith('/bin/ssh-agent')
+          - (verify_ssh_plist_content.stdout | from_json).ProgramArguments[3].endswith('/bin/ssh-agent')
           - "'-D' in (verify_ssh_plist_content.stdout | from_json).ProgramArguments"
           - "'-a' in (verify_ssh_plist_content.stdout | from_json).ProgramArguments"
           - (verify_ssh_plist_content.stdout | from_json).KeepAlive
