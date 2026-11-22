@@ -58,6 +58,21 @@
           exit 0
         mode: "0755"
 
+    - name: Ensure ~/.local/bin exists
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}/.local/bin"
+        state: directory
+        mode: "0755"
+
+    - name: Seed a stale golangci-lint distrobox wrapper (converge deletes it; the host runs ~/go/bin itself)
+      ansible.builtin.copy:
+        dest: "{{ ansible_env.HOME }}/.local/bin/golangci-lint"
+        content: |
+          #!/bin/sh
+          # distrobox_binary
+          exit 1
+        mode: "0755"
+
     - name: Create stub distrobox-host-exec (exercises symlink branch in converge)
       ansible.builtin.copy:
         dest: /usr/bin/distrobox-host-exec
@@ -80,9 +95,11 @@
             case "$1" in
               --bin) BIN="$2"; shift 2 ;;
               --export-path) DST="$2"; shift 2 ;;
+              --delete) DEL=1; shift ;;
               *) shift ;;
             esac
           done
+          if [ -n "${DEL:-}" ]; then rm -f "$DST/$(basename "$BIN")"; exit 0; fi
           mkdir -p "$DST" && cp "$BIN" "$DST/$(basename "$BIN")" 2>/dev/null || true
           exit 0
         mode: "0755"
