@@ -273,6 +273,12 @@ gpg --verify collections-dist/SHA256SUMS.asc collections-dist/SHA256SUMS
   `gdb -p` or `dlv attach`.
 - **claude.ai install.sh** — downloaded with `get_url` and run only when it matches `claude_install_sha256` (`claude_pinned_version` is a
   minimum version); the binaries it fetches come from Anthropic's rolling release channel and are not pinned by this repo.
+- **Antigravity CLI (agy)** — the tarball is checked against the SHA-512 in the vendor's release manifest, fetched over TLS in the
+  same run; nothing in this repo pins the version or hash, so integrity rests on the vendor's manifest host and storage bucket
+  (the role only requires the URL to be in that bucket).
+- **Codex CLI updates** — the role installs the committed pin (`roles/codex/files/package.json`, registry integrity checked
+  against the committed lock) only when Codex is missing or older; a newer copy from `npm install -g @openai/codex` (Codex's own
+  update prompt) is kept and is not pinned.
 - **SHA256-only release binaries** — tkn, ec, operator-sdk, sops, actionlint and zizmor use pinned SHA256 checksums without signature or
   attestation checks (tkn and ec upstreams publish no Sigstore attestations; see the TODOs in
   `roles/packages/tasks/install_standalone_binaries.yml`). This defends against CDN corruption but not a compromised release or maintainer
