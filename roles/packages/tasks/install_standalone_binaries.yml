@@ -44,7 +44,6 @@
 
 - name: Install acli (Atlassian CLI) from its pinned rpm
   when:
-    - profile == 'work'
     - packages_install_binaries | bool
     - is_dnf
     - not csb_rhel  # IT owns RHEL CSB hosts: no third-party rpm there
@@ -119,6 +118,85 @@
             path: "{{ _acli_tmp.path }}"
             state: absent
           when: _acli_tmp.path is defined
+
+- name: Install acli (Atlassian CLI) from its pinned tarball (macOS)
+  when:
+    - packages_install_binaries | bool
+    - ansible_facts['system'] == 'Darwin'
+    - ansible_facts['architecture'] in ['arm64', 'x86_64']
+  vars:
+    _acli_bin: "{{ ansible_facts['user_dir'] }}/.local/bin/acli"
+    _acli_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'arm64' else 'amd64' }}"
+  block:
+    - name: Assert the acli version is a plain release string (interpolated into the URL)
+      ansible.builtin.assert:
+        that: packages_acli_version is match('^[0-9]+(\\.[0-9]+)*-stable\\Z')
+
+    - name: Read the installed acli version (macOS)
+      ansible.builtin.command:
+        argv: ["{{ _acli_bin }}", --version]
+      register: _acli_darwin_version
+      changed_when: false
+      failed_when: false
+      check_mode: false  # read-only probe
+
+    - name: Download and install the pinned acli tarball (macOS)
+      when: ('acli version ' ~ packages_acli_version) not in (_acli_darwin_version.stdout | default(''))
+      block:
+        - name: Create a private directory for the acli tarball
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: acli-
+            path: "{{ ansible_facts['user_dir'] }}/.cache"
+          register: _acli_darwin_tmp
+
+        - name: Download the acli tarball (SHA256-pinned)
+          ansible.builtin.get_url:
+            url: >-
+              https://acli.atlassian.com/darwin/{{ packages_acli_version }}/acli_{{ packages_acli_version
+              }}_darwin_{{ _acli_arch }}.tar.gz
+            dest: "{{ _acli_darwin_tmp.path }}/acli.tar.gz"
+            checksum: "sha256:{{ packages_acli_darwin_sha256_arm64 if _acli_arch == 'arm64' else packages_acli_darwin_sha256_amd64 }}"
+            mode: "0600"
+            timeout: 120
+
+        - name: Extract acli
+          ansible.builtin.unarchive:
+            src: "{{ _acli_darwin_tmp.path }}/acli.tar.gz"
+            dest: "{{ _acli_darwin_tmp.path }}"
+            remote_src: true
+            include: ["acli_{{ packages_acli_version }}_darwin_{{ _acli_arch }}/acli"]
+
+        - name: Ensure ~/.local/bin exists
+          ansible.builtin.file:
+            path: "{{ ansible_facts['user_dir'] }}/.local/bin"
+            state: directory
+            mode: "0755"
+
+        - name: Install acli into ~/.local/bin
+          ansible.builtin.copy:
+            src: "{{ _acli_darwin_tmp.path }}/acli_{{ packages_acli_version }}_darwin_{{ _acli_arch }}/acli"
+            dest: "{{ _acli_bin }}"
+            remote_src: true
+            mode: "0755"
+      rescue:
+        - name: Stop on an acli checksum mismatch (macOS)
+          ansible.builtin.fail:
+            msg: >-
+              SECURITY: the downloaded acli tarball does not match its pinned SHA256 ({{ ansible_failed_result.msg }}).
+          when: "'checksum' in (ansible_failed_result.msg | default('') | lower)"
+        - name: Warn that acli was not installed (macOS)
+          ansible.builtin.debug:
+            msg: >-
+              WARNING: acli {{ packages_acli_version }} was not installed ({{ ansible_failed_result.msg | default('unknown error') }}).
+              The Jira steps need it: retry with make packages.
+      always:
+        - name: Remove the acli tarball directory
+          ansible.builtin.file:
+            path: "{{ _acli_darwin_tmp.path }}"
+            state: absent
+          changed_when: false  # private scratch dir, removed in the same run: not machine state
+          when: _acli_darwin_tmp.path is defined
 
 - name: Install oras (OCI artifact client)
   when:
