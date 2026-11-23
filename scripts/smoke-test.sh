@@ -294,10 +294,10 @@ if [[ "$profile" == "work" ]]; then _tools+=("kind:kind version" "helm:helm vers
 if ! grep -qE '^ID="?(rhel|rocky|almalinux|centos)' /etc/os-release 2>/dev/null; then
   _tools+=("gitlint:gitlint --version")
 fi
-# Release-management tools installed on Linux work machines only (skopeo from dnf/apt, ec pinned); acli only where
-# the packages role installs it (Fedora, x86_64; not RHEL CSB, which IT owns).
+# Release-management tools installed on Linux work machines only (skopeo from dnf/apt, ec pinned). acli on every
+# profile where the packages role installs it: Fedora x86_64 (not RHEL CSB, which IT owns) and macOS.
 if [[ "$profile" == "work" && "$(uname -s)" == Linux ]]; then _tools+=("skopeo:skopeo --version" "ec:ec version"); fi
-if [[ "$profile" == "work" && "$(uname -m)" == x86_64 ]] && grep -q '^ID=fedora' /etc/os-release 2>/dev/null; then
+if { [[ "$(uname -m)" == x86_64 ]] && grep -q '^ID=fedora' /etc/os-release 2>/dev/null; } || [[ "$(uname -s)" == Darwin ]]; then
   _tools+=("acli:acli --version")
 fi
 for tool in "${_tools[@]}"; do
@@ -347,7 +347,7 @@ if [[ "$profile" != "work" || -z "$_acli_site" ]]; then
 elif [[ -n "$CONTAINER" ]]; then
   record "acli-auth" "SKIP" "host-only"
 elif ! command -v acli &>/dev/null; then
-  record "acli-auth" "WARN" "acli_site is set but acli is not installed: $($IS_LINUX && echo 'make packages' || echo 'brew tap atlassian/homebrew-acli && brew install acli')"
+  record "acli-auth" "WARN" "acli_site is set but acli is not installed: make packages"
 else
   _acli_out=""
   if _acli_out=$(${_timeout_bin:+"$_timeout_bin" 20} acli jira auth status 2>/dev/null) && grep -qF "$_acli_site" <<<"$_acli_out"; then

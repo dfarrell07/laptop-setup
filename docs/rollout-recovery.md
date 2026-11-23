@@ -87,7 +87,7 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   `systemctl --user disable --now laptop-user-update.timer`, then delete `~/.local/bin/laptop-user-update` and
   `~/.config/systemd/user/laptop-user-update.{service,timer}` (or set `packages_user_updates_enabled: false`). On macOS:
   `launchctl bootout gui/$(id -u)/com.laptop-setup.user-update`, then delete `~/.local/bin/laptop-user-update` and
-  `~/Library/LaunchAgents/com.laptop-setup.user-update.plist`.
+  `~/Library/LaunchAgents/com.laptop-setup.user-update.plist`. acli on macOS is `~/.local/bin/acli`.
 
 ## ssh_client
 
