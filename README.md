@@ -73,6 +73,7 @@ variables and feature toggles. Secrets live in the Ansible vault (`group_vars/al
 | [docs/multi-machine.md](docs/multi-machine.md) | Agent sessions on several machines working on this repo together |
 | [docs/password-migration.md](docs/password-migration.md) | LastPass to Bitwarden import (`make pw-migrate`) without the export touching disk |
 | [docs/agent-config.md](docs/agent-config.md) | Claude, Codex and Antigravity configuration: findings and proposals |
+| [docs/drive-sync.md](docs/drive-sync.md) | Pushing `~/drive/` to Google Drive for large artifacts |
 | [docs/auto-updates.md](docs/auto-updates.md) | What updates itself, how, where it logs, and what stays manual |
 | [SECURITY.md](SECURITY.md) | Threat model, vault, hooks, supply chain, hardening scope |
 | [AGENTS.md](AGENTS.md) | Rules for AI agents working in this repo |

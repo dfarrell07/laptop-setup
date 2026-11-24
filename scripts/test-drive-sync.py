@@ -179,6 +179,14 @@ class DriveSyncTests(unittest.TestCase):
         self.assertIn('bytes free but this push needs 5000', result.stderr)
         self.assertEqual(self.calls('sync'), [])
 
+    def test_missing_rclone_is_named(self):
+        empty = self.root.parent / 'nobin'
+        empty.mkdir()
+        result = subprocess.run(['/bin/bash', str(self.script), 'push', 'owner'], capture_output=True, text=True,
+                                env=dict(self.env, PATH=str(empty)), timeout=60)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('rclone not found', result.stderr)
+
     def test_unauthorized_account_is_refused(self):
         (self.root / 'owner/model.bin').write_text('x')
         result = self.run_sync('push', 'owner', no_token=1)
