@@ -58,6 +58,13 @@ rollout_catalog:
       - codex-work-login
       - claude-session-placement
       - acli-auth
+  drive_sync:
+    desc: ~/drive directories pushed one way to Google Drive (opt-in per account)
+    risk: low
+    sudo: false
+    linux_only: true
+    requires: [packages]
+    verify: [drive-sync-auth, drive-sync-push]
   repos:
     desc: Git repository clones and the notes repo (when notes_enabled)
     risk: low

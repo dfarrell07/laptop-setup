@@ -473,7 +473,7 @@ class UxTests(unittest.TestCase):
 class LinuxOnlyTests(unittest.TestCase):
     """linux_only chunks: n/a in status, passed over by verify and refused by plan/apply on macOS."""
 
-    LINUX_ROLES = {'distrobox', 'login_shell', 'redhat', 'repos_dnf'}
+    LINUX_ROLES = {'distrobox', 'drive_sync', 'login_shell', 'redhat', 'repos_dnf'}  # drive_sync: macOS is slice 2
 
     def test_linux_only_marks_exactly_the_roles_gated_to_linux(self):
         marked = {n for n, e in CATALOG.items() if e.get('linux_only')}

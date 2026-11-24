@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+# One-way push of ~/drive/<account>/ to Google Drive (drive-sync; docs/drive-sync.md in laptop-setup).
+[Unit]
+Description=Push ~/drive to Google Drive
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.local/bin/drive-sync push --timer
+Nice=10
+IOSchedulingClass=idle

@@ -1,0 +1,140 @@
+---
+# roles/drive_sync/tasks/main.yml — local Drive directories, the drive-sync command and its push timer
+# (docs/drive-sync.md). Tokens are never handled here: `drive-sync auth <account>` runs the browser consent and rclone
+# keeps the token in drive_sync_config.
+- name: Validate drive sync settings
+  vars:
+    _generic_hosts: [fedora, localhost, localhost-localdomain, debian, ubuntu, rhel, rocky, linux, laptop]
+  ansible.builtin.assert:
+    that:
+      - drive_sync_accounts is sequence and drive_sync_accounts is not string
+      - drive_sync_accounts | reject('match', '^[a-z][a-z0-9-]{0,15}$') | list | length == 0
+      - drive_sync_accounts | unique | length == drive_sync_accounts | length
+      - drive_sync_accounts | length == 0 or drive_sync_host is match('^[a-z0-9][a-z0-9-]{1,30}$')
+      - drive_sync_accounts | length == 0 or drive_sync_host not in _generic_hosts
+    fail_msg: >-
+      drive_sync_accounts must be a list of distinct short names (a-z, 0-9, '-', starting with a letter). With any
+      account, drive_sync_host must be set in config.yml to a name unique to this machine (a-z, 0-9, '-'), not a
+      generic one such as {{ _generic_hosts | join(', ') }}: two machines pushing the same Drive folder delete each
+      other's files.
+  when: is_linux  # macOS: slice 2
+
+- name: Set up Drive sync
+  when:
+    - is_linux
+    - drive_sync_accounts | length > 0
+  block:
+    - name: Create the Drive directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0700"
+      loop: >-
+        {{ [drive_sync_root, drive_sync_config | dirname, ansible_facts['user_dir'] ~ '/.config/drive-sync']
+           + (drive_sync_accounts | map('regex_replace', '^', drive_sync_root ~ '/') | list) }}
+
+    - name: Create the user bin and systemd unit directories
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: [.local/bin, .config/systemd/user]
+
+    - name: Warn that the OAuth client is not in the vault
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: vault_drive_oauth_client_id / vault_drive_oauth_client_secret are empty, so no Drive remote was
+          configured. Create the OAuth client (docs/drive-sync.md), add both with make vault-edit, then make apply
+          CHUNK=drive_sync.
+      when: drive_sync_client_id | length == 0 or drive_sync_client_secret | length == 0
+
+    # Only the remote's settings are managed; the token rclone writes into the same section is left alone.
+    - name: Configure the Drive remotes
+      community.general.ini_file:
+        path: "{{ drive_sync_config }}"
+        section: "drive-{{ item.0 }}"
+        option: "{{ item.1.key }}"
+        value: "{{ item.1.value }}"
+        mode: "0600"
+        no_extra_spaces: false
+      loop: >-
+        {{ drive_sync_accounts | product([
+             {'key': 'type', 'value': 'drive'},
+             {'key': 'client_id', 'value': drive_sync_client_id},
+             {'key': 'client_secret', 'value': drive_sync_client_secret},
+             {'key': 'scope', 'value': 'drive.file'}]) | list }}
+      loop_control:
+        label: "drive-{{ item.0 }} {{ item.1.key }}"
+      no_log: true  # client secret
+      when: drive_sync_client_id | length > 0 and drive_sync_client_secret | length > 0
+
+    - name: Deploy the gitleaks rules for pushes
+      ansible.builtin.template:
+        src: gitleaks.toml.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/drive-sync/gitleaks.toml"
+        mode: "0600"
+
+    - name: Deploy the drive-sync command
+      ansible.builtin.template:
+        src: drive-sync.sh.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.local/bin/drive-sync"
+        mode: "0755"
+
+    - name: Deploy the Drive directory README
+      ansible.builtin.template:
+        src: README.md.j2
+        dest: "{{ drive_sync_root }}/README.md"
+        mode: "0644"
+
+    - name: Deploy the push service and timer
+      ansible.builtin.template:
+        src: "{{ item }}.j2"
+        dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/{{ item }}"
+        mode: "0644"
+      loop: [drive-sync-push.service, drive-sync-push.timer]
+      register: _drive_sync_units
+
+    - name: Check for a running systemd user manager
+      ansible.builtin.stat:
+        path: "/run/user/{{ ansible_facts['user_uid'] | default('none') }}/systemd/private"
+      register: _drive_sync_user_manager
+
+    - name: Enable the push timer once the OAuth client is configured
+      ansible.builtin.systemd:
+        name: drive-sync-push.timer
+        scope: user
+        enabled: true
+        state: started
+        daemon_reload: "{{ _drive_sync_units is changed }}"
+      when:
+        - _drive_sync_user_manager.stat.exists
+        - not (ansible_check_mode and _drive_sync_units is changed)
+        - drive_sync_client_id | length > 0 and drive_sync_client_secret | length > 0
+
+# With no accounts left, a timer from an earlier run would keep pushing with the old command: stop it. The directories,
+# the remotes (and their tokens) and the Drive copies stay; docs/rollout-recovery.md lists them.
+- name: Stop the push timer when no account is configured
+  when:
+    - is_linux
+    - drive_sync_accounts | length == 0
+  block:
+    - name: Check for a deployed push timer
+      ansible.builtin.stat:
+        path: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/drive-sync-push.timer"
+      register: _drive_sync_old_timer
+
+    - name: Check for a running systemd user manager
+      ansible.builtin.stat:
+        path: "/run/user/{{ ansible_facts['user_uid'] | default('none') }}/systemd/private"
+      register: _drive_sync_old_manager
+      when: _drive_sync_old_timer.stat.exists
+
+    - name: Disable the push timer
+      ansible.builtin.systemd:
+        name: drive-sync-push.timer
+        scope: user
+        enabled: false
+        state: stopped
+      when:
+        - _drive_sync_old_timer.stat.exists
+        - _drive_sync_old_manager.stat.exists | default(false)

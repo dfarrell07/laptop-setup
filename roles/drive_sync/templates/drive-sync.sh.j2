@@ -1,0 +1,154 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# drive-sync: push ~/drive/<account>/ one way to Google Drive, pull another machine's files on request.
+# Design and rules: docs/drive-sync.md in laptop-setup; agents: ~/drive/README.md.
+#   drive-sync auth <account>               browser consent for this machine (stores the token in the rclone config)
+#   drive-sync push [--timer] [<account>]   push now (all accounts by default); --timer: skip if a push is running
+#   drive-sync pull <account> <host>/<path> another machine's files into .pulled/<host>/ (this host: restore)
+#   drive-sync status                       remotes and Drive free space
+set -euo pipefail
+umask 077
+
+CONF={{ drive_sync_config | quote }}
+ROOT={{ drive_sync_root | quote }}
+HOST={{ drive_sync_host | quote }}
+ACCOUNTS=({% for a in drive_sync_accounts %}{{ a | quote }}{% if not loop.last %} {% endif %}{% endfor %})
+GITLEAKS_CONFIG="$HOME/.config/drive-sync/gitleaks.toml"
+LOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/drive-sync.lock"
+# Never pushed: pulled copies, unfinished writes, temp files and secret-shaped files. Symlinks are not followed.
+FILTERS=(--exclude '/.pulled/**' --exclude '/.gitleaksignore'
+         --exclude '*.partial' --exclude '*.partial/**' --exclude '*.tmp' --exclude '*.incomplete'
+         --exclude '.~lock*' --exclude '.DS_Store'
+         --exclude '.env*' --exclude '*.pem' --exclude '*.key'
+         --exclude 'id_rsa*' --exclude 'id_dsa*' --exclude 'id_ecdsa*' --exclude 'id_ed25519*')
+
+die() { echo "drive-sync: $*" >&2; exit 1; }
+rc() { rclone --config "$CONF" --ask-password=false "$@"; }
+remote() { printf 'drive-%s:laptop-drive/%s' "$1" "$2"; }
+known() { local a; for a in "${ACCOUNTS[@]}"; do [[ $a == "$1" ]] && return 0; done; die "unknown account '$1' (${ACCOUNTS[*]})"; }
+
+TIMER=false
+has_token() {  # the remote's section has a token line (its value is not read)
+  awk -v s="[drive-$1]" '$0 == s { f = 1; next } /^\[/ { f = 0 } f && /^token[[:space:]]*=/ { found = 1 } END { exit !found }' "$CONF"
+}
+# A timer run skips an account that is not set up yet (no remote or no token; the drive-sync-auth smoke check reports
+# it) instead of failing every 30 minutes. A token that stopped working (revoked, expired) fails the run.
+authorized() {
+  local remotes
+  remotes=$(rc listremotes) || die "cannot read $CONF (malformed, unreadable or encrypted?)"
+  if ! grep -xF "drive-$1:" >/dev/null <<<"$remotes"; then
+    $TIMER && { echo "drive-sync: skipping $1: no remote yet"; exit 0; }
+    die "no remote drive-$1 in $CONF: add the OAuth client to the vault, then make apply CHUNK=drive_sync"
+  fi
+  if ! has_token "$1"; then
+    $TIMER && { echo "drive-sync: skipping $1: not authorized yet"; exit 0; }
+    die "drive-$1 is not authorized on this machine: drive-sync auth $1"
+  fi
+  rc about "drive-$1:" >/dev/null 2>&1 ||
+    die "drive-$1 has a token but Drive refused it or is unreachable (revoked or expired?): drive-sync auth $1"
+}
+
+push_one() {
+  local account=$1 src="$ROOT/$1" dest need free
+  dest=$(remote "$account" "$HOST")
+  [[ -d $src ]] || die "$src does not exist"
+  authorized "$account"
+  # An empty tree with a non-empty Drive copy is a wiped or re-created directory, or a host name reused on a new
+  # machine: syncing it would empty Drive. A failed listing must not read as "empty" (exit 3: no folder yet).
+  local local_files remote_files remote_rc=0
+  local_files=$(rc lsf -R --files-only "${FILTERS[@]}" "$src") || die "cannot list $src"
+  remote_files=$(rc lsf -R --files-only "$dest" 2>/dev/null) || remote_rc=$?
+  if [[ $remote_rc -ne 0 && $remote_rc -ne 3 ]]; then die "cannot list $dest (rclone exit $remote_rc)"; fi
+  if [[ -z $local_files && $remote_rc -eq 0 && -n $remote_files ]]; then
+    die "refusing to push an empty $src over a non-empty $dest: restore it with drive-sync pull $account $HOST"
+  fi
+  command -v gitleaks >/dev/null || die "gitleaks not found (make packages): refusing to push unscanned files"
+  local ignore=()
+  [[ -f $src/.gitleaksignore ]] && ignore=(--gitleaks-ignore-path "$src/.gitleaksignore")
+  gitleaks dir "$src" --config "$GITLEAKS_CONFIG" "${ignore[@]}" --max-target-megabytes 10 --no-banner --redact -v \
+    --log-level warn >&2 ||
+    die "gitleaks stopped the push (finding above): fix the file, or add its Fingerprint line to $src/.gitleaksignore"
+  # Bytes to upload: local files missing on Drive or of another size (deletions free no space for 30 days, so they are
+  # not subtracted). Sizes only (no hashing of 15 GB files), so a same-size rewrite counts as 0 here; if that overfills
+  # Drive, the upload fails and the unit shows it.
+  local lists
+  lists=$(mktemp -d) || die "mktemp failed"
+  # shellcheck disable=SC2064  # expand now: lists is local and gone by the time the subshell exits
+  trap "rm -rf -- $(printf %q "$lists")" EXIT
+  rc lsjson -R --files-only "${FILTERS[@]}" "$src" >"$lists/src" || die "cannot list $src"
+  if [[ $remote_rc -eq 0 ]]; then
+    rc lsjson -R --files-only "$dest" >"$lists/dest" || die "cannot list $dest"
+  else
+    echo '[]' >"$lists/dest"  # first push: everything uploads
+  fi
+  need=$(python3 -I -c 'import json, sys
+dest = {e["Path"]: e["Size"] for e in json.load(open(sys.argv[2]))}
+print(sum(e["Size"] for e in json.load(open(sys.argv[1])) if dest.get(e["Path"]) != e["Size"]))' "$lists/src" "$lists/dest") ||
+    die "could not size the push"
+  [[ $need =~ ^[0-9]+$ ]] || die "could not size the push"
+  free=$(rc about --json "drive-$account:" | python3 -I -c 'import json, sys; print(json.load(sys.stdin).get("free", -1))') ||
+    die "rclone about failed: cannot check Drive free space"
+  if [[ $free -ge 0 && $need -gt $free ]]; then
+    die "drive-$account has $free bytes free but this push needs $need: free space on Drive (trash counts) first"
+  fi
+  rc sync "$src" "$dest" "${FILTERS[@]}" --drive-chunk-size 64M --transfers 2 --checkers 8 \
+    --contimeout 60s --timeout 5m --drive-stop-on-upload-limit --drive-skip-gdocs --stats-one-line -v
+}
+
+push() {
+  [[ ${1:-} == --timer ]] && { TIMER=true; shift; }
+  mkdir -p "$(dirname "$LOCK")"
+  exec 9>"$LOCK"
+  if $TIMER; then
+    flock -n 9 || { echo "drive-sync: a push is already running; this run is skipped"; exit 0; }
+    # offline (no route to Google): nothing to do, not a failure
+    getent hosts www.googleapis.com >/dev/null || { echo "drive-sync: offline; this run is skipped"; exit 0; }
+  else
+    flock 9
+  fi
+  local account failed=0
+  [[ $# -gt 0 ]] || set -- "${ACCOUNTS[@]}"
+  for account in "$@"; do
+    known "$account"
+    (push_one "$account") || failed=1
+  done
+  return "$failed"
+}
+
+pull() {
+  [[ $# -eq 2 ]] || die "usage: drive-sync pull <account> <host>/<path>"
+  local account=$1 path=${2%/} host dest
+  known "$account"
+  [[ $path != /* && $path != *..* && $path == */* || $path =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "bad path '$2'"
+  host=${path%%/*}
+  authorized "$account"
+  local src="drive-$account:laptop-drive/$path"
+  local opts=(--transfers 2 --contimeout 60s --timeout 5m --drive-skip-gdocs --stats-one-line -v)
+  if [[ $host == "$HOST" ]]; then
+    # restore this machine's own copy; files already here are kept, never overwritten
+    dest="$ROOT/$account${path#"$host"}"
+    opts+=(--ignore-existing)
+  else
+    dest="$ROOT/$account/.pulled/$path"
+  fi
+  if rc lsjson --stat "$src" | grep -q '"IsDir": *false'; then  # one file
+    mkdir -p "$(dirname "$dest")"
+    rc copyto "$src" "$dest" "${opts[@]}"
+  else
+    mkdir -p "$dest"
+    rc copy "$src" "$dest" "${FILTERS[@]}" "${opts[@]}"
+  fi
+}
+
+case ${1:-} in
+  auth) [[ $# -eq 2 ]] || die "usage: drive-sync auth <account>"; known "$2"; rc config reconnect "drive-$2:" ;;
+  push) shift; push "$@" ;;
+  pull) shift; pull "$@" ;;
+  status)
+    for account in "${ACCOUNTS[@]}"; do
+      printf '%s: ' "$account"
+      rc about "drive-$account:" 2>/dev/null | tr '\n' ' ' || printf 'not authorized (drive-sync auth %s)' "$account"
+      echo
+    done ;;
+  *) sed -n '4,8p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

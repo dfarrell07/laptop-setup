@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Push ~/drive to Google Drive every 30 minutes
+
+[Timer]
+OnCalendar=*:0/30
+Persistent=true
+RandomizedDelaySec=5m
+
+[Install]
+WantedBy=timers.target

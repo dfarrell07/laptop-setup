@@ -1,0 +1,14 @@
+---
+# Drive sync for large artifacts (docs/drive-sync.md): ~/drive/<account>/ is pushed one way to
+# drive-<account>:laptop-drive/<drive_sync_host>/ every 30 minutes. Opt-in: nothing happens until
+# drive_sync_accounts lists an account (an empty list also stops the timer). Linux only for now.
+# Short account names (letters, digits, '-'); one rclone remote drive-<name> each. Set in config.yml.
+drive_sync_accounts: []
+# This machine's folder name on Drive, set once per machine in config.yml (required with accounts). It must differ
+# between machines: two machines pushing the same folder delete each other's files.
+drive_sync_host: ''
+drive_sync_root: "{{ ansible_facts['user_dir'] }}/drive"
+drive_sync_config: "{{ ansible_facts['user_dir'] }}/.config/rclone/drive-sync.conf"
+# OAuth Desktop client (In production, drive.file) from the vault; see docs/drive-sync.md.
+drive_sync_client_id: "{{ vault_drive_oauth_client_id | default('') }}"
+drive_sync_client_secret: "{{ vault_drive_oauth_client_secret | default('') }}"

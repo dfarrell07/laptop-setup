@@ -198,6 +198,14 @@ _claude_extra_dirs=$(awk '
     next }
   block && /^[[:space:]]*-/ { sub(/^[[:space:]]*-/, ""); print trim($0); next }
   block && /^[^[:space:]#]/ { block = 0 }' "$_cfg" 2>/dev/null || true)
+# drive_sync_accounts (docs/drive-sync.md), a flow or block list like claude_extra_config_dirs
+_drive_accounts=$(awk '
+  function trim(s) { sub(/[[:space:]]*#.*$/, "", s); gsub(/^[[:space:]"\047]+|[[:space:]"\047]+$/, "", s); return s }
+  /^drive_sync_accounts:/ { sub(/^[^:]*:/, ""); v = trim($0); block = (v == "")
+    if (!block) { gsub(/^\[|\]$/, "", v); n = split(v, parts, ","); for (i = 1; i <= n; i++) if (trim(parts[i]) != "") print trim(parts[i]) }
+    next }
+  block && /^[[:space:]]*-/ { sub(/^[[:space:]]*-/, ""); print trim($0); next }
+  block && /^[^[:space:]#]/ { block = 0 }' "$_cfg" 2>/dev/null || true)
 unset _cfg
 # Check tools as the login shell finds them: make verify runs with make's PATH, which lacks the user bin
 # directories the dotfiles PATH puts first (the claude, codex and agy CLIs live there).
@@ -361,6 +369,33 @@ else
   unset _acli_out
 fi
 unset _acli_site
+
+# Drive sync (docs/drive-sync.md): a token per account (only its presence is read) and a push unit that has not failed.
+if [[ -z "$_drive_accounts" ]]; then
+  record "drive-sync-auth" "PASS" "not applicable (no drive_sync_accounts)"
+  if $IS_LINUX && [[ -z "$CONTAINER" ]] && systemctl --user is-enabled --quiet drive-sync-push.timer 2>/dev/null; then
+    record "drive-sync-push" "WARN" "no drive_sync_accounts but drive-sync-push.timer is enabled: make apply CHUNK=drive_sync"
+  else record "drive-sync-push" "PASS" "not applicable (no drive_sync_accounts)"; fi
+elif ! $IS_LINUX || [[ -n "$CONTAINER" ]]; then
+  record "drive-sync-auth" "SKIP" "Linux host only"
+  record "drive-sync-push" "SKIP" "Linux host only"
+else
+  _drive_missing=""
+  while read -r _da; do
+    [[ -n "$_da" ]] || continue
+    awk -v s="[drive-$_da]" '$0 == s { f = 1; next } /^\[/ { f = 0 } f && /^token[[:space:]]*=/ { found = 1 } END { exit !found }' \
+      "$HOME/.config/rclone/drive-sync.conf" 2>/dev/null || _drive_missing+=" $_da"
+  done <<<"$_drive_accounts"
+  if [[ -z "$_drive_missing" ]]; then record "drive-sync-auth" "PASS"
+  else record "drive-sync-auth" "WARN" "not authorized on this machine:$_drive_missing (drive-sync auth <account>)"; fi
+  if systemctl --user is-failed --quiet drive-sync-push.service 2>/dev/null; then
+    record "drive-sync-push" "FAIL" "the last push failed: systemctl --user status drive-sync-push"
+  elif ! systemctl --user is-enabled --quiet drive-sync-push.timer 2>/dev/null; then
+    record "drive-sync-push" "WARN" "drive-sync-push.timer is not enabled: make apply CHUNK=drive_sync"
+  else record "drive-sync-push" "PASS"; fi
+  unset _drive_missing _da
+fi
+unset _drive_accounts
 # Agent CLI logins (personal Claude homes, extra Claude dirs, personal Codex): logging in is an interactive owner step, so WARN with the
 # command and never start one. Each Claude home is checked as cper/cper2 run it: CLAUDE_CONFIG_DIR set to that home
 # (on macOS the Keychain item depends on it) and the backend and token variables _claude_personal clears unset, so an
