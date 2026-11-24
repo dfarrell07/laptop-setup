@@ -283,14 +283,26 @@
       register: _packages_netbird
       when: _packages_tailscaled_unit.stdout == 'loaded'
 
-    - name: Read Tailscale's netfilter mode
+    - name: Read Tailscale's preferences
       ansible.builtin.command:
         argv: [tailscale, debug, prefs]
       register: _packages_tailscale_prefs
       changed_when: false
       failed_when: false
       check_mode: false  # read-only probe
-      when: _packages_netbird.stat.exists | default(false)
+      when: _packages_tailscaled_unit.stdout == 'loaded'
+
+    # The operator may run tailscale up/set/down without sudo; tailscaled itself stays root (it owns tailscale0).
+    - name: Let the login user run the Tailscale CLI without sudo
+      ansible.builtin.command:
+        argv: [tailscale, set, "--operator={{ packages_tailscale_operator }}"]
+      become: true
+      tags: [become]
+      changed_when: true
+      when:
+        - packages_tailscale_operator | length > 0
+        - _packages_tailscale_prefs.rc | default(1) == 0
+        - (_packages_tailscale_prefs.stdout | from_json).OperatorUser | default('') != packages_tailscale_operator
 
     - name: Turn off Tailscale's netfilter rules where NetBird runs
       ansible.builtin.command:
