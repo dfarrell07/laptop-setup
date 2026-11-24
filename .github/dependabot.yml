@@ -1,11 +1,13 @@
 ---
 # Note: Dependabot does not support the Ansible Galaxy package ecosystem.
 # Galaxy collection drift is tracked separately by .github/workflows/galaxy-drift.yml.
+# Version updates wait 14 days after a release (cooldown), the same age as any version pinned by hand; security
+# updates do not wait.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
     cooldown:
-      default-days: 7
+      default-days: 14
     directories: ["/", "/.github/actions/*"]  # workflows and the composite actions
     schedule:
       interval: "weekly"
@@ -19,7 +21,7 @@ updates:
 
   - package-ecosystem: "pip"
     cooldown:
-      default-days: 7
+      default-days: 14
     directory: "/"
     schedule:
       interval: "monthly"
@@ -37,7 +39,7 @@ updates:
 
   - package-ecosystem: "npm"
     cooldown:
-      default-days: 7
+      default-days: 14
     directory: "/"
     schedule:
       interval: "monthly"
@@ -51,7 +53,7 @@ updates:
 
   - package-ecosystem: "npm"
     cooldown:
-      default-days: 7
+      default-days: 14
     directory: "/roles/codex/files"
     schedule:
       interval: "monthly"
