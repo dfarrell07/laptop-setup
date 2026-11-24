@@ -15,10 +15,10 @@ if not ANSIBLE.exists():
     ANSIBLE = Path(shutil.which('ansible-playbook'))
 
 
-def run_play(directory, tasks, variables):
+def run_play(directory, tasks, variables, *args):
     play = [{'hosts': 'localhost', 'gather_facts': False, 'vars': variables, 'tasks': tasks}]
     (directory / 'play.yml').write_text(yaml.safe_dump(play))
-    result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(directory / 'play.yml')], cwd=ROOT,
+    result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', *args, str(directory / 'play.yml')], cwd=ROOT,
                             env=dict(os.environ, ANSIBLE_ROLES_PATH=str(ROOT / 'roles'), ANSIBLE_NOCOLOR='1',
                                      ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
                             capture_output=True, text=True, timeout=180)
@@ -115,11 +115,13 @@ class AutoUpdateTests(unittest.TestCase):
                 fix_src(task)
                 stub_launchctl(task)
             log = home / 'launchctl.log'
-            # gui domain present; a job is loaded once bootstrapped
+            # gui domain present; a job is loaded once bootstrapped; the first two bootstraps fail as launchd's
+            # teardown race does ("Bootstrap failed: 5")
             stub(stubs, 'launchctl', f'echo "$*" >> {log}\ncase "$1 $2" in\n'
                  '  "print gui/501") exit 0 ;;\n'
                  f'  "print gui/501/com.laptop-setup.user-update") [ -f {home}/loaded ] ;;\n'
-                 f'  "bootstrap gui/501") touch {home}/loaded ;;\n'
+                 f'  "bootstrap gui/501") echo x >> {home}/tries; [ "$(wc -l < {home}/tries)" -gt 2 ] || exit 5\n'
+                 f'    touch {home}/loaded ;;\n'
                  f'  "bootout gui/501/com.laptop-setup.user-update") rm {home}/loaded ;;\n'
                  '  *) exit 1 ;;\nesac\n')
             # role_path for the shared launchd helper's include; the stub stands in for its /bin/launchctl too
@@ -130,12 +132,15 @@ class AutoUpdateTests(unittest.TestCase):
                          'packages_user_updates_pipx_skip': ['yamllint', 'ansible-lint'],
                          'packages_user_updates_npm': ['@openai/codex']}
             run_play(home, tasks, variables)
-            self.assertEqual(log.read_text().splitlines()[-1],
-                             f'bootstrap gui/501 {name}/Library/LaunchAgents/com.laptop-setup.user-update.plist')
+            bootstrap = f'bootstrap gui/501 {name}/Library/LaunchAgents/com.laptop-setup.user-update.plist'
+            self.assertEqual(log.read_text().splitlines()[-3:], [bootstrap] * 3)  # retried until it loaded
             log.unlink()
             again = run_play(home, tasks, variables)
             self.assertNotIn('bootstrap', log.read_text())  # loaded and unchanged: left alone
             self.assertRegex(again, r'changed=0 ')
+            (home / 'loaded').unlink()  # booted out by hand: the plan reports the load
+            self.assertRegex(run_play(home, tasks, variables, '--check'), r'changed=1 ')
+            (home / 'loaded').touch()
             run_play(home, tasks, {**variables, 'packages_user_updates_npm': ['@openai/codex', 'other']})
             self.assertEqual([l.split()[0] for l in log.read_text().splitlines()][-2:], ['bootout', 'bootstrap'])
             self.assertFalse((home / '.config/systemd').exists())  # no systemd units on macOS
