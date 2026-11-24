@@ -270,7 +270,7 @@
 
 - name: Ensure the Claude hook directory exists
   ansible.builtin.file:
-    path: "{{ claude_hook_dir }}"
+    path: "{{ claude_runtime_config_dir }}/hooks"
     state: directory
     mode: "0700"
 
@@ -278,7 +278,7 @@
 - name: Deploy the file-heredoc guard hook
   ansible.builtin.copy:
     src: claude-file-heredoc-guard.py
-    dest: "{{ claude_hook_dir }}/file-heredoc-guard.py"
+    dest: "{{ claude_runtime_config_dir }}/hooks/file-heredoc-guard.py"
     mode: "0644"
 
 # The helper runs on the target with the target's Python (inline via -c: the controller path

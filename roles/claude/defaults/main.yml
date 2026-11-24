@@ -132,8 +132,6 @@ claude_orchestrator_name: orchestrator  # session personal-<name>: its tmux sess
 claude_queue_allowed_authors: []  # GitHub logins allowed to trigger queue; MUST set when enabled — empty makes the poller refuse to run
 claude_log_dir: "{{ ansible_facts['user_dir'] }}/.local/state/claude/logs"
 claude_runtime_config_dir: "{{ ansible_facts['user_dir'] }}/.config/claude"
-# PreToolUse hooks every instance runs; the directory is in claude_deny_sensitive, so agents cannot edit them
-claude_hook_dir: "{{ claude_runtime_config_dir }}/hooks"
 claude_queue_repo: ""
 claude_queue_poll_interval_sec: 120
 claude_queue_boot_delay_sec: 60
@@ -165,7 +163,7 @@ claude_deny_sensitive:
   - "~/.docker/config.json"
   - "~/.local/share/keyrings/**"
   - "~/.config/helm/**"
-  - "~/.config/claude/**"  # queue-repos.conf and work-env; Read and Edit denied
+  - "~/.config/claude/**"  # queue-repos.conf, work-env and the hooks every instance runs; Read and Edit denied
   - "~/.azure/**"
   - "~/.config/rclone/**"
   - "~/.gitconfig"
@@ -222,6 +220,7 @@ claude_own_instance_deny_read:
   - "file-history/**"
   - "session-env/**"
   - ".claude.json"  # account state and MCP server definitions (may hold tokens)
+  - "backups/**"  # Claude Code's copies of .claude.json
 # Paths Claude Code loads as code or configuration on its next start are not agent-writable:
 # a prompt-injected session (e.g. the queue poller) must not persist hooks, MCP servers,
 # plugins, commands, agents, skills or output styles outside the sandbox. projects/** (memory,

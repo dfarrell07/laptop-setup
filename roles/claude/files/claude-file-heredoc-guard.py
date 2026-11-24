@@ -14,8 +14,9 @@ import os
 import re
 import sys
 
-# <<EOF, <<-'EOF', <<"END-PY", <<\EOF; not the <<< of a here-string
-HEREDOC = re.compile(r'(?<!<)<<(?!<)(-?)[ \t]*(?:\'([^\']+)\'|"([^"]+)"|\\?([^\s;&|<>()\'"]+))')
+# <<EOF, <<-'EOF', <<"END-PY", <<\EOF; not the <<< of a here-string. The rest of the word, such as the \r of a
+# CRLF line, is part of the delimiter for bash, so a CRLF command's body ends at EOF\r.
+HEREDOC = re.compile(r'(?<!<)<<(?!<)(-?)[ \t]*(?:\'([^\']+)\'|"([^"]+)"|\\?([^ \t\n;&|<>()\'"]+))([^ \t\n;&|<>()\'"]*)')
 SEGMENT = re.compile(r'&&|\|\||;|\|&|(?<!>)\|')  # not the | of >|
 ENV = re.compile(r'[A-Za-z_][A-Za-z0-9_]*=\S*$')
 PREFIX = {'!', 'then', 'do', 'else', 'command', 'time', 'exec', 'env'}
@@ -59,7 +60,7 @@ def mask(line, quote):
 
 
 def words(segment):
-    segment = re.sub(r'[A-Za-z_][\w-]*\(\)', ' ', segment)  # a function header, as in `f() { cat > out <<EOF`
+    segment = re.sub(r'(?<![\w-])[A-Za-z_][\w-]*\(\)', ' ', segment)  # a function header, as in `f() { cat > out <<EOF`
     w = [x for x in segment.replace('(', ' ').replace('{', ' ').split() if not ENV.match(x)]
     while w and (w[0] in PREFIX or REDIRECT_OP.match(w[0]) or w[0].startswith(('>', '1>', '&>'))):
         w = w[2:] if REDIRECT_OP.match(w[0]) else w[1:]  # `> f cat` skips the operator and its target
@@ -88,24 +89,68 @@ def writes_file(segment, original):
     return False
 
 
+def end_word(m):
+    """The word that ends this heredoc's body."""
+    return (m.group(2) or m.group(3) or m.group(4)) + m.group(5)
+
+
+def in_arithmetic(text):
+    """For each position of text: whether it sits inside (( ... )) or $(( ... )), where << is a shift. Only a (( closed
+    by )) is arithmetic: bash reads ((cmd) ) and an unclosed (( as subshells, and ${x//((/} is no arithmetic either."""
+    close, opened = {}, []
+    for i, ch in enumerate(text):
+        if ch == '(':
+            opened.append(i)
+        elif ch == ')' and opened:
+            close[opened.pop()] = i
+    depth = [0] * (len(text) + 1)
+    for i, j in close.items():
+        if close.get(i + 1) == j - 1:  # (( ... )) with no gap between the closing parentheses
+            depth[i + 2] += 1
+            depth[j] -= 1
+    inside, level = [], 0
+    for d in depth:
+        level += d
+        inside.append(level > 0)
+    return inside
+
+
+def heredocs(line, shown):
+    """The << operators in a line, not the shift in $((1<<2)). Parentheses count outside quotes and comments; for a <<
+    inside double quotes, where $((...)) still expands, from the opening quote."""
+    unquoted, quoted = in_arithmetic(shown), {}
+    found = []
+    for m in HEREDOC.finditer(line):
+        if shown[m.start()] == '<':
+            shift = unquoted[m.start()]
+        else:
+            q = line.rfind('"', 0, m.start()) + 1
+            if q not in quoted:
+                quoted[q] = in_arithmetic(line[q:])
+            shift = quoted[q][m.start() - q]
+        if not shift:
+            found.append(m)
+    return found
+
+
 def file_heredoc(command):
     pending, quote = [], ''  # heredocs whose bodies follow (delimiter, strip tabs); a quote left open by a line
-    for line in command.splitlines():
+    for line in command.split('\n'):  # bash ends lines at \n only, not at \r or \f
         if pending:
             delimiter, strip = pending[0]
             if (line.lstrip('\t') if strip else line) == delimiter:
                 pending.pop(0)
             continue
         shown, quote = mask(line, quote)
-        ops = [m for m in HEREDOC.finditer(line) if shown[m.start()] == '<']  # outside quotes and comments
+        ops = [m for m in heredocs(line, shown) if shown[m.start()] == '<']  # outside quotes and comments
         # "$(cat <<'EOF' ...)" (a commit message): skip that body too, though the heredoc only feeds the substitution
-        pending.extend((m.group(2) or m.group(3) or m.group(4), m.group(1) == '-') for m in HEREDOC.finditer(line)
+        pending.extend((end_word(m), m.group(1) == '-') for m in heredocs(line, shown)
                        if shown[m.start()] == '_' and '$(' in line[line.rfind('"', 0, m.start()):m.start()])
         if not ops:
             continue
         plain = line
         for m in ops:
-            pending.append((m.group(2) or m.group(3) or m.group(4), m.group(1) == '-'))
+            pending.append((end_word(m), m.group(1) == '-'))
             gap = ' ' * (m.end() - m.start())
             shown = shown[:m.start()] + gap + shown[m.end():]
             plain = plain[:m.start()] + gap + plain[m.end():]

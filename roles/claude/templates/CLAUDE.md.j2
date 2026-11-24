@@ -9,8 +9,8 @@
   - Give `rm` literal absolute paths and run it as its own command, not inside `sh -c` (including
     `podman run ... sh -c`). Never target run-time paths (`$D/*`, a `$(...)` result, a relative glob
     after a `cd`), `./*`, subdirectory globs, or home, `/tmp`, the working directory or its parents.
-  - Create and change files with the Write and Edit tools, never `cat > file <<EOF` in Bash (a hook
-    denies it): literal heredoc text such as make's `$$(` trips the check. Run a program longer than a
-    few lines from a scratchpad file. Avoid zsh-only syntax such as `${${x#a}%b}`.
+  - Write files with the Write tool, never a `cat`/`tee` heredoc in Bash (a hook denies it): literal
+    heredoc text such as make's `$$(` trips the check. Run a program longer than a few lines from a
+    scratchpad file. Avoid zsh-only syntax such as `${${x#a}%b}`.
 - Don't probe credential or other-profile paths, even with `ls` or `test`: deny rules refuse the whole
   command.
