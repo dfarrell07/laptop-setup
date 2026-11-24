@@ -246,10 +246,20 @@ desktop_gnome_hardening_dconf:
 desktop_gnome_clock_format: 24h
 desktop_gnome_clock_show_date: true
 desktop_gnome_touchpad_tap: true
-desktop_gnome_touchpad_natural_scroll: true
+# Traditional scrolling (content follows the scroll direction), as on the old laptop and in sway/i3 (libinput's
+# default) and macOS (com.apple.swipescrolldirection false below). Applied wherever GNOME is installed.
+desktop_gnome_touchpad_natural_scroll: false
+desktop_gnome_mouse_natural_scroll: false
 desktop_gnome_dynamic_workspaces: false
 desktop_gnome_workspace_count: 4
 desktop_gnome_xkb_options: [lv3:ralt_switch]
+
+# Scroll direction for every GNOME session, whichever desktop_environment is chosen (GNOME stays installed beside sway)
+desktop_gnome_scroll_dconf:
+  - key: /org/gnome/desktop/peripherals/touchpad/natural-scroll
+    value: "{{ desktop_gnome_touchpad_natural_scroll | bool | ternary('true', 'false') }}"
+  - key: /org/gnome/desktop/peripherals/mouse/natural-scroll
+    value: "{{ desktop_gnome_mouse_natural_scroll | bool | ternary('true', 'false') }}"
 
 # GNOME UI consistency settings (non-hardening) — keyboard feel to match Sway/i3
 desktop_gnome_ui_dconf:
@@ -259,8 +269,6 @@ desktop_gnome_ui_dconf:
     value: "{{ desktop_gnome_clock_show_date | bool | ternary('true', 'false') }}"
   - key: /org/gnome/desktop/peripherals/touchpad/tap-to-click
     value: "{{ desktop_gnome_touchpad_tap | bool | ternary('true', 'false') }}"
-  - key: /org/gnome/desktop/peripherals/touchpad/natural-scroll
-    value: "{{ desktop_gnome_touchpad_natural_scroll | bool | ternary('true', 'false') }}"
   - key: /org/gnome/mutter/dynamic-workspaces
     value: "{{ desktop_gnome_dynamic_workspaces | bool | ternary('true', 'false') }}"
   - key: /org/gnome/desktop/wm/preferences/num-workspaces
@@ -330,7 +338,7 @@ desktop_macos_defaults:
   - {domain: NSGlobalDomain, key: WebAutomaticSpellingCorrectionEnabled, type: bool, value: false}
   - {domain: NSGlobalDomain, key: AppleKeyboardUIMode, type: int, value: 2}
   # Scrolling as in sway (libinput default), not "natural"
-  - {domain: NSGlobalDomain, key: com.apple.swipescrolldirection, type: bool, value: false}
+  - {domain: NSGlobalDomain, key: com.apple.swipescrolldirection, type: bool, value: false}  # applies after logout
   - {domain: NSGlobalDomain, key: NSWindowResizeTime, type: float, value: 0.001}
   # Spaces stay in a fixed order and an activating app does not switch Space (workspaces as in sway)
   - {domain: NSGlobalDomain, key: AppleSpacesSwitchOnActivate, type: bool, value: false}

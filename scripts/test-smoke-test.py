@@ -806,6 +806,27 @@ class SmokeTests(unittest.TestCase):
             self.assertEqual(run('{}', want=''), "tailscale-operator PASS not managed (packages_tailscale_operator: '')")
             self.assertEqual(run('', prefs_rc=1), '')  # tailscaled down: the tailscale check reports it
 
+    @unittest.skipUnless(Path('/usr/bin/gnome-shell').exists() and os.geteuid() != 0, 'GNOME host, not root')
+    def test_scroll_direction_check_reads_touchpad_and_mouse(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('# Traditional scrolling (natural scrolling off)')
+        end = source.index('\nfi\n', source.index('unset _scroll', start)) + 4
+        with tempfile.TemporaryDirectory() as directory:
+            stub = Path(directory) / 'gsettings'
+            env = dict(os.environ, PATH=f'{directory}:{os.environ["PATH"]}')
+
+            def run(touchpad, mouse):
+                stub.write_text(f'#!/bin/sh\ncase "$2" in *touchpad) echo {touchpad} ;; *mouse) echo {mouse} ;; esac\n')
+                stub.chmod(0o755)
+                script = ('record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; }\nIS_LINUX=true CONTAINER= SYSTEM_ONLY=false\n'
+                          + source[start:end])
+                return subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c', script], env=env,
+                                      capture_output=True, text=True).stdout.strip()
+
+            self.assertEqual(run('false', 'false'), 'scroll-direction PASS')
+            self.assertIn('scroll-direction WARN GNOME natural scrolling (touchpad, mouse): true false', run('true', 'false'))
+            self.assertIn('false true', run('false', 'true'))
+
     def test_scripts_run_on_macos_bash_3(self):
         """macOS /bin/bash is 3.2: no ${var,,}/${var^^} case conversion, declare -A or mapfile."""
         import re
