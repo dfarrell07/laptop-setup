@@ -82,7 +82,7 @@ and `make apply CHUNK=repos`; until then those hosts and their repos are skipped
 6. Manual actions after `make all`:
    - **Reboot**: lockdown, IOMMU, vsyscall and init_on_free take effect only then; until lockdown=integrity is active, kexec is guarded
      only by the `kexec_load_disabled` sysctl. SSH is then on port 722.
-   - `make smoke-test`, then `tailscale up` (browser step).
+   - `make smoke-test`, then `tailscale up` (browser step; with IT's NetBird installed: `tailscale up --netfilter-mode=off`).
    - `gh auth login`, answering No to its git-credentials question (yes replaces the token guard that keeps gh's token off
      upstream repos), then `make packages repos` (while gh is logged out, the first run reports failed private clones, then
      continues). The notes repo is opt-in: set `notes_enabled: true` in `config.yml` first, then `make notes`.

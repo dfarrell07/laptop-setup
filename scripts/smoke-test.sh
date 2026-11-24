@@ -636,6 +636,18 @@ elif exec_cmd tailscale status &>/dev/null; then record "tailscale" "PASS" "tail
 elif $IS_LINUX; then record "tailscale" "WARN" "tailscaled not running or VPN not established (check: systemctl status tailscaled)"
 else record "tailscale" "WARN" "tailscaled not running or not logged in (check: sudo launchctl print system/com.tailscale.tailscaled, then tailscale up)"; fi
 
+# Beside IT's NetBird (also 100.64.0.0/10), Tailscale's netfilter rules drop NetBird's traffic. make packages turns them
+# off; a first plain `tailscale up` on a never-logged-in node turns them back on.
+if $IS_LINUX && [[ -z "$CONTAINER" && -x /usr/bin/netbird ]] && command -v tailscale &>/dev/null; then
+  _ts_nf=$(tailscale debug prefs 2>/dev/null | grep -o '"NetfilterMode": *[0-9]*' | grep -o '[0-9]*$' || true)
+  case $_ts_nf in
+    0) record "tailscale-netbird-netfilter" "PASS" ;;
+    '') record "tailscale-netbird-netfilter" "WARN" "cannot read Tailscale prefs (tailscaled running?)" ;;
+    *) record "tailscale-netbird-netfilter" "FAIL" "Tailscale netfilter mode $_ts_nf drops NetBird's 100.64.0.0/10 traffic: sudo tailscale set --netfilter-mode=off (and tailscale up --netfilter-mode=off)" ;;
+  esac
+  unset _ts_nf
+fi
+
 # macOS settings that need root to apply but not to read, so a no-sudo run (NOSUDO=1) shows what is left
 if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   _fw=/usr/libexec/ApplicationFirewall/socketfilterfw

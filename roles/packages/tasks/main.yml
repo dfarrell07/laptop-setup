@@ -274,6 +274,35 @@
       tags: [become]
       when: _packages_tailscaled_unit.stdout == 'loaded'
 
+    # IT's NetBird client also numbers peers in 100.64.0.0/10. Tailscale's own netfilter rules drop CGNAT-range packets
+    # that arrive on any interface but tailscale0, which cuts NetBird's peers (wt0) and its local DNS resolver. firewalld
+    # already trusts tailscale0 (system role), so Tailscale's rules are switched off where NetBird is installed.
+    - name: Check for IT's NetBird client
+      ansible.builtin.stat:
+        path: /usr/bin/netbird
+      register: _packages_netbird
+      when: _packages_tailscaled_unit.stdout == 'loaded'
+
+    - name: Read Tailscale's netfilter mode
+      ansible.builtin.command:
+        argv: [tailscale, debug, prefs]
+      register: _packages_tailscale_prefs
+      changed_when: false
+      failed_when: false
+      check_mode: false  # read-only probe
+      when: _packages_netbird.stat.exists | default(false)
+
+    - name: Turn off Tailscale's netfilter rules where NetBird runs
+      ansible.builtin.command:
+        argv: [tailscale, set, --netfilter-mode=off]
+      become: true
+      tags: [become]
+      changed_when: true
+      when:
+        - _packages_netbird.stat.exists | default(false)
+        - _packages_tailscale_prefs.rc | default(1) == 0
+        - (_packages_tailscale_prefs.stdout | from_json).NetfilterMode | default(0) | int != 0  # 0 off, 1 nodivert, 2 on
+
 # macOS: the formula's tailscaled needs a root launchd daemon that nothing else installs (Linux enables it above).
 # tailscaled's own installer writes /Library/LaunchDaemons/com.tailscale.tailscaled.plist and loads it at boot;
 # `sudo brew services` is avoided because Homebrew refuses to refresh its API cache as root.

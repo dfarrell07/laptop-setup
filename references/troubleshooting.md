@@ -180,6 +180,16 @@ processes can use `bpf()` (including package-manager dependencies) once unprivil
 - **Firewall tasks on RHEL CSB** skip the drop-zone and libvirt edits (IT owns zone policy), but the CSB fallback still opens the SSH port
   in the default zone. The `Assert trusted zone incompatible with CSB hardening` task fails the run when the default zone is `trusted`;
   move the host to `public` or `FedoraWorkstation` (or set `system_firewall_manage_zone: true`) before re-running.
+- **Tailscale beside IT's NetBird:** both number peers in 100.64.0.0/10 (NetBird uses a /15 inside it, on `wt0`). Tailscale's own
+  netfilter rules drop CGNAT-range packets that arrive on any interface but `tailscale0`, which cuts NetBird peers and NetBird's local
+  DNS, so where `/usr/bin/netbird` exists `make packages` runs `tailscale set --netfilter-mode=off` (firewalld trusts `tailscale0`).
+  The first `tailscale up` on a never-logged-in node resets it, so log in with `tailscale up --netfilter-mode=off`; the smoke check
+  `tailscale-netbird-netfilter` catches a revert. Alternative, tailnet-wide: the policy `nodeAttrs` attribute
+  `disable-linux-cgnat-drop-rule` turns the drop into a return and keeps netfilter on.
+  Check with `tailscale debug prefs` (`"NetfilterMode": 0`). Remaining overlaps: NetBird routes 100.100.100.100-102 to `wt0` ahead of
+  Tailscale's table, so query MagicDNS through systemd-resolved (`resolvectl query`), not `dig @100.100.100.100`; and a Tailscale
+  device whose address falls in NetBird's /15 (`netbird status`) is routed to `wt0`, so change that device's IP in the Tailscale
+  admin console.
 
 ## Notes repo
 
