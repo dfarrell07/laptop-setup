@@ -435,8 +435,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   git_repos_personal_categories: [personal, ovnk]        (roles/git_repos/defaults) — repo categories cloned on personal profile;
 #     this list replaces (not appends to) the default — dropping ovnk here stops cloning OVN-K repos
 #     on personal profile (existing clones are left alone)
-#   git_repos_vpn_check_host: ''  (roles/git_repos/defaults) — set to the internal Git host FQDN to enable a reachability pre-check;
-#     repos on that host (any category) are skipped for the run when it is unreachable
+#   (no setting) repos on a git host other than github.com that does not answer a TCP probe (VPN down) are skipped for
+#     the run with a warning, not failed
 #   notes_enabled: false               (roles/notes/defaults) — opt-in: set true in config.yml
 #     opt-in: requires a GitHub repo named notes_repo_name (default 'notes') under dotfiles_github_user (or override
 #     notes_remote_url / notes_remote_url_https); cloned over SSH, then HTTPS fallback (private repos need gh auth)

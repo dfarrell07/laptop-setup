@@ -521,6 +521,7 @@ TEST_SCRIPTS := \
 	'.venv/bin/python3 scripts/test-claude-file-heredoc-guard.py' \
 	'.venv/bin/python3 scripts/test-claude-project-modes.py' \
 	'.venv/bin/python3 scripts/test-agent-trust.py' \
+	'.venv/bin/python3 scripts/test-git-repos.py' \
 	'.venv/bin/python3 scripts/test-smoke-test.py' \
 	'.venv/bin/python3 scripts/test-workstation-audit.py' \
 	'.venv/bin/python3 scripts/test-go-checksum.py' \
