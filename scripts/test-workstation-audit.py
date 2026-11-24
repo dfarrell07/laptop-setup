@@ -551,8 +551,8 @@ class PortablePreferencesTests(unittest.TestCase):
                       'key': '{{ item.key }}'}, 'loop': '{{ desktop_gnome_ui_dconf }}', 'register': '_read'},
                      {'name': 'Assert values persisted', 'ansible.builtin.assert': {'that': [
                       "_read.results[0].value == \"'24h'\"", "_read.results[1].value == 'true'",
-                      "_read.results[2].value == 'true'", "_read.results[4].value == 'false'",
-                      "_read.results[5].value == '4'", "_read.results[6].value == \"['lv3:ralt_switch']\""]}}]
+                      "_read.results[2].value == 'true'", "_read.results[3].value == 'false'",
+                      "_read.results[4].value == '4'", "_read.results[5].value == \"['lv3:ralt_switch']\""]}}]
             play = [{'name': 'Isolated GNOME user preference test', 'hosts': 'localhost', 'gather_facts': False,
                      'vars': defaults, 'tasks': [guard, apply, *probe]}]
             playbook = directory / 'play.yml'

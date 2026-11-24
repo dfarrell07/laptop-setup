@@ -664,6 +664,23 @@ if $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY && command -v tailscale 
 fi
 unset _ts_want
 
+# Traditional scrolling (natural scrolling off), the desktop role's default on GNOME and macOS. Read as the user:
+# under sudo, gsettings and defaults would read root's values.
+if [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
+  if [[ "$EUID" -eq 0 && -n "${SUDO_USER:-}" ]]; then
+    record "scroll-direction" "SKIP" "user settings are unreachable under sudo; re-run: make smoke-test-user"
+  elif ! $IS_LINUX; then
+    if [[ "$(defaults read -g com.apple.swipescrolldirection 2>/dev/null)" == 0 ]]; then record "scroll-direction" "PASS"
+    else record "scroll-direction" "WARN" "natural scrolling is on (com.apple.swipescrolldirection): make desktop"; fi
+  elif [[ -x /usr/bin/gnome-shell ]] && command -v gsettings &>/dev/null; then
+    _scroll=$(gsettings get org.gnome.desktop.peripherals.touchpad natural-scroll 2>/dev/null || true)
+    _scroll+=" $(gsettings get org.gnome.desktop.peripherals.mouse natural-scroll 2>/dev/null || true)"
+    if [[ "$_scroll" == "false false" ]]; then record "scroll-direction" "PASS"
+    else record "scroll-direction" "WARN" "GNOME natural scrolling (touchpad, mouse): $_scroll; make desktop"; fi
+    unset _scroll
+  fi
+fi
+
 # macOS settings that need root to apply but not to read, so a no-sudo run (NOSUDO=1) shows what is left
 if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   _fw=/usr/libexec/ApplicationFirewall/socketfilterfw

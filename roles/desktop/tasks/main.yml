@@ -855,6 +855,43 @@
        | difference(_desktop_fw_allow_paths.results | default([]) | selectattr('rc', 'defined') | selectattr('rc', 'eq', 0)
                     | map(attribute='stdout') | list) }}
 
+# --- Scroll direction in GNOME, whichever desktop_environment is chosen ---
+- name: GNOME scroll direction
+  when:
+    - is_linux
+    - not (system_is_container | default(false))
+  block:
+    - name: Check whether GNOME is installed
+      ansible.builtin.stat:
+        path: /usr/bin/gnome-shell
+      register: _desktop_gnome_shell
+
+    - name: Set the GNOME touchpad and mouse scroll direction
+      when: _desktop_gnome_shell.stat.exists
+      block:
+        - name: Validate the scroll direction settings
+          ansible.builtin.assert:
+            that:
+              - desktop_gnome_touchpad_natural_scroll is boolean
+              - desktop_gnome_mouse_natural_scroll is boolean
+
+        - name: Write the GNOME scroll direction keys
+          community.general.dconf:
+            key: "{{ item.key }}"
+            value: "{{ item.value }}"
+          loop: "{{ desktop_gnome_scroll_dconf }}"
+          loop_control:
+            label: "{{ item.key }}"
+          ignore_errors: true  # no session bus (an SSH run): warned below, as the GNOME block does
+          register: _desktop_gnome_scroll_results
+
+        - name: Warn if the GNOME scroll direction writes failed
+          ansible.builtin.debug:
+            msg: >-
+              WARNING: GNOME scroll direction not set (dbus/dconf unavailable?):
+              {{ _desktop_gnome_scroll_results.results | selectattr('failed') | map(attribute='item.key') | join(', ') }}
+          when: _desktop_gnome_scroll_results.results | selectattr('failed') | list | length > 0
+
 # --- GNOME hardening (Linux only, GNOME desktops) ---
 - name: GNOME hardening dconf settings
   when:
@@ -868,7 +905,6 @@
           - desktop_gnome_clock_format in ['12h', '24h']
           - desktop_gnome_clock_show_date is boolean
           - desktop_gnome_touchpad_tap is boolean
-          - desktop_gnome_touchpad_natural_scroll is boolean
           - desktop_gnome_dynamic_workspaces is boolean
           - desktop_gnome_workspace_count | string is match('^[0-9]+$')
           - desktop_gnome_workspace_count | int >= 1
