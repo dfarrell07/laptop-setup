@@ -97,6 +97,7 @@ class ClaudePrivacyTests(unittest.TestCase):
                 self.assertEqual(rendered.get('skipDangerousModePermissionPrompt'), True if bypass else None)
                 self.assertEqual(rendered['permissions']['defaultMode'], defaults['claude_default_mode'])
                 self.assertEqual(rendered['crossSessionInbound'], 'accept')
+                self.assertIs(rendered['remoteControlAtStartup'], True)  # a personal home: plain claude starts with it
                 self.assertEqual(rendered['hooks']['PreToolUse'], [{'matcher': 'Bash', 'hooks': [{
                     'type': 'command', 'command': f'/usr/bin/python3 -I {tmp}/.config/claude/hooks/file-heredoc-guard.py'}]}])
                 self.assertEqual(rendered['permissions']['deny'][:len(defaults['claude_deny_bash'])],
@@ -105,6 +106,27 @@ class ClaudePrivacyTests(unittest.TestCase):
                 self.assertIs(sandbox['enableWeakerNestedSandbox'], expected, (in_container, tier))
                 self.assertEqual({k: v for k, v in sandbox.items() if k != 'enableWeakerNestedSandbox'},
                                  {'enabled': False, 'allowUnsandboxedCommands': False, 'failIfUnavailable': True})
+
+    def test_remote_control_at_startup_skips_only_the_vertex_work_home(self):
+        defaults = yaml.safe_load((ROOT / 'roles/claude/defaults/main.yml').read_text())
+        ansible = ROOT / '.venv/bin/ansible'
+        if not ansible.exists():
+            self.skipTest('no .venv ansible')
+        for home, expected in [('.claude', True), ('.claude-per2', True), ('.claude-work', None)]:
+            with tempfile.TemporaryDirectory() as tmp:
+                vars_file = Path(tmp) / 'v.json'
+                vars_file.write_text(json.dumps({
+                    **defaults, 'system_is_container': False, 'needs_container_tier': 'host-only',
+                    'ansible_facts': {'user_dir': tmp}, '_claude_instances': [], 'item': f'{tmp}/{home}'}))
+                out = Path(tmp) / 'o.json'
+                result = subprocess.run(
+                    [str(ansible), 'localhost', '-m', 'template', '-a',
+                     f'src={ROOT}/roles/claude/templates/settings-policy.json.j2 dest={out}',
+                     '-e', f'@{vars_file}', '-i', 'localhost,', '-c', 'local'],
+                    capture_output=True, text=True, timeout=120, cwd=tmp,
+                    env={**os.environ, 'ANSIBLE_LOCAL_TEMP': tmp, 'ANSIBLE_REMOTE_TEMP': tmp, 'HOME': tmp})
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(json.loads(out.read_text()).get('remoteControlAtStartup'), expected, home)
 
 
 if __name__ == '__main__':

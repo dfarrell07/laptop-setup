@@ -634,6 +634,36 @@ class MigrationTests(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, 'at most 32'):
                 run_play(Path(name), tasks=[assert_task], variables={'dotfiles_display_hostname': 'a;b'})
 
+    def test_migration_launchers_in_local_zsh_are_removed_and_user_lines_kept(self):
+        # The block the laptop migration left in local.zsh: it replaced the managed cper/cper2 without --remote-control.
+        block = '\n'.join([
+            '# Temporary launchers — provisioned version comes from make dotfiles (zshrc.j2)',
+            '_claude_personal() (',
+            '  local config_dir="$1"; shift',
+            '  unset CLAUDE_CODE_USE_VERTEX ANTHROPIC_VERTEX_PROJECT_ID CLOUD_ML_REGION',
+            '  export CLAUDE_CONFIG_DIR="$config_dir" CLAUDE_CODE_USE_VERTEX=0',
+            '  claude --dangerously-skip-permissions --plugin-dir . "$@"',
+            ')',
+            'cper()  { _claude_personal ~/.claude "$@"; }',
+            'cper2() { _claude_personal ~/.claude-per2 "$@"; }',
+            ''])
+        tasks = yaml.safe_load((ROOT / 'roles/dotfiles/tasks/main.yml').read_text())
+        wanted = ['Check for a local zsh extension', "Remove the migration's temporary Claude launchers from local.zsh"]
+        picked = [task for task in tasks if task.get('name') in wanted]
+        self.assertEqual([task['name'] for task in picked], wanted)
+        with tempfile.TemporaryDirectory() as name:
+            local = Path(name) / '.config/zsh/local.zsh'
+            local.parent.mkdir(parents=True)
+            mine = 'cper2() { echo mine; }\n'  # a later user definition is not part of the block
+            local.write_text('alias mine=true\n' + block + 'export KEEP=1\n' + mine)
+            run_play(Path(name), tasks=picked, variables={'ansible_facts': {'user_dir': name}})
+            self.assertEqual(local.read_text(), 'alias mine=true\nexport KEEP=1\n' + mine)
+            self.assertEqual(len(list(local.parent.glob('local.zsh.*~'))), 1)  # the backup
+            run_play(Path(name), tasks=picked, variables={'ansible_facts': {'user_dir': name}})  # idempotent
+            self.assertEqual(len(list(local.parent.glob('local.zsh.*~'))), 1)
+        with tempfile.TemporaryDirectory() as name:  # no local.zsh: nothing to do
+            run_play(Path(name), tasks=picked, variables={'ansible_facts': {'user_dir': name}})
+
     @unittest.skipUnless(shutil.which('zsh'), 'zsh required')
     def test_konflux_login_alias_is_work_only_browser_login_with_no_token(self):
         defaults = yaml.safe_load((ROOT / 'roles/dotfiles/defaults/main.yml').read_text())

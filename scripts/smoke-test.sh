@@ -1410,7 +1410,28 @@ else
   record "claude-cross-session-inbound" "FAIL" \
     "crossSessionInbound is not \"accept\" in settings.json of: ${_csi_bad[*]} — run: make apply CHUNK=agents"
 fi
-unset _cd _csi_bad _csi_seen _csi_dirs _claude_extra_dirs
+unset _cd _csi_bad _csi_seen
+# Remote Control: plain claude starts with it in every personal home (remoteControlAtStartup; the Vertex work home
+# cannot use it), and every shell function that starts claude passes --remote-control (a stale local.zsh launcher once
+# replaced the managed cper and dropped it).
+_rc_bad=()
+for _cd in "${_csi_dirs[@]}"; do
+  [[ -d "$_cd" && "$_cd" != "$HOME/.claude-work" ]] || continue
+  python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("remoteControlAtStartup") is True else 1)' \
+    "$_cd/settings.json" 2>/dev/null || _rc_bad+=("${_cd##*/}: remoteControlAtStartup not true (make apply CHUNK=agents)")
+done
+if command -v zsh &>/dev/null && [[ -f "$HOME/.zshrc" ]]; then
+  # shellcheck disable=SC2016  # expanded by zsh, not here
+  while IFS= read -r _f; do
+    [[ -n "$_f" ]] && _rc_bad+=("shell function $_f starts claude without --remote-control (check ~/.config/zsh/local.zsh)")
+  done < <(zsh -i -c 'for f in ${(k)functions}; do for l in "${(@f)functions[$f]}"; do
+             [[ $f != claude && ($l == *"claude --"* || $l == *"command claude "*) && $l != *--remote-control* ]] &&
+               { print -r -- $f; break; }; done; done' \
+           </dev/null 2>/dev/null || true)
+fi
+if (( ${#_rc_bad[@]} == 0 )); then record "claude-remote-control" "PASS"
+else record "claude-remote-control" "WARN" "$(IFS=';'; echo "${_rc_bad[*]}")"; fi
+unset _csi_dirs _claude_extra_dirs _rc_bad _f
 if [[ -d "$HOME/.claude-personal" ]]; then
   record "claude-retired-home" "WARN" "$HOME/.claude-personal is no longer managed (no 0700 tmpfiles rule); review and remove it"
 fi
