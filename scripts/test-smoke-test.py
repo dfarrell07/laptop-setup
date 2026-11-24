@@ -745,13 +745,18 @@ class SmokeTests(unittest.TestCase):
             (home / '.ssh').mkdir()
             (home / '.ssh/id_ed25519_sk.pub').write_text('sk-ssh-ed25519@openssh.com AAAAprimary yubikey-1\n')
             (home / '.ssh/id_ed25519_sk_backup.pub').write_text('sk-ssh-ed25519@openssh.com AAAAbackup yubikey-2\n')
+            (home / '.ssh/id_ed25519_sk_signing.pub').write_text('sk-ssh-ed25519@openssh.com AAAAsigning signing\n')
             log = home / 'gh.log'
             gh = home / 'gh'
-            # user/keys fails until refreshed (no scope), then lists only the primary key
+            # the key lists fail until refreshed (no scope); then user/keys has only the primary key and
+            # user/ssh_signing_keys has the signing key only once the file 'signed' exists
             gh.write_text('#!/bin/sh\necho "$*" >> %s\ncase "$1 $2" in\n'
                           '"auth status") exit 0 ;;\n"auth refresh") touch %s/scoped; exit 0 ;;\n'
-                          '"api --hostname") [ -f %s/scoped ] || exit 1; echo "ssh-ed25519 AAAAprimary"; exit 0 ;;\n'
-                          'esac\nexit 0\n' % (log, home, home))
+                          '"api --hostname") [ -f %s/scoped ] || exit 1\n'
+                          '  case "$5" in user/keys) echo "ssh-ed25519 AAAAprimary" ;;\n'
+                          '  user/ssh_signing_keys) [ -f %s/signed ] && echo "sk-ssh-ed25519@openssh.com AAAAsigning" ;;\n'
+                          '  esac; exit 0 ;;\n'
+                          'esac\nexit 0\n' % (log, home, home, home))
             gh.chmod(0o755)
             env = dict(os.environ, HOME=str(home), PATH=str(home) + ':' + os.environ['PATH'])
             def run():
@@ -759,14 +764,23 @@ class SmokeTests(unittest.TestCase):
                                       capture_output=True, text=True, stdin=subprocess.DEVNULL)
             result = run()  # no terminal: cannot run the interactive scope refresh
             self.assertEqual(result.returncode, 1)
-            self.assertIn('admin:public_key', result.stderr)
+            self.assertIn('admin:ssh_signing_key', result.stderr)
             (home / 'scoped').touch()
             result = run()
             self.assertEqual(result.returncode, 0, result.stderr)
             calls = log.read_text().splitlines()
             adds = [c for c in calls if c.startswith('ssh-key add')]
-            self.assertEqual(adds, ['ssh-key add %s/.ssh/id_ed25519_sk_backup.pub --title yubikey-2' % home])
+            self.assertEqual(adds, [
+                'ssh-key add %s/.ssh/id_ed25519_sk_backup.pub --title yubikey-2 --type authentication' % home,
+                'ssh-key add %s/.ssh/id_ed25519_sk_signing.pub --title signing --type signing' % home])
             self.assertFalse(any(c.startswith('auth refresh') for c in calls))
+            # once GitHub lists the signing key, a re-run adds nothing new
+            (home / 'signed').touch()
+            log.write_text('')
+            result = run()
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual([c for c in log.read_text().splitlines() if c.startswith('ssh-key add')],
+                             ['ssh-key add %s/.ssh/id_ed25519_sk_backup.pub --title yubikey-2 --type authentication' % home])
 
     def test_scripts_run_on_macos_bash_3(self):
         """macOS /bin/bash is 3.2: no ${var,,}/${var^^} case conversion, declare -A or mapfile."""

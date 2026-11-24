@@ -113,7 +113,7 @@ help:
 	@echo "  bootstrap              Install dependencies, git hooks and checksum-pinned gitleaks"
 	@echo "  setup-yubikeys         Program YubiKeys and write vault-pass.sh"
 	@echo "  ssh-keys               Set each YubiKey's FIDO2 PIN and make its SSH key"
-	@echo "  github-ssh-keys        Add the YubiKey SSH keys GitHub lacks (asks gh for the key scope)"
+	@echo "  github-ssh-keys        Add the YubiKey SSH and signing keys GitHub lacks (asks gh for the scopes)"
 	@echo "  vault-init             Encrypt the vault stub with the SSH keys (after ssh-keys)"
 	@echo "  vault-import FROM=...  Reuse another machine's encrypted vault (file, backup dir or host:path) instead of setup-yubikeys"
 	@echo "  vault-edit             Edit the vault (vault-view: read only); shared once vault-join or vault-share-init ran"
