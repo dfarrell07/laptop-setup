@@ -305,7 +305,9 @@
       loop_control:
         label: "{{ item | regex_replace('(/cmd)?@.*', '') | basename }}"
       register: packages_go_results
-      # PERMISSION-DENIED IS TRANSIENT: retried via until. Failures are not raised here; the
+      # Transient errors are retried via until: permission denied, and module-proxy drops (proxy.golang.org
+      # answers some downloads with an HTTP/2 "stream error ... INTERNAL_ERROR"). Checksum mismatches are
+      # never retried. Failures are not raised here; the
       # tasks below fail the play on checksum mismatches and otherwise only warn (CSB RHEL
       # records a ticket). A task timeout bypasses failed_when, so ignore_errors keeps a
       # timed-out item (no rc) from ending the play; it is classified below.
@@ -313,9 +315,14 @@
       ignore_errors: true
       retries: 3
       delay: 5
-      until: |-
-        packages_go_results.rc == 0 or
-        (packages_go_results.rc != 0 and 'permission denied' not in (packages_go_results.stderr | default('')))
+      until: >-
+        packages_go_results.rc | default(1) == 0 or
+        'checksum mismatch' in (packages_go_results.stderr | default('')) or
+        (packages_go_results.stderr | default('')) is not search(_packages_go_retry_re)
+      vars:
+        _packages_go_retry_re: >-
+          {{ ['permission denied', 'stream error', 'INTERNAL_ERROR', 'connection reset', 'unexpected EOF',
+              'TLS handshake timeout', 'i/o timeout'] | join('|') }}
 
     - name: Install the subctl CLI under its expected executable name
       when:
@@ -420,6 +427,9 @@
       - network is unreachable
       - TLS handshake timeout
       - temporary failure in name resolution
+      - stream error  # module proxy HTTP/2 drop
+      - connection reset
+      - unexpected EOF
 
 - name: Warn about Go tools skipped due to network errors or timeouts
   ansible.builtin.debug:
@@ -432,9 +442,14 @@
 
 - name: Warn about Go tools that failed to install (non-CSB)
   ansible.builtin.debug:
+    # stderr starts with "go: downloading" lines; the error is at the end
     msg: >-
       WARNING: Go tool install failed (optional tooling; continuing):
       {{ _packages_go_failed | difference(_packages_go_network_failed) | join(', ') }}.
+      {% for r in packages_go_results.results | default([]) | selectattr('item', 'in', _packages_go_failed) %}
+      {{ r.item | regex_replace('@.*', '') | basename }}: rc={{ r.rc | default('none') }}
+      {{ (r.stderr_lines | default([]))[-3:] | join(' | ') or r.msg | default('') }}.
+      {% endfor %}
   when:
     - not csb_rhel | bool
     - _packages_go_failed | difference(_packages_go_network_failed) | length > 0
