@@ -391,7 +391,7 @@ else
   if systemctl --user is-failed --quiet drive-sync-push.service 2>/dev/null; then
     record "drive-sync-push" "FAIL" "the last push failed: systemctl --user status drive-sync-push"
   elif ! systemctl --user is-enabled --quiet drive-sync-push.timer 2>/dev/null; then
-    record "drive-sync-push" "WARN" "drive-sync-push.timer is not enabled: make apply CHUNK=drive_sync"
+    record "drive-sync-push" "WARN" "drive-sync-push.timer is not enabled (it needs the OAuth client in the vault, docs/drive-sync.md): make apply CHUNK=drive_sync"
   else record "drive-sync-push" "PASS"; fi
   unset _drive_missing _da
 fi

@@ -140,6 +140,10 @@ pull() {
   fi
 }
 
+# rclone comes from the packages role on Fedora and macOS only (not RHEL).
+[[ ${1:-} =~ ^(auth|push|pull|status)$ ]] && ! command -v rclone >/dev/null &&
+  die "rclone not found: make packages (Fedora and macOS install it)"
+
 case ${1:-} in
   auth) [[ $# -eq 2 ]] || die "usage: drive-sync auth <account>"; known "$2"; rc config reconnect "drive-$2:" ;;
   push) shift; push "$@" ;;
