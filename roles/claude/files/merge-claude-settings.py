@@ -103,8 +103,11 @@ def merge(existing, policy, retire=()):
     current = merged.get('permissions', {})
     if not isinstance(current, dict):
         fail('existing "permissions" is not an object; refusing to overwrite it')
+    user_deny = current.get('deny', [])
+    if not isinstance(user_deny, list) or not all(isinstance(d, str) for d in user_deny):
+        fail('existing "permissions.deny" is not a list of strings; refusing to overwrite it')
     retired = (RETIRED_DENY | set(retire)) - set(perms.get('deny', []))
-    deny = [d for d in dict.fromkeys(list(perms.get('deny', [])) + list(current.get('deny', []))) if d not in retired]
+    deny = [d for d in dict.fromkeys(list(perms.get('deny', [])) + user_deny) if d not in retired]
     out_perms = deep_merge(current, {k: v for k, v in perms.items() if k not in ('deny', 'allow', 'ask')})
     for key in ('allow', 'ask'):
         if key not in current and key in perms:

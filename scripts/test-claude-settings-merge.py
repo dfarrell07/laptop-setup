@@ -84,7 +84,8 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(list(self.dir.glob('settings.json.bak-*')), [])
 
     def test_invalid_existing_json_fails_without_clobbering(self):
-        for content in ['{not json', '[1, 2]', ' \n\t\n']:
+        for content in ['{not json', '[1, 2]', ' \n\t\n', '{"permissions": {"deny": "Read(foo)"}}',
+                        '{"permissions": {"deny": [{"a": 1}]}}']:
             self.path.write_text(content)
             result = run(self.path)
             self.assertNotEqual(result.returncode, 0)

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import time
 import unittest
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -63,7 +64,19 @@ class FileHeredocGuardTests(unittest.TestCase):
                         "cat <<EOF >& out.txt\nx\nEOF",
                         "env cat > f <<'EOF'\nx\nEOF",
                         "cat <<'EOF' > \"$B/test.mk\"\nx\nEOF",
-                        "f() { cat > out <<'EOF'\nx\nEOF\n}"]:
+                        "f() { cat > out <<'EOF'\nx\nEOF\n}",
+                        "x=$((1<<2))\ncat > f <<'EOF'\nx\nEOF",  # a shift is not a heredoc
+                        'echo "((" ; cat > f <<EOF\nx\nEOF',  # quoted parentheses are not arithmetic
+                        "grep -c '((' x.sh; cat > f <<'EOF'\nx\nEOF",
+                        "v=$((((a)+1))); cat > f <<'EOF'\nx\nEOF",
+                        "cat <<EOF\r\nhi\r\nEOF\r\ncat > f <<X\r\ny\r\nX\r\n",  # CRLF: the delimiter is EOF\r
+                        "python3 - <<'EOF'\fx\nprint(1)\nEOF\fx\ncat > f <<'Z'\nz\nZ",  # the whole word ends it
+                        "echo ${x//((/}; cat > f <<EOF\nx\nEOF",  # only a (( closed by )) is arithmetic
+                        "out=$((cd . && cat > f <<EOF\nx\nEOF\n) )",  # $((cmd) ) is a command substitution
+                        "for((i=0;i<1<<2;i++)); do :; done\ncat > f <<EOF\nx\nEOF",
+                        "diff <((sort a) ) b; cat > f <<EOF\nx\nEOF",
+                        'echo "$((1<<2))"\ncat > f <<\'EOF\'\nx\nEOF',  # arithmetic still expands in "..."
+                        "n=$(basename $(pwd)); echo $((1<<2))\ncat > f <<'EOF'\nx\nEOF"]:
             with self.subTest(command=command[:40]):
                 self.assertEqual(decide(command), 'deny')
 
@@ -106,9 +119,19 @@ class FileHeredocGuardTests(unittest.TestCase):
                         "cat <<EOF > \"/dev/null\"\nx\nEOF",
                         "tee '/dev/null' <<EOF\nx\nEOF",
                         "cat <<EOF >&2\nx\nEOF",
-                        'git commit -m "$(cat <<\'EOF\'\nSay "hi\ncat > f <<X\nEOF\n)"']:
+                        'git commit -m "$(cat <<\'EOF\'\nSay "hi\ncat > f <<X\nEOF\n)"',
+                        "echo \"((\" ; git commit -F - <<'EOF'\nmsg\ncat > f <<X\nEOF",
+                        "(cd /x && (ls)); tee out <<< $((1<<2))",
+                        # bash ends lines only at \n: a \r or \f does not end a body
+                        "git commit -F - <<'EOF'\nline\r\nEOF\r\ncat > f <<X\nEOF",
+                        "python3 - <<'EOF'\nx = 1\x0cEOF\ncat > f <<X\ny\nX\nEOF"]:
             with self.subTest(command=command[:40]):
                 self.assertEqual(decide(command), 'pass')
+
+    def test_long_arguments_stay_fast(self):
+        start = time.monotonic()
+        self.assertEqual(decide("python3 - --arg '" + 'x' * 60000 + "' <<EOF\nx\nEOF"), 'pass')
+        self.assertLess(time.monotonic() - start, 3)  # was 15 s+: the function-header regex retried every offset
 
     def test_other_tools_and_bad_input_pass(self):
         self.assertEqual(decide("cat > f <<'EOF'\nx\nEOF", tool='Write'), 'pass')

@@ -10,7 +10,7 @@
 {% if item != claude_work_config_dir %}
   "remoteControlAtStartup": {{ claude_remote_control_at_startup | bool | to_json }},
 {% endif %}
-  "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": {{ ('/usr/bin/python3 -I ' ~ (claude_hook_dir ~ '/file-heredoc-guard.py') | quote) | to_json }}}]}]},
+  "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": {{ ('/usr/bin/python3 -I ' ~ (claude_runtime_config_dir ~ '/hooks/file-heredoc-guard.py') | quote) | to_json }}}]}]},
 {% if claude_default_mode == 'bypassPermissions' %}
   "skipDangerousModePermissionPrompt": true,
 {% endif %}
