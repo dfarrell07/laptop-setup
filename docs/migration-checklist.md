@@ -53,9 +53,9 @@ audits it for gaps the automation does not cover yet.
 3. Power: native management (tuned) is the baseline. TLP and charge thresholds need `system_tlp_enabled: true`;
    switching stacks is best effort and needs working repositories.
 4. Work profile: connect the corporate VPN and set `ssh_work_keyscan_hosts` for the internal Git host with an
-   independently verified fingerprint. `git_repos_vpn_check_host` warns when its host is unreachable and skips the
-   repos on that host for the run; existing access grants and your work SSH key (`dotfiles_ssh_redhat_key_basename`)
-   are still required.
+   independently verified fingerprint. Off the VPN, `make apply CHUNK=repos` warns that the internal host is
+   unreachable and skips its repos for the run; existing access grants and your work SSH key
+   (`dotfiles_ssh_redhat_key_basename`) are still required.
 5. Choose chunks with `rollout_enable`, run `make preflight`, then stage prerequisites chunk by chunk, in this
    order: `make apply CHUNK=repos_dnf` (DNF hosts), `make apply CHUNK=packages`, `make apply CHUNK=ssh_client`,
    `make apply CHUNK=dotfiles`. Avoid `make ssh`: it also rewrites `~/.ssh/authorized_keys` to exactly the vault keys.

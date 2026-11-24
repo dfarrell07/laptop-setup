@@ -62,41 +62,94 @@
     - git_repos_category_filter | length > 0
     - git_repos_filtered | length == 0
 
-# Coverage gap: the wait_for task is never invoked in any molecule scenario.
-# Molecule overrides git_repos_list to a single CI test repo (HTTPS GitHub URL).
-# git_repos_vpn_check_host defaults to '' so the length guard short-circuits and
-# wait_for is skipped. A functional end-to-end test would require VPN access
-# unavailable in CI.
-- name: Check connectivity to VPN-gated repo hosts
+# Hosts other than github.com (internal ones answer only on the VPN) get a TCP probe, no ssh and so no key touch: the
+# URL's port, else 22 for git@ and ssh://, else 443 for https:// (not probed when a proxy is set: git would use it). Repos
+# on a host and port that do not answer are left out of this run, so their clones and make update's pulls are not
+# reported as failures. Tested in scripts/test-git-repos.py.
+- name: Set git hosts to probe
+  ansible.builtin.set_fact:
+    _git_repos_probe: >-
+      {{ git_repos_filtered | map(attribute='url')
+         | map('regex_replace', '^git@([^:/]+):.*$', '\1:22')
+         | map('regex_replace', '^(?:ssh|https)://(?:[^@/]+@)?([^/:]+):([0-9]+)/.*$', '\1:\2')
+         | map('regex_replace', '^ssh://(?:[^@/]+@)?([^/:]+)/.*$', '\1:22')
+         | map('regex_replace', '^https://(?:[^@/]+@)?([^/:]+)/.*$', '\1:443')
+         | select('match', '^[A-Za-z0-9.-]+:[0-9]+$') | reject('match', '^github\.com:') | unique
+         | reject('in', _git_repos_https if (lookup('env', 'https_proxy') or lookup('env', 'HTTPS_PROXY')) else []) | list }}
+  vars:
+    _git_repos_https: >-
+      {{ git_repos_filtered | map(attribute='url') | select('match', '^https://')
+         | map('regex_replace', '^https://(?:[^@/]+@)?([^/:]+)(?::([0-9]+))?/.*$', '\1:\2')
+         | map('regex_replace', ':$', ':443') | list }}
+
+- name: Probe git hosts
   ansible.builtin.wait_for:
-    host: "{{ git_repos_vpn_check_host }}"
-    port: "{{ git_repos_vpn_check_port }}"
+    host: "{{ item | regex_replace(':[0-9]+$', '') }}"
+    port: "{{ item | regex_replace('^.*:', '') | int }}"
     timeout: 3
-  when:
-    - git_repos_vpn_check_host | length > 0
-    - >-
-      git_repos_filtered | map(attribute='url') |
-      select('search', git_repos_vpn_check_host | regex_escape) |
-      list | length > 0
-  register: git_repos_vpn_check
-  ignore_errors: true
+  loop: "{{ _git_repos_probe }}"
+  register: _git_repos_probed
+  failed_when: false  # an unreachable host is reported below, not as a failed task
   check_mode: false  # read-only probe; wait_for is otherwise skipped in check mode
 
-- name: Warn if VPN-gated repo hosts are unreachable
-  ansible.builtin.debug:
-    msg: >-
-      VPN-gated host {{ git_repos_vpn_check_host }} is unreachable (port {{ git_repos_vpn_check_port }}).
-      Skipping repos at {{ git_repos_vpn_check_host }} this run. Once the VPN works, pin its fingerprint in
-      ssh_work_keyscan_hosts if still a placeholder, then run 'make apply CHUNK=ssh_client' and 'make apply CHUNK=repos'.
-  when: git_repos_vpn_check.failed | default(false)
+- name: Skip repos on unreachable git hosts
+  vars:
+    # host:port pairs whose probe timed out (it has no state)
+    _unreachable: "{{ _git_repos_probed.results | default([]) | rejectattr('state', 'defined') | map(attribute='item') | list }}"
+    # the URLs that use one of them: an explicit port, or the scheme's default
+    _unreachable_urls: >-
+      {%- set ps = [] -%}
+      {%- for hp in _unreachable -%}
+      {%- set h = hp | regex_replace(':[0-9]+$', '') | regex_escape -%}
+      {%- set port = hp | regex_replace('^.*:', '') -%}
+      {%- set _ = ps.append('^[a-z]+://([^@/]+@)?' ~ h ~ ':' ~ port ~ '/') -%}
+      {%- if port == '22' -%}{%- set _ = ps.extend(['^git@' ~ h ~ ':', '^ssh://([^@/]+@)?' ~ h ~ '/']) -%}{%- endif -%}
+      {%- if port == '443' -%}{%- set _ = ps.append('^https://([^@/]+@)?' ~ h ~ '/') -%}{%- endif -%}
+      {%- endfor -%}
+      {{ ps | join('|') }}
+  when: _unreachable | length > 0
+  block:
+    - name: Warn about unreachable git hosts
+      ansible.builtin.debug:
+        msg: >-
+          Skipping repos on {{ _unreachable | map('regex_replace', ':[0-9]+$', '') | unique | join(', ') }} this run:
+          unreachable (VPN down?) on {{ _unreachable | join(', ') }}. Run 'make apply CHUNK=repos' once it answers.
 
-# Drop repos on the VPN-gated host for this run so their clones are not attempted and
-# reported as failures while it is unreachable.
-- name: Skip VPN-gated repos while the VPN host is unreachable
+    - name: Drop repos on unreachable git hosts
+      ansible.builtin.set_fact:
+        git_repos_filtered: "{{ git_repos_filtered | rejectattr('url', 'search', _unreachable_urls) | list }}"
+
+# Internal hosts (dotfiles_ssh_work_hosts) take the Red Hat git key the ssh role deploys from the vault; without it
+# every clone there would fail with "Permission denied".
+- name: Set internal git hosts in use
   ansible.builtin.set_fact:
-    git_repos_filtered: >-
-      {{ git_repos_filtered | rejectattr('url', 'search', git_repos_vpn_check_host | regex_escape) | list }}
-  when: git_repos_vpn_check.failed | default(false)
+    _git_repos_work_hosts: >-
+      {{ dotfiles_ssh_work_hosts | default([]) | map(attribute='host') | select('in', git_repos_filtered | map(attribute='url')
+         | map('regex_replace', '^(git@|[a-z]+://([^@/]+@)?)([^:/]+)[:/].*$', '\3') | list) | list }}
+
+- name: Check for the Red Hat git key
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.ssh/{{ dotfiles_ssh_redhat_key_basename }}"
+  register: _git_repos_rh_key
+  when: _git_repos_work_hosts | length > 0
+
+- name: Skip repos on internal hosts without the Red Hat git key
+  when:
+    - _git_repos_work_hosts | length > 0
+    - not _git_repos_rh_key.stat.exists | default(true)
+  block:
+    - name: Warn about the missing Red Hat git key
+      ansible.builtin.debug:
+        msg: >-
+          Skipping repos on {{ _git_repos_work_hosts | join(', ') }}: no Red Hat git key
+          (~/.ssh/{{ dotfiles_ssh_redhat_key_basename }}): add vault_rh_git_key (make vault-edit), then make apply
+          CHUNK=ssh_client.
+
+    - name: Drop repos on internal hosts
+      ansible.builtin.set_fact:
+        git_repos_filtered: >-
+          {{ git_repos_filtered | rejectattr('url', 'search',
+             '^(git@|[a-z]+://([^@/]+@)?)(' ~ (_git_repos_work_hosts | map('regex_escape') | join('|')) ~ ')[:/]') | list }}
 
 - name: Stat base directory without following symlinks
   ansible.builtin.stat:
@@ -322,7 +375,7 @@
     label: "{{ item.dest }}"
   when:
     - item.dest in git_repos_available_dests
-    - item.url is match('^https://github\\.com/' ~ (dotfiles_github_user | regex_escape) ~ '/')
+    - item.url is match('^https://github\.com/' ~ (dotfiles_github_user | regex_escape) ~ '/')
     - not ansible_check_mode
   register: git_repos_hooks_result
   changed_when: "'updated' in git_repos_hooks_result.stdout"
