@@ -181,7 +181,7 @@ ensure_signers() {
       grep -oE '(sk-)?ssh-[a-z0-9@.-]+ [A-Za-z0-9+/=]+' | sed 's/^/namespaces="git"|/' || true)
     from=github
   fi
-  [[ -n $entries ]] || die "no SSH signing key to check the shared vault's commits: make dotfiles (writes ~/.config/git/allowed_signers from the vault), or list your signing key on github.com (Settings, SSH and GPG keys, as a Signing Key; not with gh, which would widen its token)"
+  [[ -n $entries ]] || die "no SSH signing key to check the shared vault's commits: make dotfiles (writes ~/.config/git/allowed_signers from the vault), or put your signing key on GitHub with make github-ssh-keys"
   local opts key fp kept=''
   while IFS='|' read -r opts key; do
     fp=$(printf '%s\n' "$key" | ssh-keygen -lf - 2>/dev/null | awk '{print $2}' || true)
