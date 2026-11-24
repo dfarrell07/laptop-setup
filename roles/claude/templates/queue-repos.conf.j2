@@ -7,17 +7,21 @@
 # Format (one block per repo — parsed as key=value, not executed):
 #   REPO_PATH[key]="/absolute/path/to/local/clone"
 #   REPO_REMOTE[key]="github-owner/repo-name"
-#   REPO_ALLOWED_TOOLS[key]="Read,Edit,Write,Bash(git add *),Bash(git commit *)"
+#   REPO_ALLOWED_TOOLS[key]="Read(./**),Edit(./**)"
 #   REPO_DEFAULT_BRANCH[key]="main"
 #
 # REPO_ALLOWED_TOOLS and REPO_DEFAULT_BRANCH are optional (default branch: main).
 # Keep comments on their own lines; trailing comments are stripped but avoid them.
-# The poller itself fetches, checks out, pushes and opens the PR, so do NOT grant
-# Claude Bash(git push *), Bash(git fetch *), Bash(git pull *), Bash(git checkout *)
-# or Bash(git *).
+# Claude works in a throwaway worktree of the clone; the poller itself fetches, commits
+# (without hooks, then scans with gitleaks), pushes from the clone and opens the PR.
+# So do NOT grant Claude any git command that writes: no Bash(git commit *) (its hooks
+# run code from the tree, and -F <file> reads files the deny rules hide), git add,
+# push, fetch, checkout, or Bash(git *).
 #
 # REPO_ALLOWED_TOOLS controls what Claude Code is permitted to call.
-# Use a restrictive allow-list; omit Bash entirely for read-only review tasks.
+# Use a restrictive allow-list; omit Bash entirely for read-only review tasks. Keep
+# Read and Edit (which covers Write) to ./** (the worktree): bare, they reach any file
+# not denied.
 # Grant git diff/log only in exact forms (`git diff --output=<file>` writes anywhere), and never pair Edit or Write
 # with a build tool (Bash(make *), npm, pytest...): the agent can edit what that tool runs, which is code execution.
 #
@@ -28,10 +32,10 @@
 #
 # REPO_PATH[laptop-setup]="{{ ansible_facts['user_dir'] }}/laptop-setup"
 # REPO_REMOTE[laptop-setup]="{{ dotfiles_github_user }}/laptop-setup"
-# REPO_ALLOWED_TOOLS[laptop-setup]="Read,Edit,Write,Bash(git add *),Bash(git commit *),Bash(git diff),Bash(git diff --stat)"
+# REPO_ALLOWED_TOOLS[laptop-setup]="Read(./**),Edit(./**),Bash(git diff),Bash(git diff --stat)"
 # REPO_DEFAULT_BRANCH[laptop-setup]="main"
 #
 # REPO_PATH[my-project]="{{ ansible_facts['user_dir'] }}/repos/my-project"
 # REPO_REMOTE[my-project]="{{ dotfiles_github_user }}/my-project"
-# REPO_ALLOWED_TOOLS[my-project]="Read,Edit,Write,Bash(git add *),Bash(git commit *),Bash(git diff)"
+# REPO_ALLOWED_TOOLS[my-project]="Read(./**),Edit(./**),Bash(git diff)"
 # REPO_DEFAULT_BRANCH[my-project]="main"
