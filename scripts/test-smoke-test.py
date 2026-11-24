@@ -827,6 +827,32 @@ class SmokeTests(unittest.TestCase):
             self.assertIn('scroll-direction WARN GNOME natural scrolling (touchpad, mouse): true false', run('true', 'false'))
             self.assertIn('false true', run('false', 'true'))
 
+    @unittest.skipUnless(shutil.which('zsh'), 'zsh required')
+    def test_remote_control_check_names_only_launchers_without_the_flag(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('# Remote Control: plain claude starts with it')
+        end = source.index('unset _csi_dirs', start)
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            (home / '.zshrc').write_text('\n'.join([
+                'good() { claude --remote-control --dangerously-skip-permissions "$@"; }',
+                'bad() { claude --dangerously-skip-permissions "$@"; }',
+                'bad2() { command claude "$@"; }',
+                'claude() { command claude "$@"; }',  # the instance guard passes everything through
+                'note() { echo "run make claude first"; }', '']))
+            script = ('record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; }\n_csi_dirs=()\n' + source[start:end])
+            out = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c', script], env=dict(os.environ, HOME=directory),
+                                 capture_output=True, text=True).stdout.strip()
+            self.assertTrue(out.startswith('claude-remote-control WARN'), out)
+            self.assertIn('shell function bad starts', out)
+            self.assertIn('shell function bad2 starts', out)
+            for fine in ('good', 'claude', 'note'):
+                self.assertNotIn(f'function {fine} ', out)
+            (home / '.zshrc').write_text('good() { claude --remote-control "$@"; }\n')
+            out = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c', script], env=dict(os.environ, HOME=directory),
+                                 capture_output=True, text=True).stdout.strip()
+            self.assertEqual(out, 'claude-remote-control PASS')
+
     def test_scripts_run_on_macos_bash_3(self):
         """macOS /bin/bash is 3.2: no ${var,,}/${var^^} case conversion, declare -A or mapfile."""
         import re

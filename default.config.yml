@@ -448,6 +448,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #       curl -fsSL https://claude.ai/install.sh -o /tmp/claude-install.sh && sha256sum /tmp/claude-install.sh
 #     Update it only when the installer script changes (get_url fails with a checksum mismatch);
 #     a Claude release or pin bump alone does not change it.
+#   claude_remote_control_at_startup: true  (roles/claude/defaults) — remoteControlAtStartup in every personal
+#     Claude home (not the Vertex work home); the launchers also pass --remote-control
 #   claude_sandbox_enabled: false      (roles/claude/defaults) — Claude Code Bash sandbox (bubblewrap); off because on Fedora it left
 #     commands with no writable directory. Deny rules for the Read/Edit tools apply either way.
 #   claude_orchestrator_enabled: false  (roles/claude/defaults) — start the claude-skills session orchestrator at boot
