@@ -83,26 +83,22 @@ is_allowed_actor() {
     grep -Fixq -- "$1"
 }
 
-# True when the clone at $1 holds nothing the poller did not create: a clean
-# working tree, or HEAD on a branch the poller made (claude/<issue>-<slug>).
-# Anything else (a user's dirty tree on their own branch) must never be reset.
-clone_is_disposable() {
-  local dir="$1" status head
-  status=$(git -C "$dir" status --porcelain 2>/dev/null) || return 1
-  [[ -z "$status" ]] && return 0
-  head=$(git -C "$dir" symbolic-ref --quiet --short HEAD 2>/dev/null) || return 1
-  [[ "$head" =~ ^claude/[0-9]+- ]]
+# The agent works in a throwaway detached worktree of the clone at REPO_PATH (often the user's own checkout): it never
+# touches their files or branches, and nothing it writes, gitignored files included, outlives the run.  Neither repair
+# nor prune here: both can act on the user's own worktrees.
+remove_worktree() {
+  git -C "$1" worktree remove --force --force "$2" >/dev/null 2>&1 || true
 }
 
-# Return a clone to a clean default-branch state (a failed run leaves it dirty
-# on the work branch).  Only touches the clone given as $1, and only when
-# clone_is_disposable; otherwise returns 1 without modifying anything.
-cleanup_clone() {
-  local dir="$1" branch="$2"
-  clone_is_disposable "$dir" || return 1
-  git -C "$dir" reset --hard >/dev/null 2>&1 || true
-  git -C "$dir" clean -fd >/dev/null 2>&1 || true
-  git -C "$dir" checkout "$branch" >/dev/null 2>&1 || true
+# Commit everything in worktree $1 (git directory $2) on top of $3 with message $4 and print the commit, or nothing
+# when there is no change.  Plumbing, not git commit: commit hooks would run code from the tree the agent just edited.
+commit_worktree() {
+  local worktree="$1" gitdir="$2" parent="$3" message="$4" tree
+  local g=(git -C "$worktree" --git-dir="$gitdir" --work-tree="$worktree")
+  "${g[@]}" add -A || return 1
+  tree=$("${g[@]}" write-tree) || return 1
+  [[ "$tree" != "$("${g[@]}" rev-parse "$parent^{tree}")" ]] || return 0
+  "${g[@]}" commit-tree "$tree" -p "$parent" -m "$message"
 }
 
 mark_issue_failed() {
@@ -116,6 +112,8 @@ mark_issue_failed() {
 
 # gtimeout covers a Homebrew coreutils that installs only g-prefixed names
 TIMEOUT_BIN=$(command -v timeout || command -v gtimeout) || { echo "timeout/gtimeout not found" >&2; exit 1; }
+# The poller commits without hooks, so it scans the agent's commit for secrets itself.
+command -v gitleaks >/dev/null || { echo "gitleaks not found; refusing to push unscanned work" >&2; exit 1; }
 
 # --- Main ---
 mkdir -p "$LOG_DIR"  # umask 077 makes new dirs 700
@@ -219,8 +217,9 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
 
   TARGET_DIR="${REPO_PATH[$REPO_SHORT]}"
   TARGET_REMOTE="${REPO_REMOTE[$REPO_SHORT]}"
-  # Exact git diff/log forms: their --output=<file> writes anywhere (~/.config/zsh/local.zsh runs in every shell)
-  TOOLS="${REPO_ALLOWED_TOOLS[$REPO_SHORT]:-Read,Edit,Write,Bash(git add *),Bash(git commit *),Bash(git diff),Bash(git diff --cached),Bash(git diff --stat),Bash(git log --oneline -20),Bash(git status)}"
+  # Files only inside the worktree (Edit covers Write); git diff/log only in exact forms, as --output=<file> writes
+  # anywhere.  No git commit: its hooks run code from the tree, and -F <file> reads files the deny rules hide.
+  TOOLS="${REPO_ALLOWED_TOOLS[$REPO_SHORT]:-Read(./**),Edit(./**),Bash(git diff),Bash(git diff --stat),Bash(git log --oneline -20),Bash(git status)}"
   DEFAULT_BRANCH="${REPO_DEFAULT_BRANCH[$REPO_SHORT]:-main}"
   PROMPT=$(extract_issue_body "$ISSUE_BODY")
 
@@ -276,60 +275,62 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
   BRANCH_NAME="claude/${ISSUE_NUM}-$(slugify "$ISSUE_TITLE")"
   START_TIME=$(date +%s)
   TMPFILE=$(mktemp)
-  trap 'rm -f "${TMPFILE:-}"' EXIT
+  WORKTREE="$(mktemp -d)/$REPO_SHORT"
+  trap 'rm -f "${TMPFILE:-}"; [[ -z "${WORKTREE:-}" ]] || remove_worktree "$TARGET_DIR" "$WORKTREE"' EXIT
   chmod 0600 "$TMPFILE"
   printf '%s\n' "$PROMPT" > "$TMPFILE"
 
-  # The poller (not Claude) fetches, checks out and pushes.  Start from a clean
-  # default branch even if a previous failed run left the clone dirty.
-  if ! cleanup_clone "$TARGET_DIR" "$DEFAULT_BRANCH"; then
-    mark_issue_failed "$ISSUE_NUM" "Clone \`$TARGET_DIR\` has uncommitted changes on a branch the poller did not create; refusing to discard them. Clean it up, then re-open and re-label as \`queued\`."
-    rm -f "$TMPFILE"
-    continue
-  fi
-
+  # The poller (not Claude) fetches, commits and pushes; Claude only edits files in the worktree.
   (
     # set -e is suppressed inside a subshell on the left of ||, so fail explicitly.
     cd "$TARGET_DIR" || exit 1
-    git fetch origin || exit 1
-    git checkout "$DEFAULT_BRANCH" || exit 1
-    git pull --ff-only origin "$DEFAULT_BRANCH" || exit 1
-    git checkout -B "$BRANCH_NAME" || exit 1
+    git fetch origin "$DEFAULT_BRANCH" || exit 1
+    BASE=$(git rev-parse --verify "origin/$DEFAULT_BRANCH^{commit}") || exit 1
+    git worktree add -q --detach "$WORKTREE" "$BASE" || exit 1
+    # Name the git directory from here on, for the agent's git too: the worktree's .git file is the agent's to edit.
+    GITDIR=$(git -C "$WORKTREE" rev-parse --absolute-git-dir) || exit 1
 
     set +e
     # dontAsk denies instead of prompting and keeps a bypassPermissions defaultMode from widening this run. Settings
     # allow rules (instance and the target repo's .claude/settings.json) still apply on top of --allowedTools.
-    "$TIMEOUT_BIN" -k 30 "$TIMEOUT_SECONDS" "$CLAUDE_BIN" -p \
+    (cd "$WORKTREE" && GIT_DIR="$GITDIR" GIT_WORK_TREE="$WORKTREE" exec "$TIMEOUT_BIN" -k 30 "$TIMEOUT_SECONDS" "$CLAUDE_BIN" -p \
       --permission-mode dontAsk \
       --allowedTools "$TOOLS" \
       --max-turns "$MAX_TURNS" \
       < "$TMPFILE" \
       2>"$LOG_DIR/issue-${ISSUE_NUM}-stderr.log" \
-      >"$LOG_DIR/issue-${ISSUE_NUM}-stdout.log"
+      >"$LOG_DIR/issue-${ISSUE_NUM}-stdout.log")
     CLAUDE_EXIT=$?
     set -e
 
-    rm -f "$TMPFILE"
     END_TIME=$(date +%s)
     DURATION=$((END_TIME - START_TIME))
 
     if [[ "$CLAUDE_EXIT" -ne 0 ]]; then
-      mark_issue_failed "$ISSUE_NUM" "Task failed (exit $CLAUDE_EXIT, ${DURATION}s). Branch: \`$BRANCH_NAME\`. Re-open and re-label as \`queued\` to retry."
-      # Only push the work branch if it has commits beyond the default branch.
-      if [[ "$(git rev-list --count "$DEFAULT_BRANCH..$BRANCH_NAME" 2>/dev/null || echo 0)" -gt 0 ]]; then
-        git push origin "$BRANCH_NAME" 2>/dev/null || true
-      fi
-      cleanup_clone "$TARGET_DIR" "$DEFAULT_BRANCH"
+      mark_issue_failed "$ISSUE_NUM" "Task failed (exit $CLAUDE_EXIT, ${DURATION}s); its changes were discarded. Re-open and re-label as \`queued\` to retry."
       exit 0  # already handled — exit 0 prevents outer || handler from double-calling mark_issue_failed
     fi
 
-    if git diff --quiet "$DEFAULT_BRANCH"..."$BRANCH_NAME" 2>/dev/null; then
-      mark_issue_failed "$ISSUE_NUM" "Claude completed but made no changes (no commits; uncommitted edits are discarded; ${DURATION}s)."
-      cleanup_clone "$TARGET_DIR" "$DEFAULT_BRANCH"
+    COMMIT=$(commit_worktree "$WORKTREE" "$GITDIR" "$BASE" "$ISSUE_TITLE
+
+From ${TASK_QUEUE_REPO}#${ISSUE_NUM}.
+
+Signed-off-by: $(git var GIT_COMMITTER_IDENT | sed 's/>.*/>/')") || exit 1
+    if [[ -z "$COMMIT" ]]; then
+      mark_issue_failed "$ISSUE_NUM" "Claude completed but made no changes (${DURATION}s)."
       exit 0  # already handled — exit 0 prevents outer || handler from double-calling mark_issue_failed
     fi
+    # Scan from this clone, whose .gitleaks.toml and .gitleaksignore the agent never saw; an inline gitleaks:allow
+    # the agent added would still silence a finding, so refuse those outright.
+    if ! gitleaks git --no-banner --redact --log-opts="$BASE..$COMMIT" >>"$LOG_DIR/issue-${ISSUE_NUM}-stderr.log" 2>&1 \
+      || git diff --no-ext-diff --no-textconv "$BASE" "$COMMIT" | grep '^+.*gitleaks:allow' >/dev/null; then
+      mark_issue_failed "$ISSUE_NUM" "gitleaks flagged the changes (or they add \`gitleaks:allow\`); nothing was pushed. See $LOG_DIR/issue-${ISSUE_NUM}-stderr.log."
+      exit 0
+    fi
 
-    git push -u --force-with-lease origin "$BRANCH_NAME" || exit 1
+    # Push from this clone, never the worktree: its hooks are the user's, not code the agent could have changed.  No
+    # local branch: a re-queued issue must not move or delete one the user made from the earlier PR.
+    git push --force-with-lease origin "$COMMIT:refs/heads/$BRANCH_NAME" || exit 1
 
     PR_URL=$(gh pr create \
       --repo "$TARGET_REMOTE" \
@@ -350,8 +351,10 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
     log "Issue #$ISSUE_NUM completed: $PR_URL"
   ) || {
     log "Issue #$ISSUE_NUM: subshell failed — see $LOG_DIR/issue-${ISSUE_NUM}-stderr.log"
-    mark_issue_failed "$ISSUE_NUM" "Internal error: git-push or PR creation failed (post-PR label/comment/close may also have failed). Check logs at $LOG_DIR/issue-${ISSUE_NUM}-stderr.log."
-    cleanup_clone "$TARGET_DIR" "$DEFAULT_BRANCH" || log "WARNING: left $TARGET_DIR untouched (not a poller branch and not clean)"
-    rm -f "$TMPFILE"
+    mark_issue_failed "$ISSUE_NUM" "Internal error: git or PR creation failed (post-PR label/comment/close may also have failed). Check logs at $LOG_DIR/issue-${ISSUE_NUM}-stderr.log."
   }
+  rm -f "$TMPFILE"
+  remove_worktree "$TARGET_DIR" "$WORKTREE"
+  rmdir "$(dirname "$WORKTREE")" 2>/dev/null || true
+  WORKTREE=""
 done

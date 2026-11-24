@@ -33,6 +33,11 @@ done
 GQLEOF
 chmod +x "$GQL_HELPER"
 export GQL_HELPER
+# The poller refuses to run without gitleaks; tests that need its verdict put their own stub first on PATH.
+_STUBS=$(mktemp -d)
+printf '#!/bin/bash\nexit 0\n' > "$_STUBS/gitleaks"
+chmod +x "$_STUBS/gitleaks"
+export PATH="$_STUBS:$PATH"
 
 assert_eq() {
   local desc="$1" expected="$2" actual="$3"
@@ -210,275 +215,130 @@ rm -rf "$_UR_TMPBIN" "$_UR_TMPHOME" "$_UR_PATCHED" "$_UR_GH_LOG"
 assert_contains "unknown repo: issue marked failed" "issue edit 8 --repo test/q --remove-label processing --remove-label queued --add-label failed" "$_ur_gh"
 assert_contains "unknown repo: comment names the repo" 'Unknown or incomplete repo: `nosuchrepo`' "$_ur_gh"
 
-# --- Integration: main while-loop processes a queued issue end-to-end ---
-_INT_TMPBIN=$(mktemp -d)
-_INT_TMPHOME=$(mktemp -d)
-_INT_TMPLOCKDIR=$(mktemp -d)
-_INT_TMPREPO=$(mktemp -d)
-_INT_GH_LOG=$(mktemp)
-
-# Stub gh: return one issue on list, a PR URL on pr create; log all calls
-cat > "$_INT_TMPBIN/gh" << 'GHEOF'
+# --- Integration: queued issues run against a real clone of a local origin ---
+# _qrun <number> <title>: run the poller on one queued issue for repo "testrepo". The stub claude runs $CLAUDE_ACT in
+# its working directory and exits $CLAUDE_RC; the stub gitleaks exits $GITLEAKS_RC. The clone sits on a user branch
+# with an untracked file, and core.hooksPath=.githooks runs tracked hooks that leave a mark.
+# Sets _Q (scratch dir, removed by _qdone), _q_out, _q_exit, _q_gh (gh, claude and gitleaks calls).
+_qrun() {
+  _Q=$(mktemp -d)
+  local g=(env HOME="$_Q/home" GIT_CONFIG_NOSYSTEM=1 git)
+  mkdir -p "$_Q/bin" "$_Q/home/.config/claude" "$_Q/seed/.githooks"
+  "${g[@]}" init -q -b main "$_Q/seed"
+  printf '#!/bin/sh\ntouch "%s/hook-ran"\n' "$_Q" > "$_Q/seed/.githooks/pre-commit"
+  chmod +x "$_Q/seed/.githooks/pre-commit"
+  echo 'ignored/' > "$_Q/seed/.gitignore"
+  "${g[@]}" -C "$_Q/seed" add -A
+  "${g[@]}" -C "$_Q/seed" -c user.name=t -c user.email=t@example.invalid commit -q -m init
+  "${g[@]}" clone -q --bare "$_Q/seed" "$_Q/origin.git"
+  "${g[@]}" clone -q "$_Q/origin.git" "$_Q/clone"
+  "${g[@]}" -C "$_Q/clone" config core.hooksPath .githooks
+  "${g[@]}" -C "$_Q/clone" checkout -q -b feature/mine
+  echo mine > "$_Q/clone/notes.txt"
+  eval "${Q_SETUP:-}"
+  cat > "$_Q/bin/gh" << 'GHEOF'
 #!/bin/bash
 echo "$*" >> "$GH_LOG_FILE"
 case "$1 $2" in
-  "issue list") case "$*" in *"--label processing"*) ;; *) echo '{"author":{"login":"tester"},"number":7,"title":"Fix the thing","body":"repo: testrepo\n\nDo something useful"}' ;; esac ;;
-  "api repos/"*) echo "${EVENTS_ACTOR-tester}" ;;
-  "api graphql") GQL_BODY="${GQL_BODY-repo: testrepo\n\nDo something useful}" "$GQL_HELPER" "$@" ;;
+  "issue list") case "$*" in *"--label processing"*) ;; *) printf '{"author":{"login":"tester"},"number":%s,"title":"%s","body":"x"}\n' "$Q_NUM" "$Q_TITLE" ;; esac ;;
+  "api repos/"*) echo tester ;;
+  "api graphql") GQL_BODY="repo: testrepo\n\nDo something useful" "$GQL_HELPER" "$@" ;;
   "pr create")  echo "https://github.com/owner/testrepo/pull/99" ;;
 esac
 exit 0
 GHEOF
-chmod +x "$_INT_TMPBIN/gh"
-
-# Stub git: log calls; exit 1 on diff --quiet to signal changes are present
-cat > "$_INT_TMPBIN/git" << 'GITEOF'
-#!/bin/bash
-echo "git $*" >> "$GH_LOG_FILE"
-[[ "$1 $2" == "diff --quiet" ]] && exit 1
-exit 0
-GITEOF
-chmod +x "$_INT_TMPBIN/git"
-
-# Stub CLAUDE_BIN: drain stdin, exit 0
-cat > "$_INT_TMPBIN/claude-stub" << 'CLAUDEOF'
-#!/bin/bash
-echo "claude $*" >> "$GH_LOG_FILE"
-cat > /dev/null
-exit 0
-CLAUDEOF
-chmod +x "$_INT_TMPBIN/claude-stub"
-
-mkdir -p "$_INT_TMPHOME/.config/claude"
-printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n' \
-  "$_INT_TMPREPO" > "$_INT_TMPHOME/.config/claude/queue-repos.conf"
-
-_INT_PATCHED=$(mktemp)
-sed 's|LOCKFILE=.*|LOCKFILE="'"$_INT_TMPLOCKDIR/test.lock"'"|' \
-  "$POLLER" > "$_INT_PATCHED"
-
-set +e
-_int_out=$(
-  GH_LOG_FILE="$_INT_GH_LOG" \
-  CLAUDE_QUEUE_REPO="test/q" \
-  CLAUDE_BIN="$_INT_TMPBIN/claude-stub" \
-  CLAUDE_QUEUE_TIMEOUT=10 \
-  HOME="$_INT_TMPHOME" \
-  PATH="$_INT_TMPBIN:$PATH" \
-  bash "$_INT_PATCHED" 2>&1
-)
-_int_exit=$?
-set -e
-rm -f "$_INT_PATCHED"
-
-_int_gh=$(cat "$_INT_GH_LOG")
-# Logs hold the issue prompt output: the poller (umask 077; chmod 700 on the directory) must keep them owner-only.
+  printf '#!/bin/bash\ncat >/dev/null\necho "claude $* in $PWD" >> "$GH_LOG_FILE"\necho "claude git dir $GIT_DIR" >> "$GH_LOG_FILE"\neval "${CLAUDE_ACT:-}"\nexit "${CLAUDE_RC:-0}"\n' \
+    > "$_Q/bin/claude-stub"
+  printf '#!/bin/bash\necho "gitleaks $*" >> "$GH_LOG_FILE"\nexit "${GITLEAKS_RC:-0}"\n' > "$_Q/bin/gitleaks"
+  chmod +x "$_Q/bin"/*
+  printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n' "$_Q/clone" \
+    > "$_Q/home/.config/claude/queue-repos.conf"
+  sed 's|LOCKFILE=.*|LOCKFILE="'"$_Q/test.lock"'"|' "$POLLER" > "$_Q/poller.sh"
+  : > "$_Q/gh.log"
+  set +e
+  _q_out=$(GH_LOG_FILE="$_Q/gh.log" Q_NUM="$1" Q_TITLE="$2" CLAUDE_QUEUE_REPO="test/q" CLAUDE_BIN="$_Q/bin/claude-stub" \
+    CLAUDE_QUEUE_TIMEOUT=10 HOME="$_Q/home" GIT_CONFIG_NOSYSTEM=1 GIT_COMMITTER_NAME=Poller GIT_COMMITTER_EMAIL=p@example.invalid \
+    GIT_AUTHOR_NAME=Poller GIT_AUTHOR_EMAIL=p@example.invalid PATH="$_Q/bin:$PATH" bash "$_Q/poller.sh" 2>&1)
+  _q_exit=$?
+  set -e
+  _q_gh=$(cat "$_Q/gh.log")
+}
+_qdone() { rm -rf "$_Q"; }
 _mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
-_int_logdir="$_INT_TMPHOME/.local/state/claude/logs"
-_int_logmodes="$(_mode "$_int_logdir" || echo missing) $( (for _f in "$_int_logdir"/*.log; do _mode "$_f" || echo missing; done | sort -u | tr '\n' ' ') || true)"
-rm -rf "$_INT_TMPBIN" "$_INT_TMPHOME" "$_INT_TMPLOCKDIR" "$_INT_TMPREPO"
-rm -f "$_INT_GH_LOG"
+_has() { [[ -e "$1" ]] && echo yes || echo no; }
+# The user's clone after a run: same branch, untracked file kept, no worktree or branch left behind
+_q_clone_untouched() {
+  assert_eq "$1: clone stays on the user's branch" "feature/mine" "$(git -C "$_Q/clone" branch --show-current)"
+  assert_eq "$1: user's untracked file kept" "mine" "$(cat "$_Q/clone/notes.txt")"
+  assert_eq "$1: worktree removed" "1" "$(git -C "$_Q/clone" worktree list | wc -l | tr -d ' ')"
+  assert_eq "$1: no local poller branch" "" "$(git -C "$_Q/clone" branch --list 'claude/*')"
+}
 
-assert_eq       "integration: exit 0"             "0" "$_int_exit"
-assert_eq       "integration: log dir and files owner-only" "700 600 " "$_int_logmodes"
-assert_contains "integration: queued→processing"  \
-  "issue edit 7 --repo test/q --remove-label queued --add-label processing" "$_int_gh"
-assert_contains "integration: pr create called"   "pr create"          "$_int_gh"
+# Success: the agent's edits become one signed-off commit on a pushed branch; ignored files and hooks go nowhere
+CLAUDE_ACT='echo new > feature.txt; mkdir -p ignored; echo planted > ignored/python' _qrun 7 "Fix the thing"
+_wt=$(sed -n 's/^claude .* in //p' <<< "$_q_gh")
+assert_eq       "integration: exit 0"             "0" "$_q_exit"
+# Logs hold the issue prompt output: the poller (umask 077; chmod 700 on the directory) must keep them owner-only.
+_logdir="$_Q/home/.local/state/claude/logs"
+assert_eq       "integration: log dir and files owner-only" "700 600 " \
+  "$(_mode "$_logdir" || echo missing) $( (for _f in "$_logdir"/*.log; do _mode "$_f" || echo missing; done | sort -u | tr '\n' ' ') || true)"
+assert_contains "integration: queued→processing"  "issue edit 7 --repo test/q --remove-label queued --add-label processing" "$_q_gh"
 assert_contains "integration: default tool allowlist, permission mode pinned" \
-  "claude -p --permission-mode dontAsk --allowedTools Read,Edit,Write,Bash(git add *),Bash(git commit *),Bash(git diff),Bash(git diff --cached),Bash(git diff --stat),Bash(git log --oneline -20),Bash(git status) --max-turns" "$_int_gh"
-assert_contains "integration: processing→done"    "--add-label done"   "$_int_gh"
-assert_contains "integration: issue closed"       "issue close 7"      "$_int_gh"
-assert_contains "integration: completed log line" "Issue #7 completed" "$_int_out"
+  "claude -p --permission-mode dontAsk --allowedTools Read(./**),Edit(./**),Bash(git diff),Bash(git diff --stat),Bash(git log --oneline -20),Bash(git status) --max-turns" "$_q_gh"
+assert_eq       "integration: claude ran in a worktree, not the clone" "yes no" \
+  "$([[ "$_wt" == */testrepo ]] && echo yes || echo no) $([[ "$_wt" == "$_Q/clone"* ]] && echo yes || echo no)"
+assert_eq       "integration: claude's git names the real git directory, not the worktree's .git file" "yes" \
+  "$([[ "$_q_gh" == *"claude git dir /"*"/clone/.git/worktrees/testrepo"* ]] && echo yes || echo no)"
+assert_eq       "integration: worktree directory gone" "no" "$(_has "$_wt")"
+assert_eq       "integration: pushed branch holds the edit" "new" \
+  "$(git --git-dir="$_Q/origin.git" show claude/7-fix-the-thing:feature.txt 2>&1)"
+assert_eq       "integration: one commit, message names the issue and signs off" "1|Fix the thing||From test/q#7.||Signed-off-by: Poller <p@example.invalid>" \
+  "$(git --git-dir="$_Q/origin.git" rev-list --count main..claude/7-fix-the-thing)|$(git --git-dir="$_Q/origin.git" log -1 --format=%B claude/7-fix-the-thing | sed '/^$/{$d;}' | paste -sd'|' -)"
+assert_eq       "integration: ignored file neither committed nor left behind" "no no" \
+  "$(git --git-dir="$_Q/origin.git" cat-file -e claude/7-fix-the-thing:ignored/python 2>/dev/null && echo yes || echo no) $(_has "$_wt/ignored")"
+assert_eq       "integration: tracked commit hook not run" "no" "$(_has "$_Q/hook-ran")"
+assert_contains "integration: gitleaks scans the new commit" \
+  "gitleaks git --no-banner --redact --log-opts=$(git --git-dir="$_Q/origin.git" rev-parse main)..$(git --git-dir="$_Q/origin.git" rev-parse claude/7-fix-the-thing)" "$_q_gh"
+assert_contains "integration: pr create called"   "pr create"          "$_q_gh"
+assert_contains "integration: processing→done"    "--add-label done"   "$_q_gh"
+assert_contains "integration: issue closed"       "issue close 7"      "$_q_gh"
+assert_contains "integration: completed log line" "Issue #7 completed" "$_q_out"
+_q_clone_untouched integration
+_qdone
 
-# --- Integration: no-changes failure path (git diff --quiet exits 0 → mark_issue_failed) ---
-_NC_TMPBIN=$(mktemp -d)
-_NC_TMPHOME=$(mktemp -d)
-_NC_TMPLOCKDIR=$(mktemp -d)
-_NC_TMPREPO=$(mktemp -d)
-_NC_GH_LOG=$(mktemp)
+# Failures push nothing: no changes, a failed Claude run, a gitleaks finding, an added gitleaks:allow
+_q_failed() { # <name> <expected comment text>
+  assert_eq           "$1: exit 0"                "0"                  "$_q_exit"
+  assert_contains     "$1: issue marked failed"   "--remove-label processing --remove-label queued --add-label failed" "$_q_gh"
+  assert_contains     "$1: comment explains"      "$2"                 "$_q_gh"
+  assert_not_contains "$1: done label not added"  "--add-label done"   "$_q_gh"
+  assert_not_contains "$1: no PR"                 "pr create"          "$_q_gh"
+  assert_eq           "$1: nothing pushed"        ""                   "$(git --git-dir="$_Q/origin.git" branch --list 'claude/*')"
+  _q_clone_untouched "$1"
+  _qdone
+}
+_qrun 8 "No-op task"; _q_failed no-changes "made no changes"
+CLAUDE_ACT='echo x > f' CLAUDE_RC=1 _qrun 9 "Fail task"; _q_failed claude-exit "exit 1"
+CLAUDE_ACT='echo x > f' GITLEAKS_RC=1 _qrun 10 "Leak"; _q_failed gitleaks "gitleaks flagged"
+CLAUDE_ACT='echo "k = 1  # gitleaks:allow" > f' _qrun 11 "Allow"; _q_failed allow-marker "gitleaks flagged"
+# A marker followed by a long diff (grep -q would stop early, and pipefail would count git's SIGPIPE as no match)
+CLAUDE_ACT='{ echo "k = 1  # gitleaks:allow"; seq 1 200000; } > f' _qrun 11 "Allow"; _q_failed allow-marker-long "gitleaks flagged"
 
-cat > "$_NC_TMPBIN/gh" << 'GHEOF'
-#!/bin/bash
-echo "$*" >> "$GH_LOG_FILE"
-case "$1 $2" in
-  "issue list") case "$*" in *"--label processing"*) ;; *) echo '{"author":{"login":"tester"},"number":8,"title":"No-op task","body":"repo: testrepo\n\nDo something useful"}' ;; esac ;;
-  "api repos/"*) echo "${EVENTS_ACTOR-tester}" ;;
-  "api graphql") GQL_BODY="${GQL_BODY-repo: testrepo\n\nDo something useful}" "$GQL_HELPER" "$@" ;;
-esac
-exit 0
-GHEOF
-chmod +x "$_NC_TMPBIN/gh"
+# A re-queued issue whose branch the user checked out in a worktree of their own: pushed, the user's branch untouched
+Q_SETUP='git -C "$_Q/clone" worktree add -q -b claude/14-retry "$_Q/mine" main' CLAUDE_ACT='echo y > f' _qrun 14 "Retry"
+assert_contains "re-queued: PR opened" "pr create" "$_q_gh"
+assert_eq       "re-queued: pushed" "y" "$(git --git-dir="$_Q/origin.git" show claude/14-retry:f 2>&1)"
+assert_eq       "re-queued: user's branch and worktree untouched" "$(git -C "$_Q/clone" rev-parse main) " \
+  "$(git -C "$_Q/clone" rev-parse claude/14-retry) $(git -C "$_Q/mine" status --porcelain)"
+_qdone
 
-# Stub git: exit 0 for all calls including diff --quiet — simulates no changes produced
-cat > "$_NC_TMPBIN/git" << 'GITEOF'
-#!/bin/bash
-echo "git $*" >> "$GH_LOG_FILE"
-exit 0
-GITEOF
-chmod +x "$_NC_TMPBIN/git"
-
-cat > "$_NC_TMPBIN/claude-stub" << 'CLAUDEOF'
-#!/bin/bash
-cat > /dev/null
-exit 0
-CLAUDEOF
-chmod +x "$_NC_TMPBIN/claude-stub"
-
-mkdir -p "$_NC_TMPHOME/.config/claude"
-printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n' \
-  "$_NC_TMPREPO" > "$_NC_TMPHOME/.config/claude/queue-repos.conf"
-
-_NC_PATCHED=$(mktemp)
-sed 's|LOCKFILE=.*|LOCKFILE="'"$_NC_TMPLOCKDIR/test.lock"'"|' \
-  "$POLLER" > "$_NC_PATCHED"
-
-set +e
-_nc_out=$(
-  GH_LOG_FILE="$_NC_GH_LOG" \
-  CLAUDE_QUEUE_REPO="test/q" \
-  CLAUDE_BIN="$_NC_TMPBIN/claude-stub" \
-  CLAUDE_QUEUE_TIMEOUT=10 \
-  HOME="$_NC_TMPHOME" \
-  PATH="$_NC_TMPBIN:$PATH" \
-  bash "$_NC_PATCHED" 2>&1
-)
-_nc_exit=$?
-set -e
-rm -f "$_NC_PATCHED"
-
-_nc_gh=$(cat "$_NC_GH_LOG")
-rm -rf "$_NC_TMPBIN" "$_NC_TMPHOME" "$_NC_TMPLOCKDIR" "$_NC_TMPREPO"
-rm -f "$_NC_GH_LOG"
-
-assert_eq           "no-changes: exit 0"                          "0"                  "$_nc_exit"
-assert_contains     "no-changes: mark_issue_failed adds failed label"    "--add-label failed" "$_nc_gh"
-assert_contains     "no-changes: fail comment mentions no changes" "no changes"        "$_nc_gh"
-assert_not_contains "no-changes: done label not added"            "--add-label done"   "$_nc_gh"
-assert_not_contains "no-changes: issue not closed"                "issue close"        "$_nc_gh"
-
-# --- Integration: Claude non-zero exit path ---
-_CE_TMPBIN=$(mktemp -d)
-_CE_TMPHOME=$(mktemp -d)
-_CE_TMPLOCKDIR=$(mktemp -d)
-_CE_TMPREPO=$(mktemp -d)
-_CE_GH_LOG=$(mktemp)
-
-cat > "$_CE_TMPBIN/gh" << 'GHEOF'
-#!/bin/bash
-echo "$*" >> "$GH_LOG_FILE"
-case "$1 $2" in
-  "issue list") case "$*" in *"--label processing"*) ;; *) echo '{"author":{"login":"tester"},"number":9,"title":"Fail task","body":"repo: testrepo\n\nDo something"}' ;; esac ;;
-  "api repos/"*) echo "${EVENTS_ACTOR-tester}" ;;
-  "api graphql") GQL_BODY="${GQL_BODY-repo: testrepo\n\nDo something}" "$GQL_HELPER" "$@" ;;
-  "pr create")  echo "https://github.com/owner/testrepo/pull/100" ;;
-esac
-exit 0
-GHEOF
-chmod +x "$_CE_TMPBIN/gh"
-
-# Stub git: log calls; diff --quiet exits 0 (no changes checked; CLAUDE_EXIT fires first)
-cat > "$_CE_TMPBIN/git" << 'GITEOF'
-#!/bin/bash
-echo "git $*" >> "$GH_LOG_FILE"
-[[ "$1 $2" == "rev-list --count" ]] && echo 1
-exit 0
-GITEOF
-chmod +x "$_CE_TMPBIN/git"
-
-# Stub CLAUDE_BIN: exit 1 to trigger the non-zero exit path
-cat > "$_CE_TMPBIN/claude-stub" << 'CLAUDEOF'
-#!/bin/bash
-cat > /dev/null
-exit 1
-CLAUDEOF
-chmod +x "$_CE_TMPBIN/claude-stub"
-
-mkdir -p "$_CE_TMPHOME/.config/claude"
-printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n' \
-  "$_CE_TMPREPO" > "$_CE_TMPHOME/.config/claude/queue-repos.conf"
-
-_CE_PATCHED=$(mktemp)
-sed 's|LOCKFILE=.*|LOCKFILE="'"$_CE_TMPLOCKDIR/test.lock"'"|' \
-  "$POLLER" > "$_CE_PATCHED"
-
-set +e
-_ce_out=$(
-  GH_LOG_FILE="$_CE_GH_LOG" \
-  CLAUDE_QUEUE_REPO="test/q" \
-  CLAUDE_BIN="$_CE_TMPBIN/claude-stub" \
-  CLAUDE_QUEUE_TIMEOUT=10 \
-  HOME="$_CE_TMPHOME" \
-  PATH="$_CE_TMPBIN:$PATH" \
-  bash "$_CE_PATCHED" 2>&1
-)
-_ce_exit=$?
-set -e
-rm -f "$_CE_PATCHED"
-
-_ce_gh=$(cat "$_CE_GH_LOG")
-rm -rf "$_CE_TMPBIN" "$_CE_TMPHOME" "$_CE_TMPLOCKDIR" "$_CE_TMPREPO"
-rm -f "$_CE_GH_LOG"
-
-assert_eq           "claude-exit: exit 0"                          "0"                  "$_ce_exit"
-assert_contains     "claude-exit: mark_issue_failed removes processing"   "--remove-label processing --remove-label queued --add-label failed" "$_ce_gh"
-assert_contains     "claude-exit: comment mentions exit 1"         "exit 1"             "$_ce_gh"
-assert_contains     "claude-exit: branch pushed"                   "git push origin"    "$_ce_gh"
-assert_contains     "claude-exit: clone reset"                     "reset --hard"       "$_ce_gh"
-assert_contains     "claude-exit: clone cleaned"                   "clean -fd"          "$_ce_gh"
-assert_not_contains "claude-exit: done label not added"            "--add-label done"   "$_ce_gh"
-assert_not_contains "claude-exit: issue not closed"                "issue close"        "$_ce_gh"
-
-# --- Clone safety: never discard work the poller did not create ---
-_load_fn clone_is_disposable
-_load_fn cleanup_clone
-_CS=$(mktemp -d)
-git init -q -b main "$_CS/repo"
-git -C "$_CS/repo" -c core.hooksPath=/dev/null -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m init
-echo mine > "$_CS/repo/notes.txt"
-git -C "$_CS/repo" checkout -q -b feature/mine
-if clone_is_disposable "$_CS/repo"; then _r=yes; else _r=no; fi
-assert_eq "clone-safety: untracked file on user branch is not disposable" "no" "$_r"
-if cleanup_clone "$_CS/repo" main; then _r=yes; else _r=no; fi
-assert_eq "clone-safety: cleanup refuses user branch" "no" "$_r"
-assert_eq "clone-safety: user file survives" "mine" "$(cat "$_CS/repo/notes.txt")"
-assert_eq "clone-safety: user branch kept" "feature/mine" "$(git -C "$_CS/repo" branch --show-current)"
-git -C "$_CS/repo" checkout -q -b claude/7-task
-if clone_is_disposable "$_CS/repo"; then _r=yes; else _r=no; fi
-assert_eq "clone-safety: dirty poller branch is disposable" "yes" "$_r"
-cleanup_clone "$_CS/repo" main
-assert_eq "clone-safety: poller branch cleaned" "main" "$(git -C "$_CS/repo" branch --show-current)"
-assert_eq "clone-safety: poller leftovers removed" "no" "$([[ -e $_CS/repo/notes.txt ]] && echo yes || echo no)"
-git -C "$_CS/repo" checkout -q -b feature/clean
-if clone_is_disposable "$_CS/repo"; then _r=yes; else _r=no; fi
-assert_eq "clone-safety: clean tree is disposable" "yes" "$_r"
-
-# Integration: a dirty clone on a user branch fails the issue and never runs Claude
-echo mine > "$_CS/repo/notes.txt"
-mkdir -p "$_CS/bin" "$_CS/home/.config/claude"
-cat > "$_CS/bin/gh" << 'GHEOF'
-#!/bin/bash
-echo "$*" >> "$GH_LOG_FILE"
-case "$1 $2" in
-  "issue list") case "$*" in *"--label processing"*) ;; *) echo '{"author":{"login":"tester"},"number":9,"title":"Dirty","body":"x"}' ;; esac ;;
-  "api repos/"*) echo tester ;;
-  "api graphql") GQL_BODY="repo: testrepo\n\nDo something" "$GQL_HELPER" "$@" ;;
-esac
-exit 0
-GHEOF
-printf '#!/bin/bash\ntouch "%s/claude-ran"\ncat >/dev/null\n' "$_CS" > "$_CS/bin/claude-stub"
-chmod +x "$_CS/bin/gh" "$_CS/bin/claude-stub"
-printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n' "$_CS/repo" > "$_CS/home/.config/claude/queue-repos.conf"
-sed 's|LOCKFILE=.*|LOCKFILE="'"$_CS/test.lock"'"|' "$POLLER" > "$_CS/poller.sh"
-: > "$_CS/gh.log"
-set +e
-GH_LOG_FILE="$_CS/gh.log" CLAUDE_QUEUE_REPO="test/q" CLAUDE_BIN="$_CS/bin/claude-stub" \
-  HOME="$_CS/home" PATH="$_CS/bin:$PATH" bash "$_CS/poller.sh" >/dev/null 2>&1
-set -e
-assert_contains     "clone-safety: dirty user clone fails the issue" "--add-label failed" "$(cat "$_CS/gh.log")"
-assert_contains     "clone-safety: comment explains refusal" "did not create" "$(cat "$_CS/gh.log")"
-assert_eq           "clone-safety: user edits kept after poller run" "mine" "$(cat "$_CS/repo/notes.txt")"
-assert_eq           "clone-safety: claude not run" "no" "$([[ -e $_CS/claude-ran ]] && echo yes || echo no)"
-rm -rf "$_CS"
+# HOST_LABEL names the host in the "Processing started" comment, and only when set
+CLAUDE_QUEUE_HOST_LABEL=myhost _qrun 12 "Host"
+assert_contains     "host-label-set: 'on myhost' in comment" "on myhost" "$_q_gh"
+_qdone
+_qrun 13 "Host"
+assert_not_contains "host-label-unset: no 'on' in comment" " on " "$_q_gh"
+_qdone
 
 # --- Flock concurrency guard: second instance exits immediately ---
 _FLOCK_TMPLOCKDIR=$(mktemp -d)
@@ -518,135 +378,6 @@ rm -f "$_FLOCK_PATCHED"
 
 assert_eq       "flock: second instance exits 0"      "0"                        "$_flock_exit"
 assert_contains "flock: logs 'Another instance'"       "Another instance running" "$_flock_out"
-
-# --- Integration: HOST_LABEL set → 'on myhost' appears in Processing started comment ---
-_HL_SET_TMPBIN=$(mktemp -d)
-_HL_SET_TMPHOME=$(mktemp -d)
-_HL_SET_TMPLOCKDIR=$(mktemp -d)
-_HL_SET_TMPREPO=$(mktemp -d)
-_HL_SET_GH_LOG=$(mktemp)
-
-cat > "$_HL_SET_TMPBIN/gh" << 'GHEOF'
-#!/bin/bash
-echo "$*" >> "$GH_LOG_FILE"
-case "$1 $2" in
-  "issue list") case "$*" in *"--label processing"*) ;; *) echo '{"author":{"login":"tester"},"number":7,"title":"Fix the thing","body":"repo: testrepo\n\nDo something useful"}' ;; esac ;;
-  "api repos/"*) echo "${EVENTS_ACTOR-tester}" ;;
-  "api graphql") GQL_BODY="${GQL_BODY-repo: testrepo\n\nDo something useful}" "$GQL_HELPER" "$@" ;;
-  "pr create")  echo "https://github.com/owner/testrepo/pull/99" ;;
-esac
-exit 0
-GHEOF
-chmod +x "$_HL_SET_TMPBIN/gh"
-
-cat > "$_HL_SET_TMPBIN/git" << 'GITEOF'
-#!/bin/bash
-echo "git $*" >> "$GH_LOG_FILE"
-[[ "$1 $2" == "diff --quiet" ]] && exit 1
-exit 0
-GITEOF
-chmod +x "$_HL_SET_TMPBIN/git"
-
-cat > "$_HL_SET_TMPBIN/claude-stub" << 'CLAUDEOF'
-#!/bin/bash
-cat > /dev/null
-exit 0
-CLAUDEOF
-chmod +x "$_HL_SET_TMPBIN/claude-stub"
-
-mkdir -p "$_HL_SET_TMPHOME/.config/claude"
-printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n' \
-  "$_HL_SET_TMPREPO" > "$_HL_SET_TMPHOME/.config/claude/queue-repos.conf"
-
-_HL_SET_PATCHED=$(mktemp)
-sed 's|LOCKFILE=.*|LOCKFILE="'"$_HL_SET_TMPLOCKDIR/test.lock"'"|' \
-  "$POLLER" > "$_HL_SET_PATCHED"
-
-set +e
-_hl_set_out=$(
-  GH_LOG_FILE="$_HL_SET_GH_LOG" \
-  CLAUDE_QUEUE_REPO="test/q" \
-  CLAUDE_BIN="$_HL_SET_TMPBIN/claude-stub" \
-  CLAUDE_QUEUE_TIMEOUT=10 \
-  CLAUDE_QUEUE_HOST_LABEL=myhost \
-  HOME="$_HL_SET_TMPHOME" \
-  PATH="$_HL_SET_TMPBIN:$PATH" \
-  bash "$_HL_SET_PATCHED" 2>&1
-)
-_hl_set_exit=$?
-set -e
-rm -f "$_HL_SET_PATCHED"
-
-_hl_set_gh=$(cat "$_HL_SET_GH_LOG")
-rm -rf "$_HL_SET_TMPBIN" "$_HL_SET_TMPHOME" "$_HL_SET_TMPLOCKDIR" "$_HL_SET_TMPREPO"
-rm -f "$_HL_SET_GH_LOG"
-
-assert_eq       "host-label-set: exit 0"              "0"        "$_hl_set_exit"
-assert_contains "host-label-set: 'on myhost' in comment" "on myhost" "$_hl_set_gh"
-
-# --- Integration: HOST_LABEL unset → no 'on' token in Processing started comment ---
-_HL_UNSET_TMPBIN=$(mktemp -d)
-_HL_UNSET_TMPHOME=$(mktemp -d)
-_HL_UNSET_TMPLOCKDIR=$(mktemp -d)
-_HL_UNSET_TMPREPO=$(mktemp -d)
-_HL_UNSET_GH_LOG=$(mktemp)
-
-cat > "$_HL_UNSET_TMPBIN/gh" << 'GHEOF'
-#!/bin/bash
-echo "$*" >> "$GH_LOG_FILE"
-case "$1 $2" in
-  "issue list") case "$*" in *"--label processing"*) ;; *) echo '{"author":{"login":"tester"},"number":7,"title":"Fix the thing","body":"repo: testrepo\n\nDo something useful"}' ;; esac ;;
-  "api repos/"*) echo "${EVENTS_ACTOR-tester}" ;;
-  "api graphql") GQL_BODY="${GQL_BODY-repo: testrepo\n\nDo something useful}" "$GQL_HELPER" "$@" ;;
-  "pr create")  echo "https://github.com/owner/testrepo/pull/99" ;;
-esac
-exit 0
-GHEOF
-chmod +x "$_HL_UNSET_TMPBIN/gh"
-
-cat > "$_HL_UNSET_TMPBIN/git" << 'GITEOF'
-#!/bin/bash
-echo "git $*" >> "$GH_LOG_FILE"
-[[ "$1 $2" == "diff --quiet" ]] && exit 1
-exit 0
-GITEOF
-chmod +x "$_HL_UNSET_TMPBIN/git"
-
-cat > "$_HL_UNSET_TMPBIN/claude-stub" << 'CLAUDEOF'
-#!/bin/bash
-cat > /dev/null
-exit 0
-CLAUDEOF
-chmod +x "$_HL_UNSET_TMPBIN/claude-stub"
-
-mkdir -p "$_HL_UNSET_TMPHOME/.config/claude"
-printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n' \
-  "$_HL_UNSET_TMPREPO" > "$_HL_UNSET_TMPHOME/.config/claude/queue-repos.conf"
-
-_HL_UNSET_PATCHED=$(mktemp)
-sed 's|LOCKFILE=.*|LOCKFILE="'"$_HL_UNSET_TMPLOCKDIR/test.lock"'"|' \
-  "$POLLER" > "$_HL_UNSET_PATCHED"
-
-set +e
-_hl_unset_out=$(
-  GH_LOG_FILE="$_HL_UNSET_GH_LOG" \
-  CLAUDE_QUEUE_REPO="test/q" \
-  CLAUDE_BIN="$_HL_UNSET_TMPBIN/claude-stub" \
-  CLAUDE_QUEUE_TIMEOUT=10 \
-  HOME="$_HL_UNSET_TMPHOME" \
-  PATH="$_HL_UNSET_TMPBIN:$PATH" \
-  bash "$_HL_UNSET_PATCHED" 2>&1
-)
-_hl_unset_exit=$?
-set -e
-rm -f "$_HL_UNSET_PATCHED"
-
-_hl_unset_gh=$(cat "$_HL_UNSET_GH_LOG")
-rm -rf "$_HL_UNSET_TMPBIN" "$_HL_UNSET_TMPHOME" "$_HL_UNSET_TMPLOCKDIR" "$_HL_UNSET_TMPREPO"
-rm -f "$_HL_UNSET_GH_LOG"
-
-assert_eq           "host-label-unset: exit 0"             "0"    "$_hl_unset_exit"
-assert_not_contains "host-label-unset: no 'on' in comment" " on " "$_hl_unset_gh"
 
 # --- Empty author allowlist: the poller refuses to run (fail closed) ---
 set +e
@@ -762,6 +493,6 @@ assert_contains     "auth: last queued actor wins (foreign)" "last applied by \`
 _o=$(EVENTS_JSON="[$(_ev_q queued mallory),$(_ev_q queued tester)]" _auth_run "")
 assert_contains     "auth: last queued actor wins (allowed)" "--add-label processing" "$_o"
 
-rm -f "$GQL_HELPER"
+rm -rf "$GQL_HELPER" "$_STUBS"
 echo "Results: $PASS passed, $FAIL failed"
 exit $((FAIL > 0 ? 1 : 0))
