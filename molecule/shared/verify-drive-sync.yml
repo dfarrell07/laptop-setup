@@ -1,0 +1,51 @@
+---
+# drive_sync after a converge with accounts [owner, partner], host molecule-fedora and a test OAuth client.
+- name: Stat the drive_sync files
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/{{ item }}"
+  loop:
+    - drive
+    - drive/owner
+    - drive/partner
+    - drive/README.md
+    - .local/bin/drive-sync
+    - .config/rclone/drive-sync.conf
+    - .config/drive-sync/gitleaks.toml
+    - .config/systemd/user/drive-sync-push.service
+    - .config/systemd/user/drive-sync-push.timer
+  register: _verify_drive_files
+
+- name: Assert the drive_sync files exist with private modes
+  ansible.builtin.assert:
+    that:
+      - _verify_drive_files.results | rejectattr('stat.exists') | list | length == 0
+      - _verify_drive_files.results[0].stat.mode == '0700'
+      - _verify_drive_files.results[1].stat.mode == '0700'
+      - _verify_drive_files.results[4].stat.mode == '0755'
+      - _verify_drive_files.results[5].stat.mode == '0600'
+    fail_msg: "drive_sync files missing or with wrong modes: {{ _verify_drive_files.results | map(attribute='stat.path') | list }}"
+
+- name: Read the drive_sync remote config (test client only; no token in CI)
+  ansible.builtin.slurp:
+    src: "{{ ansible_facts['user_dir'] }}/.config/rclone/drive-sync.conf"
+  register: _verify_drive_conf
+
+- name: Read the drive-sync command and README
+  ansible.builtin.slurp:
+    src: "{{ ansible_facts['user_dir'] }}/{{ item }}"
+  loop: [.local/bin/drive-sync, drive/README.md]
+  register: _verify_drive_text
+
+- name: Assert one drive.file remote per account and this host's folder
+  vars:
+    _conf: "{{ _verify_drive_conf.content | b64decode }}"
+  ansible.builtin.assert:
+    that:
+      - "'[drive-owner]' in _conf"
+      - "'[drive-partner]' in _conf"
+      - _conf | regex_findall('(?m)^scope = drive\\.file$') | length == 2
+      - _conf | regex_findall('(?m)^client_id = ci-client\\.apps\\.googleusercontent\\.com$') | length == 2
+      - "'token' not in _conf"
+      - "\"HOST=molecule-fedora\" in (_verify_drive_text.results[0].content | b64decode)"
+      - "'laptop-drive/molecule-fedora/' in (_verify_drive_text.results[1].content | b64decode)"
+    fail_msg: drive-sync.conf, the drive-sync command or the README does not match the converge settings

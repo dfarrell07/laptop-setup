@@ -534,7 +534,8 @@
       when: not item.skipped | default(false)
       no_log: true
 
-    # podman-prune.* are the containers role's units (containers_prune_enabled); claude-orchestrator.service is below.
+    # podman-prune.* are the containers role's units (containers_prune_enabled), drive-sync-push.* the drive_sync role's;
+    # claude-orchestrator.service is below.
     - name: Fail on unmanaged systemd user unit files before daemon-reload
       ansible.builtin.fail:
         msg: >-
@@ -546,7 +547,8 @@
       when: >-
         item.path | basename not in ['claude-queue.service', 'claude-queue.timer', 'ssh-agent.service', 'gcr-ssh-agent.service',
                                       'podman-prune.service', 'podman-prune.timer',
-                                      'laptop-user-update.service', 'laptop-user-update.timer', 'claude-orchestrator.service']
+                                      'laptop-user-update.service', 'laptop-user-update.timer', 'claude-orchestrator.service',
+                                      'drive-sync-push.service', 'drive-sync-push.timer']
         or (not item.isreg | default(false) and item.path | basename != 'gcr-ssh-agent.service')
 
     - name: Reload systemd user daemon after deploying queue units  # noqa: no-handler

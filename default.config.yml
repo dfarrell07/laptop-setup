@@ -118,6 +118,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     (VPN daemon only; network dev tools are work-profile-only in packages_networking_work)
 #   packages_tailscale_operator: <login user>  (roles/packages/defaults) — Linux: runs tailscale up/set without sudo; '' leaves it alone
 #     (an operator, and every process running as that user, can change any Tailscale setting; '' keeps that behind sudo)
+#   drive_sync_accounts: []  (roles/drive_sync) — Google Drive sync of ~/drive/<account>/ (docs/drive-sync.md),
+#     e.g. [owner, partner]; drive_sync_host: '' — this machine's Drive folder, unique per machine (required then)
 #   packages_go_install: []               (roles/packages/defaults) — universal Go tools installed on all profiles;
 #     all role-default tools are in packages_go_install_work (work-profile only); add cross-profile tools here
 #   packages_go_install_work: [gofumpt@v..., govulncheck@v..., golangci-lint@v..., controller-gen@v..., ...]  (roles/packages/defaults) —

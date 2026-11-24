@@ -1,0 +1,18 @@
+# {{ ansible_managed }}
+# drive-sync pre-push scan: gitleaks' default rules, minus exactly what a push never uploads (the drive-sync FILTERS):
+# .pulled/ and .gitleaksignore at an account root, unfinished and temp files, and secret-shaped files at any depth.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "paths drive-sync does not push"
+paths = [
+  '''^{{ drive_sync_root | regex_escape }}/[^/]+/\.pulled/''',
+  '''^{{ drive_sync_root | regex_escape }}/[^/]+/\.gitleaksignore$''',
+  '''\.partial(/|$)''',
+  '''\.(tmp|incomplete|pem|key)$''',
+  '''(^|/)\.~lock[^/]*$''',
+  '''(^|/)\.DS_Store$''',
+  '''(^|/)\.env[^/]*$''',
+  '''(^|/)id_(rsa|dsa|ecdsa|ed25519)[^/]*$''',
+]

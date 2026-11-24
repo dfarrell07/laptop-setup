@@ -36,3 +36,5 @@
   exceptions local.
 - Before large downloads/builds, check free space; scratch dirs may be tmpfs, so put large
   caches and artifacts on disk.
+- Large artifacts, datasets and backups that must outlive the machine but do not belong in Git:
+  when `~/drive/README.md` exists, follow it.

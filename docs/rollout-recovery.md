@@ -200,6 +200,22 @@ open until you are done. To undo:
   personal-<claude_orchestrator_name>` if wanted. The `bubblewrap` and `socat` packages can stay (restoring `settings.json` removes the
   sandbox requirement); `sudo dnf remove socat` if wanted.
 
+## drive_sync
+
+- **Why:** `~/drive/<account>/` pushed one way to Google Drive for large artifacts that must outlive the machine
+  ([drive-sync.md](drive-sync.md)). Opt-in: nothing happens until `drive_sync_accounts` lists an account.
+- **Breaks if wrong:** a push deletes Drive files that were deleted locally (they stay in Drive's trash for 30 days);
+  two machines with the same `drive_sync_host` would delete each other's files, so the role rejects generic names and
+  a push refuses to empty a non-empty Drive copy.
+- **Verify:** `make verify CHUNK=drive_sync` (`drive-sync-auth`: each account has a token; `drive-sync-push`: the push
+  unit has not failed); `drive-sync status`.
+- **Undo:** `systemctl --user disable --now drive-sync-push.timer`, delete `~/.config/systemd/user/drive-sync-push.{service,timer}`,
+  `~/.local/bin/drive-sync`, `~/.config/drive-sync/` and `~/.config/rclone/drive-sync.conf` (the tokens), then
+  `systemctl --user daemon-reload`. `~/drive/` and the Drive copies are data: keep or delete them by hand. Revoke the
+  tokens at Google Account > Security > Third-party access.
+  Removing one account from `drive_sync_accounts` (or all of them, which also stops the timer) leaves its
+  `[drive-<account>]` section and token in `drive-sync.conf` and its `~/drive/<account>/`: delete those by hand.
+
 ## repos
 
 - **Why:** git clones under `~/src`, plus the opt-in notes clone.

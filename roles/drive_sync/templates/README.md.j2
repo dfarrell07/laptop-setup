@@ -1,0 +1,21 @@
+# ~/drive: large artifacts on Google Drive
+
+<!-- {{ ansible_managed }} (laptop-setup docs/drive-sync.md) -->
+
+Accounts on this machine: {{ drive_sync_accounts | join(', ') }}. This machine is `{{ drive_sync_host }}`.
+`~/drive/<account>/` is pushed one way to that account's Drive (`laptop-drive/{{ drive_sync_host }}/`) every 30 minutes.
+
+- Put large or binary outputs, datasets and backups that must outlive this machine in
+  `~/drive/<account>/<project>/`, not Git. Use `{{ drive_sync_accounts[0] }}` unless told otherwise.
+- Write as `<name>.partial` (or a `<dir>.partial/` directory) and rename when complete. Prefer new names
+  (`step-1200.ckpt`) over rewriting one file: each rewrite of a 15 GB file is a 15 GB upload.
+- `drive-sync push <account>` pushes now. `drive-sync pull <account> <host>/<path>` fetches another machine's files
+  into `.pulled/<host>/` (this machine's own host restores into the account root). Check free space first; never
+  edit `.pulled/`. Other machines do not see new files until they pull.
+- Never put secrets here, never share or publish Drive files (`rclone link`, web sharing), and use the `drive-*`
+  rclone remotes only through `drive-sync`.
+- Delete what is no longer needed. Deleting does not free Drive space for 30 days (trash and revisions count).
+- A push stopped by a secret-looking match: fix the file, or copy the finding's `Fingerprint:` line into
+  `<account>/.gitleaksignore` (a false positive).
+- `drive-sync pull <account> {{ drive_sync_host }}` restores this machine's Drive copy; it never overwrites local files.
+- A failed push: `systemctl --user status drive-sync-push`; `drive-sync status` shows each account's free space.

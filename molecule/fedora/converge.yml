@@ -68,6 +68,15 @@
       vars:
         desktop_environment: i3
 
+    - name: Converge drive_sync with two accounts and a test OAuth client
+      ansible.builtin.include_role:
+        name: drive_sync
+      vars:
+        drive_sync_accounts: [owner, partner]
+        drive_sync_host: molecule-fedora
+        drive_sync_client_id: ci-client.apps.googleusercontent.com
+        drive_sync_client_secret: ci-not-a-secret
+
     - name: Run shared converge post-tasks
       ansible.builtin.include_tasks: ../shared/converge-post-common.yml
       tags: [always]

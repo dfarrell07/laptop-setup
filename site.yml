@@ -206,6 +206,9 @@
       tags: [antigravity, agents]
       when: antigravity_enabled | default(true) | bool
 
+    - role: drive_sync
+      tags: [drive_sync]
+
     - role: distrobox
       tags: [distrobox]
       when: ansible_facts['system'] | default('Linux') == 'Linux' and distrobox_enabled | bool

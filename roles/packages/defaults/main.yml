@@ -153,8 +153,10 @@ packages_support_work:
 packages_fedora:
   # commit message linting: submariner-release-management's make test and claude-skills' make gitlint run it
   - gitlint
+  - rclone  # Drive sync (docs/drive-sync.md); EPEL-only on RHEL
 
 packages_apt:
+  - rclone  # Drive sync (docs/drive-sync.md)
   - gitlint  # mirrors packages_fedora
   - git-lfs  # depends on git (pulled in automatically)
   - make
