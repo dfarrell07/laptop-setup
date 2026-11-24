@@ -1,5 +1,5 @@
 ---
-# Standalone binary/script downloads (most are work-profile only; transcrypt and gitleaks install on both profiles).
+# Standalone binary/script downloads (most are work-profile only; transcrypt, gitleaks and acli install on both profiles).
 #
 # To add a new binary:
 #   1. Add packages_BINARY_version and packages_BINARY_sha256 to defaults/main.yml
@@ -122,8 +122,7 @@
 - name: Install acli (Atlassian CLI) from its pinned tarball (macOS)
   when:
     - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Darwin'
-    - ansible_facts['architecture'] in ['arm64', 'x86_64']
+    - is_macos
   vars:
     _acli_bin: "{{ ansible_facts['user_dir'] }}/.local/bin/acli"
     _acli_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'arm64' else 'amd64' }}"
@@ -140,8 +139,17 @@
       failed_when: false
       check_mode: false  # read-only probe
 
+    - name: Report acli install not simulated in check mode (macOS)
+      ansible.builtin.debug:
+        msg: "CHECK MODE: acli {{ packages_acli_version }} would be downloaded (SHA256-pinned) and installed; not simulated."
+      when:
+        - ansible_check_mode
+        - ('acli version ' ~ packages_acli_version) not in (_acli_darwin_version.stdout | default(''))
+
     - name: Download and install the pinned acli tarball (macOS)
-      when: ('acli version ' ~ packages_acli_version) not in (_acli_darwin_version.stdout | default(''))
+      when:
+        - not ansible_check_mode  # tempfile does not run in check mode
+        - ('acli version ' ~ packages_acli_version) not in (_acli_darwin_version.stdout | default(''))
       block:
         - name: Create a private directory for the acli tarball
           ansible.builtin.tempfile:
