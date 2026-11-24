@@ -14,6 +14,9 @@
     - not ansible_check_mode  # builds into a temp dir that check mode never creates
     - _packages_linux_x86_work and packages_subctl_versioned | default([]) | length > 0
   vars:
+    _subctl_retry_re: >-
+      {{ ['permission denied', 'stream error', 'INTERNAL_ERROR', 'connection reset', 'unexpected EOF',
+          'TLS handshake timeout', 'i/o timeout'] | join('|') }}
     _subctl_installed: >-
       {{ ((packages_subctl_version_check.results[loop_idx].stdout | default('')) ~
           (packages_subctl_version_check.results[loop_idx].stderr | default('')))
@@ -75,6 +78,13 @@
       changed_when: true
       ignore_errors: true
       register: packages_subctl_install_results
+      # retry module-proxy drops and network blips, never a checksum mismatch (install_go_tools.yml)
+      retries: 3
+      delay: 5
+      until: >-
+        packages_subctl_install_results.rc | default(1) == 0 or
+        'checksum mismatch' in (packages_subctl_install_results.stderr | default('')) or
+        (packages_subctl_install_results.stderr | default('')) is not search(_subctl_retry_re)
       loop: "{{ packages_subctl_versioned }}"
       loop_control:
         label: "subctl{{ item.suffix }}"
@@ -84,7 +94,8 @@
       ansible.builtin.debug:
         msg: >-
           WARNING: go install failed for subctl@v{{ item.item.version }}
-          ({{ item.stderr | default(item.msg | default(''), true) | truncate(200) }});
+          (rc={{ item.rc | default('none') }}: {{ (item.stderr_lines | default([]))[-3:] | join(' | ')
+          or item.msg | default('') }});
           subctl{{ item.item.suffix }} is missing or outdated. Re-run make packages when the
           Go proxy is reachable.
       loop: >-
