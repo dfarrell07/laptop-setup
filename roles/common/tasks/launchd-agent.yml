@@ -32,3 +32,10 @@
       until: _launchd_agent_bootstrap.rc == 0
       changed_when: true
       when: _launchd_agent_job.rc != 0 or _launchd_agent_changed | bool
+
+    # Check mode skips the commands above, so a job that is not loaded would otherwise plan as changed=0
+    - name: Report a launchd job would load - {{ _launchd_agent_label }}
+      ansible.builtin.debug:
+        msg: "CHECK MODE: {{ _launchd_agent_label }} would be bootstrapped"
+      changed_when: true
+      when: ansible_check_mode and (_launchd_agent_job.rc != 0 or _launchd_agent_changed | bool)

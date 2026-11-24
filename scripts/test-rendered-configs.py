@@ -66,6 +66,7 @@ CASES = {
         'containers_macos_machine_prune_stamp': '/PRUNE-STAMP-PLACEHOLDER'}),
     'ssh_agent_plist': ('roles/dotfiles/templates/ssh-agent.plist.j2', {'dotfiles_homebrew_prefix': '/opt/homebrew'}),
     'ssh_auth_sock_plist': ('roles/dotfiles/templates/ssh-auth-sock.plist.j2', {}),
+    'ssh_agent_unit': ('roles/dotfiles/templates/ssh-agent.service.j2', {}),
 }
 SSHD_ALGORITHM_VARS = {'KexAlgorithms': 'ssh_kex_algorithms', 'Ciphers': 'ssh_ciphers', 'MACs': 'ssh_macs',
                        'HostKeyAlgorithms': 'ssh_host_key_algorithms', 'PubkeyAcceptedAlgorithms': 'ssh_pubkey_accepted_algorithms'}
@@ -688,6 +689,11 @@ class RenderedConfigTests(unittest.TestCase):
                     else a for a in args]
             result = subprocess.run(args, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_systemd_ssh_agent_starts_over_a_stale_socket(self):
+        unit = self.read('ssh_agent_unit')
+        socket = re.search(r'^ExecStart=\S+ .*-a (\S+)', unit, re.M).group(1)
+        self.assertIn(f'ExecStartPre=-/usr/bin/rm -f {socket}\n', unit)
 
     def test_launchd_ssh_auth_sock_names_the_ssh_agent_socket(self):
         agent = self.read('ssh_agent_plist')
