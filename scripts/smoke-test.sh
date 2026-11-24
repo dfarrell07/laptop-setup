@@ -181,6 +181,9 @@ _cfg_value() { awk -v k="$1" '$0 ~ "^" k ":" {sub(/^[^:]*:[[:space:]]*/, ""); su
 _claude_home=$(_cfg_value claude_default_config_dir)
 _claude_home2=$(_cfg_value claude_personal2_config_dir)
 _codex_personal=$(_cfg_value codex_personal_config_dir)
+# Tailscale operator the packages role manages: the login user unless config.yml sets packages_tailscale_operator
+_ts_want=${SUDO_USER:-$USER}
+grep -q '^packages_tailscale_operator:' "$_cfg" 2>/dev/null && _ts_want=$(_cfg_value packages_tailscale_operator)
 _claude_home2_off=false
 grep -qiE '^claude_personal2_instance_enabled:[[:space:]]*["'"'"']?(false|no|off|n|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null \
   && _claude_home2_off=true
@@ -647,6 +650,19 @@ if $IS_LINUX && [[ -z "$CONTAINER" && -x /usr/bin/netbird ]] && command -v tails
   esac
   unset _ts_nf
 fi
+
+# The packages role makes the login user Tailscale's operator (tailscale up/set without sudo) unless
+# packages_tailscale_operator is ''. With tailscaled down nothing is read (the tailscale check reports it).
+if $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY && command -v tailscale &>/dev/null; then
+  if [[ -z "$_ts_want" ]]; then record "tailscale-operator" "PASS" "not managed (packages_tailscale_operator: '')"
+  elif _ts_prefs=$(tailscale debug prefs 2>/dev/null); then
+    _ts_op=$(grep -o '"OperatorUser": *"[^"]*"' <<<"$_ts_prefs" | sed 's/.*"\([^"]*\)"$/\1/' || true)
+    if [[ "$_ts_op" == "$_ts_want" ]]; then record "tailscale-operator" "PASS"
+    else record "tailscale-operator" "WARN" "Tailscale operator is '${_ts_op}', not $_ts_want (tailscale up needs sudo; a sudo tailscale up on a new node clears it): make packages"; fi
+  fi
+  unset _ts_prefs _ts_op
+fi
+unset _ts_want
 
 # macOS settings that need root to apply but not to read, so a no-sudo run (NOSUDO=1) shows what is left
 if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then

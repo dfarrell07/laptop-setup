@@ -116,6 +116,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     bpfman is not in this list; it is controlled by packages_bpfman_enabled (default false, see above)
 #   packages_networking: [tailscale]  (roles/packages/defaults) — universal networking tools
 #     (VPN daemon only; network dev tools are work-profile-only in packages_networking_work)
+#   packages_tailscale_operator: <login user>  (roles/packages/defaults) — Linux: runs tailscale up/set without sudo; '' leaves it alone
+#     (an operator, and every process running as that user, can change any Tailscale setting; '' keeps that behind sudo)
 #   packages_go_install: []               (roles/packages/defaults) — universal Go tools installed on all profiles;
 #     all role-default tools are in packages_go_install_work (work-profile only); add cross-profile tools here
 #   packages_go_install_work: [gofumpt@v..., govulncheck@v..., golangci-lint@v..., controller-gen@v..., ...]  (roles/packages/defaults) —

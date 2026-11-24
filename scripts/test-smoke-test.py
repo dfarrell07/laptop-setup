@@ -3,6 +3,7 @@
 import json
 import os
 import platform
+import shlex
 from pathlib import Path
 import subprocess
 import sys
@@ -781,6 +782,29 @@ class SmokeTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual([c for c in log.read_text().splitlines() if c.startswith('ssh-key add')],
                              ['ssh-key add %s/.ssh/id_ed25519_sk_backup.pub --title yubikey-2 --type authentication' % home])
+
+    def test_tailscale_operator_check(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index("# The packages role makes the login user Tailscale's operator")
+        end = source.index('unset _ts_want\n', start)
+        with tempfile.TemporaryDirectory() as directory:
+            stub = Path(directory) / 'tailscale'
+            env = dict(os.environ, PATH=f'{directory}:{os.environ["PATH"]}', USER='alice')
+            env.pop('SUDO_USER', None)
+
+            def run(prefs, want='alice', prefs_rc=0):
+                stub.write_text(f'#!/bin/sh\nprintf %s {shlex.quote(prefs)}\nexit {prefs_rc}\n')
+                stub.chmod(0o755)
+                script = ('record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; }\nIS_LINUX=true CONTAINER= SYSTEM_ONLY=false\n'
+                          f'_ts_want={shlex.quote(want)}\n' + source[start:end])
+                return subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c', script], env=env,
+                                      capture_output=True, text=True).stdout.strip()
+
+            self.assertEqual(run('{\n  "OperatorUser": "alice",\n  "NetfilterMode": 0\n}'), 'tailscale-operator PASS')
+            self.assertIn("tailscale-operator WARN Tailscale operator is '', not alice", run('{\n  "NetfilterMode": 0\n}'))
+            self.assertIn("operator is 'bob', not alice", run('{"OperatorUser": "bob"}'))
+            self.assertEqual(run('{}', want=''), "tailscale-operator PASS not managed (packages_tailscale_operator: '')")
+            self.assertEqual(run('', prefs_rc=1), '')  # tailscaled down: the tailscale check reports it
 
     def test_scripts_run_on_macos_bash_3(self):
         """macOS /bin/bash is 3.2: no ${var,,}/${var^^} case conversion, declare -A or mapfile."""
