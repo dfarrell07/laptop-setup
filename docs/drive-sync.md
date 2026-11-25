@@ -38,10 +38,16 @@ upload interrupted by sleep starts over on the next run.
 
 - `<host>` is `drive_sync_host`, set once per machine in `config.yml` (required once an account is listed; generic
   names such as `fedora` or `localhost` are rejected), so two machines never share a folder and a DHCP name change
-  does not start a new one.
+  does not start a new one. The folder holds `.drive-sync-machine`, a hash of the pushing machine's `/etc/machine-id`;
+  a push refuses a folder another machine owns (the same `drive_sync_host` in a copied `config.yml`), since each
+  machine's push would delete the other's files. After a reinstall (a new machine-id) run `drive-sync adopt <account>` in a terminal:
+  it asks you to type the host name, claims the folder and restores it; pushes refuse until the restore finishes. An
+  empty or garbled marker is refused, never treated as unowned.
 - Skipped: `/.pulled/**`, `*.partial` and `*.partial/**`, temp files (`*.tmp`, `*.incomplete`, `.~lock*`, `.DS_Store`),
   and secret-shaped files (`.env*`, `*.pem`, `*.key`, SSH key names `id_rsa*`, `id_ed25519*` and the like). Symlinks
-  are not followed.
+  inside the tree are refused (outside the skipped paths): rclone skips them, so a file or directory replaced by a link,
+  or a link to an unmounted disk, would be deleted from Drive. A symlinked account root is followed by both the scan
+  and the push.
 - A push refuses when the local tree holds no pushable files (excluded paths and `.gitleaksignore` do not count) but
   the Drive copy does (a wiped or re-created directory, or a new machine reusing a host name), so it cannot empty
   Drive. The way out: `drive-sync pull <account> <this-host>` restores this machine's Drive copy into the account
@@ -53,11 +59,16 @@ upload interrupted by sleep starts over on the next run.
   750 GB daily upload limit.
 - Before uploading, a gitleaks scan (files up to 10 MB, same exclusions as the push, plus a `.gitleaksignore` at the
   account root for false positives) stops the push if it finds a secret. gitleaks comes from the packages role. Larger
-  files (the artifacts themselves) and the inside of archives are not scanned, and the scan covers the files present
+  files (the artifacts themselves), the inside of archives, and what gitleaks' default allowlist skips (such as
+  `node_modules/`, lock files and binary formats like `.pdf`) are not scanned, and the scan covers the files present
   when it starts (write with `.partial` names so nothing half-written lands in between).
-- One push at a time (`flock`): the timer's run exits 0 when a push is already running; a manual `drive-sync push`
-  waits. `--contimeout 60s --timeout 5m` end a hung connection; `--transfers 2` bounds memory to about 128 MB.
-- Every refusal (empty source, quota, a gitleaks finding, gitleaks missing, a token Drive refuses) exits non-zero,
+- One push or pull at a time (`flock`): the timer's run exits 0 when one is already running; a manual push or pull
+  waits. A restore of this host's copy leaves `.drive-sync-restoring` until a full restore completes (a subpath
+  pull never clears it), and pushes refuse while it is there, so a restore that failed halfway is never pushed over
+  Drive (run the pull again). `--contimeout 60s --timeout 5m` end a hung connection;
+  `--transfers 2` bounds memory to about 128 MB.
+- Every refusal (empty source, quota, a gitleaks finding, gitleaks missing, a token Drive refuses, a symlink,
+  a folder another machine owns) exits non-zero,
   so the push unit shows as failed; the smoke test reads that state, never a status file. A timer run skips an
   account that is not set up yet (no remote or no token), which `drive-sync-auth` reports instead.
 
@@ -65,7 +76,8 @@ upload interrupted by sleep starts over on the next run.
 
 - `config.yml`: `drive_sync_accounts: [<name>, ...]` (short names, e.g. `[owner, partner]`; no addresses in the repo)
   and `drive_sync_host`. Empty accounts (the default) means the chunk does nothing; rclone itself comes from the
-  packages role, which IT's CSB backup client also relies on.
+  packages role on Fedora and Debian (IT's CSB backup client also relies on it); elsewhere install it by hand, and
+  until then the chunk leaves the push timer off and warns.
 - One OAuth client (Desktop app) in a Google Cloud project the owner keeps, publishing status **In production**:
   Testing-status clients get refresh tokens that expire after 7 days, and rclone's shared client is retired during 2026.
   Scope `drive.file` (rclone sees only files it created) is non-sensitive, so the client needs no verification. All

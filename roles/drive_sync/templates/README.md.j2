@@ -14,8 +14,10 @@ Accounts on this machine: {{ drive_sync_accounts | join(', ') }}. This machine i
   edit `.pulled/`. Other machines do not see new files until they pull.
 - Never put secrets here, never share or publish Drive files (`rclone link`, web sharing), and use the `drive-*`
   rclone remotes only through `drive-sync`.
-- Delete what is no longer needed. Deleting does not free Drive space for 30 days (trash and revisions count).
+- Delete what is no longer needed: a local delete also deletes the Drive copy on the next push (it stays in Drive's
+  trash for 30 days, which still counts against the space).
 - A push stopped by a secret-looking match: fix the file, or copy the finding's `Fingerprint:` line into
   `<account>/.gitleaksignore` (a false positive).
 - `drive-sync pull <account> {{ drive_sync_host }}` restores this machine's Drive copy; it never overwrites local files.
+  After reinstalling this machine, run `drive-sync adopt <account>` instead (it confirms, claims and restores). Symlinks under `~/drive` stop the push.
 - A failed push: `systemctl --user status drive-sync-push`; `drive-sync status` shows each account's free space.

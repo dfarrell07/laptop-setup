@@ -44,7 +44,8 @@ audits it for gaps the automation does not cover yet.
 
 1. Follow the README quick start through `make bootstrap`, then `cp default.config.yml config.yml`; merge reviewed
    source overrides into it. The Claude native install also needs a reviewed `claude_install_sha256` and
-   `claude_pinned_version`; the pin does not freeze later auto-updates.
+   `claude_pinned_version`; the pin does not freeze later auto-updates. Give the new machine its own
+   `drive_sync_host` ([drive-sync.md](drive-sync.md)).
 2. Once the shared vault exists ([shared-vault.md](shared-vault.md)), `make packages` then `make vault-join` instead of
    this step. Otherwise reuse the encrypted vault with your existing hardware keys: `make vault-import FROM=HOST:PATH` (or a local file, or
    a `make backup` directory). It writes the standard `scripts/vault-pass.sh` (it holds no secret, so it is never
