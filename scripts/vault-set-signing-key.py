@@ -69,11 +69,11 @@ def replace_entries(text, entries):
     return ''.join(out)
 
 
-def main():
-    if len(sys.argv) != 3:
-        die('usage: vault-set-signing-key.py KEY VAULT_FILE')
-    key, pub = read_key(sys.argv[1])
-    vault = Path(sys.argv[2])
+def update_vault(vault, values, entries, label):
+    """Set top-level keys in an encrypted vault: values maps each key to its new value, entries to the YAML lines
+    written for it. Returns False when the vault already holds those values (nothing is written). Dies, leaving the
+    vault untouched, on anything unexpected. Also used by vault-set-acli-token.py."""
+    vault = Path(vault)
     raw = vault.read_bytes()
     if not raw.startswith(b'$ANSIBLE_VAULT'):
         die(f'{vault} is not encrypted: make vault-init first')
@@ -82,22 +82,20 @@ def main():
     if password.returncode or not password.stdout.strip():
         die('scripts/vault-pass.sh gave no password (YubiKey plugged in and touched?)')
     vault_lib = VaultLib([('default', VaultSecret(password.stdout.strip()))])
-    text = vault_lib.decrypt(raw).decode()
-    entries = {
-        'vault_ssh_signing_key': 'vault_ssh_signing_key: |\n' + ''.join(f'  {l}\n' for l in key.rstrip('\n').split('\n')),
-        'vault_ssh_signing_key_pub': "vault_ssh_signing_key_pub: '" + pub.replace("'", "''") + "'\n",
-    }
+    try:
+        text = vault_lib.decrypt(raw).decode()
+    except Exception:  # AnsibleVaultError and friends: a wrong key's password; the message holds nothing useful
+        die(f'{vault} could not be decrypted with that password (the YubiKey this vault was made with?); nothing changed')
     try:
         before = yaml.safe_load(text) or {}
     except yaml.YAMLError:
         die(f'{vault} does not hold valid YAML once decrypted: fix it with make vault-edit first')
     if not isinstance(before, dict):
         die(f'{vault} is not a mapping of vault_* values')
-    if before.get('vault_ssh_signing_key') == key and before.get('vault_ssh_signing_key_pub') == pub:
-        print('OK: the vault already holds this signing key; nothing changed', file=sys.stderr)
-        sys.exit(3)
+    if all(before.get(k) == v for k, v in values.items()):
+        return False
     updated = replace_entries(text, entries)
-    # The edit is line-based, so check the result the way Ansible will read it: the two new values, every other key
+    # The edit is line-based, so check the result the way Ansible will read it: the new values, every other key
     # exactly as before, nothing else. Any surprise leaves the vault untouched.
     try:
         after = yaml.safe_load(updated) or {}
@@ -107,12 +105,11 @@ def main():
             after = None
     except yaml.YAMLError:
         after = None
-    expected = dict(before, vault_ssh_signing_key=key, vault_ssh_signing_key_pub=pub)
-    if after != expected:
-        die(f'{vault} has a layout this helper cannot edit safely (nothing was changed): set the two values with '
+    if after != dict(before, **values):
+        die(f'{vault} has a layout this helper cannot edit safely (nothing was changed): set {label} with '
             'make vault-edit instead')
     encrypted = vault_lib.encrypt(updated.encode())
-    fd, tmp = tempfile.mkstemp(dir=vault.parent, prefix='.vault-signing.')
+    fd, tmp = tempfile.mkstemp(dir=vault.parent, prefix='.vault-set.')
     try:
         os.fchmod(fd, 0o600)
         with os.fdopen(fd, 'wb') as f:
@@ -121,6 +118,21 @@ def main():
     finally:
         if os.path.exists(tmp):
             os.unlink(tmp)
+    return True
+
+
+def main():
+    if len(sys.argv) != 3:
+        die('usage: vault-set-signing-key.py KEY VAULT_FILE')
+    key, pub = read_key(sys.argv[1])
+    entries = {
+        'vault_ssh_signing_key': 'vault_ssh_signing_key: |\n' + ''.join(f'  {l}\n' for l in key.rstrip('\n').split('\n')),
+        'vault_ssh_signing_key_pub': "vault_ssh_signing_key_pub: '" + pub.replace("'", "''") + "'\n",
+    }
+    values = {'vault_ssh_signing_key': key, 'vault_ssh_signing_key_pub': pub}
+    if not update_vault(sys.argv[2], values, entries, 'the two values'):
+        print('OK: the vault already holds this signing key; nothing changed', file=sys.stderr)
+        sys.exit(3)
     print(f'OK: vault_ssh_signing_key and vault_ssh_signing_key_pub set from {sys.argv[1]} (values not shown)',
           file=sys.stderr)
 

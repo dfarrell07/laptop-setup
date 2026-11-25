@@ -175,6 +175,11 @@ _codex_work=$(awk '/^codex_work_config_dir:/ {sub(/^[^:]*:[[:space:]]*/, ""); su
   gsub(/^["\047]|["\047]$/, ""); sub(/[[:space:]]+$/, ""); print; exit}' "$_cfg" 2>/dev/null || true)
 _acli_site=$(awk '/^acli_site:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/[[:space:]]*#.*$/, "");
   gsub(/^["\047]|["\047]$/, ""); sub(/[[:space:]]+$/, ""); print; exit}' "$_cfg" 2>/dev/null || true)
+# Not in config.yml: the claude role's default (roles/claude/defaults/main.yml acli_site), Red Hat's site on the work
+# profile and none on personal. Only an explicit acli_site: '' turns the check off.
+if ! grep -q '^acli_site:' "$_cfg" 2>/dev/null; then
+  if [[ "$profile" == "work" ]]; then _acli_site=redhat.atlassian.net; else _acli_site=""; fi
+fi
 # Personal agent homes for agent-cli-logins: config.yml overrides, defaults otherwise ("~" expanded there)
 _cfg_value() { awk -v k="$1" '$0 ~ "^" k ":" {sub(/^[^:]*:[[:space:]]*/, ""); sub(/[[:space:]]*#.*$/, "");
   gsub(/^["\047]|["\047]$/, ""); sub(/[[:space:]]+$/, ""); print; exit}' "$_cfg" 2>/dev/null || true; }
@@ -352,22 +357,48 @@ else
   fi
   unset _codex_work
 fi
-# Jira through acli (work profile, when config.yml sets acli_site): the claude role logs it in from
+# Jira through acli (wherever acli_site is set: by default on the work profile only): the claude role logs it in from
 # vault_acli_api_token. `acli jira auth status` shows the site and account, never the token.
-if [[ "$profile" != "work" || -z "$_acli_site" ]]; then
-  record "acli-auth" "PASS" "not applicable (personal profile or acli_site unset)"
+if [[ -z "$_acli_site" ]]; then
+  record "acli-auth" "PASS" "not applicable (acli_site unset: the personal profile's default)"
 elif [[ -n "$CONTAINER" ]]; then
   record "acli-auth" "SKIP" "host-only"
-elif ! command -v acli &>/dev/null; then
-  record "acli-auth" "WARN" "acli_site is set but acli is not installed: make packages"
 else
+  # ~/.local/bin: where the packages role puts acli on macOS.
+  _acli_bin=$(command -v acli || { [[ -x "$HOME/.local/bin/acli" ]] && echo "$HOME/.local/bin/acli"; } || true)
   _acli_out=""
-  if _acli_out=$(${_timeout_bin:+"$_timeout_bin" 20} acli jira auth status 2>/dev/null) && grep -qF "$_acli_site" <<<"$_acli_out"; then
-    record "acli-auth" "PASS"
-  else
-    record "acli-auth" "WARN" "acli (jira) is not logged in to $_acli_site: add vault_acli_api_token (make vault-edit), then make claude from a desktop session (expired tokens too)"
+  # Like the claude role: acli reads its token from the login keyring, locked in an SSH-only session, where status
+  # would fail and the WARN below would point at the wrong fix. Only a definite "locked" skips; an unknown probe
+  # result (no busctl or security, a timeout) falls through to the status call.
+  _acli_locked=false
+  if [[ -n "$_acli_bin" && -f "$HOME/.config/laptop-setup/acli-token-configured" ]]; then
+    if $IS_LINUX; then
+      [[ $(${_timeout_bin:+"$_timeout_bin" 10} busctl --user get-property org.freedesktop.secrets \
+        /org/freedesktop/secrets/collection/login org.freedesktop.Secret.Collection Locked 2>/dev/null) != "b true" ]] \
+        || _acli_locked=true
+    else
+      _acli_rc=0
+      ${_timeout_bin:+"$_timeout_bin" 10} security show-keychain-info >/dev/null 2>&1 || _acli_rc=$?
+      # 124: timed out; 126/127: security did not run. Anything else non-zero is a locked Keychain (152 over SSH).
+      [[ $_acli_rc == 0 || $_acli_rc == 124 || $_acli_rc == 126 || $_acli_rc == 127 ]] || _acli_locked=true
+      unset _acli_rc
+    fi
   fi
-  unset _acli_out
+  if $_acli_locked; then
+    record "acli-auth" "SKIP" "login keyring locked (SSH session?): run make verify or make smoke-test from the desktop session"
+  elif [[ -n "$_acli_bin" ]] && _acli_out=$(${_timeout_bin:+"$_timeout_bin" 20} "$_acli_bin" jira auth status 2>/dev/null) \
+     && grep -qF "$_acli_site" <<<"$_acli_out"; then
+    record "acli-auth" "PASS"
+  elif [[ ! -f "$HOME/.config/laptop-setup/acli-token-configured" ]]; then
+    # The claude role writes this marker (no secret) whenever the vault holds a token: without it this machine never
+    # had one, so a work machine without Jira (or without acli) does not fail make verify.
+    record "acli-auth" "PASS" "not applicable (no token in the vault: make acli-token to add one)"
+  elif [[ -z "$_acli_bin" ]]; then
+    record "acli-auth" "WARN" "the vault holds an acli token but acli is not installed: make packages"
+  else
+    record "acli-auth" "WARN" "acli (jira) is not logged in to $_acli_site: make acli-token from a desktop session (expired tokens too; no Jira here: acli_site: '' in config.yml)"
+  fi
+  unset _acli_out _acli_bin _acli_locked
 fi
 unset _acli_site
 

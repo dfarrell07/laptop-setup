@@ -269,10 +269,13 @@ claude_deny_write_only:
   - "~/.config/tmux/**"  # tmux.conf run-shell executes on server start
   - "~/.vimrc"  # vimscript can run system() on every vim start
 
-# acli (Atlassian CLI, used by the Jira skill): every profile, logged in from the vault's vault_acli_api_token
-# (an Atlassian API token) when acli_site is set in config.yml. acli keeps the token in the OS keyring (Secret
-# Service on Linux, Keychain on macOS); the login needs an unlocked keyring, so it is skipped with a warning over SSH
-# or without a desktop session. Tokens expire within a year: replace it with make vault-edit, then make claude.
-acli_site: ''  # e.g. <site>.atlassian.net; set in config.yml (host fact, not in the public repo)
+# acli (Atlassian CLI, used by the Jira skill): every profile, logged in to acli_site from the vault's
+# vault_acli_api_token (an Atlassian API token) whenever that token is set. acli keeps the token in the OS keyring
+# (Secret Service on Linux, Keychain on macOS); the login needs an unlocked keyring, so it is skipped with a warning
+# over SSH or without a desktop session. Set or replace the token (they expire within a year) with make acli-token,
+# which asks for it, stores it and logs in; make acli-login repeats only the login.
+# Work profile only by default, so a personal machine that shares the vault stays off Red Hat's Jira unless its
+# config.yml names a site. Another site: set it in config.yml; '' turns the login and its smoke check off.
+acli_site: "{{ 'redhat.atlassian.net' if profile | default('work') == 'work' else '' }}"
 acli_email: "{{ dotfiles_user_email_work | default('') }}"
 acli_products: [jira]  # confluence works with the same token

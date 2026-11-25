@@ -54,6 +54,7 @@ class SharedVault(unittest.TestCase):
         (repo / 'group_vars/all').mkdir(parents=True)
         shutil.copy(SCRIPT, repo / 'scripts/vault-shared.sh')
         shutil.copy(ROOT / 'scripts/vault-set-signing-key.py', repo / 'scripts/vault-set-signing-key.py')
+        shutil.copy(ROOT / 'scripts/vault-set-acli-token.py', repo / 'scripts/vault-set-acli-token.py')
         # The real wrapper pins ANSIBLE_VAULT_PASSWORD_FILE to scripts/vault-pass.sh; so does this stand-in, and it
         # swaps in a scripted editor for ansible-vault edit (the script itself clears EDITOR).
         (repo / 'scripts/verify-ansible-args.sh').write_text(
@@ -600,6 +601,21 @@ class SharedVault(unittest.TestCase):
         self.assertIn('vault_ssh_signing_key_pub', self.view('a', a))
         log = run(['git', f'--git-dir={self.remote}', 'log', '-1', '--format=%s', 'main']).stdout.strip()
         self.assertEqual(log, 'Vault: signing key')
+
+    def test_acli_token_lands_in_the_shared_vault_and_is_pushed(self):
+        a = self.init_a()
+        env = self.env('a', a)
+        env['PATH'] = f"{Path(sys.executable).parent}:{env['PATH']}"  # a python3 that can import ansible
+        token = 'ATATT3xFfGF0sharedTestToken_value=XY'
+        result = run(['bash', str(a / 'scripts/vault-shared.sh'), 'acli-token'], cwd=a, env=env, input=token + '\n')
+        self.assertNotIn(token, result.stdout + result.stderr)
+        self.assertIn(f"vault_acli_api_token: '{token}'", self.view('a', a))
+        log = run(['git', f'--git-dir={self.remote}', 'log', '-1', '--format=%s', 'main']).stdout.strip()
+        self.assertEqual(log, 'Vault: Atlassian token')
+        again = run(['bash', str(a / 'scripts/vault-shared.sh'), 'acli-token'], cwd=a, env=env, input=token + '\n')
+        self.assertIn('nothing changed', again.stderr)  # the same token: no new commit
+        self.assertEqual(run(['git', f'--git-dir={self.remote}', 'log', '-1', '--format=%s', 'main']).stdout.strip(),
+                         'Vault: Atlassian token')
 
     def test_init_refuses_a_plaintext_vault_and_changes_nothing(self):
         a = self.machine('a', None)

@@ -11,6 +11,7 @@ import tempfile
 import time
 import unittest
 
+import jinja2
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -919,6 +920,50 @@ class ShippedFileTests(unittest.TestCase):
             self.assertNotIn('acli_api_token', yaml.safe_dump(command.get('argv', [])), task.get('name'))
             self.assertIn('acli_api_token', command.get('stdin', ''), task.get('name'))
         self.assertIn("vault_acli_api_token: ''", (ROOT / 'group_vars/all/vault.yml').read_text())
+
+    def test_acli_login_runs_alone_under_its_tag_with_a_default_site(self):
+        """make acli-login runs --tags common,acli: the include and every task it pulls in carry the acli tag."""
+        main = yaml.safe_load((ROOT / 'roles/claude/tasks/main.yml').read_text())
+        include = next(t for t in main if t.get('name') == 'Log acli in to Jira from the vault')
+        self.assertIn('acli', include['tags'])
+        self.assertIn('acli', include['ansible.builtin.include_tasks']['apply']['tags'])
+        self.assertIn('--tags common,acli --skip-tags become', (ROOT / 'Makefile').read_text())
+        defaults = yaml.safe_load((ROOT / 'roles/claude/defaults/main.yml').read_text())
+        site = jinja2.Environment().from_string(defaults['acli_site'])
+        self.assertEqual(site.render(profile='work'), 'redhat.atlassian.net')
+        self.assertEqual(site.render(), 'redhat.atlassian.net')  # profile unset means work
+        self.assertEqual(site.render(profile='personal'), '')  # opt-in: personal machines share the vault
+        smoke = (ROOT / 'scripts/smoke-test.sh').read_text()
+        self.assertIn('if [[ "$profile" == "work" ]]; then _acli_site=redhat.atlassian.net; else _acli_site=""; fi',
+                      smoke)
+
+    def test_acli_calls_use_the_resolved_timeout_and_check_the_macos_keychain(self):
+        """macOS has no bare timeout without gnubin, and a locked Keychain (SSH) must stop the login like Linux's."""
+        tasks = yaml.safe_load((ROOT / 'roles/claude/tasks/acli.yml').read_text())
+
+        def walk(items):
+            for task in items:
+                yield task
+                yield from walk(task.get('block', []))
+        for task in walk(tasks):
+            argv = task.get('ansible.builtin.command', {}).get('argv', [])
+            if '{{ _acli_bin }}' in argv:
+                self.assertEqual(argv[0], '{{ _acli_timeout_bin }}', task['name'])
+                self.assertEqual(argv[2], '{{ _acli_bin }}', task['name'])
+            self.assertNotIn('acli', argv, task['name'])  # bare acli: not on make's PATH on macOS
+        keychain = next(t for t in walk(tasks) if 'security' in t.get('ansible.builtin.command', {}).get('argv', []))
+        self.assertIn('is_macos', keychain['when'])
+        marker = next(t for t in tasks if t.get('name') == 'Mark that the vault holds an acli token')
+        self.assertEqual(marker['ansible.builtin.copy']['mode'], '0600')
+        self.assertNotIn('{{', marker['ansible.builtin.copy']['content'])  # fixed text: no secret, not even a digest
+        main = yaml.safe_load((ROOT / 'roles/claude/tasks/main.yml').read_text())
+        cleanup = next(t for t in main if t.get('name') == 'Remove the acli token marker when no acli login is configured')
+        self.assertEqual(cleanup['ansible.builtin.file']['state'], 'absent')
+        for condition in ('acli_api_token', 'acli_site'):
+            self.assertIn(condition, cleanup['when'])
+        self.assertNotIn('profile', cleanup['when'])  # the login runs on every profile, so the marker stays on each
+        decide = next(t for t in tasks if t.get('name') == 'Decide whether the keyring allows an acli login')
+        self.assertIn('_acli_keychain', decide['ansible.builtin.set_fact']['_acli_keyring_ok'])
 
     def test_global_commit_msg_hook_allows_other_repo_conventions(self):
         """The global hook runs in every repo: it must require sign-off but not this repo's style."""

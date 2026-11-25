@@ -779,7 +779,22 @@
   when: is_macos
 
 - name: Log acli in to Jira from the vault
-  ansible.builtin.include_tasks: acli.yml
+  ansible.builtin.include_tasks:
+    file: acli.yml
+    apply:
+      tags: [acli]
+  tags: [acli]  # make acli-login runs only these
   when:
     - acli_api_token | default('') | length > 0
     - acli_site | default('') | length > 0
+
+# acli.yml writes this marker (no secret) while the vault holds a token; without a token or a site a stale one would
+# turn the acli-auth smoke check's "not applicable" into a false WARN.
+- name: Remove the acli token marker when no acli login is configured
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.config/laptop-setup/acli-token-configured"
+    state: absent
+  tags: [acli]
+  when: >-
+    acli_api_token | default('') | length == 0
+    or acli_site | default('') | length == 0

@@ -2,7 +2,7 @@
        dotfiles packages repos notes \
        ssh desktop system repos_dnf redhat containers claude codex container \
        container-rebuild csb-audit ssh-keys github-ssh-keys vault-init vault-import vault-edit vault-view pull vault-share-init vault-join vault-add-key \
-       vault-remove-key vault-pull vault-status vault-signing-key update hooks pw-migrate gate \
+       vault-remove-key vault-pull vault-status vault-signing-key acli-token acli-login update hooks pw-migrate gate \
        smoke-test-container smoke-test-user \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
        test-scripts test-poller test-gitleaks test-% \
@@ -121,6 +121,8 @@ help:
 	@echo "  vault-share-init       Move this machine's vault into the shared laptop-secrets repo (first machine, once)"
 	@echo "  vault-join             Use the shared vault on this machine (vault-pull: fetch changes; vault-status)"
 	@echo "  vault-signing-key      Copy ~/.ssh/id_ed25519_sk_signing (KEY=...) into the vault, nothing to paste"
+	@echo "  acli-token             Ask for an Atlassian API token (hidden), store it in the vault, then make acli-login"
+	@echo "  acli-login             Log acli in to Jira from the vault (no sudo; from a desktop session)"
 	@echo "  vault-add-key [NOPIN=1] Enrol the plugged-in YubiKey (vault-remove-key RECIPIENT=age1...: drop one, new password)"
 	@echo "  usb-add                Allow blocked USB devices (USBGuard) and save their rules to config.yml"
 	@echo "  preflight              Check prerequisites and CSB detection"
@@ -395,6 +397,11 @@ containers: guard-not-root rollout-banner
 claude: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,claude --ask-become-pass
 
+# acli (Jira) login alone, from vault_acli_api_token: the claude role's acli tasks, no sudo. Like make claude, it does
+# nothing while rollout_enable leaves out the agents chunk.
+acli-login: guard-not-root rollout-banner
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,acli --skip-tags become
+
 codex: guard-not-root rollout-banner
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,codex --skip-tags become
 
@@ -549,6 +556,7 @@ TEST_SCRIPTS := \
 	'.venv/bin/python3 scripts/test-vault-import.py' \
 	'.venv/bin/python3 scripts/test-vault-shared.py' \
 	'.venv/bin/python3 scripts/test-vault-signing-key.py' \
+	'.venv/bin/python3 scripts/test-vault-acli-token.py' \
 	'.venv/bin/python3 scripts/test-collection-source-verifier.py' \
 	'.venv/bin/python3 scripts/test-rollout.py' \
 	'bash test-var-override.sh'
@@ -644,6 +652,14 @@ vault-signing-key: guard-not-root
 	sh -c 'if scripts/vault-shared.sh active; then exec scripts/vault-shared.sh signing-key "$$KEY"; fi; \
 	py=$$(command -v python3); "$$py" -I -c "import ansible" 2>/dev/null || py=.venv/bin/python3; \
 	"$$py" -I scripts/vault-set-signing-key.py "$$KEY" group_vars/all/vault.yml; rc=$$?; [ $$rc -eq 3 ] && rc=0; exit $$rc'
+
+# Store an Atlassian API token in the vault (asked for with echo off, never printed), then log acli in with it. With the
+# shared vault active it is committed and pushed like vault-edit. Exit 3 from the helper: the vault already held it.
+acli-token: guard-not-root
+	@sh -c 'if scripts/vault-shared.sh active; then scripts/vault-shared.sh acli-token || exit $$?; else \
+	py=$$(command -v python3); "$$py" -I -c "import ansible" 2>/dev/null || py=.venv/bin/python3; \
+	"$$py" -I scripts/vault-set-acli-token.py group_vars/all/vault.yml; rc=$$?; [ $$rc -eq 3 ] || [ $$rc -eq 0 ] || exit $$rc; fi'
+	@$(MAKE) --no-print-directory acli-login
 
 vault-status:
 	@scripts/vault-shared.sh status

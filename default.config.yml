@@ -119,8 +119,10 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   packages_tailscale_operator: <login user>  (roles/packages/defaults) — Linux: runs tailscale up/set without sudo; '' stops
 #     managing it (an operator already set stays: sudo tailscale set --operator=). An operator, and every process running as
 #     that user, can change any Tailscale setting
-#   acli_site: ''  (roles/claude/defaults) — Jira site acli logs in to with vault_acli_api_token; set on a personal machine
-#     (or copied there with config.yml), it puts that work Atlassian token in the personal machine's keyring
+#   acli_site: redhat.atlassian.net on work, '' on personal  (roles/claude/defaults) — Jira site acli logs in to with
+#     vault_acli_api_token (make acli-token stores it); '' turns the login and the acli-auth smoke check off. Set on a
+#     personal machine (or copied there with config.yml), it puts that work Atlassian token in the personal machine's
+#     keyring
 #   drive_sync_accounts: []  (roles/drive_sync) — Google Drive sync of ~/drive/<account>/ (docs/drive-sync.md),
 #     e.g. [owner, partner]; drive_sync_host: '' — this machine's Drive folder, unique per machine (required then)
 #   packages_go_install: []               (roles/packages/defaults) — universal Go tools installed on all profiles;
