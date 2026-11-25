@@ -354,7 +354,15 @@ packages_go_install_work:
   - "github.com/submariner-io/subctl/cmd@v{{ packages_subctl_version }}"
   # Kubernetes log viewer — multi-pod log tail for OVN-K/Konflux debugging
   - "github.com/stern/stern@v{{ packages_stern_version }}"
+  # Installed by hand on the old laptop and used daily: linters, import fixer, struct layout and envtest binaries
+  - "honnef.co/go/tools/cmd/staticcheck@v{{ packages_staticcheck_version }}"
+  - "golang.org/x/tools/cmd/goimports@v{{ packages_x_tools_version }}"
+  - "golang.org/x/tools/go/analysis/passes/fieldalignment/cmd/fieldalignment@v{{ packages_x_tools_version }}"
+  - "sigs.k8s.io/controller-runtime/tools/setup-envtest@{{ packages_setup_envtest_version }}"
 
+packages_staticcheck_version: "0.8.1"
+packages_x_tools_version: "0.50.0"  # goimports and fieldalignment (golang.org/x/tools; gopls has its own module version)
+packages_setup_envtest_version: "v0.25.3"  # its own module's tag (sigs.k8s.io/controller-runtime/tools/setup-envtest)
 packages_code_generator_version: "0.36.2"  # governs all k8s.io/code-generator/* tools; bump with OVN-K k8s upgrade
 packages_subctl_version: "0.24.0"  # governs go install and distrobox_subctl_version; bump together
 
@@ -511,6 +519,7 @@ packages_brew_work:
 packages_extra_dnf: []
 packages_extra_apt: []
 packages_extra_brew: []
+packages_extra_pipx: []  # PyPI names, optionally name==version; installed with pipx on every OS
 
 # Fedora ships AWS CLI v2. RHEL package availability varies; use a configured extra list there.
 packages_aws_cli_fedora_work: [awscli2]

@@ -539,6 +539,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     packages_ansible_lint_version, packages_golangci_lint_version, packages_gofumpt_version,
 #     packages_govulncheck_version, packages_gci_version, packages_gopls_version,
 #     packages_controller_gen_version, packages_stern_version, packages_code_generator_version,
+#     packages_staticcheck_version, packages_x_tools_version, packages_setup_envtest_version,
 #     packages_subctl_version, packages_aerospace_version, packages_krew_bootstrap_version,
 #     packages_kubectx_version, and others in
 #     roles/packages/defaults/main.yml; distrobox_oc_version, distrobox_golangci_lint_version
@@ -617,6 +618,9 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   packages_extra_dnf: []             (roles/packages/defaults) — additive; e.g. [ccache, git-review, openssl-devel]
 #   packages_extra_apt: []             (roles/packages/defaults) — additive; e.g. [ccache, git-review, libssl-dev]
 #   packages_extra_brew: []            (roles/packages/defaults) — additive; e.g. [ccache, git-review]
+#   packages_extra_pipx: []            (roles/packages/defaults) — PyPI apps installed with pipx on every OS, e.g. [ruff, chirp];
+#     name==version pins one (then also list its name in packages_user_updates_pipx_skip, keeping yamllint and
+#     ansible-lint there, so the daily updater leaves it)
 #   desktop_gnome_clock_format: 24h    (roles/desktop/defaults)
 #   desktop_gnome_touchpad_tap: true    (roles/desktop/defaults)
 #   desktop_gnome_touchpad_natural_scroll: false  (roles/desktop/defaults; desktop_gnome_mouse_natural_scroll: false too)

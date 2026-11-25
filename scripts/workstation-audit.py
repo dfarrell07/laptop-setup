@@ -23,11 +23,20 @@ GNOME = {
     'org.gnome.desktop.wm.preferences': ['num-workspaces', 'focus-mode'],
     'org.gnome.mutter': ['dynamic-workspaces', 'edge-tiling'],
 }
-CONFIG_PATHS = ['.zshrc', '.zlogin', '.gitconfig', '.vimrc', '.tmux.conf', '.ssh/config',
+CONFIG_PATHS = ['.zshrc', '.zlogin', '.zprofile', '.bashrc', '.gitconfig', '.gitignore', '.vimrc', '.tmux.conf', '.ssh/config',
                 '.config/mimeapps.list', '.config/xdg-terminals.list', '.config/htop/htoprc',
                 '.config/zsh/local.zsh', '.config/containers/registries.conf', '.config/go/env',
                 '.codex/config.toml', '.codex-personal/config.toml',
                 '.claude/settings.json', '.claude-per2/settings.json']
+# Script directories whose #! interpreter can vanish (a removed Python or Homebrew), leaving commands that shadow working ones
+SCRIPT_DIRS = ['.local/bin', 'bin']
+# Install prefixes outside any package manager that an earlier setup may have left behind
+STALE_PREFIXES = ['/home/linuxbrew/.linuxbrew', '/usr/local/go', '/usr/local/lib/node_modules']
+UNMANAGED_DIRS = ['/usr/local/bin']
+# git settings an old config may carry that turn off safety checks (any spelling git reads as false; URL-scoped too)
+GIT_FALSE = {'false', 'no', 'off', '0', ''}
+RISKY_GIT = [(re.compile(r'^http\.(.+\.)?sslverify$'), lambda value: value in GIT_FALSE),
+             (re.compile(r'^safe\.directory$'), lambda value: value == '*')]
 SYSTEM_DIRS = ['/etc/modprobe.d', '/etc/udev/rules.d', '/etc/sysctl.d',
                '/etc/profile.d', '/etc/tmpfiles.d', '/etc/NetworkManager/conf.d']
 
@@ -144,6 +153,8 @@ def pipx_state(home, errors):
             errors.append({'probe': 'pipx', 'path': private_path(base, home), 'reason': 'directory unreadable'})
             continue
         for venv in environments:
+            if venv.name.startswith('.'):
+                continue  # pipx's own lock files (.<name>.lock), not environments
             metadata = venv / 'pipx_metadata.json'
             try:
                 if not stat.S_ISREG(metadata.stat().st_mode):
@@ -164,6 +175,54 @@ def pipx_state(home, errors):
             except (OSError, ValueError):
                 errors.append({'probe': 'pipx', 'path': private_path(metadata, home), 'reason': 'metadata unreadable'})
     return result
+
+
+def dead_interpreters(home, errors):
+    """Scripts whose #! interpreter no longer exists (only the first line is read)."""
+    dead = []
+    for relative in SCRIPT_DIRS:
+        base = home / relative
+        if not base.is_dir():
+            continue
+        try:
+            entries = sorted(base.iterdir())
+        except OSError:
+            errors.append({'probe': 'scripts', 'path': private_path(base, home), 'reason': 'directory unreadable'})
+            continue
+        for path in entries:
+            try:
+                if not path.is_file():
+                    continue
+                with path.open('rb') as stream:
+                    first = stream.readline(256)
+            except OSError:
+                continue
+            if not first.startswith(b'#!'):
+                continue
+            words = first[2:].decode('utf-8', 'replace').split()
+            if words and words[0].startswith('/') and not os.path.exists(words[0]):
+                dead.append({'path': private_path(path, home), 'interpreter': private_path(words[0], home)})
+    return dead
+
+
+def risky_git_settings(home, errors):
+    """Names of safety-disabling git settings in the user's git configs (values are never published)."""
+    found = []
+    for relative in ['.gitconfig', '.config/git/config']:
+        path = home / relative
+        if not path.is_file():
+            continue
+        # --includes reads included files too (it runs nothing: no hooks, fsmonitor or ssh)
+        output = probe(['git', 'config', '--file', str(path), '--includes', '--list'], errors, 'git-config:' + relative)
+        for line in (output or '').splitlines():
+            key, separator, value = line.partition('=')
+            # a bare key ("sslVerify" with no "=") is true to git; "sslVerify =" (empty) is false
+            key, value = key.lower(), value.strip().lower() if separator else 'true'
+            if any(pattern.match(key) and risky(value) for pattern, risky in RISKY_GIT):
+                # a URL-scoped key names a host: publish only its kind
+                found.append({'file': relative, 'setting': ('http.<url>.sslverify' if key.count('.') > 1 and
+                                                            key.startswith('http.') else key) + '=' + value})
+    return found
 
 
 def collect(home=None, path_value=None):
@@ -288,10 +347,26 @@ def collect(home=None, path_value=None):
             local_files.append({'path': str(path), 'package_manager': manager,
                                 'package_owner': owner or None, 'symlink': path.is_symlink()})
     report['system_config_files'] = local_files
+    report['dead_interpreters'] = dead_interpreters(home, errors)
+    # On an Intel Mac /usr/local is Homebrew's own prefix (its node_modules and bin are managed), so it is not checked
+    homebrew_usr_local = platform.system() == 'Darwin' and os.path.isdir('/usr/local/Homebrew')
+    report['stale_prefixes'] = [path for path in STALE_PREFIXES if os.path.isdir(path)
+                                and not (homebrew_usr_local and path.startswith('/usr/local/'))]
+    unmanaged = []
+    for directory in [] if homebrew_usr_local else UNMANAGED_DIRS:
+        try:
+            unmanaged += [str(path) for path in sorted(Path(directory).iterdir()) if path.is_file()]
+        except OSError:
+            continue  # absent or unreadable: nothing to report
+    report['unmanaged_local_files'] = unmanaged
+    report['risky_git_settings'] = risky_git_settings(home, errors)
     report['findings'] = {
         'shadowed_commands': [name for name, value in report['command_paths'].items() if value['shadowed']],
         'broken_pipx_environments': [item['name'] for item in report['pipx'] if not item['interpreter_exists']],
         'unpackaged_system_files': [item['path'] for item in local_files if item['package_manager'] is not None and item['package_owner'] is None],
+        'dead_interpreters': [item['path'] for item in report['dead_interpreters']],
+        'stale_prefixes': report['stale_prefixes'],
+        'risky_git_settings': list(dict.fromkeys(item['file'] + ': ' + item['setting'] for item in report['risky_git_settings'])),
     }
     return report
 
@@ -311,6 +386,9 @@ def main():
         raise
     print(f"Report: {args.output}; {len(report['findings']['shadowed_commands'])} shadowed commands; "
           f"{len(report['findings']['broken_pipx_environments'])} broken pipx environments; "
+          f"{len(report['findings']['dead_interpreters'])} scripts with a missing interpreter; "
+          f"{len(report['findings']['stale_prefixes'])} stale install prefixes; "
+          f"{len(report['findings']['risky_git_settings'])} safety-disabling git settings; "
           f"{len(report['errors'])} probe errors")
     return 1 if report['errors'] else 0
 

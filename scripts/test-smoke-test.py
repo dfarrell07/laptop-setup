@@ -95,6 +95,28 @@ class SmokeTests(unittest.TestCase):
             self.assertEqual(result.stdout.strip(), 'home-tmp-dir PASS')
             self.assertEqual(list((home / 'tmp').iterdir()), [])
 
+    def test_scripts_with_a_missing_interpreter_are_named(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('_dead_scripts=""')
+        end = source.index('unset _dead_scripts', start)
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            scripts = home / '.local/bin'
+            scripts.mkdir(parents=True)
+            for name, body in [('ansible', '#!/gone/python3.13\n'), ('fine', '#!/bin/sh\n'), ('tab', '#!/bin/sh\t-e\n'),
+                               ('elf', '\x7fELF\x00\x00#!/gone\n'), ('env', '#!/usr/bin/env python3\n')]:
+                (scripts / name).write_text(body)
+                (scripts / name).chmod(0o755)
+            run = lambda: subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c',
+                                          'record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; };\n' + source[start:end]],
+                                         env=dict(os.environ, HOME=str(home)), capture_output=True, text=True)
+            result = run()
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(result.stdout.startswith('local-bin-interpreters WARN'), result.stdout)
+            self.assertIn('{ansible}', result.stdout)
+            (scripts / 'ansible').unlink()
+            self.assertEqual(run().stdout.strip(), 'local-bin-interpreters PASS')
+
     def test_intel_thermald_states_do_not_abort_diagnostics(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
         start = source.index('    _thermald_state=')
