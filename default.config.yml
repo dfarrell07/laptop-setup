@@ -379,7 +379,9 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   desktop_i3status_cpu_temp_path: ""  (roles/desktop/defaults) — empty disables the CPU temp block; set correct
 #     hwmon sysfs path in config.yml, e.g. /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon8/temp1_input on ThinkPad P16v AMD.
 #     hwmon index varies by machine/kernel. Verify: ls /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon*/temp1_input
-#   desktop_i3status_vpn: true  (roles/desktop/defaults) — status-bar field naming active VPNs (NM, Tailscale, NetBird)
+#   desktop_i3status_vpn: true  (roles/desktop/defaults) — status-bar block per VPN (up, down or missing): NetBird on CSB
+#     machines, Tailscale, then desktop_i3status_vpns_extra, plus active NetworkManager VPNs. Add one with
+#     desktop_i3status_vpns_extra: [{name: Mullvad, command: [mullvad, status], connected: '^Connected'}]
 #   desktop_i3status_disks: [/, /tmp]  (roles/desktop/defaults) — status-bar free-space fields (mounted paths only)
 #   desktop_i3status_timezones: [IN Asia/Kolkata, IL Asia/Jerusalem]  (roles/desktop/defaults) — extra clocks
 #     ({label, timezone} list) after local time; [] disables

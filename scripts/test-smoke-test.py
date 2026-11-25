@@ -898,6 +898,40 @@ exit 0
             self.assertIn('tailscale-netbird-netfilter FAIL Tailscale netfilter mode 2', run('{"NetfilterMode": 2}'))
             self.assertEqual(run(None), '')  # tailscaled down: the tailscale check reports it
 
+    @unittest.skipUnless(shutil.which('jq'), 'jq required')
+    def test_tailscale_peers_routed_into_netbird_are_named(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index("# NetBird's routes sit ahead of Tailscale's table 52")
+        end = source.index('  unset _ts_peers _ts_bad _ip\nfi\n', start) + len('  unset _ts_peers _ts_bad _ip\nfi\n')
+        with tempfile.TemporaryDirectory() as directory:
+            bindir = Path(directory)
+            stubs = {'netbird': '',
+                     'tailscale': 'cat "$0.json"',
+                     # a made-up NetBird range, 100.120.0.0/15: routed via wt0; everything else via tailscale0
+                     'ip': 'case $3 in 100.12[01].*) echo "$3 dev wt0 src 100.120.0.1";; '
+                           '*) echo "$3 dev tailscale0 table 52 src 100.70.0.1";; esac'}
+            for name, body in stubs.items():
+                (bindir / name).write_text(f'#!/bin/sh\n{body}\n')
+                (bindir / name).chmod(0o755)
+
+            def run(status):
+                (bindir / 'tailscale.json').write_text(json.dumps(status))
+                script = ('IS_LINUX=true; CONTAINER=\nrecord() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; }\n'
+                          + source[start:end])
+                env = dict(os.environ, PATH=f'{bindir}:{os.environ["PATH"]}', SMOKE_NETBIRD=str(bindir / 'netbird'))
+                return subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c', script], env=env,
+                                      capture_output=True, text=True).stdout.strip()
+
+            def peer(*ips):
+                return {'TailscaleIPs': list(ips)}
+
+            good = {'BackendState': 'Running', 'Peer': {'a': peer('100.101.2.3', 'fd7a:115c:a1e0::1')}}
+            self.assertEqual(run(good), 'tailscale-netbird-routes PASS')
+            bad = {'BackendState': 'Running', 'Peer': {'a': peer('100.101.2.3'), 'b': peer('100.121.4.5')}}
+            out = run(bad)
+            self.assertTrue(out.startswith('tailscale-netbird-routes WARN Tailscale peers 100.121.4.5 route'), out)
+            self.assertEqual(run({'BackendState': 'Stopped', 'Peer': {'b': peer('100.121.4.5')}}), '')
+
     def test_tailscale_operator_check(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
         start = source.index("# The packages role makes the login user Tailscale's operator")

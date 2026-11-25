@@ -688,6 +688,24 @@ if $IS_LINUX && [[ -z "$CONTAINER" && -x "${SMOKE_NETBIRD:-/usr/bin/netbird}" ]]
   unset _ts_nf
 fi
 
+# NetBird's routes sit ahead of Tailscale's table 52 (its policy rules come first), and its own network lies inside
+# Tailscale's 100.64.0.0/10: a Tailscale peer given an address there is routed into NetBird and cannot be reached.
+# Checked only while Tailscale runs.
+if $IS_LINUX && [[ -z "$CONTAINER" && -x "${SMOKE_NETBIRD:-/usr/bin/netbird}" ]] && command -v tailscale &>/dev/null &&
+  command -v jq &>/dev/null; then
+  _ts_peers=$(tailscale status --json 2>/dev/null |
+    jq -r 'select(.BackendState == "Running") | .Peer // {} | .[] | .TailscaleIPs[]? | select(test("^[0-9.]+$"))' 2>/dev/null || true)
+  _ts_bad=()
+  for _ip in $_ts_peers; do
+    [[ $(ip route get "$_ip" 2>/dev/null) == *" dev tailscale0 "* ]] || _ts_bad+=("$_ip")
+  done
+  if [[ -n "$_ts_peers" ]]; then
+    if (( ${#_ts_bad[@]} == 0 )); then record "tailscale-netbird-routes" "PASS"
+    else record "tailscale-netbird-routes" "WARN" "Tailscale peers ${_ts_bad[*]} route outside tailscale0 (into NetBird's range) and are unreachable over Tailscale: give each a new address in the Tailscale admin console (Machines, Edit machine IPv4)"; fi
+  fi
+  unset _ts_peers _ts_bad _ip
+fi
+
 # The packages role makes the login user Tailscale's operator (tailscale up/set without sudo) unless
 # packages_tailscale_operator is ''. With tailscaled down nothing is read (the tailscale check reports it).
 if $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY && command -v tailscale &>/dev/null; then
