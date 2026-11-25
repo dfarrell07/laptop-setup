@@ -693,6 +693,56 @@ class MigrationTests(unittest.TestCase):
                                         env=dict(os.environ, PATH=f'{stub}:{os.environ["PATH"]}'), check=True)
                 self.assertEqual(result.stdout.splitlines(), ['login', '--web', url])
 
+    @unittest.skipUnless(shutil.which('zsh') and shutil.which('jq'), 'zsh and jq required')
+    def test_netbird_shortcuts_and_the_tailscale_route_warning(self):
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            defaults = yaml.safe_load((ROOT / 'roles/dotfiles/defaults/main.yml').read_text())
+            defaults.update({'ansible_managed': 'test', 'ansible_facts': {'user_dir': name, 'system': 'Linux'},
+                             'profile': 'work', 'packages_gotoolchain': 'local', 'notes_repo_path': name + '/notes'})
+            config = directory / 'zshrc'
+            run_play(directory, tasks=[{'name': 'Render shell', 'ansible.builtin.template': {
+                'src': str(ROOT / 'roles/dotfiles/templates/zshrc.j2'), 'dest': str(config), 'mode': '0600'}}],
+                variables=defaults)
+            content = config.read_text()
+            block = content[content.index('# NetBird (IT'):content.index("alias rc='claude --remote-control'")]
+            bindir = directory / 'bin'
+            bindir.mkdir()
+            stubs = {'netbird': 'echo "netbird $*" >> "$LOG"; [ "$1" != up ] || [ -z "$UP_FAIL" ]',
+                     'tailscale': 'cat "$TS_JSON"',
+                     # a made-up NetBird range, 100.120.0.0/15, routes via wt0; everything else via tailscale0
+                     'ip': 'case $3 in 100.12[01].*) echo "$3 dev wt0 src 100.120.0.1";; '
+                           '*) echo "$3 dev tailscale0 table 52 src 100.70.0.1";; esac'}
+            for tool, body in stubs.items():
+                (bindir / tool).write_text(f'#!/bin/sh\n{body}\n')
+                (bindir / tool).chmod(0o755)
+            log, status = directory / 'log', directory / 'ts.json'
+
+            def run(script, peers, state='Running', **extra):
+                status.write_text(json.dumps({'BackendState': state,
+                                              'Peer': {str(i): {'TailscaleIPs': [ip]} for i, ip in enumerate(peers)}}))
+                env = dict(os.environ, PATH=f'{bindir}:{os.environ["PATH"]}', LOG=str(log), TS_JSON=str(status), **extra)
+                return subprocess.run([shutil.which('zsh'), '-f', '-c', block + '\n' + script], env=env,
+                                      capture_output=True, text=True)
+
+            result = run('nb --no-browser; nbs; nbd', ['100.101.2.3'])
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(log.read_text().splitlines(), ['netbird up --no-browser', 'netbird status', 'netbird down'])
+            self.assertEqual(result.stderr, '')
+            result = run('nb', ['100.101.2.3', '100.121.4.5'])
+            self.assertIn('Tailscale peers now routed into NetBird (unreachable over Tailscale): 100.121.4.5', result.stderr)
+            self.assertNotIn('100.101.2.3', result.stderr)
+            result = run('nb', ['100.121.4.5'], state='Stopped')  # Tailscale down: nothing to warn about
+            self.assertEqual((result.returncode, result.stderr), (0, ''))
+            result = run('nb', ['100.121.4.5'], UP_FAIL='1')  # a failed up returns its status and checks nothing
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stderr, '')
+            defaults['ansible_facts']['system'] = 'Darwin'
+            run_play(directory, tasks=[{'name': 'Render macOS shell', 'ansible.builtin.template': {
+                'src': str(ROOT / 'roles/dotfiles/templates/zshrc.j2'), 'dest': str(config), 'mode': '0600'}}],
+                variables=defaults)
+            self.assertNotIn('nb()', config.read_text())
+
     @unittest.skipUnless(shutil.which('zsh'), 'zsh required for launcher regression')
     def test_rendered_shell_accounts_arguments_and_environment(self):
         with tempfile.TemporaryDirectory() as name:
