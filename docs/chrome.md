@@ -14,7 +14,8 @@ is decided per profile, from `Local State`: a profile is personal when its signe
 account (`hosted_domain` `NO_HOSTED_DOMAIN`, not managed) in `desktop_chrome_personal_domains` (gmail.com,
 googlemail.com) and signed in (`gaia_id`). That is stricter than the bookmarks installer's domain-only match, since
 these settings are rewritten on every run: a profile that is signed out or unknown is left alone. Work, signed-out and
-other profiles get only the page zoom. The audit output names profile directories, never accounts.
+other profiles get only the page zoom. If `Local State` cannot be read, no profile counts as personal: the run sets only
+the zoom and warns, and the checks warn. The audit output names profile directories, never accounts.
 
 ## Three levels
 
@@ -35,7 +36,8 @@ a work machine policy would reach the work profile, even before IT's files arriv
 policy are undefined (the last name wins the whole key). So the role writes nothing under `/etc` on a work machine, when
 `csb_detected` is true, or when any other file exists under `/etc/opt/chrome/policies` (an enrollment token included;
 symlinks, hidden and unreadable entries count against it), and nothing under `/Library` on a Mac that is MDM-enrolled,
-enrolled in Chrome Browser Cloud Management or has a configuration profile for Chrome. There, the default-level settings
+enrolled in Chrome Browser Cloud Management or has a configuration profile for Chrome (a Mac assigned to MDM but not yet
+enrolled cannot be told apart without root). There, the default-level settings
 that have a preference equivalent (`PasswordManagerEnabled`, `AutofillCreditCardEnabled`, `AutofillAddressEnabled`,
 `BookmarkBarEnabled`, `BlockThirdPartyCookies`, `SafeBrowsingProtectionLevel`, `RestoreOnStartup` on Linux) are
 reconciled into personal profiles instead, so there they are set back on every run; the others (`HttpsOnlyMode`) are not
@@ -81,13 +83,14 @@ Not managed:
   preferences could be added to the reconciled level when there is something to set.
 - **Chrome Sync**: should stay off in personal profiles (Settings > You and Google): Sync would carry settings
   (kept in `account_values`), themes and extensions between machines and fight the ones set here. The
-  `chrome-extensions` check reports a personal profile with Sync on (`sync-on`); nothing turns it off.
+  `chrome-extensions` check reports a personal profile with Sync on (`sync-on`); nothing turns it off. Signing in
+  without Sync (account storage for bookmarks and passwords) does not carry settings and is not reported.
 - **Passwords, cookies, history, sessions**, and anything in a work profile.
 
 ## Site settings
 
-`desktop_chrome_site_settings` maps a type to `{site: allow|block|ask}` (images, javascript, popups and sound take allow
-or block only); sites are `https://host`, `https://host:port` or `[*.]domain`. `desktop_chrome_default_site_settings`
+`desktop_chrome_site_settings` maps a type to `{site: allow|block|ask}` (images, javascript, popups, sound and
+cookies take allow or block only); sites are `https://host`, `https://host:port` or `[*.]domain`. `desktop_chrome_default_site_settings`
 maps a type to the default for every site. Types: notifications, popups, geolocation, media_stream_camera,
 media_stream_mic, javascript, images, sound, automatic_downloads, clipboard, cookies. A site (or default) the role added
 is removed from Chrome when it leaves the map; one the user had set in Chrome before is changed to the declared value
@@ -108,7 +111,8 @@ Support/Google/Chrome/External Extensions` on macOS, where Chrome asks once per 
 it then stays removed in that profile. Dropping an extension from the list deletes its file, and Chrome then uninstalls
 it from every profile on the next start, with its local data (uBOL's custom filters, for one). If the machine's policy
 stops being ours, the files stay and the run warns. A file a package ships there (Fedora's GNOME Shell integration) is
-never written or removed. On a CSB laptop an
+never written or removed, and neither is one already there that the role did not write, on Linux or macOS (rpm and
+dpkg are both asked, in the C locale, and a package database error counts as a package's). On a CSB laptop an
 external extension would also install into the work profile, so nothing is installed there: `make chrome-extensions`
 opens the Web Store page of each missing one in its personal profile to add by hand. Everywhere, the `chrome-extensions`
 check reports per personal profile a declared extension that is missing or disabled, and one installed by hand that is

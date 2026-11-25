@@ -345,10 +345,39 @@ class ChromeHelperTests(unittest.TestCase):
             self.assertIn('allow or block only', err)
             self.spec.update({'site_settings': {}, 'default_site_settings': {}})
         self.assertEqual(self.out('prefs', default_site_settings={'notifications': 'ask'}), 'unchanged')  # no personal
+        for field, bad in (('default_site_settings', {'cookies': 'ask'}),
+                           ('site_settings', {'cookies': {'https://a.example': 'ask'}})):
+            code, _, err = self.run_helper('prefs', **{field: bad})
+            self.assertEqual(code, 1, field)
+            self.assertIn('allow or block only', err)
+            self.spec.update({'site_settings': {}, 'default_site_settings': {}})
         (self.data / 'Local State').write_text('{broken')
         code, out, err = self.run_helper('prefs', zoom_percent=80)
-        self.assertEqual((code, out), (0, 'changed'), err)
-        self.assertIn('cannot parse', err)
+        self.assertEqual((code, out), (0, 'changed\npersonal-unknown'), err)
+        self.assertIn('cannot read', err)
+
+    def test_an_unreadable_local_state_still_zooms_writes_nothing_personal_and_says_so(self):
+        if os.geteuid() == 0:
+            self.skipTest('root reads a mode 0 file')
+        self.profile('Profile 1', {}, consumer())
+        self.profile('Default', {}, {'user_name': 'me@example.com', 'gaia_id': '2', 'hosted_domain': 'example.com'})
+        local_state = self.data / 'Local State'
+        local_state.chmod(0)
+        try:
+            code, out, err = self.run_helper('prefs', zoom_percent=80, color_scheme='dark',
+                                             site_settings={'javascript': {'https://a.example': 'block'}})
+            self.assertEqual((code, out), (0, 'changed\npersonal-unknown'), err)
+            self.assertEqual(self.out('extensions', extensions=[{'id': UBOL}]), 'blocked')
+        finally:
+            local_state.chmod(0o600)
+        for name in ('Profile 1', 'Default'):
+            prefs = self.prefs(name)
+            self.assertIn('default_zoom_level', json.dumps(prefs), name)
+            self.assertNotIn('theme', prefs.get('browser', {}), name)
+            self.assertNotIn('content_settings', prefs.get('profile', {}), name)
+        self.assertEqual(self.out('prefs', zoom_percent=80, color_scheme='dark',
+                                  site_settings={'javascript': {'https://a.example': 'block'}}), 'changed')
+        self.assertEqual(self.prefs('Profile 1')['browser']['theme']['color_scheme2'], 2)
 
     # --- a real Chrome reads what the helper writes ---
     def chrome(self, url):
@@ -430,6 +459,32 @@ class SmokeAloneTests(unittest.TestCase):
         self.assertIn('chrome-policy', out.stdout, out.stderr[-500:])
         self.assertIn('helper missing', out.stdout)
 
+    def test_chunk_enabled_reads_rollout_enable(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('_chunk_enabled() {')
+        end = source.index('\n}\n', start) + 3
+        cases = [(None, 'yes'), ('profile: work\n', 'yes'), ('rollout_enable: all\n', 'yes'),
+                 ("rollout_enable: 'all'  # every chunk\n", 'yes'),
+                 ('rollout_enable: [packages, chrome]\n', 'yes'), ('rollout_enable: [packages, desktop]\n', 'no'),
+                 ('rollout_enable: [packages, chromebook]\n', 'no'),
+                 ('rollout_enable:\n  - packages\n  - "chrome"  # yes\nother: 1\n', 'yes'),
+                 ('rollout_enable:\n  - packages\n  - desktop\nother: [chrome]\n', 'no'),
+                 ('rollout_enable:\n  - packages\n', 'no'),
+                 ('rollout_enable: [desktop,\n  chrome]\n', 'yes'),
+                 ('rollout_enable: [\n  desktop,  # comment\n  chrome,\n]\nother: 1\n', 'yes'),
+                 ('rollout_enable:\n  [desktop, chrome]\n', 'yes'),
+                 ('rollout_enable: [\n  desktop,\n]\nother: [chrome]\n', 'no'),
+                 ('rollout_enable:\n  [desktop]\nother:\n  - chrome\n', 'no')]
+        for config, want in cases:
+            with self.subTest(config=config), tempfile.TemporaryDirectory() as tmp:
+                cfg = Path(tmp) / 'config.yml'
+                if config is not None:
+                    cfg.write_text(config)
+                out = subprocess.run(['bash', '-c', f'_cfg={cfg}\n' + source[start:end]
+                                      + '\nif _chunk_enabled chrome; then echo yes; else echo no; fi'],
+                                     capture_output=True, text=True).stdout.strip()
+                self.assertEqual(out, want)
+
 class ShippedTaskTests(unittest.TestCase):
     """roles/desktop/tasks/chrome.yml: nothing machine-wide unless this machine's Chrome policy is ours."""
 
@@ -507,7 +562,9 @@ class ShippedTaskTests(unittest.TestCase):
                          _chrome_state_dir='/home/x/.config/laptop-setup',
                          _chrome_extensions=[{'id': UBOL}, {'id': gnome}, {'id': BITWARDEN, 'install': False}],
                          _chrome_ext_before={'content': before},
-                         _chrome_ext_owned={'stdout_lines': [f'/usr/share/google-chrome/extensions/{gnome}.json']})
+                         _chrome_ext_owned={'stdout_lines': [f'owned /usr/share/google-chrome/extensions/{gnome}.json',
+                                                             f'exists /usr/share/google-chrome/extensions/{BITWARDEN}.json',
+                                                             f'exists /usr/share/google-chrome/extensions/{UBOL}.json']})
         tasks = [{'ansible.builtin.debug': {'msg': 'WANT={{ _chrome_ext_want | join(",") }}='}},
                  {'ansible.builtin.debug': {'msg': 'REMOVE={{ ' + removal['loop'][3:-3] + ' | join(",") }}='}}]
         with tempfile.TemporaryDirectory() as tmp:
@@ -527,6 +584,43 @@ class ShippedTaskTests(unittest.TestCase):
                                  text=True, timeout=300, env=env).stdout
         self.assertIn('WANT==', out)
         self.assertIn(f'REMOVE={old}=', out)  # dropped from the list: still removed
+
+    def test_package_ownership_probe_fails_closed(self):
+        """The shell probe: unowned by rpm and dpkg -> exists; owned by either, or a database error -> owned (never
+        touched); a dangling symlink counts as present; with neither tool (macOS) every present file is "exists"."""
+        import re as _re
+        probe = self.task('Find Chrome external extension files present or a package\'s')
+        self.assertNotIn('when', probe)  # macOS too
+        self.assertEqual(probe['environment'], {'LC_ALL': 'C'})
+        script = _re.search(r"\['sh', '-c', '(.*?)', 'sh'\]", probe['ansible.builtin.command']['argv'], _re.S).group(1)
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / 'bin').mkdir()
+            (tmp / 'none').mkdir()
+            for name in ('mine', 'pkg', 'deb', 'broken', 'debbroken'):
+                (tmp / f'{name}.json').write_text('{}')
+            (tmp / 'link.json').symlink_to(tmp / 'nowhere')
+            (tmp / 'bin/rpm').write_text('#!/bin/sh\ncase "$2" in\n'
+                                         '  *pkg*) echo pkg-1.0; exit 0;;\n'
+                                         '  *broken*) echo "error: rpmdb open failed"; exit 1;;\n'
+                                         '  *) echo "file $2 is not owned by any package"; exit 1;;\nesac\n')
+            (tmp / 'bin/dpkg').write_text('#!/bin/sh\ncase "$2" in\n'
+                                          '  *deb*) echo "deb: $2"; exit 0;;\n'
+                                          '  *) echo "dpkg-query: no path found matching pattern $2"; exit 1;;\nesac\n')
+            for tool in ('rpm', 'dpkg'):
+                (tmp / f'bin/{tool}').chmod(0o755)
+            names = ('mine', 'pkg', 'deb', 'broken', 'link', 'absent')
+
+            def probe_with(path):
+                out = subprocess.run(['/bin/sh', '-c', script, 'sh', *(str(tmp / f'{n}.json') for n in names)],
+                                     capture_output=True, text=True, env=dict(os.environ, PATH=path)).stdout
+                return [line.split(' ')[0] + ' ' + Path(line.split(' ', 1)[1]).name for line in out.split('\n') if line]
+            self.assertEqual(probe_with(f"{tmp / 'bin'}:/usr/bin:/bin"),
+                             ['exists mine.json', 'owned pkg.json', 'owned deb.json', 'owned broken.json',
+                              'exists link.json'])
+            self.assertEqual(probe_with(str(tmp / 'none')),
+                             ['exists mine.json', 'exists pkg.json', 'exists deb.json', 'exists broken.json',
+                              'exists link.json'])
 
     def test_every_write_under_etc_or_library_needs_our_policy(self):
         self.assertIn("profile | default('work') == 'personal'",

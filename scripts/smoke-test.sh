@@ -192,6 +192,28 @@ _cfg_value() { awk -v k="$1" '$0 ~ "^" k ":" {sub(/^[^:]*:[[:space:]]*/, ""); su
 _claude_home=$(_cfg_value claude_default_config_dir)
 _claude_home2=$(_cfg_value claude_personal2_config_dir)
 _codex_personal=$(_cfg_value codex_personal_config_dir)
+# Whether config.yml's rollout_enable ('all' or absent, a flow list on one or several lines, or one "- name" per line)
+# enables a chunk.
+_chunk_enabled() {
+  [[ -f "$_cfg" ]] || return 0
+  [[ $(awk -v c="$1" '
+    function done(r) { print r; finished = 1; exit }
+    function strip(s) { sub(/[[:space:]]*#.*$/, "", s); return s }
+    function check(v) { gsub(/[]["\047[:space:]]/, "", v); if (v == "all") done("yes")
+      n = split(v, a, ","); for (i = 1; i <= n; i++) if (a[i] == c) done("yes"); done("no") }
+    flow { f = f "," strip($0); if (f ~ /\]/) check(f); next }
+    /^rollout_enable:/ { key = 1; v = $0; sub(/^[^:]*:[[:space:]]*/, "", v); v = strip(v)
+      if (v == "") { open = 1; next }
+      if (v ~ /^\[/ && v !~ /\]/) { flow = 1; f = v; next }
+      check(v) }
+    open && !list && /^[[:space:]]+\[/ { v = strip($0); if (v ~ /\]/) check(v); flow = 1; f = v; next }
+    open && /^[[:space:]]*-/ { list = 1; x = $0; sub(/^[[:space:]]*-[[:space:]]*/, "", x); x = strip(x)
+      gsub(/["\047[:space:]]/, "", x); if (x == c) done("yes"); next }
+    open && /^[^[:space:]#]/ { done("no") }
+    END { if (!finished) print (key ? "no" : "yes") }' "$_cfg" 2>/dev/null) != no ]]
+}
+_chrome_chunk_on=true
+_chunk_enabled chrome || _chrome_chunk_on=false  # Chrome checks (desktop role)
 # Tailscale operator the packages role manages: the login user unless config.yml sets packages_tailscale_operator
 _ts_want=${SUDO_USER:-$USER}
 grep -q '^packages_tailscale_operator:' "$_cfg" 2>/dev/null && _ts_want=$(_cfg_value packages_tailscale_operator)
@@ -760,6 +782,10 @@ if [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY && [[ "$EUID" -ne 0 ]]; then
   if $IS_LINUX; then _chrome_app=/opt/google/chrome/chrome; else _chrome_app="/Applications/Google Chrome.app"; fi
   if [[ ! -e "$_chrome_app" ]]; then
     for _c in chrome-profiles chrome-extensions chrome-policy; do record "$_c" "PASS" "not applicable (Chrome not installed)"; done
+  elif ! $_chrome_chunk_on; then
+    for _c in chrome-profiles chrome-extensions chrome-policy; do
+      record "$_c" "PASS" "not applicable (chrome chunk not enabled in rollout_enable)"
+    done
   elif [[ ! -f "${_chrome_py[2]}" ]]; then  # a copy of this script run alone (Molecule's script module)
     for _c in chrome-profiles chrome-extensions chrome-policy; do record "$_c" "SKIP" "helper missing: ${_chrome_py[2]}"; done
   elif [[ ! -f "$_chrome_spec" ]]; then
@@ -767,7 +793,11 @@ if [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY && [[ "$EUID" -ne 0 ]]; then
   else
     _chrome_tcc=""
     $IS_LINUX || _chrome_tcc=" (macOS: give the terminal Full Disk Access)"
-    case $("${_chrome_py[@]}" prefs "$_chrome_spec" --check 2>&1 | head -1 || true) in
+    _chrome_out=$("${_chrome_py[@]}" prefs "$_chrome_spec" --check 2>&1) || true
+    _chrome_status=$(grep -v '^chrome\.py: ' <<<"$_chrome_out" | head -1 || true)
+    grep -qx 'personal-unknown' <<<"$_chrome_out" && _chrome_status=personal-unknown
+    case $_chrome_status in
+      personal-unknown) record "chrome-profiles" "WARN" "cannot read Chrome's Local State, so no profile counts as personal: start and quit Chrome once, then make apply CHUNK=chrome" ;;
       unchanged) record "chrome-profiles" "PASS" ;;
       absent) record "chrome-profiles" "PASS" "no Chrome profile yet" ;;
       running) record "chrome-profiles" "WARN" "profile settings (zoom, color scheme, site settings) differ: quit Chrome, then make apply CHUNK=chrome" ;;
@@ -786,10 +816,11 @@ if [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY && [[ "$EUID" -ne 0 ]]; then
     _chrome_out=$("${_chrome_py[@]}" policy "$_chrome_spec" 2>&1) || true
     if [[ "$_chrome_out" == ok ]]; then record "chrome-policy" "PASS"
     else record "chrome-policy" "WARN" "$(tr '\n' ';' <<<"$_chrome_out" | sed 's/;$//')"; fi
-    unset _chrome_out _chrome_tcc
+    unset _chrome_out _chrome_tcc _chrome_status
   fi
   unset _chrome_spec _chrome_py _chrome_app _c
 fi
+unset _chrome_chunk_on
 
 # macOS settings that need root to apply but not to read, so a no-sudo run (NOSUDO=1) shows what is left
 if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then

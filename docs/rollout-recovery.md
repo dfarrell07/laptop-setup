@@ -300,7 +300,9 @@ open until you are done. To undo:
 ## chrome
 
 - **Why:** personal Chrome profiles from git instead of Chrome Sync ([chrome.md](chrome.md)). Apply with `make apply CHUNK=chrome`
-  (needs the desktop chunk enabled; Chrome quit).
+  (needs the desktop chunk enabled; Chrome quit). A `config.yml` that lists `rollout_enable` must add `chrome`, or the page zoom
+  (`desktop_chrome_page_zoom`, set by this chunk since it left the desktop chunk) is no longer applied; until then the Chrome checks
+  read "not applicable".
 - **Breaks if wrong:** a bad site setting or policy in a personal profile; on a machine whose policy is not ours nothing is written
   under `/etc` or `/Library`.
 - **Verify:** `make verify CHUNK=chrome` (`chrome-profiles`, `chrome-policy`); `make smoke-test` adds `chrome-extensions`.
