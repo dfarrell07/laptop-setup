@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- {{ ansible_managed }} -->
+<!-- agent-getty for one harness/profile pair: its remote-control daemon in detached tmux. Docs: docs/agent-getty.md -->
+{% set pair = _launchd_label | regex_replace('^getty-', '') | regex_replace('[^a-z0-9-]', '') %}
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.{{ dotfiles_github_user }}.claude-getty-{{ pair }}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>{{ ansible_facts['user_dir'] }}/.local/bin/agent-getty</string>
+    <string>run</string>
+    <string>{{ pair }}</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>{{ ansible_facts['user_dir'] }}/.local/bin:{{ ansible_facts['user_dir'] }}/.npm-global/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <!-- why a pair keeps restarting (not logged in, a die message): launchd has no journal -->
+  <key>StandardErrorPath</key>
+  <string>{{ ansible_facts['user_dir'] }}/Library/Logs/agent-getty-{{ pair }}.log</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <!-- agent-getty exits when its daemon ends; launchd starts it again, at most every ThrottleInterval seconds -->
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+</dict>
+</plist>

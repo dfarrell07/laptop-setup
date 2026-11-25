@@ -1,0 +1,205 @@
+---
+# roles/claude/tasks/agent_getty.yml — boot-time remote-control daemons per harness/profile pair (docs/agent-getty.md).
+- name: Assert agent_getty_pairs lists known pairs only
+  ansible.builtin.assert:
+    that:
+      - agent_getty_pairs is sequence and agent_getty_pairs is not string
+      - agent_getty_pairs | difference(_getty_supported + _getty_not_yet) | length == 0
+      - profile | default('work') != 'work' or agent_getty_pairs | select('search', '/personal2$') | list | length == 0
+      - agent_getty_dir is match('^/[A-Za-z0-9._/-]+$')
+      - agent_getty_host is match('^[A-Za-z0-9-]+$')
+    fail_msg: >-
+      agent_getty_pairs must list pairs from {{ (_getty_supported + _getty_not_yet) | join(', ') }}
+      (got {{ agent_getty_pairs | difference(_getty_supported + _getty_not_yet) | join(', ') | default('a non-list', true) }}).
+      A profile: work machine never runs personal2. agent_getty_dir must be an absolute plain path.
+
+# Pairs that cannot run yet are skipped, not failed, so a machine's list can name them ahead of time.
+- name: Warn about agent-getty pairs that are not possible yet
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: agent-getty skips {{ agent_getty_pairs | select('in', _getty_not_yet) | join(', ') }}: claude/work needs a
+      claude.ai login for Remote Control and the work profile uses Vertex; agy/work, codex/personal2 and agy/personal2
+      have no profile home yet (docs/agent-getty.md, Not possible yet).
+  when: agent_getty_pairs | intersect(_getty_not_yet) | length > 0
+
+- name: Set agent-getty pair lists
+  ansible.builtin.set_fact:
+    # agy runs its own remote-control daemon under its own service; agent-getty supervises the others
+    _getty_enabled: >-
+      {{ agent_getty_pairs | select('in', _getty_supported) | map('replace', '/', '-') | reject('equalto', 'agy-personal')
+         | list }}
+    _getty_all: "{{ _getty_supported | map('replace', '/', '-') | reject('equalto', 'agy-personal') | list }}"
+
+- name: Check for an earlier agent-getty
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.local/bin/agent-getty"
+  register: _getty_before
+
+- name: Deploy agent-getty
+  ansible.builtin.template:
+    src: agent-getty.j2
+    dest: "{{ ansible_facts['user_dir'] }}/.local/bin/agent-getty"
+    mode: "0755"
+  when: _getty_enabled | length > 0
+  register: _getty_script
+
+- name: Remove agent-getty (no pairs)
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.local/bin/agent-getty"
+    state: absent
+  when: _getty_enabled | length == 0
+
+- name: Agent-getty units (Linux)
+  when:
+    - is_linux
+    - not (system_is_container)  # user inotify triggers daemon-reload, crashes container PID 1
+  block:
+    # The session orchestrator unit agent-getty replaced (KillMode=process: its tmux session outlives the stop)
+    - name: Stop the old session orchestrator unit
+      ansible.builtin.command:
+        argv: [systemctl, --user, disable, --now, claude-orchestrator.service]
+      register: _getty_old_unit
+      changed_when: _getty_old_unit.rc == 0 and 'Removed' in _getty_old_unit.stderr
+      failed_when: false
+
+    - name: Warn that the old session orchestrator's tmux session keeps running  # noqa: no-handler
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: claude-orchestrator.service is stopped, but its tmux session (personal-<name>, in your own tmux server)
+          keeps running until you end it: tmux kill-session -t personal-<name>.
+      when: _getty_old_unit is changed
+
+    - name: Remove the old session orchestrator unit
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ ansible_facts['user_dir'] }}/.config/systemd/user/default.target.wants/claude-orchestrator.service"
+        - "{{ ansible_facts['user_dir'] }}/.config/systemd/user/claude-orchestrator.service"
+
+    # A drop-in would change what these units run; the role writes none, so one found here was put there by someone else
+    - name: Find drop-ins for agent-getty and agy units
+      ansible.builtin.find:
+        paths: "{{ ansible_facts['user_dir'] }}/.config/systemd/user"
+        patterns: ['agent-getty@*.d', 'antigravity-cli-daemon.service.d']
+        file_type: any
+      register: _getty_dropins
+
+    - name: Fail on drop-ins for agent-getty and agy units
+      ansible.builtin.fail:
+        msg: >-
+          SECURITY: {{ _getty_dropins.files | map(attribute='path') | join(', ') }} would change what agent-getty or agy's
+          daemon runs, and this playbook writes no drop-ins for them. Inspect and remove, then re-run.
+      when: _getty_dropins.files | length > 0
+
+    - name: Deploy agent-getty systemd user unit
+      ansible.builtin.template:
+        src: agent-getty@.service.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/agent-getty@.service"
+        mode: "0644"
+      when: _getty_enabled | length > 0
+      register: _getty_unit
+
+    # A running pair is adopted, not duplicated, so starting now is safe.
+    - name: Enable and start agent-getty pairs
+      ansible.builtin.systemd:
+        name: "agent-getty@{{ item }}.service"
+        scope: user
+        enabled: "{{ item in _getty_enabled }}"
+        state: "{{ 'started' if item in _getty_enabled else 'stopped' }}"
+        daemon_reload: "{{ _getty_unit is changed }}"
+      # in check mode a unit not yet deployed cannot be found
+      loop: "{{ _getty_all if _getty_enabled | length > 0 and not (ansible_check_mode and _getty_unit is changed) else [] }}"
+      register: _getty_units
+      ignore_errors: true
+
+    - name: Warn if an agent-getty pair could not be managed
+      ansible.builtin.debug:
+        msg: "WARNING: agent-getty@{{ item.item }}.service: {{ item.msg | default('unknown error') }}"
+      loop: "{{ _getty_units.results | default([]) | selectattr('failed', 'defined') | selectattr('failed') | list }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Stop agent-getty pairs (no pairs)
+      ansible.builtin.command:
+        argv: [systemctl, --user, disable, --now, "agent-getty@{{ item }}.service"]
+      loop: "{{ _getty_all }}"
+      register: _getty_off
+      changed_when: _getty_off.rc == 0 and 'Removed' in _getty_off.stderr
+      failed_when: false
+      when: _getty_enabled | length == 0
+
+    - name: Remove agent-getty systemd user unit (no pairs)
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/agent-getty@.service"
+        state: absent
+      when: _getty_enabled | length == 0
+      register: _getty_unit_gone
+
+    - name: Forget removed agent-getty units  # noqa: no-handler
+      ansible.builtin.systemd:
+        scope: user
+        daemon_reload: true
+      when: _getty_unit_gone is changed
+
+# agy has its own remote-control daemon and service (antigravity-cli-daemon on Linux): register it once, named like
+# the others, and stop it when agy/personal leaves the list. It needs agy to be signed in; until then this warns.
+- name: Antigravity remote-control daemon
+  when: not (system_is_container)
+  vars:
+    # the antigravity role's install path, off Ansible's PATH
+    _getty_agy_bin: "{{ antigravity_bin_dir | default(ansible_facts['user_dir'] ~ '/.local/bin') }}/agy"
+  block:
+    - name: Read the Antigravity remote-control daemon status
+      ansible.builtin.command:
+        argv: ["{{ _getty_agy_bin }}", remote-control, status]
+      register: _getty_agy
+      changed_when: false
+      failed_when: false
+      check_mode: false  # read-only probe
+
+    - name: Start the Antigravity remote-control daemon
+      ansible.builtin.command:
+        argv: ["{{ _getty_agy_bin }}", remote-control, start, --name, "{{ agent_getty_host }}-agy-personal"]
+      register: _getty_agy_start
+      changed_when: _getty_agy_start.rc == 0
+      failed_when: false
+      when:
+        - "'agy/personal' in agent_getty_pairs"
+        - _getty_agy.rc | default(1) == 0  # agy installed (the antigravity role runs later: a first run starts it next time)
+        - "'Daemon status: active' not in _getty_agy.stdout | default('')"
+
+    # Only the daemon agent-getty registered (its name), never one the owner started by hand
+    - name: Stop the Antigravity remote-control daemon (agy/personal removed)
+      ansible.builtin.command:
+        argv: ["{{ _getty_agy_bin }}", remote-control, stop]
+      register: _getty_agy_stop
+      changed_when: _getty_agy_stop.rc == 0
+      failed_when: false
+      when:
+        - "'agy/personal' not in agent_getty_pairs"
+        - _getty_agy.rc | default(1) == 0
+        - "'Daemon status: active' in _getty_agy.stdout | default('')"
+        - >-
+          _getty_agy.stdout | default('') is search('(?m)^Instance name: ' ~ agent_getty_host ~ '-agy-personal( |$)')
+
+    - name: Warn if the Antigravity remote-control daemon did not start
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: agy/personal: {{ 'agy is not installed yet (the antigravity role runs after this one): run make apply
+          CHUNK=agents again' if _getty_agy.rc | default(1) != 0 else 'agy remote-control start failed: '
+          ~ (_getty_agy_start.stderr | default('') | truncate(200)) }}
+      when:
+        - "'agy/personal' in agent_getty_pairs"
+        - _getty_agy_start.rc | default(0) != 0 or _getty_agy.rc | default(1) != 0
+
+# Restarting a pair ends the sessions its daemon started, so a pair already running keeps the old build until restarted
+- name: Warn that running agent-getty pairs keep the old build
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: agent-getty changed; pairs that were already running keep the old build until restarted, which ends the
+      sessions they started: {{ 'tmux -L agent-getty-<pair> kill-server (launchd starts it again)' if is_macos
+      else "systemctl --user restart 'agent-getty@<pair>'" }}.
+  when:
+    - _getty_before.stat.exists
+    - _getty_script is changed or _getty_unit | default({}) is changed

@@ -30,7 +30,9 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   bypassPermissions`, Codex `codex_approval_policy: never` with `danger-full-access`). Deny rules guard only Claude's Read/Edit
   tools and the literal `sudo`/`su` prefix; Bash and Codex run with the user's full rights, so the effective boundary is the Unix
   account, and secrets behind a YubiKey touch (vault, FIDO2 SSH) stay gated. `crossSessionInbound: accept` delivers messages from
-  any session on the account, including prompting-mode ones, without review (`claude_cross_session_inbound: hold` restores the check)
+  any session on the account, including prompting-mode ones, without review (`claude_cross_session_inbound: hold` restores the check).
+  `agent_getty_pairs` (default off) keeps remote-control daemons running from login: anyone holding the owner's claude.ai or
+  ChatGPT session can then start a session in `agent_getty_dir` with nobody at the console (docs/agent-getty.md)
 - **Supply chain** — `.npmrc ignore-scripts=true`, vendored and verified Ansible collections, SHA256-verified
   binary downloads, oh-my-zsh pinned to a commit, Go module checksum verification (see "Go Module Supply Chain")
 - **CI supply chain** — actionlint, zizmor and gitleaks run as SHA256-verified binary downloads (no third-party node actions); all GitHub

@@ -454,10 +454,13 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     Claude home (not the Vertex work home); the launchers also pass --remote-control
 #   claude_sandbox_enabled: false      (roles/claude/defaults) — Claude Code Bash sandbox (bubblewrap); off because on Fedora it left
 #     commands with no writable directory. Deny rules for the Read/Edit tools apply either way.
-#   claude_orchestrator_enabled: false  (roles/claude/defaults) — start the claude-skills session orchestrator at boot
-#     (claude-orchestrator.service, a systemd user unit; Linux); needs linger for boot without a login
-#   claude_orchestrator_checkout: ~/src/<user>/claude-skills  (roles/claude/defaults) — physical path of a checkout with skills/sessions
-#   claude_orchestrator_name: orchestrator  (roles/claude/defaults) — session personal-<name>; give each machine its own
+#   agent_getty_pairs: []            (roles/claude/defaults) — remote-control daemons kept running from boot, one per
+#     harness/profile pair, so new sessions can be started from the phone/web (docs/agent-getty.md). Pairs: claude/personal,
+#     claude/personal2, codex/work, codex/personal, agy/personal; a profile: work machine never takes personal2. Linux work
+#     laptop: [claude/personal, codex/work, codex/personal, agy/personal]; Mac: [claude/personal, claude/personal2,
+#     codex/personal, agy/personal]
+#   agent_getty_dir: ~                (roles/claude/defaults) — folder Claude starts new sessions in (its trust prompt is answered)
+#   agent_getty_host: <hostname>      (roles/claude/defaults) — prefix of the daemons' names in Remote Control
 #   claude_queue_enabled: false        (roles/claude/defaults) — enable Claude queue poller
 #     (claude-queue-poller.sh via a systemd user timer; launchd on macOS)
 #   claude_queue_repo: ""              (roles/claude/defaults) — REQUIRED when claude_queue_enabled: true;

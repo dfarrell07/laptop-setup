@@ -1,0 +1,94 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# agent-getty: keep one harness/profile pair's remote-control daemon running in detached tmux, so new agent sessions
+# can be started on this machine from the phone or web. Docs: docs/agent-getty.md in laptop-setup.
+#   agent-getty run <pair>      what the service manager runs: start the pair's tmux session unless it is running,
+#                               then wait while it lives; exit 1 when it ends, so the service manager restarts it
+#   agent-getty attach <pair>   attach to the pair's daemon (detach: C-b d)
+#   agent-getty ls              each enabled pair and whether it runs
+# Pairs: claude-personal, claude-personal2, codex-work, codex-personal. Each has its own tmux server
+# (tmux -L agent-getty-<pair>), so a stop or a crash takes down that pair only. bash 3.2 compatible (macOS).
+set -u
+
+ENABLED={{ _getty_enabled | join(' ') | quote }}
+DIR={{ agent_getty_dir | quote }}
+HOST={{ agent_getty_host | quote }}
+CODEX_WORK={{ codex_work_config_dir | quote }}
+CODEX_PERSONAL={{ codex_personal_config_dir | quote }}
+CLAUDE_PERSONAL={{ claude_default_config_dir | quote }}
+CLAUDE_PERSONAL2={{ claude_personal2_config_dir | quote }}
+MODE={{ claude_default_mode | quote }}
+POLL=${AGENT_GETTY_POLL:-15}
+TMUX_BIN=${AGENT_GETTY_TMUX:-tmux}
+
+die() { echo "agent-getty: $1" >&2; exit "${2:-1}"; }
+t() { env -u TMUX "$TMUX_BIN" -L "agent-getty-$PAIR" -f /dev/null "$@"; }
+alive() { t has-session -t "=getty-$PAIR" 2>/dev/null && [ "$(t display-message -p -t "=getty-$PAIR:" '#{pane_dead}' 2>/dev/null)" != 1 ]; }
+
+# The pair's daemon, with only that profile's account (the variables mirror cper, cper2, owork and oper in zshrc.j2).
+command_for() {
+	local -a vertex=(-u CLAUDE_CODE_USE_VERTEX -u ANTHROPIC_VERTEX_PROJECT_ID -u CLOUD_ML_REGION
+		-u GOOGLE_APPLICATION_CREDENTIALS -u GOOGLE_CLOUD_PROJECT -u ANTHROPIC_BASE_URL -u ANTHROPIC_API_KEY
+		-u ANTHROPIC_AUTH_TOKEN -u CLAUDE_CODE_OAUTH_TOKEN -u CLAUDE_CODE_USE_BEDROCK -u CLAUDE_CODE_USE_FOUNDRY)
+	local -a openai=(-u OPENAI_API_KEY -u CODEX_API_KEY -u OPENAI_BASE_URL -u OPENAI_ORG_ID -u OPENAI_PROJECT_ID)
+	case $1 in
+	# Each harness also drops the other's account variables: a daemon holds only its own profile's credentials.
+	claude-personal) CMD=(env "${vertex[@]}" "${openai[@]}" CLAUDE_CODE_USE_VERTEX=0 "CLAUDE_CONFIG_DIR=$CLAUDE_PERSONAL") ;;
+	claude-personal2) CMD=(env "${vertex[@]}" "${openai[@]}" CLAUDE_CODE_USE_VERTEX=0 "CLAUDE_CONFIG_DIR=$CLAUDE_PERSONAL2") ;;
+	codex-work) CMD=(env "${vertex[@]}" "CODEX_HOME=$CODEX_WORK" codex remote-control --no-daemon); return ;;
+	codex-personal)
+		mkdir -p "$CODEX_PERSONAL" && chmod 700 "$CODEX_PERSONAL" || die "cannot create $CODEX_PERSONAL"
+		CMD=(env "${vertex[@]}" "${openai[@]}" "CODEX_HOME=$CODEX_PERSONAL" codex remote-control --no-daemon); return ;;
+	*) die "unknown pair '$1' (claude-personal, claude-personal2, codex-work, codex-personal)" 2 ;;
+	esac
+	# Sessions started from the phone run in the mode the shell launchers' sessions do (claude_default_mode).
+	CMD+=(claude remote-control --name "$HOST-$1" --permission-mode "$MODE")
+}
+
+# Claude asks once whether to trust the folder it starts sessions in; agent_getty_dir is the owner's choice of folder,
+# so the prompt naming exactly it is answered. Any other prompt is left for the owner (agent-getty attach).
+answer_trust() {
+	local _
+	for _ in 1 2 3 4 5 6 7 8 9 10; do
+		if t capture-pane -p -t "=getty-$PAIR:" 2>/dev/null | grep -qxF "Trust $DIR? [y/N]"; then
+			t send-keys -t "=getty-$PAIR:" y Enter
+			return
+		fi
+		sleep 2
+	done
+}
+
+# Stopping the service stops the daemon too: tmux built with systemd support moves each pane into its own scope, outside
+# the unit's cgroup, and launchd's bootout misses the tmux server (setsid). The pane's process group and the server go.
+stop() {
+	local pid
+	pid=$(t display-message -p -t "=getty-$PAIR:" '#{pane_pid}' 2>/dev/null) && kill -TERM -- "-$pid" 2>/dev/null
+	t kill-server 2>/dev/null
+	exit 0
+}
+
+run() {
+	PAIR=$1
+	command_for "$PAIR"
+	if ! alive; then
+		t kill-server 2>/dev/null # a server whose session died: start clean
+		t new-session -d -s "getty-$PAIR" -x 200 -y 50 -c "$DIR" -- "${CMD[@]}" || die "could not start getty-$PAIR"
+		case $PAIR in claude-*) answer_trust ;; esac
+	fi
+	trap stop TERM INT HUP
+	while alive; do
+		sleep "$POLL" &
+		wait $! # so a stop signal is handled at once, not after the sleep
+	done
+	die "getty-$PAIR ended"
+}
+
+case ${1:-} in
+run) [ $# = 2 ] || die "usage: agent-getty run <pair>" 2; run "$2" ;;
+attach) [ $# = 2 ] || die "usage: agent-getty attach <pair>" 2; PAIR=$2; command_for "$PAIR"; t attach -t "=getty-$PAIR" ;;
+ls)
+	for PAIR in $ENABLED; do
+		if alive; then echo "$PAIR running"; else echo "$PAIR stopped"; fi
+	done ;;
+*) die "usage: agent-getty run|attach <pair> | ls" 2 ;;
+esac
