@@ -68,30 +68,39 @@ record() { # name status [detail]
 # Detect profile from config.yml so work-only checks are correctly gated.
 # 'profile' is an Ansible variable never exported to the shell; read it here.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-_cfg="$SCRIPT_DIR/../config.yml"
-# Fresh checkouts have no machine-specific config; use role defaults.
-[[ -f "$_cfg" ]] || _cfg=/dev/null
+# Fresh checkouts have no machine-specific config; use role defaults. The readers below get a copy without CR line
+# endings or a value's !unsafe tag (for Ansible such a value is a plain string), removed where _cfg is unset.
+_cfg=/dev/null _cfg_tmp=
+if [[ -f "$SCRIPT_DIR/../config.yml" ]]; then
+  if _cfg_tmp=$(mktemp "${TMPDIR:-/tmp}/smoke-cfg.XXXXXX" 2>/dev/null); then
+    trap 'rm -f "$_cfg_tmp"' EXIT
+    sed -E $'s/\r$//; s/^([A-Za-z0-9_]+:)[[:space:]]+!unsafe([[:space:]]+|$)/\\1 /' "$SCRIPT_DIR/../config.yml" >"$_cfg_tmp" 2>/dev/null
+    _cfg=$_cfg_tmp
+  else
+    _cfg_tmp='' _cfg="$SCRIPT_DIR/../config.yml"  # no temporary file: the file as it is
+  fi
+fi
 profile="work"
 grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && profile="personal"
 [[ -z "$PROFILE_OVERRIDE" ]] || profile="$PROFILE_OVERRIDE"
 _codex_enabled=true
-grep -qiE '^(codex_enabled|packages_install_binaries):[[:space:]]*(false|no|off)([[:space:]]|$)|^codex_install_method:[[:space:]]*["'"'"']?skip["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _codex_enabled=false
+grep -qiE '^(codex_enabled|packages_install_binaries):[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)|^codex_install_method:[[:space:]]*["'"'"']?skip["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _codex_enabled=false
 _init_on_free=true
-grep -qiE '^system_init_on_free:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _init_on_free=false
+grep -qiE '^system_init_on_free:[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _init_on_free=false
 _tlp_enabled=false
-grep -qiE '^system_tlp_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _tlp_enabled=true
+grep -qiE '^system_tlp_enabled:[[:space:]]*["'"'"']?(true|yes|on|1)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _tlp_enabled=true
 _bpfman_enabled=false
-grep -qiE '^packages_bpfman_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _bpfman_enabled=true
+grep -qiE '^packages_bpfman_enabled:[[:space:]]*["'"'"']?(true|yes|on|1)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _bpfman_enabled=true
 _containers_environment_d_enabled=false
-grep -qiE '^containers_environment_d_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _containers_environment_d_enabled=true
+grep -qiE '^containers_environment_d_enabled:[[:space:]]*["'"'"']?(true|yes|on|1)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _containers_environment_d_enabled=true
 _notes_enabled=false
-grep -qiE '^notes_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _notes_enabled=true
+grep -qiE '^notes_enabled:[[:space:]]*["'"'"']?(true|yes|on|1)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _notes_enabled=true
 _disable_bluetooth=true
-grep -qiE '^system_disable_bluetooth:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _disable_bluetooth=false
+grep -qiE '^system_disable_bluetooth:[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _disable_bluetooth=false
 _mask_nfs=true
-grep -qiE '^system_mask_nfs_server:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_nfs=false
+grep -qiE '^system_mask_nfs_server:[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_nfs=false
 _luks_discards=false
-grep -qiE '^system_luks_discards_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _luks_discards=true
+grep -qiE '^system_luks_discards_enabled:[[:space:]]*["'"'"']?(true|yes|on|1)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _luks_discards=true
 _macos_always_on=false
 # first number in the value, ignoring a trailing comment; base 10 even with a leading 0
 _cfg_num() { awk -F: -v k="$1" '$1 == k {sub(/#.*/, "", $2); if (match($2, /[0-9]+/)) print substr($2, RSTART, RLENGTH)}' "$_cfg" 2>/dev/null || true; }
@@ -100,48 +109,48 @@ _idle_display=$(_cfg_num desktop_wm_idle_display_timeout)
 [[ "$_idle_lock" =~ ^[0-9]+$ ]] && _idle_lock=$((10#$_idle_lock)) || _idle_lock=3600
 [[ "$_idle_display" =~ ^[0-9]+$ ]] && _idle_display=$((10#$_idle_display)) || _idle_display=3900
 _macos_gnu_tools=true
-grep -qiE '^dotfiles_macos_gnu_tools:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_gnu_tools=false
+grep -qiE '^dotfiles_macos_gnu_tools:[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_gnu_tools=false
 _podman_machine=true
-grep -qiE '^containers_macos_machine_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _podman_machine=false
+grep -qiE '^containers_macos_machine_enabled:[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _podman_machine=false
 _docker_shim=true
 _launchd_gnu=true  # dotfiles_macos_launchd_gnu_tools: GUI apps get the GNU tools first too
-grep -qiE '^dotfiles_macos_launchd_gnu_tools:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _launchd_gnu=false
-grep -qiE '^containers_macos_docker_shim:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _docker_shim=false
+grep -qiE '^dotfiles_macos_launchd_gnu_tools:[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _launchd_gnu=false
+grep -qiE '^containers_macos_docker_shim:[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _docker_shim=false
 _macos_python=$(awk -F: '/^dotfiles_macos_python:/{sub(/#.*/, "", $2); gsub(/[[:space:]"'"'"']/, "", $2); print $2}' "$_cfg" 2>/dev/null || true)
 [[ "$_macos_python" =~ ^python@[0-9.]+$ ]] || _macos_python=python@3.14
 _podman_machine_name=$(awk -F: '/^containers_macos_machine_name:/{sub(/#.*/, "", $2); gsub(/[[:space:]"'"'"']/, "", $2); print $2}' "$_cfg" 2>/dev/null || true)
 [[ "$_podman_machine_name" =~ ^[A-Za-z0-9._-]+$ ]] || _podman_machine_name=podman-machine-default
-grep -qiE '^desktop_macos_always_on:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_always_on=true
+grep -qiE '^desktop_macos_always_on:[[:space:]]*["'"'"']?(true|yes|on|1)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_always_on=true
 _claude_mode=$(sed -nE 's/^claude_default_mode:[[:space:]]*["'\'']?([A-Za-z]+)["'\'']?.*/\1/p' "$_cfg" 2>/dev/null | tail -1)
 _claude_mode=${_claude_mode:-bypassPermissions}
 # Remote Login follows desktop_macos_always_on and Screen Sharing is off, unless config.yml sets them
 _macos_remote_login=$_macos_always_on _macos_screen_sharing=false
-grep -qiE '^desktop_macos_remote_login:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_remote_login=true
-grep -qiE '^desktop_macos_remote_login:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_remote_login=false
-grep -qiE '^desktop_macos_screen_sharing:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_screen_sharing=true
-grep -qiE '^desktop_macos_screen_sharing:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_screen_sharing=false
+grep -qiE '^desktop_macos_remote_login:[[:space:]]*["'"'"']?(true|yes|on|1)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_remote_login=true
+grep -qiE '^desktop_macos_remote_login:[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_remote_login=false
+grep -qiE '^desktop_macos_screen_sharing:[[:space:]]*["'"'"']?(true|yes|on|1)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_screen_sharing=true
+grep -qiE '^desktop_macos_screen_sharing:[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_screen_sharing=false
 _claude_sandbox=false
-grep -qiE '^claude_sandbox_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _claude_sandbox=true
+grep -qiE '^claude_sandbox_enabled:[[:space:]]*["'"'"']?(true|yes|on|1)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _claude_sandbox=true
 _mask_iscsi=true
-grep -qiE '^system_mask_iscsi:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_iscsi=false
+grep -qiE '^system_mask_iscsi:[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_iscsi=false
 _usbguard_enabled=true
-grep -qiE '^system_install_usbguard:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _usbguard_enabled=false
+grep -qiE '^system_install_usbguard:[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _usbguard_enabled=false
 _disable_usb_storage=false
-grep -qiE '^system_disable_usb_storage:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _disable_usb_storage=true
+grep -qiE '^system_disable_usb_storage:[[:space:]]*["'"'"']?(true|yes|on|1)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _disable_usb_storage=true
 _containers_policy_enabled=true
-grep -qiE '^containers_policy_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _containers_policy_enabled=false
+grep -qiE '^containers_policy_enabled:[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _containers_policy_enabled=false
 _containers_enforce_fqin=true
-grep -qiE '^containers_enforce_fqin:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _containers_enforce_fqin=false
+grep -qiE '^containers_enforce_fqin:[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _containers_enforce_fqin=false
 _mask_abrt=true
-grep -qiE '^system_mask_abrt:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_abrt=false
+grep -qiE '^system_mask_abrt:[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_abrt=false
 _rpmfusion_free=true
-grep -qiE '^repo_rpmfusion_free:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _rpmfusion_free=false
+grep -qiE '^repo_rpmfusion_free:[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _rpmfusion_free=false
 _aide_enabled=false
-grep -qiE '^system_aide_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _aide_enabled=true
+grep -qiE '^system_aide_enabled:[[:space:]]*["'"'"']?(true|yes|on|1)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _aide_enabled=true
 _devshm_noexec=true
-grep -qiE '^system_devshm_noexec:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _devshm_noexec=false
+grep -qiE '^system_devshm_noexec:[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _devshm_noexec=false
 _agent_fwd=$(awk -F': ' '/^system_ssh_allow_agent_forwarding:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
-case "$(printf %s "$_agent_fwd" | tr "[:upper:]" "[:lower:]")" in yes|true|on) _agent_fwd=yes ;; *) _agent_fwd=no ;; esac
+case "$(printf %s "$_agent_fwd" | tr "[:upper:]" "[:lower:]")" in yes|true|on|1) _agent_fwd=yes ;; *) _agent_fwd=no ;; esac
 _cfg_ssh_port=$(awk -F': ' '/^ssh_port:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
 [[ -z "$_cfg_ssh_port" ]] && _cfg_ssh_port="722"
 # Validate ssh_port matches decimal format to prevent regex injection in grep patterns
@@ -156,7 +165,7 @@ else
   _lockdown_intended="integrity"  # role default
 fi
 # Read desktop_sway_trackpoint_id if configured (for TrackPoint device validation)
-_trackpoint_id=$(awk -F': ' '/^desktop_sway_trackpoint_id:/{gsub(/^[[:space:]]*["'"'"']|["'"'"'][[:space:]]*$/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
+_trackpoint_id=$(awk -F': ' '/^desktop_sway_trackpoint_id:/{sub(/#.*$/, "", $2); gsub(/^[[:space:]]*["'"'"']|["'"'"'][[:space:]]*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
 _desktop_terminal=$(awk -F': ' '/^desktop_terminal:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
 [[ -n "$_desktop_terminal" ]] || _desktop_terminal="alacritty"  # role default on Linux
 _desktop_env=$(awk -F': ' '/^desktop_environment:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
@@ -178,9 +187,9 @@ USER="${USER:-$(id -un)}"  # cron/env -i runs leave USER unset; later checks use
 # Read before _cfg goes away: the work Codex home (value up to an inline comment, quotes and spaces trimmed) and the
 # user-updater opt-out.
 _codex_work=$(awk '/^codex_work_config_dir:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/[[:space:]]*#.*$/, "");
-  gsub(/^["\047]|["\047]$/, ""); sub(/[[:space:]]+$/, ""); print; exit}' "$_cfg" 2>/dev/null || true)
+  sub(/[[:space:]]+$/, ""); gsub(/^["\047]|["\047]$/, ""); print; exit}' "$_cfg" 2>/dev/null || true)
 _acli_site=$(awk '/^acli_site:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/[[:space:]]*#.*$/, "");
-  gsub(/^["\047]|["\047]$/, ""); sub(/[[:space:]]+$/, ""); print; exit}' "$_cfg" 2>/dev/null || true)
+  sub(/[[:space:]]+$/, ""); gsub(/^["\047]|["\047]$/, ""); print; exit}' "$_cfg" 2>/dev/null || true)
 # Not in config.yml: the claude role's default (roles/claude/defaults/main.yml acli_site), Red Hat's site on the work
 # profile and none on personal. Only an explicit acli_site: '' turns the check off.
 if ! grep -q '^acli_site:' "$_cfg" 2>/dev/null; then
@@ -188,7 +197,7 @@ if ! grep -q '^acli_site:' "$_cfg" 2>/dev/null; then
 fi
 # Personal agent homes for agent-cli-logins: config.yml overrides, defaults otherwise ("~" expanded there)
 _cfg_value() { awk -v k="$1" '$0 ~ "^" k ":" {sub(/^[^:]*:[[:space:]]*/, ""); sub(/[[:space:]]*#.*$/, "");
-  gsub(/^["\047]|["\047]$/, ""); sub(/[[:space:]]+$/, ""); print; exit}' "$_cfg" 2>/dev/null || true; }
+  sub(/[[:space:]]+$/, ""); gsub(/^["\047]|["\047]$/, ""); print; exit}' "$_cfg" 2>/dev/null || true; }
 _claude_home=$(_cfg_value claude_default_config_dir)
 _claude_home2=$(_cfg_value claude_personal2_config_dir)
 _codex_personal=$(_cfg_value codex_personal_config_dir)
@@ -222,7 +231,7 @@ grep -qiE '^claude_personal2_instance_enabled:[[:space:]]*["'"'"']?(false|no|off
   && _claude_home2_off=true
 unset -f _cfg_value
 _user_updates_off=false
-grep -qiE '^packages_user_updates_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _user_updates_off=true
+grep -qiE '^packages_user_updates_enabled:[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _user_updates_off=true
 # claude_extra_config_dirs, a flow ([a, b]) or block (- a) list: one entry per line, comments, quotes and spaces trimmed
 _claude_extra_dirs=$(awk '
   function trim(s) { sub(/[[:space:]]*#.*$/, "", s); gsub(/^[[:space:]"\047]+|[[:space:]"\047]+$/, "", s); return s }
@@ -240,6 +249,8 @@ _drive_accounts=$(awk '
   block && /^[[:space:]]*-/ { sub(/^[[:space:]]*-/, ""); print trim($0); next }
   block && /^[^[:space:]#]/ { block = 0 }' "$_cfg" 2>/dev/null || true)
 unset _cfg
+[[ -z "$_cfg_tmp" ]] || { rm -f "$_cfg_tmp"; trap - EXIT; }  # the cleaned copy of config.yml
+unset _cfg_tmp
 # Check tools as the login shell finds them: make verify runs with make's PATH, which lacks the user bin
 # directories the dotfiles PATH puts first (the claude, codex and agy CLIs live there).
 # Never as root (sudo may keep the user's HOME), and only directories this user owns that group and others
@@ -980,7 +991,9 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   # Prints off, PASS, or FAIL (WARN in Molecule: a CI runner has no login session for LaunchAgents)
   _macos_agent_state() { # process toggle_value (read from config.yml at the top)
     # off by config, or never built (packages_install_binaries: false skips the source builds)
-    if [[ "$_desktop_env" != aerospace || "$2" =~ ^([Ff]alse|[Nn]o|0)$ || "$_install_binaries_cfg" =~ ^([Ff]alse|[Nn]o|0)$ ]]; then echo off
+    local on bins
+    on=$(printf %s "$2" | tr "[:upper:]" "[:lower:]") bins=$(printf %s "$_install_binaries_cfg" | tr "[:upper:]" "[:lower:]")
+    if [[ "$_desktop_env" != aerospace || "$on" =~ ^(false|no|off|0)$ || "$bins" =~ ^(false|no|off|0)$ ]]; then echo off
     elif pgrep -x "$1" &>/dev/null; then echo PASS
     elif [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then echo WARN
     else echo FAIL; fi
@@ -3291,7 +3304,7 @@ fi
 
 # ---- Output ----
 if $JSON; then
-  printf '{"results":[%s],"failures":%d,"warns":%d}\n' "$(IFS=,; printf '%s' "${RESULTS[*]}")" "$FAILURES" "$WARNS"
+  printf '{"results":[%s],"failures":%d,"warns":%d}\n' "$(IFS=,; printf '%s' ${RESULTS[@]+"${RESULTS[*]}"})" "$FAILURES" "$WARNS"
 else
   total=${#RESULTS[@]}
   passes=$((total - FAILURES - WARNS - SKIPS))
