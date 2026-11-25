@@ -57,6 +57,8 @@ esac
 '''
 
 
+@unittest.skipUnless(os.uname().sysname == 'Linux',
+                     'drive-sync is Linux-only until its macOS slice: flock, /etc/machine-id')
 class DriveSyncTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

@@ -449,6 +449,7 @@ class RenderedConfigTests(unittest.TestCase):
         for line in order:
             self.assertRegex(line, r'^order \+= "[^"]+"$')
 
+    @unittest.skipUnless(os.uname().sysname == 'Linux', 'the sway bar script is Linux-only: /proc, bash 4.3')
     def test_bar_counts_rootless_containers_and_only_terminal_agent_sessions(self):
         with tempfile.TemporaryDirectory() as name:
             stubs = Path(name)
@@ -659,6 +660,7 @@ class RenderedConfigTests(unittest.TestCase):
                                                              WLR_BACKENDS='headless', WLR_RENDERER='pixman'))
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    @unittest.skipUnless(os.uname().sysname == 'Linux', 'the sway bar script is Linux-only: /proc, bash 4.3')
     def test_bar_shows_the_microphone_state_after_volume(self):
         for wpctl, expect in [('Volume: 0.40 [MUTED]', '"name":"mic","full_text":"MIC muted"'),
                               ('Volume: 0.40', '"name":"mic","full_text":"MIC on","color":"#FFFF00"'),

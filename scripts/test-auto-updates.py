@@ -317,6 +317,7 @@ class AutoUpdateTests(unittest.TestCase):
                                          capture_output=True, text=True)
                     self.assertEqual(run.stdout.strip(), expected, run.stderr)
 
+    @unittest.skipUnless(os.uname().sysname == 'Linux', 'the sway bar script is Linux-only: /proc, bash 4.3')
     def test_bar_shows_upd_only_when_an_update_unit_failed(self):
         defaults = yaml.safe_load((ROOT / 'roles/desktop/defaults/main.yml').read_text())
         for failed in [None, 'user', 'system']:
@@ -340,6 +341,7 @@ class AutoUpdateTests(unittest.TestCase):
                                         timeout=30, env=dict(os.environ, PATH=f'{stubs}:/usr/bin:/bin', HOME=name))
                 self.assertEqual('"full_text":"UPD"' in result.stdout.splitlines()[-1], failed is not None)
 
+    @unittest.skipUnless(os.uname().sysname == 'Linux', 'the sway bar script is Linux-only: /proc, bash 4.3')
     def test_bar_shows_every_configured_vpn_with_its_own_state(self):
         defaults = yaml.safe_load((ROOT / 'roles/desktop/defaults/main.yml').read_text())
         extra = [{'name': 'Mullvad', 'command': ['mullvad', 'status'], 'connected': '^Connected'}]  # not installed here
