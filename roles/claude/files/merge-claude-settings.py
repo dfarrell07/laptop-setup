@@ -10,8 +10,8 @@ the existing file or the policy is not a JSON object.
 Merge rules: user keys are kept; permissions.deny is the de-duplicated union
 (policy entries first, retired policy entries dropped); permissions.allow/ask stay the user's; hooks keep the user's
 entries and replace earlier managed ones (a hook running the same script as a policy hook); every other policy
-key (sandbox, enableAllProjectMcpServers, env keys) overrides
-the user's value, merging dictionaries recursively. --defaults (plugin declarations)
+key (sandbox, enableAllProjectMcpServers, crossSessionInbound, env keys) overrides
+the user's value, merging dictionaries recursively. --defaults (plugin declarations, remoteControlAtStartup)
 only adds absent keys and absent marketplace or plugin entries, so a user's entry,
 including a disabled plugin, is never changed. --retire names further deny entries to drop
 (claude_retired_deny) unless the policy itself still denies them.

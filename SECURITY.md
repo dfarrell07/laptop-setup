@@ -31,6 +31,11 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   tools and the literal `sudo`/`su` prefix; Bash and Codex run with the user's full rights, so the effective boundary is the Unix
   account, and secrets behind a YubiKey touch (vault, FIDO2 SSH) stay gated. `crossSessionInbound: accept` delivers messages from
   any session on the account, including prompting-mode ones, without review (`claude_cross_session_inbound: hold` restores the check).
+  Every Claude launcher passes `--remote-control` and `~/.claude` and `~/.claude-per2` start with `remoteControlAtStartup`, so
+  whoever holds the owner's claude.ai session can drive these bypass-mode sessions from the web or the phone (turn it off in
+  `/config` by choosing false, which the next run keeps; "default" deletes the key and the next run sets it again). Extra
+  homes (`claude_extra_config_dirs`, another person's login) are not given it; one set up before 2026-11-25 kept it
+  from the old policy, so turn it off in that home's `/config`.
   `agent_getty_pairs` (default off) keeps remote-control daemons running from login: anyone holding the owner's claude.ai or
   ChatGPT session can then start a session in `agent_getty_dir` with nobody at the console (docs/agent-getty.md)
 - **Supply chain** — `.npmrc ignore-scripts=true`, vendored and verified Ansible collections, SHA256-verified

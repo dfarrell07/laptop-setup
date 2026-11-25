@@ -462,7 +462,7 @@ else
   unset _to _msg _cd _cx _disp _rc _claude_homes
   unset -f _home_disp
 fi
-unset _logged_out _timed_out _claude_home _claude_home2 _claude_home2_off _codex_personal
+unset _logged_out _timed_out _codex_personal
 # Session placement (claude role writes ~/.config/claude-sessions/machine; the launcher decides): no misplaced sessions
 _placement=$HOME/.config/claude-sessions/machine
 _launcher=$(compgen -G "${HOME}/src/*/claude-skills*/skills/sessions/scripts/session.sh" | head -1 || true)
@@ -1461,27 +1461,34 @@ else
     "crossSessionInbound is not \"accept\" in settings.json of: ${_csi_bad[*]} — run: make apply CHUNK=agents"
 fi
 unset _cd _csi_bad _csi_seen
-# Remote Control: plain claude starts with it in every personal home (remoteControlAtStartup; the Vertex work home
-# cannot use it), and every shell function that starts claude passes --remote-control (a stale local.zsh launcher once
-# replaced the managed cper and dropped it).
+# Remote Control: the owner's personal homes have remoteControlAtStartup (seeded; false is the owner's /config choice),
+# and every shell function that starts claude passes --remote-control (a stale local.zsh launcher once replaced the
+# managed cper and dropped it).
 _rc_bad=()
-for _cd in "${_csi_dirs[@]}"; do
-  [[ -d "$_cd" && "$_cd" != "$HOME/.claude-work" ]] || continue
-  python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("remoteControlAtStartup") is True else 1)' \
-    "$_cd/settings.json" 2>/dev/null || _rc_bad+=("${_cd##*/}: remoteControlAtStartup not true (make apply CHUNK=agents)")
+# the homes the role seeds: the default one, and personal2 unless claude_personal2_instance_enabled is off
+_rc_homes=("${_claude_home:-$HOME/.claude}")
+$_claude_home2_off || _rc_homes+=("${_claude_home2:-$HOME/.claude-per2}")
+for _cd in "${_rc_homes[@]}"; do
+  _cd=${_cd/#\~/$HOME}
+  [[ -d "$_cd" ]] || continue
+  python3 -c 'import json,sys; sys.exit(0 if "remoteControlAtStartup" in json.load(open(sys.argv[1])) else 1)' \
+    "$_cd/settings.json" 2>/dev/null || _rc_bad+=("${_cd##*/}: remoteControlAtStartup not set (make apply CHUNK=agents)")
 done
 if command -v zsh &>/dev/null && [[ -f "$HOME/.zshrc" ]]; then
+  # Names come behind a marker: startup files may print (macOS Terminal: "Restored session: <date>").
   # shellcheck disable=SC2016  # expanded by zsh, not here
   while IFS= read -r _f; do
+    [[ $_f == *RC-BAD:* ]] || continue  # anywhere: startup output without a trailing newline precedes the first
+    _f=${_f##*RC-BAD:}
     [[ -n "$_f" ]] && _rc_bad+=("shell function $_f starts claude without --remote-control (check ~/.config/zsh/local.zsh)")
   done < <(zsh -i -c 'for f in ${(k)functions}; do for l in "${(@f)functions[$f]}"; do
              [[ $f != claude && ($l == *"claude --"* || $l == *"command claude "*) && $l != *--remote-control* ]] &&
-               { print -r -- $f; break; }; done; done' \
+               { print -r -- "RC-BAD:$f"; break; }; done; done' \
            </dev/null 2>/dev/null || true)
 fi
 if (( ${#_rc_bad[@]} == 0 )); then record "claude-remote-control" "PASS"
 else record "claude-remote-control" "WARN" "$(IFS=';'; echo "${_rc_bad[*]}")"; fi
-unset _csi_dirs _claude_extra_dirs _rc_bad _f
+unset _csi_dirs _claude_extra_dirs _rc_bad _f _rc_homes _cd _claude_home _claude_home2 _claude_home2_off
 if [[ -d "$HOME/.claude-personal" ]]; then
   record "claude-retired-home" "WARN" "$HOME/.claude-personal is no longer managed (no 0700 tmpfiles rule); review and remove it"
 fi

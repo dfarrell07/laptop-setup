@@ -121,8 +121,9 @@ _claude_check_base_url() {
   fi
 }
 
-# Instance guard + tmux launchers. Every launcher starts Claude with --remote-control (claude.ai/code and the
-# mobile app can drive the session); keep it first, before a dash option, so its optional name never takes a prompt.
+# Instance guard + tmux launchers. Every launcher starts Claude with --remote-control, so claude.ai/code and the mobile
+# app can drive personal sessions (under Vertex, cwork, Claude starts normally and Remote Control stays off); keep it
+# first, before a dash option, so its optional name never takes a prompt.
 claude() {
   if [[ -z "${CLAUDE_CONFIG_DIR:-}" ]]; then
     echo "ERROR: CLAUDE_CONFIG_DIR not set. Use {% if profile == 'work' %}'cwork' (work), {% endif %}'cper'{% if claude_personal2_instance_enabled | bool %} or 'cper2'{% endif %} (personal)." >&2

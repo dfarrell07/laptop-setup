@@ -185,7 +185,7 @@ open until you are done. To undo:
   Claude config dir has `crossSessionInbound: accept`; `codex`: `codex --version` runs, so a failed Codex npm install, which the role only
   warns about, shows up here). Claude's sandbox settings are not mapped: check `jq .sandbox ~/.claude/settings.json` (`enabled` follows
   `claude_sandbox_enabled`). `make smoke-test` also reports `claude-remote-control` (every launcher passes `--remote-control`
-  and each personal home sets `remoteControlAtStartup`; it also depends on the dotfiles chunk). Antigravity has no mapped check: run `agy --version` and `ls -l ~/.gemini*/GEMINI.md`.
+  and `~/.claude` and `~/.claude-per2` have `remoteControlAtStartup` set, seeded where it was missing; it also depends on the dotfiles chunk). Antigravity has no mapped check: run `agy --version` and `ls -l ~/.gemini*/GEMINI.md`.
 - **Undo:** per instance, restore the oldest `~/.claude*/settings.json.bak-<timestamp>` (written by the merge, which keeps every backup);
   if the instance had no `settings.json` before the chunk, delete `settings.json` instead (the backup then holds only the seeded file),
   and delete instance directories the chunk created (for example `~/.claude-per2`). The replaced `CLAUDE.md`, `AGENTS.md`, `GEMINI.md` and
