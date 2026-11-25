@@ -49,6 +49,8 @@
     - not csb_rhel  # IT owns RHEL CSB hosts: no third-party rpm there
     - ansible_facts['architecture'] == 'x86_64'
     - repos_dnf_acli_baseurl is not defined  # the internal mirror path in repos_dnf installs it instead
+  vars:
+    _acli_pin: "{{ packages_acli_version | regex_replace('-.*', '') }}"
   block:
     - name: Assert the acli version is a plain release string (interpolated into the URL)
       ansible.builtin.assert:
@@ -62,17 +64,11 @@
       failed_when: false
       check_mode: false
 
-    - name: Report acli install not simulated in check mode
-      ansible.builtin.debug:
-        msg: "CHECK MODE: acli {{ packages_acli_version }} would be downloaded (SHA256-pinned) and installed; not simulated."
-      when:
-        - ansible_check_mode
-        - (_acli_rpm.stdout | default('')) != (packages_acli_version | replace('-', '~'))
-
     - name: Download and install the pinned acli rpm
       when:
         - not ansible_check_mode  # tempfile does not run in check mode
-        - (_acli_rpm.stdout | default('')) != (packages_acli_version | replace('-', '~'))
+        # missing or older than the pin; a newer acli (Atlassian's own repo, say) is left alone
+        - _acli_rpm.rc != 0 or (_acli_rpm.stdout | regex_replace('[~-].*', '')) is version(_acli_pin, '<')
       # Root-owned 0700 temp dir: nobody else can swap or redirect the verified rpm before dnf reads it.
       become: true
       tags: [become]
@@ -126,6 +122,9 @@
   vars:
     _acli_bin: "{{ ansible_facts['user_dir'] }}/.local/bin/acli"
     _acli_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'arm64' else 'amd64' }}"
+    _acli_pin: "{{ packages_acli_version | regex_replace('-.*', '') }}"
+    _acli_have: >-
+      {{ _acli_darwin_version.stdout | default('') | regex_findall('acli version ([0-9][0-9.]*)') | first | default('') }}
   block:
     - name: Assert the acli version is a plain release string (interpolated into the URL)
       ansible.builtin.assert:
@@ -139,17 +138,10 @@
       failed_when: false
       check_mode: false  # read-only probe
 
-    - name: Report acli install not simulated in check mode (macOS)
-      ansible.builtin.debug:
-        msg: "CHECK MODE: acli {{ packages_acli_version }} would be downloaded (SHA256-pinned) and installed; not simulated."
-      when:
-        - ansible_check_mode
-        - ('acli version ' ~ packages_acli_version) not in (_acli_darwin_version.stdout | default(''))
-
     - name: Download and install the pinned acli tarball (macOS)
       when:
         - not ansible_check_mode  # tempfile does not run in check mode
-        - ('acli version ' ~ packages_acli_version) not in (_acli_darwin_version.stdout | default(''))
+        - _acli_have == '' or _acli_have is version(_acli_pin, '<')  # missing or older than the pin
       block:
         - name: Create a private directory for the acli tarball
           ansible.builtin.tempfile:
@@ -205,6 +197,27 @@
             state: absent
           changed_when: false  # private scratch dir, removed in the same run: not machine state
           when: _acli_darwin_tmp.path is defined
+
+- name: Check for the unpinned Homebrew acli (macOS)
+  ansible.builtin.command:
+    argv: ["{{ dotfiles_homebrew_prefix }}/bin/brew", list, --formula, --versions, acli]
+  register: _acli_brew
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe
+  when:
+    - packages_install_binaries | bool
+    - is_macos
+
+- name: Warn that the unpinned Homebrew acli is still installed (macOS)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Homebrew's acli ({{ _acli_brew.stdout | trim }}) is still installed from the old instructions; it is not
+      pinned and may come before ~/.local/bin/acli on PATH. Remove it: brew uninstall acli && brew untap atlassian/homebrew-acli
+  when:
+    - _acli_brew is not skipped
+    - (_acli_brew.rc | default(1)) == 0
+    - (_acli_brew.stdout | default('') | trim) | length > 0
 
 - name: Install oras (OCI artifact client)
   when:

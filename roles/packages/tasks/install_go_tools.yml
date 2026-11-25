@@ -446,8 +446,9 @@
     msg: >-
       WARNING: Go tool install failed (optional tooling; continuing):
       {{ _packages_go_failed | difference(_packages_go_network_failed) | join(', ') }}.
-      {% for r in packages_go_results.results | default([]) | selectattr('item', 'in', _packages_go_failed) %}
-      {{ r.item | regex_replace('@.*', '') | basename }}: rc={{ r.rc | default('none') }}
+      {% for r in packages_go_results.results | default([])
+           | selectattr('item', 'in', _packages_go_failed | difference(_packages_go_network_failed)) %}
+      {{ r.item | regex_replace('(/cmd)?@.*', '') | basename }}: rc={{ r.rc | default('none') }}
       {{ (r.stderr_lines | default([]))[-3:] | join(' | ') or r.msg | default('') }}.
       {% endfor %}
   when:

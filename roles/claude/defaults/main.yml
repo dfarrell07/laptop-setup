@@ -269,7 +269,7 @@ claude_deny_write_only:
   - "~/.config/tmux/**"  # tmux.conf run-shell executes on server start
   - "~/.vimrc"  # vimscript can run system() on every vim start
 
-# acli (Atlassian CLI, used by the Jira skill): work profile, logged in from the vault's vault_acli_api_token
+# acli (Atlassian CLI, used by the Jira skill): every profile, logged in from the vault's vault_acli_api_token
 # (an Atlassian API token) when acli_site is set in config.yml. acli keeps the token in the OS keyring (Secret
 # Service on Linux, Keychain on macOS); the login needs an unlocked keyring, so it is skipped with a warning over SSH
 # or without a desktop session. Tokens expire within a year: replace it with make vault-edit, then make claude.

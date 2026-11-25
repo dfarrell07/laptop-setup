@@ -184,9 +184,7 @@ processes can use `bpf()` (including package-manager dependencies) once unprivil
   netfilter rules drop CGNAT-range packets that arrive on any interface but `tailscale0`, which cuts NetBird peers and NetBird's local
   DNS, so where `/usr/bin/netbird` exists `make packages` runs `tailscale set --netfilter-mode=off` (firewalld trusts `tailscale0`).
   The first `tailscale up` on a never-logged-in node resets it, so log in with `tailscale up --netfilter-mode=off`; the smoke check
-  `tailscale-netbird-netfilter` catches a revert. Alternative, tailnet-wide: the policy `nodeAttrs` attribute
-  `disable-linux-cgnat-drop-rule` turns the drop into a return and keeps netfilter on.
-  Check with `tailscale debug prefs` (`"NetfilterMode": 0`). Remaining overlaps: NetBird routes 100.100.100.100-102 to `wt0` ahead of
+  `tailscale-netbird-netfilter` catches a revert. Check with `tailscale debug prefs` (`"NetfilterMode": 0`). Remaining overlaps: NetBird routes 100.100.100.100-102 to `wt0` ahead of
   Tailscale's table, so query MagicDNS through systemd-resolved (`resolvectl query`), not `dig @100.100.100.100`; and a Tailscale
   device whose address falls in NetBird's /15 (`netbird status`) is routed to `wt0`, so change that device's IP in the Tailscale
   admin console.

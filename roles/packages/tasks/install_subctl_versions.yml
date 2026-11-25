@@ -90,6 +90,18 @@
         label: "subctl{{ item.suffix }}"
         index_var: loop_idx
 
+    # Like install_go_tools.yml: a checksum mismatch means GOPROXY tampering or a compromised module, not a network blip.
+    - name: Fail on a versioned subctl checksum mismatch (init() injection risk)
+      ansible.builtin.fail:
+        msg: >-
+          Go module checksum verification failed for subctl@v{{ item.item.version }}. This indicates GOPROXY tampering
+          or module compromise. Verify GOSUMDB reachability (default: sum.golang.org), check for MITM attacks, and retry.
+      loop: >-
+        {{ packages_subctl_install_results.results | default([])
+           | selectattr('stderr', 'defined') | selectattr('stderr', 'contains', 'checksum mismatch') | list }}
+      loop_control:
+        label: "subctl{{ item.item.suffix }}"
+
     - name: Warn if versioned subctl go install failed
       ansible.builtin.debug:
         msg: >-

@@ -762,48 +762,135 @@ class SmokeTests(unittest.TestCase):
                     if 'Permission denied' in stderr:
                         self.assertIn('make github-ssh-keys', result.stdout)
 
-    def test_github_ssh_keys_adds_only_missing_keys_and_refreshes_scope_once(self):
+    def test_github_ssh_keys_adds_only_missing_keys_with_only_the_scopes_they_need(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
             (home / '.ssh').mkdir()
             (home / '.ssh/id_ed25519_sk.pub').write_text('sk-ssh-ed25519@openssh.com AAAAprimary yubikey-1\n')
             (home / '.ssh/id_ed25519_sk_backup.pub').write_text('sk-ssh-ed25519@openssh.com AAAAbackup yubikey-2\n')
-            (home / '.ssh/id_ed25519_sk_signing.pub').write_text('sk-ssh-ed25519@openssh.com AAAAsigning signing\n')
-            log = home / 'gh.log'
+            signing = home / '.ssh/id_ed25519_sk_signing.pub'
+            signing.write_text('sk-ssh-ed25519@openssh.com AAAAsigning signing\n')
+            log, scopes = home / 'gh.log', home / 'scopes'
             gh = home / 'gh'
-            # the key lists fail until refreshed (no scope); then user/keys has only the primary key and
-            # user/ssh_signing_keys has the signing key only once the file 'signed' exists
-            gh.write_text('#!/bin/sh\necho "$*" >> %s\ncase "$1 $2" in\n'
-                          '"auth status") exit 0 ;;\n"auth refresh") touch %s/scoped; exit 0 ;;\n'
-                          '"api --hostname") [ -f %s/scoped ] || exit 1\n'
-                          '  case "$5" in user/keys) echo "ssh-ed25519 AAAAprimary" ;;\n'
-                          '  user/ssh_signing_keys) [ -f %s/signed ] && echo "sk-ssh-ed25519@openssh.com AAAAsigning" ;;\n'
-                          '  esac; exit 0 ;;\n'
-                          'esac\nexit 0\n' % (log, home, home, home))
+            # Public key lists need no scope: users/alice/keys has the primary key, ssh_signing_keys has the signing key
+            # once 'signed' exists. 'auth refresh' adds or removes scopes in the scopes file; -i user prints them.
+            gh.write_text(f'''#!/bin/bash
+echo "$*" >> {log}
+case "$*" in
+  "auth status"*) exit 0 ;;
+  *"user --jq .login") echo alice ;;
+  *"-i user") echo "X-Oauth-Scopes: $(cat {scopes})" ;;
+  *users/alice/keys*) echo "ssh-ed25519 AAAAprimary" ;;
+  *users/alice/ssh_signing_keys*) [ -f {home}/signed ] && echo "sk-ssh-ed25519@openssh.com AAAAsigning"; exit 0 ;;
+  "auth refresh --hostname github.com --scopes "*) echo "$(cat {scopes}), ${{6//,/, }}" > {scopes} ;;
+  "auth refresh --hostname github.com --remove-scopes "*) [ -f {home}/dropfail ] && exit 1; sed -i.bak "s/, $6//" {scopes} ;;
+  "ssh-key add "*_signing.pub*) [ -f {home}/addfail ] && exit 1 ;;
+esac
+exit 0
+''')
             gh.chmod(0o755)
             env = dict(os.environ, HOME=str(home), PATH=str(home) + ':' + os.environ['PATH'])
-            def run():
-                return subprocess.run([str(ROOT / 'scripts/github-ssh-keys.sh')], env=env,
-                                      capture_output=True, text=True, stdin=subprocess.DEVNULL)
-            result = run()  # no terminal: cannot run the interactive scope refresh
+
+            def run(have, tty=False):
+                scopes.write_text(have + '\n')
+                log.write_text('')
+                if tty:
+                    master, slave = os.openpty()
+                    try:
+                        result = subprocess.run([str(ROOT / 'scripts/github-ssh-keys.sh')], env=env, capture_output=True,
+                                                text=True, stdin=slave)
+                    finally:
+                        os.close(master)
+                        os.close(slave)
+                else:
+                    result = subprocess.run([str(ROOT / 'scripts/github-ssh-keys.sh')], env=env, capture_output=True,
+                                            text=True, stdin=subprocess.DEVNULL)
+                calls = log.read_text().splitlines()
+                return result, [c for c in calls if c.startswith(('ssh-key add', 'auth refresh'))]
+
+            add_backup = 'ssh-key add %s/.ssh/id_ed25519_sk_backup.pub --title yubikey-2 --type authentication' % home
+            add_signing = 'ssh-key add %s --title signing --type signing' % signing
+            # no terminal, no scopes: nothing can be added
+            result, calls = run('repo')
             self.assertEqual(result.returncode, 1)
-            self.assertIn('admin:ssh_signing_key', result.stderr)
-            (home / 'scoped').touch()
-            result = run()
+            self.assertIn('admin:public_key admin:ssh_signing_key', result.stderr)
+            self.assertEqual(calls, [])
+            # no terminal, authentication scope only: the authentication key is still added, then it fails for signing
+            result, calls = run('repo, admin:public_key')
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('lacks admin:ssh_signing_key', result.stderr)
+            self.assertEqual(calls, [add_backup])
+            # both scopes already granted: both keys added, no refresh
+            result, calls = run('repo, admin:public_key, write:ssh_signing_key')
             self.assertEqual(result.returncode, 0, result.stderr)
-            calls = log.read_text().splitlines()
-            adds = [c for c in calls if c.startswith('ssh-key add')]
-            self.assertEqual(adds, [
-                'ssh-key add %s/.ssh/id_ed25519_sk_backup.pub --title yubikey-2 --type authentication' % home,
-                'ssh-key add %s/.ssh/id_ed25519_sk_signing.pub --title signing --type signing' % home])
-            self.assertFalse(any(c.startswith('auth refresh') for c in calls))
-            # once GitHub lists the signing key, a re-run adds nothing new
+            self.assertEqual(calls, [add_backup, add_signing])
+            # a terminal: asks for exactly the missing scope, then drops the signing scope it added
+            result, calls = run('repo, admin:public_key', tty=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(calls, ['auth refresh --hostname github.com --scopes admin:ssh_signing_key', add_backup,
+                                     add_signing, 'auth refresh --hostname github.com --remove-scopes admin:ssh_signing_key'])
+            # a failed key add still drops the scope this run added
+            (home / 'addfail').touch()
+            result, calls = run('repo, admin:public_key', tty=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(calls[-1], 'auth refresh --hostname github.com --remove-scopes admin:ssh_signing_key')
+            (home / 'addfail').unlink()
+            # failing to drop the scope fails the run
+            (home / 'dropfail').touch()
+            result, calls = run('repo, admin:public_key', tty=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('could not drop admin:ssh_signing_key', result.stderr)
+            (home / 'dropfail').unlink()
+            # everything registered: nothing added, no scope asked for
             (home / 'signed').touch()
-            log.write_text('')
-            result = run()
+            (home / '.ssh/id_ed25519_sk_backup.pub').unlink()
+            result, calls = run('repo')
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual([c for c in log.read_text().splitlines() if c.startswith('ssh-key add')],
-                             ['ssh-key add %s/.ssh/id_ed25519_sk_backup.pub --title yubikey-2 --type authentication' % home])
+            self.assertEqual(calls, [])
+            self.assertNotIn('remove-scopes', result.stdout)
+            # a signing scope left from an earlier run is pointed out, not dropped (that needs the browser)
+            result, calls = run('repo, admin:ssh_signing_key')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(calls, [])
+            self.assertIn('gh auth refresh --hostname github.com --remove-scopes admin:ssh_signing_key', result.stdout)
+            # the write: form is named as such, and a key added with a scope already held still gets the note
+            (home / 'signed').unlink()
+            result, calls = run('repo, admin:public_key, write:ssh_signing_key')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn('remove-scopes', ' '.join(calls))  # this run granted nothing, so it drops nothing
+            self.assertIn('--remove-scopes write:ssh_signing_key', result.stdout)
+            (home / 'signed').touch()
+            # no signing key file: says how to make one, still succeeds
+            signing.unlink()
+            result, calls = run('repo')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('signing key skipped (make dotfiles or make vault-signing-key)', result.stdout)
+
+    def test_tailscale_netbird_netfilter_check(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index("# Beside IT's NetBird")
+        end = source.index('\n\n', source.index('tailscale-netbird-netfilter" "FAIL"', start))
+        with tempfile.TemporaryDirectory() as directory:
+            bindir = Path(directory)
+            (bindir / 'netbird').write_text('#!/bin/sh\n')
+            (bindir / 'tailscale').write_text('#!/bin/sh\n[ -f "$0.prefs" ] && cat "$0.prefs"\nexit 0\n')
+            for f in ('netbird', 'tailscale'):
+                (bindir / f).chmod(0o755)
+
+            def run(prefs):
+                if prefs is None:
+                    (bindir / 'tailscale.prefs').unlink(missing_ok=True)
+                else:
+                    (bindir / 'tailscale.prefs').write_text(prefs)
+                script = ('IS_LINUX=true; CONTAINER=\nrecord() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; }\n'
+                          + source[start:end])
+                env = dict(os.environ, PATH=f'{bindir}:{os.environ["PATH"]}', SMOKE_NETBIRD=str(bindir / 'netbird'))
+                return subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c', script], env=env,
+                                      capture_output=True, text=True).stdout.strip()
+
+            self.assertEqual(run('{"NetfilterMode": 0}'), 'tailscale-netbird-netfilter PASS')
+            self.assertIn('tailscale-netbird-netfilter FAIL Tailscale netfilter mode 2', run('{"NetfilterMode": 2}'))
+            self.assertEqual(run(None), '')  # tailscaled down: the tailscale check reports it
 
     def test_tailscale_operator_check(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
@@ -828,26 +915,37 @@ class SmokeTests(unittest.TestCase):
             self.assertEqual(run('{}', want=''), "tailscale-operator PASS not managed (packages_tailscale_operator: '')")
             self.assertEqual(run('', prefs_rc=1), '')  # tailscaled down: the tailscale check reports it
 
-    @unittest.skipUnless(Path('/usr/bin/gnome-shell').exists() and os.geteuid() != 0, 'GNOME host, not root')
+    @unittest.skipIf(os.geteuid() == 0, 'reads user settings: not as root')
     def test_scroll_direction_check_reads_touchpad_and_mouse(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
         start = source.index('# Traditional scrolling (natural scrolling off)')
         end = source.index('\nfi\n', source.index('unset _scroll', start)) + 4
         with tempfile.TemporaryDirectory() as directory:
-            stub = Path(directory) / 'gsettings'
+            shell = Path(directory) / 'gnome-shell'  # stands in for /usr/bin/gnome-shell, so any host runs the GNOME branch
+            shell.write_text('#!/bin/sh\n')
+            shell.chmod(0o755)
+            block = source[start:end].replace('/usr/bin/gnome-shell', str(shell))
             env = dict(os.environ, PATH=f'{directory}:{os.environ["PATH"]}')
+            env.pop('SUDO_USER', None)
 
-            def run(touchpad, mouse):
-                stub.write_text(f'#!/bin/sh\ncase "$2" in *touchpad) echo {touchpad} ;; *mouse) echo {mouse} ;; esac\n')
+            def run(tool, body, linux=True):
+                stub = Path(directory) / tool
+                stub.write_text('#!/bin/sh\n' + body + '\n')
                 stub.chmod(0o755)
-                script = ('record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; }\nIS_LINUX=true CONTAINER= SYSTEM_ONLY=false\n'
-                          + source[start:end])
+                script = ('record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; }\n'
+                          f'IS_LINUX={"true" if linux else "false"} CONTAINER= SYSTEM_ONLY=false\n' + block)
                 return subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c', script], env=env,
                                       capture_output=True, text=True).stdout.strip()
 
-            self.assertEqual(run('false', 'false'), 'scroll-direction PASS')
-            self.assertIn('scroll-direction WARN GNOME natural scrolling (touchpad, mouse): true false', run('true', 'false'))
-            self.assertIn('false true', run('false', 'true'))
+            def gnome(touchpad, mouse):
+                return run('gsettings', f'case "$2" in *touchpad) echo {touchpad} ;; *mouse) echo {mouse} ;; esac')
+
+            self.assertEqual(gnome('false', 'false'), 'scroll-direction PASS')
+            self.assertIn('scroll-direction WARN GNOME natural scrolling (touchpad, mouse): true false', gnome('true', 'false'))
+            self.assertIn('false true', gnome('false', 'true'))
+            self.assertEqual(run('defaults', 'echo 0', linux=False), 'scroll-direction PASS')
+            self.assertIn('scroll-direction WARN natural scrolling is on', run('defaults', 'echo 1', linux=False))
+            self.assertIn('scroll-direction WARN', run('defaults', 'exit 1', linux=False))  # never set: macOS default is natural
 
     @unittest.skipUnless(shutil.which('zsh'), 'zsh required')
     def test_remote_control_check_names_only_launchers_without_the_flag(self):

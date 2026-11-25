@@ -295,7 +295,18 @@
       check_mode: false  # read-only probe
       when: _packages_tailscaled_unit.stdout == 'loaded'
 
-    # The operator may run tailscale up/set/down without sudo; tailscaled itself stays root (it owns tailscale0).
+    - name: Warn that Tailscale's preferences could not be read
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: tailscale debug prefs failed ({{ _packages_tailscale_prefs.stderr | default('') | trim | truncate(120) }}),
+          so the operator and NetBird netfilter settings were not checked. Start tailscaled, then make packages.
+      when:
+        - _packages_tailscaled_unit.stdout == 'loaded'
+        - _packages_tailscale_prefs.rc | default(1) != 0
+
+    # The operator may run tailscale up/set/down without sudo; tailscaled itself stays root (it owns tailscale0). That
+    # includes re-enabling netfilter, so the NetBird fix below holds only as long as the login account does
+    # (SECURITY.md, Known Limitations).
     - name: Let the login user run the Tailscale CLI without sudo
       ansible.builtin.command:
         argv: [tailscale, set, "--operator={{ packages_tailscale_operator }}"]
@@ -317,6 +328,18 @@
         - _packages_netbird.stat.exists | default(false)
         - _packages_tailscale_prefs.rc | default(1) == 0
         - (_packages_tailscale_prefs.stdout | from_json).NetfilterMode | default(0) | int != 0  # 0 off, 1 nodivert, 2 on
+
+    # The change above is one-way: with NetBird gone, netfilter stays off until switched back by hand.
+    - name: Note that Tailscale netfilter is off without NetBird
+      ansible.builtin.debug:
+        msg: >-
+          NOTE: Tailscale's netfilter rules are off but NetBird is not installed. If NetBird was removed and you want them
+          back: tailscale set --netfilter-mode=on
+      when:
+        - _packages_tailscaled_unit.stdout == 'loaded'
+        - not (_packages_netbird.stat.exists | default(false))
+        - _packages_tailscale_prefs.rc | default(1) == 0
+        - (_packages_tailscale_prefs.stdout | from_json).NetfilterMode | default(2) | int == 0
 
 # macOS: the formula's tailscaled needs a root launchd daemon that nothing else installs (Linux enables it above).
 # tailscaled's own installer writes /Library/LaunchDaemons/com.tailscale.tailscaled.plist and loads it at boot;

@@ -405,9 +405,9 @@ install_virtualization: true  # fallback; authoritative value in group_vars/all/
 network_proxied: false  # fallback; authoritative value in group_vars/all/vars.yml
 proxy_url: ''  # fallback; authoritative value in group_vars/all/vars.yml
 repo_tailscale: true  # fallback; authoritative value in group_vars/all/vars.yml
-# Linux: the user who may run tailscale up/set/down without sudo (tailscale set --operator); '' leaves it as it is.
-# An operator can change every Tailscale setting (netfilter, Tailscale SSH, exit node, logout) as that user, agents
-# included; '' keeps that behind sudo.
+# Linux: the user who may run tailscale up/set/down without sudo (tailscale set --operator). An operator can change every
+# Tailscale setting (netfilter, Tailscale SSH, exit node, logout) as that user, agents included. '' stops managing it and
+# leaves an operator already set in place (sudo tailscale set --operator= clears it); SECURITY.md, Known Limitations.
 packages_tailscale_operator: "{{ real_user_id | default(lookup('env', 'USER'), true) }}"
 repo_gh_cli: true  # fallback; authoritative value in group_vars/all/vars.yml
 needs_container_tier: "host-only"  # fallback; authoritative value in group_vars/all/vars.yml

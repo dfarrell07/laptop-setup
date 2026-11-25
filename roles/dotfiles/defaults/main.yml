@@ -60,7 +60,7 @@ dotfiles_github_https_read_repos:
   - ansible-automation-platform/aap-konflux-pipelines
 dotfiles_work_src_dirs: []  # set in config.yml: e.g. [my-org, my-other-org]
 
-real_user_id: "{{ lookup('env', 'USER') }}"  # fallback; authoritative in site.yml play vars
+real_user_id: "{{ lookup('env', 'USER') }}"  # the user running make (roles/system/defaults has the same)
 dotfiles_ssh_hardware_key_basename: id_ed25519_sk  # fallback; authoritative in group_vars/all/vars.yml
 dotfiles_ssh_redhat_key_basename: id_rsa_redhat  # fallback; authoritative in group_vars/all/vars.yml
 
