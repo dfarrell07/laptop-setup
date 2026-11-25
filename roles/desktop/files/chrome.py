@@ -32,15 +32,16 @@ import sys
 import tempfile
 from pathlib import Path
 
-EXTENSION_ID = re.compile(r'^[a-p]{32}$')
+EXTENSION_ID = re.compile(r'[a-p]{32}')  # used with fullmatch: no trailing newline
 # Content-setting types the site settings may name. All are untracked prefs, so Chrome on macOS keeps a direct edit
 # (the file_system_* types are tracked there and would be reset).
 SITE_TYPES = {'notifications', 'popups', 'geolocation', 'media_stream_camera', 'media_stream_mic', 'javascript',
               'images', 'sound', 'automatic_downloads', 'clipboard', 'cookies'}
 SITE_VALUES = {'allow': 1, 'block': 2, 'ask': 3}
 ALLOW_BLOCK_ONLY = {'images', 'javascript', 'popups', 'sound', 'cookies'}  # Chromium registers no "ask" for these
-ORIGIN = re.compile(r'^(https?)://([a-z0-9-]+(?:\.[a-z0-9-]+)*)(?::([0-9]{1,5}))?/?$')
-DOMAIN_PATTERN = re.compile(r'^\[\*\.\]([a-z0-9-]+(?:\.[a-z0-9-]+)+)$')
+LABEL = r'[a-z0-9](?:[a-z0-9-]*[a-z0-9])?'  # a DNS label: no hyphen at either end
+ORIGIN = re.compile(rf'(https?)://({LABEL}(?:\.{LABEL})*)(?::([0-9]{{1,5}}))?/?')  # used with fullmatch
+DOMAIN_PATTERN = re.compile(rf'\[\*\.\]({LABEL}(?:\.{LABEL})+)')
 COLOR_SCHEMES = {'system': 0, 'light': 1, 'dark': 2}
 POLICY_FILE = 'laptop-setup.json'
 EXCEPTIONS = ('profile', 'content_settings', 'exceptions')
@@ -65,19 +66,21 @@ POLICY_PREFS = {
     # Tracked (reset by Chrome) on macOS, so skipped there; Linux never enforces tracked prefs.
     'RestoreOnStartup': (int, lambda v: [(('session', 'restore_on_startup'), v)]),
 }
+# The values Chrome defines for the integer policies above
+POLICY_VALUES = {'SafeBrowsingProtectionLevel': {0, 1, 2}, 'RestoreOnStartup': {1, 4, 5}}
 
 
 def site_key(site):
     """A site as the user writes it (https://host[:port] or [*.]domain) -> Chrome's "primary,secondary" key."""
     text = str(site).strip().lower()
-    m = ORIGIN.match(text)
+    m = ORIGIN.fullmatch(text)
     if m:
         scheme, host, port = m.groups()
         port = int(port) if port else (443 if scheme == 'https' else 80)
         if not 1 <= port <= 65535:
             fail(f'site {site!r}: port out of range')
         return f'{scheme}://{host}:{port},*'
-    m = DOMAIN_PATTERN.match(text)
+    m = DOMAIN_PATTERN.fullmatch(text)
     if m:
         return f'[*.]{m.group(1)},*'
     fail(f'site {site!r}: write https://host, https://host:port or [*.]domain (internationalized names in punycode)')
@@ -105,9 +108,11 @@ def load_spec(path):
         fail('personal_domains must be a list of domains')
     spec['personal_domains'] = [d.strip().lower() for d in domains]
     exts = spec.get('extensions', [])
-    if not isinstance(exts, list) or not all(isinstance(e, dict) and EXTENSION_ID.match(str(e.get('id', '')))
-                                             for e in exts):
-        fail('extensions must be a list of {id, name} with Chrome Web Store IDs (32 letters a-p)')
+    if not isinstance(exts, list) or not all(isinstance(e, dict) and isinstance(e.get('id'), str)
+                                             and EXTENSION_ID.fullmatch(e['id'])
+                                             and isinstance(e.get('install', True), bool) for e in exts):
+        fail('extensions must be a list of {id, name, install} with Chrome Web Store IDs (32 letters a-p) and install'
+             ' true or false')
     defaults = spec.get('default_site_settings') or {}
     sites = spec.get('site_settings') or {}
     if not isinstance(defaults, dict) or not isinstance(sites, dict):
@@ -142,6 +147,8 @@ def load_spec(path):
     for name, (kind, _) in POLICY_PREFS.items():
         if name in policies and not (is_int(policies[name]) if kind is int else isinstance(policies[name], bool)):
             fail(f'policy {name} must be {"an integer" if kind is int else "true or false"}, not {policies[name]!r}')
+        if name in policies and name in POLICY_VALUES and policies[name] not in POLICY_VALUES[name]:
+            fail(f'policy {name} must be one of {sorted(POLICY_VALUES[name])}, not {policies[name]!r}')
     spec['policies'] = policies
     return spec
 
@@ -173,11 +180,9 @@ def profile_dirs(data_dir):
 def info_cache(data_dir):
     """Local State's profile list, or None when it cannot be read (then no profile is personal; the zoom still
     applies, and the caller reports it)."""
-    try:
+    try:  # called only once profile directories exist, so a missing Local State is unreadable too
         state = json.loads((data_dir / 'Local State').read_text(encoding='utf-8'))
-    except FileNotFoundError:
-        return {}
-    except (UnicodeDecodeError, ValueError, PermissionError) as err:
+    except (UnicodeDecodeError, ValueError, OSError) as err:
         print(f'chrome.py: cannot read {data_dir / "Local State"} ({type(err).__name__}); treating no profile as personal',
               file=sys.stderr)
         return None
@@ -323,8 +328,9 @@ def apply_prefs(spec, check, unreadable):
         plans = []
         for prof in found:
             prefs = read_json(prof / 'Preferences')
-            recorded = applied.get(prof.name, [])
-            before = {unit(u) for u in recorded if isinstance(u, list)} - {None}
+            recorded = applied.get(prof.name)  # the record is user-writable: anything malformed is ignored
+            before = {unit(u) for u in (recorded if isinstance(recorded, list) else [])
+                      if isinstance(u, list) and all(isinstance(x, str) for x in u)} - {None}
             if prof.name not in personal:
                 todo = [(p, v) for p, v in wanted_prefs(spec, False) if not same(get_path(prefs, p), v)]
                 plans.append((prof, prefs, todo, [], sorted(before)))  # its record waits until it is personal again

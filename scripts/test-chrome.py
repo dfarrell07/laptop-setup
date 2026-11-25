@@ -272,12 +272,26 @@ class ChromeHelperTests(unittest.TestCase):
                            ('extensions', ['uBOL']), ('default_site_settings', {'popups': ['allow']}),
                            ('policies', {'SafeBrowsingProtectionLevel': 'enhanced'}),
                            ('policies', {'BlockThirdPartyCookies': 'false'}),
-                           ('policies', {'SafeBrowsingProtectionLevel': True})):
+                           ('policies', {'SafeBrowsingProtectionLevel': True}),
+                           ('policies', {'SafeBrowsingProtectionLevel': -7}), ('policies', {'RestoreOnStartup': 99}),
+                           ('extensions', [{'id': UBOL, 'install': 'false'}]),
+                           ('extensions', [{'id': UBOL + '\n'}]), ('extensions', [{'id': 7}]),
+                           ('site_settings', {'popups': {'https://-.-': 'allow'}}),
+                           ('site_settings', {'popups': {'https://a-.example': 'allow'}}),
+                           ('site_settings', {'popups': {'[*.]-a.example': 'allow'}})):
             code, _, err = self.run_helper('prefs', **{field: bad})
             self.assertEqual(code, 1, (field, bad))
             self.assertIn('chrome.py:', err, (field, bad))
             self.assertNotIn('Traceback', err, (field, bad))
             self.spec.update({'site_settings': {}, 'extensions': [], 'default_site_settings': {}, 'policies': {}})
+
+    def test_a_malformed_record_is_ignored_not_a_traceback(self):
+        self.profile('Profile 1', {}, consumer())
+        self.profile('Default', {}, consumer('other@gmail.com'))
+        self.state.mkdir()
+        (self.state / 'chrome-site-settings.json').write_text(json.dumps({'Default': 5, 'Profile 1': [[['x']], 7]}))
+        self.assertEqual(self.out('prefs', site_settings={'popups': {'https://a.example': 'allow'}}), 'changed')
+        self.assertEqual(self.out('prefs'), 'unchanged')
 
     @unittest.skipIf(os.geteuid() == 0, 'root reads anything')
     def test_an_unreadable_data_dir_is_blocked_not_a_traceback(self):
@@ -378,6 +392,15 @@ class ChromeHelperTests(unittest.TestCase):
         self.assertEqual(self.out('prefs', zoom_percent=80, color_scheme='dark',
                                   site_settings={'javascript': {'https://a.example': 'block'}}), 'changed')
         self.assertEqual(self.prefs('Profile 1')['browser']['theme']['color_scheme2'], 2)
+
+    def test_a_missing_or_odd_local_state_is_reported_not_a_traceback(self):
+        self.profile('Profile 1', {}, consumer())
+        local_state = self.data / 'Local State'
+        local_state.unlink()
+        self.assertEqual(self.out('prefs', zoom_percent=80), 'changed\npersonal-unknown')
+        local_state.mkdir()  # IsADirectoryError
+        self.assertEqual(self.out('prefs', zoom_percent=90), 'changed\npersonal-unknown')
+        self.assertEqual(self.out('extensions', extensions=[{'id': UBOL}]), 'blocked')
 
     # --- a real Chrome reads what the helper writes ---
     def chrome(self, url):
@@ -584,6 +607,30 @@ class ShippedTaskTests(unittest.TestCase):
                                  text=True, timeout=300, env=env).stdout
         self.assertIn('WANT==', out)
         self.assertIn(f'REMOVE={old}=', out)  # dropped from the list: still removed
+
+    def test_the_settings_check_rejects_quoted_install_and_odd_ids_in_ansible(self):
+        import yaml
+        check = self.task('Check the declared Chrome settings')
+        env = dict(os.environ, ANSIBLE_STDOUT_CALLBACK='default')
+        base = {'desktop_chrome_page_zoom': 80, 'desktop_chrome_color_scheme': 'dark',
+                '_chrome_policies': self.defaults['desktop_chrome_policies_recommended'], '_chrome_policies_enforced': {}}
+        ok = [{'id': UBOL}, {'id': BITWARDEN, 'install': False}]
+        cases = [(ok, {}, 0), ([{'id': UBOL, 'install': 'false'}], {}, 2), ([{'id': UBOL + '\n'}], {}, 2),
+                 ([{'id': 7}], {}, 2),
+                 (ok, {'_chrome_policies': {'SafeBrowsingProtectionLevel': 3}}, 2),
+                 (ok, {'_chrome_policies_enforced': {'SafeBrowsingProtectionLevel': True}}, 2),
+                 (ok, {'_chrome_policies_enforced': {'RestoreOnStartup': 6}}, 2),
+                 (ok, {'_chrome_policies': {'PasswordManagerEnabled': 'false'}}, 2),
+                 (ok, {'_chrome_policies_enforced': {'RestoreOnStartup': 4, 'BlockThirdPartyCookies': False}}, 0)]
+        for extensions, extra, rc in cases:
+            with self.subTest(extensions=extensions, extra=extra), tempfile.TemporaryDirectory() as tmp:
+                play = Path(tmp) / 'p.yml'
+                play.write_text(yaml.safe_dump([{'hosts': 'localhost', 'connection': 'local', 'gather_facts': False,
+                                                 'vars': dict(base, _chrome_extensions=extensions, **extra),
+                                                 'tasks': [check]}]))
+                result = subprocess.run([str(ROOT / '.venv/bin/ansible-playbook'), str(play)], capture_output=True,
+                                        text=True, timeout=300, env=env)
+                self.assertEqual(result.returncode, rc, result.stdout[-2000:])
 
     def test_package_ownership_probe_fails_closed(self):
         """The shell probe: unowned by rpm and dpkg -> exists; owned by either, or a database error -> owned (never
