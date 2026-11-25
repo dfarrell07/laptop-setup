@@ -251,12 +251,12 @@ class BackupInstallTests(unittest.TestCase):
                                  '--recipients', str(self.recipients)], capture_output=True, text=True)
         self.assertIn("host's name", result.stderr)
 
-    def fake_plugin(self, serials):
+    def fake_plugin(self, serials, pin_222='Once'):
         """A fake age-plugin-yubikey on PATH: keys by serial, each a throwaway X25519 key (recipient and identity)."""
         bindir = self.root / 'bin'
         bindir.mkdir(exist_ok=True)
         keys = {'111': self.key, '222': self.key2}
-        listing = ''.join(f'#       Serial: {s}, Slot: 1\n#   PIN policy: {"Never" if s == "111" else "Once"}\n'
+        listing = ''.join(f'#       Serial: {s}, Slot: 1\n#   PIN policy: {"Never" if s == "111" else pin_222}\n'
                           f'{subprocess.run(["age-keygen", "-y", str(keys[s])], capture_output=True, text=True).stdout}\n'
                           for s in serials)
         cases = ''.join(f'  *"--serial {s} "*) cat {keys[s]} ;;\n' for s in serials)
@@ -267,19 +267,38 @@ class BackupInstallTests(unittest.TestCase):
 
     def test_several_keys_plugged_in_each_named_by_serial(self):
         self.assertEqual(self.backup().returncode, 0)
-        env = self.fake_plugin(['111', '222'])
-        result = subprocess.run([sys.executable, '-I', str(INSTALL), '--archive', str(self.archive), '--recipients',
-                                 str(self.recipients), '--verify-only'], capture_output=True, text=True, env=env)
+        verify = [sys.executable, '-I', str(INSTALL), '--archive', str(self.archive), '--recipients',
+                  str(self.recipients), '--verify-only']
+        # no terminal here (a test, or an agent's background job): the key that asks for its PIN is left for one
+        result = subprocess.run(verify, capture_output=True, text=True, env=self.fake_plugin(['222', '111']),
+                                stdin=subprocess.DEVNULL, start_new_session=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('YubiKey 222: not checked here: it asks for its PIN, which needs a terminal', result.stdout)
         self.assertIn('YubiKey 111 opens it', result.stdout)
-        self.assertIn('YubiKey 222 opens it', result.stdout)
+        self.assertIn('not checked: ', result.stdout)
+        self.assertIn('YubiKey 111: touch it when it blinks', result.stderr)  # PIN policy Never: no PIN named
+        # two touch-only keys: each opens it, touch-only order kept by serial
+        result = subprocess.run(verify, capture_output=True, text=True, env=self.fake_plugin(['111', '222'], 'Never'),
+                                stdin=subprocess.DEVNULL, start_new_session=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertLess(result.stdout.index('YubiKey 111 opens it'), result.stdout.index('YubiKey 222 opens it'))
         self.assertIn('all 2 listed keys open the archive: safe to rely on', result.stdout)
-        self.assertIn('YubiKey 111: touch it', result.stderr)  # PIN policy Never: no PIN prompt named
-        self.assertIn('YubiKey 222: enter its PIN if asked, then touch it', result.stderr)
+        # one key failing (a missed touch) does not stop the others; the run fails at the end
+        env = self.fake_plugin(['111', '222'], 'Never')
+        plugin = self.root / 'bin/age-plugin-yubikey'
+        bad = self.root / 'bad-key.txt'
+        subprocess.run(['age-keygen', '-o', str(bad)], check=True, capture_output=True)
+        plugin.write_text(plugin.read_text().replace(f'cat {self.key} ', f'cat {bad} '))
+        result = subprocess.run(verify, capture_output=True, text=True, env=env, stdin=subprocess.DEVNULL,
+                                start_new_session=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('YubiKey 111: failed', result.stdout)
+        self.assertIn('YubiKey 222 opens it', result.stdout)
+        self.assertNotIn('safe to rely on', result.stdout.replace('safe to rely on once', ''))
         env = self.fake_plugin(['111'])
         result = subprocess.run([sys.executable, '-I', str(INSTALL), '--archive', str(self.archive), '--recipients',
                                  str(self.recipients), '--verify-only'], capture_output=True, text=True, env=env)
-        self.assertIn('not checked (not plugged in)', result.stdout)
+        self.assertIn('not checked: ', result.stdout)
         # the keys listing names keys by serial and adds the missing one
         self.recipients.write_text(self.recipients.read_text().splitlines()[2] + '\n')  # only key 222 listed
         env = self.fake_plugin(['111', '222'])
