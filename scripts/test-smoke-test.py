@@ -788,6 +788,9 @@ class SmokeTests(unittest.TestCase):
                     ('aerospace', '', '', '/src', ['WARN', 'WARN']),
                     ('aerospace', 'desktop_macos_bar: false\ndesktop_macos_borders: "no"  # off\n', '', '', ['PASS', 'PASS']),
                     ('aerospace', 'packages_install_binaries: false\n', '', '', ['PASS', 'PASS']),
+                    # every spelling Ansible's | bool reads as false
+                    ('aerospace', 'desktop_macos_bar: off\ndesktop_macos_borders: FALSE\n', '', '', ['PASS', 'PASS']),
+                    ('aerospace', 'packages_install_binaries: off\n', '', '', ['PASS', 'PASS']),
                     ('CHANGE_ME', '', '', '', ['PASS', 'PASS'])]:
                 with self.subTest(wm=wm, config=config, running=running, molecule=molecule):
                     cfg.write_text(config)
@@ -800,6 +803,53 @@ class SmokeTests(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertEqual(result.stdout.split('\n')[:2], [f'macos-sketchybar {expected[0]}',
                                                                       f'macos-borders {expected[1]}'])
+
+    def test_config_readers_match_what_ansible_reads(self):
+        # The readers see config.yml as Ansible does: a value's !unsafe tag, CR line endings, quotes with trailing
+        # spaces, and every boolean spelling | bool accepts. Run under macOS's bash 3.2 where it exists.
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        block = source[source.index('# Fresh checkouts have no machine-specific config'):
+                       source.index('unset _cfg_tmp\n') + len('unset _cfg_tmp\n')]
+        bash = '/bin/bash' if Path('/bin/bash').exists() else BASH
+        show = ('"$profile" "$_desktop_env" "$_claude_home" "$_codex_work" "$_notes_enabled" "$_podman_machine" '
+                '"$_user_updates_off" "$_chrome_chunk_on" "${_cfg-unset}" "$(trap -p EXIT)"')
+        with tempfile.TemporaryDirectory() as directory:
+            d = Path(directory)
+            (d / 'scripts').mkdir()
+            (d / 'tmp').mkdir()
+
+            def read(config):
+                (d / 'config.yml').write_bytes(config.encode())
+                result = subprocess.run([bash, '-euo', 'pipefail', '-c', f'PROFILE_OVERRIDE=; SCRIPT_DIR={d}/scripts\n'
+                                         + block + f'printf "%s|" {show}'],
+                                        env=dict(os.environ, HOME=directory, TMPDIR=str(d / 'tmp')),
+                                        capture_output=True, text=True)
+                self.assertEqual((result.returncode, result.stderr), (0, ''))
+                self.assertEqual(list((d / 'tmp').iterdir()), [])  # the cleaned copy is gone
+                return result.stdout.split('|')[:-1]
+
+            plain = read('profile: personal\ndesktop_environment: aerospace\nclaude_default_config_dir: ~/.claude\n'
+                         'rollout_enable: [desktop]\n')
+            self.assertEqual(plain, ['personal', 'aerospace', '~/.claude', '', 'false', 'true', 'false',
+                                     'false', 'unset', ''])
+            self.assertEqual(read("profile: !unsafe 'personal'\ndesktop_environment: !unsafe aerospace\n"
+                                  "claude_default_config_dir: !unsafe '~/.claude'\nrollout_enable: [desktop]\n"), plain)
+            self.assertEqual(read('profile: personal\r\ndesktop_environment: aerospace\r\n'
+                                  'claude_default_config_dir: "~/.claude"   \r\nrollout_enable: [desktop]\r\n'), plain)
+            self.assertEqual(read("codex_work_config_dir: '~/.codex w' # work\n")[3], '~/.codex w')
+            for on in ('true', '"true"', '1', "'yes'", 'On'):
+                self.assertEqual(read(f'notes_enabled: {on}\n')[4], 'true', on)
+            for off in ('false', '"false"', '0', "'no'", 'OFF'):
+                self.assertEqual(read(f'containers_macos_machine_enabled: {off}\npackages_user_updates_enabled: {off}\n')[5:7],
+                                 ['false', 'true'], off)
+
+    def test_json_output_without_results_under_bash_3_2(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        line = next(l for l in source.splitlines() if '{"results":[%s]' in l)
+        bash = '/bin/bash' if Path('/bin/bash').exists() else BASH
+        result = subprocess.run([bash, '-u', '-c', 'RESULTS=(); FAILURES=0; WARNS=0\n' + line.strip()],
+                                capture_output=True, text=True)
+        self.assertEqual((result.stdout, result.stderr), ('{"results":[],"failures":0,"warns":0}\n', ''))
 
     def test_macos_git_difftool_check(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
