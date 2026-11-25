@@ -1,7 +1,7 @@
 .PHONY: status plan apply verify rollout-banner bootstrap-hooks help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check test smoke-test \
        dotfiles packages repos notes \
        ssh desktop system repos_dnf redhat containers claude codex container \
-       container-rebuild csb-audit ssh-keys github-ssh-keys vault-init vault-import vault-edit vault-view vault-share-init vault-join vault-add-key \
+       container-rebuild csb-audit ssh-keys github-ssh-keys vault-init vault-import vault-edit vault-view pull vault-share-init vault-join vault-add-key \
        vault-remove-key vault-pull vault-status vault-signing-key update hooks pw-migrate gate \
        smoke-test-container smoke-test-user \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
@@ -117,6 +117,7 @@ help:
 	@echo "  vault-init             Encrypt the vault stub with the SSH keys (after ssh-keys)"
 	@echo "  vault-import FROM=...  Reuse another machine's encrypted vault (file, backup dir or host:path) instead of setup-yubikeys"
 	@echo "  vault-edit             Edit the vault (vault-view: read only); shared once vault-join or vault-share-init ran"
+	@echo "  pull                   git pull --ff-only that keeps a local encrypted vault (skip-worktree) across stub changes"
 	@echo "  vault-share-init       Move this machine's vault into the shared laptop-secrets repo (first machine, once)"
 	@echo "  vault-join             Use the shared vault on this machine (vault-pull: fetch changes; vault-status)"
 	@echo "  vault-signing-key      Copy ~/.ssh/id_ed25519_sk_signing (KEY=...) into the vault, nothing to paste"
@@ -533,6 +534,7 @@ TEST_SCRIPTS := \
 	'.venv/bin/python3 scripts/test-workstation-audit.py' \
 	'.venv/bin/python3 scripts/test-go-checksum.py' \
 	'.venv/bin/python3 scripts/test-drive-sync.py' \
+	'.venv/bin/python3 scripts/test-pull.py' \
 	'.venv/bin/python3 scripts/test-laptop-migration.py' \
 	'.venv/bin/python3 scripts/test-claude-privacy.py' \
 	'.venv/bin/python3 scripts/test-ansible-input-guards.py' \
@@ -600,6 +602,10 @@ vault-import: guard-not-root
 vault-edit:
 	@if scripts/vault-shared.sh active; then scripts/vault-shared.sh edit; else \
 	EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) ansible-vault edit group_vars/all/vault.yml; fi
+
+# Fast-forward this checkout, keeping a local vault marked skip-worktree (plain git pull refuses when the stub changes)
+pull:
+	@scripts/pull.sh
 
 vault-view:
 	@if scripts/vault-shared.sh active; then scripts/vault-shared.sh view; else \

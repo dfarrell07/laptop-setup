@@ -102,6 +102,7 @@ make check                  # full sudo dry run; runs preflight first
 make preflight              # prerequisites and CSB detection; run after bootstrap
 make backup | backup-dry-run  # back up dotfiles before re-provisioning
 make bootstrap | hooks | bootstrap-hooks  # deps and collections | git hooks | checksum-pinned gitleaks
+make pull                   # git pull --ff-only keeping the encrypted vault (skip-worktree) across stub changes
 make collections            # verify and reinstall vendored collections, no sudo (after pulling a collections-dist bump)
 make vendor-collections     # re-vendor into collections-dist/ (SECURITY.md Collections Supply Chain)
 make container | container-rebuild  # distrobox/toolbox dev container
