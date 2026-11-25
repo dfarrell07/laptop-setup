@@ -62,6 +62,8 @@ def main():
     # Make targets a suite runs still go through verify-ansible-args.sh, which sets its own value.
     os.environ['ANSIBLE_VAULT_PASSWORD_FILE'] = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                                              'scripts', 'vault-pass-ci.sh')
+    # No __pycache__ beside role plugins: the make wrapper refuses untracked files there (parse-config.py --vars-files).
+    os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
     start = time.monotonic()
     failed = []
     total = 0.0

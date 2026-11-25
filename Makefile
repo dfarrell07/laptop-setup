@@ -541,6 +541,7 @@ test: shellcheck test-scripts test-poller test-fedora test-rocky test-debian tes
 TEST_SCRIPTS := \
 	'bash scripts/test-hooks-security.sh' \
 	'.venv/bin/python3 -I scripts/test-config-parser.py' \
+	'.venv/bin/python3 -I scripts/test-checkout-guard.py' \
 	'.venv/bin/python3 -I scripts/test-pre-push.py' \
 	'.venv/bin/python3 -I scripts/test-vault-stub.py' \
 	'.venv/bin/python3 -I scripts/test-workflow-guards.py' \

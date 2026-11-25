@@ -2,6 +2,10 @@
 # Copy to local_repos.yml (gitignored) and list repos on internal git hosts.
 # Concatenated onto git_repos_public by group_vars/all/repos.yml.
 # Hosts must also appear in ssh_work_keyscan_hosts in config.yml.
+# git_repos_local is the only key allowed here, with no {{ }}, {% %}, #jinja2 or control characters: Ansible
+# loads this file before any task, so make refuses anything else (scripts/parse-config.py --vars-files).
+# Apart from the vault scripts' side files it is the only untracked file make allows in group_vars/;
+# settings go in config.yml.
 git_repos_local:
   - url: "git@git.example.internal:group/repo.git"
     dest: "rh-context/group/repo"

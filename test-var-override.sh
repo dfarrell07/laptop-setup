@@ -99,11 +99,11 @@ if [[ -n "$expected_skip" ]]; then
 else
   [[ "$site_out" != *--skip-tags* ]] || { echo 'FAIL: wrapper added --skip-tags with every chunk enabled' >&2; exit 1; }
 fi
-other_out=$(scripts/verify-ansible-args.sh "$fake_ansible" other.yml)
+other_out=$(scripts/verify-ansible-args.sh "$fake_ansible" other.yml --syntax-check)  # check mode: runs on uncommitted work
 [[ "$other_out" != *--skip-tags* ]] || { echo 'FAIL: wrapper added --skip-tags to a non-site.yml run' >&2; exit 1; }
 
 # All inherited ANSIBLE_* (not in the pinned set) and shell-trace vars must be cleared.
-trace_probe='! env | grep -E "^(ANSIBLE_(VAULT_IDENTITY_LIST|DEBUG|TEST_PLUGINS|PRIVATE_KEY_FILE)|BASH_XTRACEFD|PS4|SHELLOPTS|BASHOPTS)="'
+trace_probe='! env | grep -E "^(ANSIBLE_(VAULT_IDENTITY_LIST|DEBUG|PRIVATE_KEY_FILE)|BASH_XTRACEFD|PS4|SHELLOPTS|BASHOPTS)="'
 ANSIBLE_VAULT_IDENTITY_LIST=x@/tmp/evil ANSIBLE_DEBUG=1 ANSIBLE_TEST_PLUGINS=/tmp \
   ANSIBLE_PRIVATE_KEY_FILE=/tmp/k BASH_XTRACEFD=2 PS4='+evil ' \
   scripts/verify-ansible-args.sh bash -c "$trace_probe" \
@@ -126,6 +126,7 @@ if (root / '.venv/bin/python3').exists():
 assert '/evil' not in os.environ['PATH']
 assert os.environ['ANSIBLE_BECOME_PLUGINS'] == '/dev/null'
 assert os.environ['ANSIBLE_LOOKUP_PLUGINS'] == '/dev/null'
+assert os.environ['ANSIBLE_TEST_PLUGINS'] == '/dev/null'  # pinned, not merely cleared
 assert os.environ['ANSIBLE_COLLECTIONS_PATH'].split(':')[0] == str(root / 'collections')
 assert 'PYTHONPATH' not in os.environ
 # every PYTHON* variable is cleared (PYTHONPYCACHEPREFIX would move bytecode out of the verified tree); two are pinned
@@ -138,7 +139,7 @@ PY
 probe_python=python3
 [[ ! -x .venv/bin/python3 ]] || probe_python=.venv/bin/python3
 ANSIBLE_BECOME_PLUGINS=/evil/plugins ANSIBLE_LOOKUP_PLUGINS=/evil/plugins \
-  ANSIBLE_COLLECTIONS_PATH=/evil/collections ANSIBLE_ROLES_PATH=/evil/roles PYTHONPATH=/evil/python \
+  ANSIBLE_COLLECTIONS_PATH=/evil/collections ANSIBLE_ROLES_PATH=/evil/roles PYTHONPATH=/evil/python ANSIBLE_TEST_PLUGINS=/evil/plugins \
   PYTHONPYCACHEPREFIX=/evil/pycache PYTHONWARNINGS=error PYTHONSAFEPATH=1 PYTHONUNKNOWN=1 \
   scripts/verify-ansible-args.sh "$probe_python" "$probe_file"
 echo 'Environment and argument guards passed.'

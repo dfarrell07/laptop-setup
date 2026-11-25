@@ -336,9 +336,9 @@ export ANSIBLE_VAULT_ID_MATCH=False  # prevent ANSIBLE_VAULT_ID_MATCH=true locko
 export ANSIBLE_COLLECTIONS_PATH="${_repo_root}/collections:/usr/share/ansible/collections"
 export ANSIBLE_ROLES_PATH="${_repo_root}/roles"  # every role is in the repo; no user-writable ~/.ansible/roles (as ansible.cfg)
 export ANSIBLE_INVENTORY="${_repo_root}/inventory"  # pin inventory; host_var inject bypasses ANSIBLE_PYTHON_INTERPRETER unset
-export ANSIBLE_ACTION_PLUGINS="${_repo_root}/action_plugins"
-export ANSIBLE_STRATEGY_PLUGINS="${_repo_root}/strategy_plugins"
-export ANSIBLE_HOME="${_repo_root}"  # pin ANSIBLE_HOME — ANSIBLE_HOME=/tmp/evil shifts DEFAULT_MODULE_UTILS_PATH to include /tmp/evil/plugins/module_utils before the installed package; Ansible's module loader searches that path first so a malicious basic.py at /tmp/evil/plugins/module_utils/ansible/module_utils/basic.py executes in root context (Play 1, become:true) for every ansible.builtin.* module across all 13 roles; pinning to _repo_root (validated, non-attacker-writable) prevents this prepend
+export ANSIBLE_ACTION_PLUGINS=/dev/null  # the repo has no action plugins
+export ANSIBLE_STRATEGY_PLUGINS=/dev/null  # the repo has no strategy plugins
+export ANSIBLE_HOME="${_repo_root}"  # ansible-playbook gets / instead (vars-files block below); ansible-lint and Molecule keep the checkout, as ansible_compat caches there; an untracked plugins/<type>/ there would load (Molecule's check refuses only ignored ones). Pin ANSIBLE_HOME — ANSIBLE_HOME=/tmp/evil shifts DEFAULT_MODULE_UTILS_PATH to include /tmp/evil/plugins/module_utils before the installed package; Ansible's module loader searches that path first so a malicious basic.py at /tmp/evil/plugins/module_utils/ansible/module_utils/basic.py executes in root context (Play 1, become:true) for every ansible.builtin.* module across all 13 roles; pinning to _repo_root (validated, non-attacker-writable) prevents this prepend
 export ANSIBLE_MODULE_UTILS=/dev/null       # clear ANSIBLE_MODULE_UTILS — direct env var for module_utils search path; an attacker-set value prepends /tmp/evil/module_utils before built-in paths at PluginLoader resolution time; clearing forces Ansible to use only compiled-in module_utils from the installed package, regardless of ANSIBLE_HOME
 export ANSIBLE_LIBRARY=/dev/null  # an empty value means the current directory; prevent ANSIBLE_LIBRARY=/tmp/evil hijacking short-name module resolution (runs before builtins, become: true = root)
 # Empty path strings are resolved as the current directory by Ansible 2.21.
@@ -347,6 +347,10 @@ export ANSIBLE_FILTER_PLUGINS=/dev/null  # no local filter plugins; prevent shad
 export ANSIBLE_CONNECTION_PLUGINS=/dev/null  # prevent ANSIBLE_CONNECTION_PLUGINS=/tmp/evil hijacking: PluginLoader searches user paths before builtins; malicious local.py intercepts all localhost task execution (all 13 roles, including become:true plays)
 export ANSIBLE_BECOME_PLUGINS=/dev/null      # prevent ANSIBLE_BECOME_PLUGINS=/tmp/evil loading a malicious sudo.py; ANSIBLE_BECOME_EXE pin alone does NOT protect — the plugin is a Python class loaded before build_become_command() runs; a malicious class ignores get_option('become_exe') entirely and constructs any root command string; plugin code also runs in the Ansible user-context process, giving arbitrary pre-become code execution
 export ANSIBLE_TERMINAL_PLUGINS=/dev/null    # defence-in-depth; terminal plugins process connection output; unguarded path allows attacker hook into output stream
+# Every other plugin type too (base.yml *_PLUGIN_PATH): the repo ships none of these, so nothing outside
+# the checkout's playbook- and role-adjacent dirs (checked by parse-config.py --vars-files) is searched.
+export ANSIBLE_TEST_PLUGINS=/dev/null ANSIBLE_CACHE_PLUGINS=/dev/null ANSIBLE_CLICONF_PLUGINS=/dev/null
+export ANSIBLE_HTTPAPI_PLUGINS=/dev/null ANSIBLE_NETCONF_PLUGINS=/dev/null ANSIBLE_DOC_FRAGMENT_PLUGINS=/dev/null
 # SECURITY: clear EVERY exported PYTHON* variable, as for ANSIBLE_* above; no allowlist. PYTHONPYCACHEPREFIX makes
 # Python load bytecode from <prefix>/<source path>/, outside the collections tree verify-collections.sh checks, and
 # PYTHONPATH, PYTHONHOME, PYTHONSTARTUP, PYTHONWARNINGS and the rest change what or how it imports. Then pin the two
@@ -503,6 +507,104 @@ elif [[ -f "$_vault_yml" && -O "$_vault_yml" && -n "$(find "$_vault_yml" -prune 
     chmod 600 "$_vault_yml" || { echo "ERROR: could not restore mode 0600 on group_vars/all/vault.yml" >&2; exit 1; }
 fi
 # vault-mode: end
+# vars-files: begin
+# A tripwire for files in the checkout that git does not account for, which Ansible would load or run before any task
+# could check them (vars that outrank ansible.cfg and the pins above, such as a planted ansible_python_interpreter or
+# ansible_become_exe; role vars and meta dependencies; plugins beside a playbook or role, which load whatever
+# ANSIBLE_*_PLUGINS says). It guards against stray or planted files, not against an attacker running as this user,
+# who could edit .git or .venv instead (SECURITY.md). parse-config.py --vars-files checks git's walk of the whole tree:
+# - always refused, as git status hides them: gitignored files outside the allowlist (config.yml, local_repos.yml with
+#   git_repos_local only, the vault side files, .venv/, collections/, ...), skip-worktree or assume-unchanged flags
+#   (vault.yml aside), tracked byte code. __pycache__ directories are deleted (Python would run a .pyc whose header
+#   matches the source; a cache is never needed), a symlinked one refused; PYTHONDONTWRITEBYTECODE (above) stops new ones.
+# - for a run that executes plays (Molecule too), also untracked files and index entries missing from HEAD
+#   (git add -f, -N); for ansible-playbook, tracked files that differ from HEAD need a typed yes on a terminal
+#   (with none, as for an agent, it refuses). Any process with a pty can type it: it stops unattended runs, it is
+#   not proof that a person confirmed.
+# Syntax checks and task listings never get the become password, so they accept what git status shows and gates run
+# on uncommitted work, except untracked plugin code (*_plugins/, library/, module_utils/ anywhere): a vars plugin
+# beside a playbook runs even for --syntax-check. -i and -M would add paths outside the checkout, and -- would turn
+# --syntax-check into a playbook name, so they are refused. Without git (or outside a checkout) nothing says which
+# files belong: fail closed.
+_tree_mode=""  # set below for ansible-playbook and molecule; the last check before exec runs when it is set
+if [[ "$(basename "${args[0]:-}")" =~ ^(ansible-playbook|molecule)$ ]]; then
+    _mode=provision
+    if [[ "$(basename "${args[0]}")" == molecule ]]; then
+        # Molecule converges real roles (make test-macos on this host) with its own plugin paths, from
+        # molecule.yml's provisioner.env and its defaults, which replace the pins above: only the tree check
+        # guards it. It tests uncommitted edits, so only the confirmation of modified tracked files is relaxed.
+        _mode=molecule
+    else
+        # Root-owned: this user cannot create /plugins/<type> (test, cache, ...), so no ANSIBLE_HOME-derived
+        # plugin dir has files, and Ansible's mkdir(exist_ok) is a no-op (/dev/null would warn on every run).
+        export ANSIBLE_HOME=/
+    fi
+    _value=false
+    for ((_ai=1; _ai<${#args[@]}; _ai++)); do  # not an array slice: bash 3.2 joins one into a single word under this IFS
+        _a="${args[$_ai]}"
+        [[ "$_mode" != molecule ]] || break
+        if "$_value"; then  # the extra-vars value after -e (scanned above), not an option
+            _value=false
+            continue
+        fi
+        if [[ "$_a" == -- ]]; then  # after it --syntax-check would be a playbook name, not check mode
+            echo "ERROR: -- rejected by VERIFY_AND_RUN: pass options before the playbook" >&2
+            exit 1
+        fi
+        [[ "$_a" == --extra-vars || "$_a" =~ ^-[A-Za-z]*e$ ]] && _value=true
+        _n="${_a%%=*}"
+        if [[ "$_a" =~ ^-[bCDhJkKv]*[iM] ]] || { [[ "$_n" == --?* && ${#_n} -ge 3 ]] \
+                && [[ --inventory == "$_n"* || --inventory-file == "$_n"* || --module-path == "$_n"* ]]; }; then
+            echo "ERROR: $_a rejected by VERIFY_AND_RUN: the inventory and module path are pinned to the checkout" >&2
+            exit 1
+        fi
+        if [[ ${#_n} -ge 4 ]] && [[ --syntax-check == "$_n"* || --list-tasks == "$_n"* || --list-hosts == "$_n"* \
+                || --list-tags == "$_n"* ]]; then
+            _mode=check
+        fi
+    done
+    # The root-owned system python when it has PyYAML (Fedora's python3-pyyaml), so nothing in .venv runs the check;
+    # otherwise the checkout's .venv, then python3 from the pinned PATH. Not tried on macOS: its /usr/bin/python3 has no
+    # PyYAML, and without the Command Line Tools it opens an install dialog instead of running.
+    _tree_py=/usr/bin/python3
+    if [[ "$(uname -s)" == Darwin ]] \
+            || ! [[ -x "$_tree_py" && "$(stat -c %u "$_tree_py" 2>/dev/null || stat -f %u "$_tree_py")" == 0 ]] \
+            || ! "$_tree_py" -I -S -c 'import site, sys; sys.path.extend(site.getsitepackages([sys.prefix])); import yaml' \
+            2>/dev/null; then
+        _tree_py="${_repo_root}/.venv/bin/python3"
+        [[ -x "$_tree_py" ]] || _tree_py=python3
+    fi
+    _tree_mode="$_mode"
+    _confirmed=""
+    # -S: no .pth file in .venv runs before the check (one calling os._exit(0) would pass it); it refuses .pth
+    # files no installed package lists. Its NOTE on stderr (HEAD not on origin/main) reaches the terminal.
+    _vf=$("$_tree_py" -I -S "${_repo_root}/scripts/parse-config.py" --vars-files --mode "$_mode" --remove-bytecode \
+        --warn-unpublished --inventory "$ANSIBLE_INVENTORY") && _rc=0 || _rc=$?
+    if [[ $_rc -eq 4 ]]; then
+        {
+            echo "These tracked files differ from the last commit (HEAD), and this run would use them:"
+            while IFS= read -r _l; do printf '  %s\n' "$_l"; done <<< "$_vf"
+        } >&2
+        if [[ ! -t 0 ]]; then
+            echo "SECURITY: refusing to start Ansible without a terminal to confirm them: commit or revert them, or run" \
+                "this make target yourself in a terminal." >&2
+            exit 2
+        fi
+        IFS= read -rp 'Type yes to provision with them: ' _answer || _answer=''
+        [[ "$_answer" == yes ]] || { echo "ERROR: not confirmed; nothing has run" >&2; exit 2; }
+        _confirmed="$_vf"
+    elif [[ $_rc -ne 0 ]]; then
+        {
+            echo "SECURITY: refusing to start Ansible. Git does not account for these files, which Ansible could load:"
+            while IFS= read -r _l; do printf '  %s\n' "$_l"; done <<< "$_vf"
+            echo "Move each untracked file out of the checkout (git status --ignored lists them); settings belong in"
+            echo "config.yml, internal repos in group_vars/all/local_repos.yml (git_repos_local only; see local_repos.yml.example)."
+        } >&2
+        exit 2
+    fi
+    unset _vf _l _rc _mode _a _ai _n _answer _value
+fi
+# vars-files: end
 "${_repo_root}/scripts/verify-collections.sh"
 
 # All checks passed — exec the remaining arguments (ansible-playbook or molecule with its args).
@@ -557,6 +659,23 @@ if [[ -t 0 ]]; then
         break
     done
 fi
+# vars-files-final: begin
+# The checkout check again, last, after every prompt (typed yes, become password): a file planted while someone typed
+# is refused, and the confirmed edits must be exactly the ones confirmed (same files, same content). Byte code caches
+# another Python process wrote meanwhile (a parallel make gate) are deleted again, as in the first check.
+if [[ -n "${_tree_mode:-}" ]]; then
+    _vf=$("$_tree_py" -I -S "${_repo_root}/scripts/parse-config.py" --vars-files --mode "$_tree_mode" --remove-bytecode \
+        --inventory "$ANSIBLE_INVENTORY") && _rc=0 || _rc=$?
+    if ! [[ $_rc -eq 0 || ( $_rc -eq 4 && "$_vf" == "$_confirmed" ) ]]; then
+        {
+            echo "SECURITY: refusing to start Ansible: the checkout changed after the first check (nothing has run):"
+            while IFS= read -r _l; do printf '  %s\n' "$_l"; done <<< "$_vf"
+        } >&2
+        exit 2
+    fi
+    unset _vf _rc _l
+fi
+# vars-files-final: end
 if "$_bp_stdin"; then
     exec "${args[@]}" < <(printf '%s' "$_bp")
 else

@@ -247,6 +247,72 @@ other-writable, in root-owned directories that are not group- or other-writable;
 be the Homebrew prefix's `bin/transcrypt`. User preferences that run as the user with no secret, such as `desktop_wm_browser` and
 `dotfiles_gh_editor`, stay free-form.
 
+**Checkout tripwire.** Ansible reads far more of the checkout than the files a play names, before any task could check them:
+`group_vars/`, `host_vars/` and inventory files outrank `ansible.cfg` and the wrapper's `ANSIBLE_*` pins (a planted
+`host_vars/localhost.yml` with `ansible_python_interpreter` runs every module, an `ansible_become_exe` replaces sudo and receives the
+become password); role `vars/`, `defaults/` and `meta/` dependencies, the task, template and file search paths, and the `*_plugins/`,
+`library/` and `module_utils/` dirs beside any playbook or role are read whatever `ANSIBLE_*_PLUGINS` says, and a filter or test
+plugin there is imported as soon as templating starts. So before it starts `ansible-playbook` or `molecule` the wrapper
+(`scripts/parse-config.py --vars-files`) checks git's own walk of the whole tree against `HEAD`:
+
+- **Always refused**, because `git status` hides them: gitignored files outside the allowlist below, skip-worktree or assume-unchanged
+  flags on anything but `vault.yml`, and tracked byte code. `vault.yml` itself must be the committed stub byte for byte, or one whole
+  Ansible Vault file (an optional BOM and leading whitespace, a `$ANSIBLE_VAULT;1.1` or `1.2;AES256` header, then only hex lines):
+  plaintext beside the encrypted vault, inline `!vault` values included, would load like any `group_vars` file, so it is refused
+  whatever its skip-worktree bit says. Untracked `__pycache__` directories are deleted (Python would run a `.pyc`
+  whose header matches the source; a cache is never needed), a symlinked one is refused, and `PYTHONDONTWRITEBYTECODE` keeps new ones
+  from being written.
+- **Refused for a run that executes plays** (every `ansible-playbook` target but syntax checks and task listings, and Molecule):
+  untracked files outside the allowlist and index entries missing from `HEAD` (`git add -f`, `git add -N`). Molecule converges real
+  roles (`make test-macos` on this host) with plugin paths of its own, from `provisioner.env` in `molecule.yml` and its defaults,
+  which replace the wrapper's pins, so this check is what guards it.
+- **Confirmed for an `ansible-playbook` run that executes plays**: tracked files whose content differs from `HEAD` are listed and
+  need a typed `yes` on a terminal; without a terminal the run is refused. There is no override variable, since any process could set
+  one. The prompt is a tripwire for unattended runs, not proof that a person confirmed: any process with a pseudo-terminal can type
+  `yes`. Edits are found by hashing each file against `HEAD`, and every git call overrides `.git/config` (`core.ignorecase=false`,
+  `core.precomposeunicode=false`, full stat checks, no fsmonitor), so neither a weakened stat check nor `core.ignorecase=true` hides
+  an edit or a planted `Vars.yml` beside `vars.yml`; a path differing from a tracked one only in case is refused in every mode.
+  Molecule tests uncommitted edits, so it does not ask.
+- **Checked again last**, right before `exec` and after every prompt (typed `yes`, become password): a file planted while someone
+  types is refused, and the confirmed edits must still be the same files with the same content.
+- A note on stderr, never a refusal, when `HEAD` is not on `origin/main`: a local commit makes whatever it holds tracked, and the
+  owner runs feature branches.
+- Syntax checks and task listings never get the become password, so they accept what `git status` shows (new, staged and edited
+  files) and `make gate` runs on uncommitted work, except untracked plugin code (`*_plugins/`, `library/`, `module_utils/` anywhere
+  in the tree): a vars plugin beside a playbook runs even for `--syntax-check`. Replace refs (`refs/replace/`) and `info/grafts`
+  are refused in every mode, and the check runs with `GIT_NO_REPLACE_OBJECTS=1`. `--` is refused: after it `--syntax-check` would be a
+  playbook name. A new file needs a commit before `make test-<scenario>` runs; CI runs Molecule without the wrapper, from a clean
+  checkout.
+
+The allowlist: `config.yml`, `CLAUDE.local.md`, the Chrome bookmark list (`local_bookmarks.yml` and its backups),
+`group_vars/all/local_repos.yml` (only `git_repos_local`, passing the `config.yml` template-marker and control-character checks, each
+`dest` a relative path below the repos directory: no `..`, not absolute), the
+side files the vault scripts leave beside `vault.yml` and `scripts/vault-pass.sh`, and the generated or scratch directories `.venv/`,
+`collections/` (checked by `verify-collections.sh`), `node_modules/`, `galaxy_cache/`, `tmp/` and `.claude/`, plus
+`toolbox/migrate.lock` while it is the only file there and an empty regular file (Fedora's toolbox writes it to the working
+directory when `XDG_RUNTIME_DIR` is unset). Anything else, such as a
+scratch directory, belongs outside the checkout. For `ansible-playbook` the wrapper also sets `ANSIBLE_HOME=/` (root-owned, so no
+`plugins/<type>/` can appear there); it pins every plugin path to `/dev/null` and the roles and collections paths to the checkout's,
+and rejects `-i` and `-M`.
+A checkout git cannot read (no git, no commit, not the top of a checkout) fails closed. The first Play 0 task repeats the check for
+direct `ansible-playbook` runs; it runs no module, so it stops a plain planted interpreter or become executable, but planted Jinja
+and plugins act before it.
+
+**This is a tripwire against stray or agent-planted files, not an anchor against an attacker running as your user.** Such an attacker
+can edit `.git` (hooks, config, attributes and clean filters, the index), `.venv/`, `collections/`,
+`scripts/vault-pass.sh` and its `.sha256` (allowlisted by design, yet an executable Ansible runs as the vault password file), or change
+a file after the last check: the check runs right before `exec`, but Ansible reads tasks, templates and role files lazily during the
+run. **`.venv/` and `collections/` integrity rests on the same same-user trust as the tracked files.** The checker runs with the
+root-owned system `python3 -I -S` where it has PyYAML (Fedora), so nothing in `.venv` runs the check itself, and otherwise with `.venv`'s
+python under `-I -S`, so no `.pth` file runs first. Its refusal of `.pth` and `sitecustomize` files no installed package's `RECORD`
+lists is only a speed bump: it proves `RECORD` and the files agree, and a planted `dist-info/RECORD` listing its own `.pth`, or an
+edit to an installed module such as `yaml/__init__.py`, passes it. `verify-collections.sh` hashes only the collections' Python
+files, not `meta/runtime.yml` or their YAML. The `local_repos.yml` `dest` check is lexical: a symlinked directory under
+`git_repos_base_dir` still redirects a clone. The fix for that class is an owner decision: provision from a clone this user
+cannot write (root-owned, or on a read-only mount) whose `HEAD` is checked with `git verify-commit` against the owner's
+signing key, with its own `.venv`. We recommend it for `make all` and the `sys_*` chunks once commit signing is enforced again
+(`.gpg-enforcement`); until then the tripwire is the guard.
+
 Each role also re-validates its critical inputs at the start of `main.yml` (for example, `roles/claude/tasks/main.yml` constrains
 `claude_install_url` to `claude.ai` or `anthropic.com`), so a skipped `pre_tasks` does not reach the installer.
 
