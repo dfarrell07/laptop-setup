@@ -86,6 +86,15 @@ for now: Claude's background sessions (`claude --bg --resume`) stop after about 
 supervisor, shared per Claude config dir, would live in, and die with, the getty's cgroup; an interactive resume would mean scripting
 Claude's trust dialog.
 
+## Per-session isolation
+
+One launch path: this getty for Remote Control, and the harness's own worktrees for isolation; there is no separate
+session launcher. Every session started from the phone begins in `agent_getty_dir` (`~`) in the pair's permission
+mode (Claude pairs: bypass by default), and Claude does not keep the trust answer for `~` itself. Two sessions editing the same
+checkout collide, so before editing a repository ask the session to move into a worktree (Claude's EnterWorktree
+tool), or start it there at the machine with `claude --worktree <name>`; a Vertex work session, which has no Remote
+Control, starts with `cwt <name>`. Codex has its own worktree support.
+
 ## Out of scope
 
 Queues, schedules, restarting sessions a daemon started, auto-detecting profiles, the missing pairs above.

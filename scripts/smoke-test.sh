@@ -495,26 +495,6 @@ else
   unset -f _home_disp
 fi
 unset _logged_out _timed_out _codex_personal
-# Session placement (claude role writes ~/.config/claude-sessions/machine; the launcher decides): no misplaced sessions
-_placement=$HOME/.config/claude-sessions/machine
-_launcher=$(compgen -G "${HOME}/src/*/claude-skills*/skills/sessions/scripts/session.sh" | head -1 || true)
-if [[ -n "$CONTAINER" ]]; then
-  record "claude-session-placement" "SKIP" "host-only check"
-elif [[ ! -f "$_placement" ]]; then
-  record "claude-session-placement" "PASS" "placement off (claude_machine_role unset)"
-elif [[ -z "$_launcher" ]]; then
-  record "claude-session-placement" "SKIP" "session launcher not found under ~/src/*/claude-skills*"
-elif ! _sessions=$(bash "$_launcher" ls 2>/dev/null); then
-  record "claude-session-placement" "WARN" "session launcher ls failed: $_launcher"
-else
-  # ls lines: <session> <running|stopped|failed> [misplaced] <dir>; any misplaced session, running or not, fails
-  _misplaced=$(awk '$3 == "misplaced" {print $1}' <<<"$_sessions" | paste -sd' ' -)
-  if [[ -n "$_misplaced" ]]; then
-    record "claude-session-placement" "FAIL" "sessions on the wrong machine: $_misplaced (session.sh stop, then start on the right one)"
-  else record "claude-session-placement" "PASS"; fi
-fi
-unset _placement _launcher _misplaced _sessions
-
 # Daily user-space updater (packages role; docs/auto-updates.md): Linux host only
 if $IS_LINUX && [[ -z "$CONTAINER" ]]; then
   if $_user_updates_off; then
