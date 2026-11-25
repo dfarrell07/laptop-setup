@@ -142,13 +142,12 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 ## desktop
 
 - **Why:** GNOME, sway, i3 or AeroSpace configuration. Apply it with `make apply CHUNK=desktop`: the role target `make desktop` also applies
-  `login_shell` (zsh and, for an SSSD account, the sssd override) whenever that chunk is enabled.
+  `login_shell` (zsh and, for an SSSD account, the sssd override) and `chrome` whenever those chunks are enabled.
 - **Breaks if wrong:** a bad compositor config can leave the session unusable; keys that IT or `sys_baseline` lock are ignored.
-- **Verify:** no check is mapped on Linux (macOS has one), so `make verify CHUNK=desktop` exits 1 (state unknown) by design. Pass criterion: `make plan
-  CHUNK=desktop` shows changed=0 and no dconf warning, then log in again from a TTY or second session.
+- **Verify:** no check is mapped on Linux (macOS has one; Chrome's are under `chrome`), so `make verify CHUNK=desktop` exits 1 (state
+  unknown) by design. Pass criterion: `make plan CHUNK=desktop` shows changed=0 and no dconf warning, then log in again from a TTY or
+  second session.
 - **Before:** `dconf dump / > ~/dconf-before.ini` (the system snapshot block also takes it; do it before the first desktop run).
-- **Chrome:** with `desktop_chrome_page_zoom` set, each profile's default page zoom (`Preferences`, written only while Chrome
-  is closed; a running Chrome gets a warning). Undo: set it to `''`, then choose the zoom in Chrome's Settings > Appearance.
 - **Undo:** `dconf reset <key>` for each key the role wrote (`/org/gnome/desktop/interface/color-scheme` under sway; the
   `desktop_gnome_hardening_dconf` and `desktop_gnome_ui_dconf` keys in `roles/desktop/defaults/main.yml` under gnome, and the two
   `desktop_gnome_scroll_dconf` natural-scroll keys under either), then
@@ -297,6 +296,22 @@ open until you are done. To undo:
   exported wrappers that would shadow host tools:
   `for f in oc kubectl golangci-lint; do grep -q '^# distrobox_binary' ~/.local/bin/$f 2>/dev/null && rm ~/.local/bin/$f; done`.
   Tools Go-installed into the shared `~/go/bin` stay; delete them by hand if unwanted.
+
+## chrome
+
+- **Why:** personal Chrome profiles from git instead of Chrome Sync ([chrome.md](chrome.md)). Apply with `make apply CHUNK=chrome`
+  (needs the desktop chunk enabled; Chrome quit).
+- **Breaks if wrong:** a bad site setting or policy in a personal profile; on a machine whose policy is not ours nothing is written
+  under `/etc` or `/Library`.
+- **Verify:** `make verify CHUNK=chrome` (`chrome-profiles`, `chrome-policy`); `make smoke-test` adds `chrome-extensions`.
+- **What it writes:** each profile's page zoom and the personal profiles' color scheme, site settings and (where
+  machine policy is not ours) privacy preferences in `Preferences`, written only while Chrome is closed; where machine policy is ours,
+  `/etc/opt/chrome/policies/{recommended,managed}/laptop-setup.json` and extension files listed in
+  `~/.config/laptop-setup/chrome-external-extensions.json` (Linux), or `com.google.Chrome` user defaults and
+  `/Library/Application Support/Google/Chrome/External Extensions` (macOS). Undo: `desktop_chrome_manage: false` and
+  `desktop_chrome_page_zoom: ''`, then `make apply CHUNK=chrome` removes the policy and extension files: Chrome uninstalls those extensions,
+  with their local data, at its next start. Preferences stay as set until changed in Chrome's Settings.
+- **Undo:** see above; `Preferences.laptop-setup-bak` beside each profile's `Preferences` holds it as it was before the latest change.
 
 ## login_shell
 

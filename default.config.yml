@@ -637,7 +637,12 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   desktop_gnome_touchpad_tap: true    (roles/desktop/defaults)
 #   desktop_gnome_touchpad_natural_scroll: false  (roles/desktop/defaults; desktop_gnome_mouse_natural_scroll: false too)
 #   desktop_chrome_page_zoom: ''  (roles/desktop/defaults) — Chrome's default page zoom in percent (e.g. 80), set in every
-#     profile while Chrome is closed (a running Chrome gets a warning: quit it, re-run make desktop); '' leaves it alone
+#     profile while Chrome is closed (a running Chrome gets a warning: quit it, re-run make apply CHUNK=chrome); '' leaves it alone
+#   desktop_chrome_manage: true  (roles/desktop/defaults) — personal Chrome profiles from git instead of Chrome Sync
+#     (docs/chrome.md): extensions (desktop_chrome_extensions, _extra), recommended policies (desktop_chrome_policies_recommended,
+#     _extra; null drops one), desktop_chrome_policies_enforced (Linux), desktop_chrome_color_scheme: dark, and the private
+#     desktop_chrome_site_settings / desktop_chrome_default_site_settings (set those here only); personal profiles are
+#     those signed in with a consumer account of desktop_chrome_personal_domains: [gmail.com, googlemail.com]
 #   desktop_gnome_dynamic_workspaces: false     (roles/desktop/defaults)
 #   desktop_gnome_workspace_count: 4   (roles/desktop/defaults)
 #   desktop_gnome_xkb_options: [lv3:ralt_switch]  (roles/desktop/defaults)

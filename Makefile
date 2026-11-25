@@ -8,7 +8,7 @@
        test-scripts test-poller test-gitleaks test-% \
        repos-% \
        preflight guard-not-root guard-libvirt-group \
-       pip-lock pip-sync npm setup-yubikeys collections vendor-collections migration-inventory workstation-audit chrome-bookmarks chrome-bookmarks-export chrome-bookmarks-install chrome-bookmarks-backup chrome-bookmarks-verify chrome-bookmarks-keys usb-add aide-rebaseline \
+       pip-lock pip-sync npm setup-yubikeys collections vendor-collections migration-inventory workstation-audit chrome-bookmarks chrome-bookmarks-export chrome-bookmarks-install chrome-bookmarks-backup chrome-bookmarks-verify chrome-bookmarks-keys chrome-extensions usb-add aide-rebaseline \
        test-vm repos-dnf
 
 # *** ORDERING CRITICAL — DO NOT MOVE THESE BLOCKS ***
@@ -139,6 +139,7 @@ help:
 	@echo "  chrome-bookmarks-verify  Decrypt the backup with each plugged-in listed YubiKey and check it; no Chrome file touched"
 	@echo "  chrome-bookmarks-keys    Plugged-in YubiKeys by serial against chrome-bookmarks/recipients (SERIAL=<n> adds that key)"
 	@echo "  chrome-bookmarks-install Restore the backup's work and personal sets into the matching profiles (Chrome closed)"
+	@echo "  chrome-extensions      Open the Web Store page of each declared extension a personal Chrome profile lacks"
 	@echo "  workstation-audit      Write a private JSON audit of this workstation"
 	@echo
 	@echo "Development:"
@@ -442,6 +443,12 @@ chrome-bookmarks-verify: guard-not-root .venv
 chrome-bookmarks-install: guard-not-root .venv
 	.venv/bin/python3 -I scripts/chrome-bookmarks-install.py
 
+# The declared extensions a personal profile lacks (desktop_chrome_extensions, docs/chrome.md), each opened in its
+# profile to add by hand; the URLs are printed without a display. Uses the settings the last chrome chunk run rendered.
+chrome-extensions: guard-not-root
+	@test -f "$$HOME/.config/laptop-setup/chrome.json" || { echo "Chrome is not set up yet: run make apply CHUNK=chrome first"; exit 1; }
+	python3 -I roles/desktop/files/chrome.py open "$$HOME/.config/laptop-setup/chrome.json"
+
 
 preflight:
 	scripts/preflight.sh
@@ -569,7 +576,7 @@ TEST_SCRIPTS := \
 	'.venv/bin/python3 scripts/test-workstation-audit.py' \
 	'.venv/bin/python3 scripts/test-go-checksum.py' \
 	'.venv/bin/python3 scripts/test-drive-sync.py' \
-	'.venv/bin/python3 scripts/test-chrome-page-zoom.py' \
+	'.venv/bin/python3 scripts/test-chrome.py' \
 	'.venv/bin/python3 scripts/test-pull.py' \
 	'.venv/bin/python3 scripts/test-laptop-migration.py' \
 	'.venv/bin/python3 scripts/test-claude-privacy.py' \

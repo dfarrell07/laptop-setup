@@ -83,6 +83,13 @@ rollout_catalog:
     sudo: false
     requires: [containers]
     verify: [distrobox-container]
+  chrome:
+    desc: Personal Chrome profiles (extensions, policies, profile settings, page zoom; docs/chrome.md)
+    risk: medium  # root writes Chrome policy and extension files where machine policy is ours
+    requires: [desktop]  # its tasks live in the desktop role and carry that role's tag
+    # PASS n/a without Chrome. chrome-extensions is in make smoke-test only: extensions install at Chrome's next
+    # start, or by hand on a CSB laptop, so it would fail a verify right after a correct apply.
+    verify: [chrome-profiles, chrome-policy]
   login_shell:
     desc: zsh as the login shell (usermod or SSSD override)
     risk: medium

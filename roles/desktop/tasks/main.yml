@@ -931,31 +931,25 @@
               {{ _desktop_gnome_scroll_results.results | selectattr('failed') | map(attribute='item.key') | join(', ') }}
           when: _desktop_gnome_scroll_results.results | selectattr('failed') | list | length > 0
 
-# --- Chrome default page zoom (Linux and macOS) ---
-# No Chrome policy sets it: it is each profile's Preferences, which Chrome rewrites from memory while it runs, so the
-# helper writes only while Chrome is closed and otherwise asks for a re-run.
-- name: Chrome default page zoom
-  when:
-    - desktop_chrome_page_zoom | string | length > 0
-    - not (system_is_container | default(false))
-  block:
-    - name: Set Chrome's default page zoom in every profile
-      ansible.builtin.command:
-        argv: >-
-          {{ [ansible_facts.get('python', {}).get('executable', 'python3'), '-I', '-c',
-              lookup('ansible.builtin.file', role_path ~ '/files/chrome-page-zoom.py'),
-              desktop_chrome_user_data_dir, desktop_chrome_page_zoom | string]
-             + (['--check'] if ansible_check_mode else []) }}
-      register: _desktop_chrome_zoom
-      changed_when: _desktop_chrome_zoom.stdout | trim == 'changed'
-      check_mode: false
+# --- Chrome (Linux and macOS): policies, extensions, profile settings and page zoom (docs/chrome.md) ---
+# Its own chunk (chrome), inside the desktop role: make apply CHUNK=desktop skips it.
+- name: Check whether Google Chrome is installed
+  ansible.builtin.stat:
+    path: "{{ '/Applications/Google Chrome.app' if is_macos else '/opt/google/chrome/chrome' }}"
+  register: _desktop_chrome_app
+  when: is_linux or is_macos
+  tags: [chrome]
 
-    - name: Warn that Chrome must be closed to set its page zoom
-      ansible.builtin.debug:
-        msg: >-
-          WARNING: Chrome is running, so its default page zoom ({{ desktop_chrome_page_zoom }}%) was not set: quit
-          Chrome (every window), then run make desktop again.
-      when: _desktop_chrome_zoom.stdout | trim == 'running'
+- name: Chrome
+  ansible.builtin.include_tasks:
+    file: chrome.yml
+    apply:
+      tags: [chrome]
+  tags: [chrome]
+  when:
+    - is_linux or is_macos
+    - not (system_is_container | default(false))
+    - _desktop_chrome_app.stat.exists | default(false)
 
 # --- GNOME hardening (Linux only, GNOME desktops) ---
 - name: GNOME hardening dconf settings
