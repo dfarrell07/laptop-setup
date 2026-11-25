@@ -57,7 +57,7 @@ def slug(name, taken):
 
 def clean_name(text, fallback):
     # control, format (bidi) and surrogate characters would break the YAML, the HTML or the bar of names
-    text = ''.join(' ' if unicodedata.category(c) in ('Cc', 'Cf', 'Cs') else c for c in str(text or ''))
+    text = ''.join(' ' if unicodedata.category(c) in ('Cc', 'Cf', 'Cs', 'Zl', 'Zp') else c for c in str(text or ''))
     return text.strip()[:render.MAX_NAME] or fallback
 
 

@@ -75,6 +75,17 @@ class ChromeBookmarksExportTests(unittest.TestCase):
                                  '--output-dir', str(self.dir / 'html')], capture_output=True, text=True)
         self.assertEqual(render.returncode, 0, render.stderr)
 
+    def test_line_separator_titles_are_cleaned_not_fatal(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('ex', ROOT / 'scripts/chrome-bookmarks-export.py')
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        for title in ('Line\u2028sep', 'Para\u2029sep'):
+            cleaned = mod.clean_name(title, 'x')
+            self.assertNotIn('\u2028', cleaned)
+            self.assertNotIn('\u2029', cleaned)
+            mod.render.check_name(cleaned, 'p')  # what the export writes, the renderer accepts
+
     def test_previous_files_are_kept_and_nothing_is_written_without_bookmarks(self):
         self.out.write_text('curated\n')
         self.profile('Default', 'Personal', {'bookmark_bar': folder('Bar', url('A', 'https://a.example/'))})

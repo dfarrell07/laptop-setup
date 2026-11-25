@@ -10,6 +10,7 @@ import html
 import os
 from pathlib import Path
 import re
+import unicodedata
 import sys
 from urllib.parse import urlsplit
 
@@ -62,21 +63,34 @@ def check_items(items, where, depth, count):
             check_url(item['url'], place)
 
 
+BAD_CHARS = r'[\x00-\x1f\x7f-\x9f\u2028\u2029]'  # C0/C1 controls and line separators: they break the file or YAML
+
+
+def is_text(value):
+    try:
+        value.encode('utf-8')  # a lone surrogate cannot be written
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
 def check_name(name, place):
-    if not isinstance(name, str) or not name.strip() or len(name) > MAX_NAME or re.search(r'[\x00-\x1f]', name):
-        raise Invalid(f'{place}: name must be 1-{MAX_NAME} printable characters')
+    if (not isinstance(name, str) or not name.strip() or len(name) > MAX_NAME or re.search(BAD_CHARS, name)
+            or not is_text(name)):
+        raise Invalid(f'{place}: name must be 1-{MAX_NAME} printable characters (quote one that YAML reads as a number)')
 
 
 def check_url(url, place):
     # http(s) only: javascript:, data: and file: bookmarks run code or read local files when clicked
-    if not isinstance(url, str) or re.search(r'[\x00-\x20]', url):
+    if not isinstance(url, str) or re.search(r'[\x00-\x20]', url) or re.search(BAD_CHARS, url):
         raise Invalid(f'{place}: url must be a string without spaces or control characters')
-    try:
-        url.encode('utf-8')
-    except UnicodeEncodeError:
-        raise Invalid(f'{place}: url must be valid text') from None
+    if not is_text(url):
+        raise Invalid(f'{place}: url must be valid text')
+    if any(unicodedata.category(c) == 'Cf' for c in url):  # bidi overrides, zero-width marks: a URL that misleads
+        raise Invalid(f'{place}: url must not contain invisible formatting characters')
     try:
         parts = urlsplit(url)
+        parts.port  # raises on a port that is not a number from 0 to 65535
     except ValueError as error:
         raise Invalid(f'{place}: url does not parse ({error})') from None
     if parts.scheme not in ('http', 'https') or not parts.hostname:
@@ -157,9 +171,13 @@ def main():
         target = args.output_dir / f'chrome-bookmarks-{profile}.html'
         temporary = target.with_suffix('.tmp')
         fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
-        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
-            stream.write(document(items))
-        os.replace(temporary, target)
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+                stream.write(document(items))
+            os.replace(temporary, target)
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
         print(f'{profile}: {target} — in that Chrome profile, delete the previous import (the "{FOLDER}" folder, or the '
               '"Imported" folder holding it), then Settings > Import bookmarks and settings > Bookmarks HTML file; '
               'Chrome Sync carries it to your other machines')
