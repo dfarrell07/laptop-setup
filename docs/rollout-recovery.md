@@ -195,9 +195,13 @@ open until you are done. To undo:
   chunk created it (keep `~/.gemini`: it holds the login), `~/.config/claude/` and `~/.config/user-tmpfiles.d/claude-privacy.conf`. If
   `claude_queue_enabled` was on: `systemctl --user disable --now claude-queue.timer`, delete
   `~/.config/systemd/user/claude-queue.{service,timer}` and `~/.local/bin/claude-queue-poller.sh`, `systemctl --user daemon-reload`, and
-  `sudo rm /etc/logrotate.d/claude-queue-poller`. If `claude_orchestrator_enabled` was on: `systemctl --user disable
-  claude-orchestrator.service`, delete `~/.config/systemd/user/claude-orchestrator.service`, and `tmux kill-session -t
-  personal-<claude_orchestrator_name>` if wanted. The `bubblewrap` and `socat` packages can stay (restoring `settings.json` removes the
+  `sudo rm /etc/logrotate.d/claude-queue-poller`. If `agent_getty_pairs` was set: `systemctl --user stop 'agent-getty@*'` and
+  `systemctl --user disable agent-getty@<pair>` per pair (macOS: `launchctl bootout
+  gui/$(id -u)/com.<user>.claude-getty-<pair>` per pair), delete
+  `~/.config/systemd/user/agent-getty@.service` (macOS: `~/Library/LaunchAgents/com.<user>.claude-getty-*.plist`) and
+  `~/.local/bin/agent-getty`; on macOS also `tmux -L agent-getty-<pair> kill-server` per pair; `agy remote-control stop`
+  if agy/personal was listed. The old `claude-orchestrator.service` this replaced: `tmux kill-session -t
+  personal-<claude_orchestrator_name>` if its session is still running. The `bubblewrap` and `socat` packages can stay (restoring `settings.json` removes the
   sandbox requirement); `sudo dnf remove socat` if wanted.
 
 ## drive_sync

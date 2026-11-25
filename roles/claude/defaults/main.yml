@@ -122,13 +122,17 @@ claude_session_either: {}
 
 claude_queue_enabled: false
 
-# Session orchestrator at boot (Linux): a systemd user unit runs the claude-skills sessions launcher, which starts the
-# orchestrator in tmux with Remote Control on. Design: claude-skills plans/session-orchestrator.md, "Boot".
-claude_orchestrator_enabled: false
-# Physical path (no symlink) of a claude-skills checkout that has skills/sessions; it loads as the orchestrator's plugin
-claude_orchestrator_checkout: >-
-  {{ git_repos_base_dir | default(ansible_facts['user_dir'] ~ '/src') }}/{{ dotfiles_github_user }}/claude-skills
-claude_orchestrator_name: orchestrator  # session personal-<name>: its tmux session and Remote Control name
+# agent-getty (docs/agent-getty.md): at boot, keep each listed harness/profile pair's remote-control daemon running in
+# detached tmux (systemd user unit on Linux, LaunchAgent on macOS), so new sessions can be started from the phone/web
+# (empty: off).
+agent_getty_pairs: []
+agent_getty_dir: "{{ ansible_facts['user_dir'] }}"  # where Claude starts new sessions; its trust prompt is answered
+agent_getty_host: "{{ ansible_facts['hostname'] | regex_replace('[^A-Za-z0-9-]', '-') }}"  # prefix of daemon names
+# Pairs agent-getty runs, and pairs it skips with a warning until they have a profile home or Remote Control works there
+_getty_supported: [claude/personal, claude/personal2, codex/work, codex/personal, agy/personal]
+_getty_not_yet: [claude/work, agy/work, codex/personal2, agy/personal2]
+codex_work_config_dir: "{{ ansible_facts['user_dir'] }}/.codex"  # fallback; mirrors roles/codex/defaults
+codex_personal_config_dir: "{{ ansible_facts['user_dir'] }}/.codex-personal"  # fallback; mirrors roles/codex/defaults
 claude_queue_allowed_authors: []  # GitHub logins allowed to trigger queue; MUST set when enabled — empty makes the poller refuse to run
 claude_log_dir: "{{ ansible_facts['user_dir'] }}/.local/state/claude/logs"
 claude_runtime_config_dir: "{{ ansible_facts['user_dir'] }}/.config/claude"

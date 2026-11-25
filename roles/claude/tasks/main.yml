@@ -430,6 +430,10 @@
     force: false
   when: claude_queue_enabled | bool
 
+# Before the queue's unit guard below: agent-getty writes, or removes, its own unit and agy's daemon first
+- name: Agent-getty, remote-control daemons at boot (docs/agent-getty.md)
+  ansible.builtin.include_tasks: agent_getty.yml
+
 - name: Deploy task queue poller script
   ansible.builtin.copy:
     src: claude-queue-poller.sh
@@ -535,7 +539,9 @@
       no_log: true
 
     # podman-prune.* are the containers role's units (containers_prune_enabled), drive-sync-push.* the drive_sync role's;
-    # claude-orchestrator.service is below.
+    # agent-getty@.service is agent_getty.yml's and antigravity-cli-daemon.service agy's own (agy remote-control), each
+    # only while its pairs are listed (agent_getty.yml, which runs earlier, removes them otherwise);
+    # claude-orchestrator.service is removed there.
     - name: Fail on unmanaged systemd user unit files before daemon-reload
       ansible.builtin.fail:
         msg: >-
@@ -549,6 +555,8 @@
                                       'podman-prune.service', 'podman-prune.timer',
                                       'laptop-user-update.service', 'laptop-user-update.timer', 'claude-orchestrator.service',
                                       'drive-sync-push.service', 'drive-sync-push.timer']
+        + (['agent-getty@.service'] if _getty_enabled | default([]) | length > 0 else [])
+        + (['antigravity-cli-daemon.service'] if 'agy/personal' in agent_getty_pairs | default([]) else [])
         or (not item.isreg | default(false) and item.path | basename != 'gcr-ssh-agent.service')
 
     - name: Reload systemd user daemon after deploying queue units  # noqa: no-handler
@@ -707,51 +715,6 @@
     - is_linux
     - not (system_is_container)
 
-- name: Session orchestrator at boot (claude-skills sessions launcher)
-  when:
-    - is_linux
-    - not (system_is_container)  # user inotify triggers daemon-reload, crashes container PID 1
-  block:
-    - name: Assert the orchestrator checkout path is safe for a unit file
-      ansible.builtin.assert:
-        that:
-          - claude_orchestrator_checkout is match('^/[A-Za-z0-9._/-]+$')
-          - claude_orchestrator_name is match('^[A-Za-z0-9_-]+$')
-        fail_msg: "claude_orchestrator_checkout must be an absolute plain path and claude_orchestrator_name a plain name."
-      when: claude_orchestrator_enabled | bool
-
-    - name: Deploy session orchestrator systemd user unit
-      ansible.builtin.template:
-        src: claude-orchestrator.service.j2
-        dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/claude-orchestrator.service"
-        mode: "0644"
-      when: claude_orchestrator_enabled | bool
-
-    # Enabled only: it starts at the next boot. Starting it now would launch a second orchestrator beside a running one.
-    - name: Enable session orchestrator at boot
-      ansible.builtin.systemd:
-        name: claude-orchestrator.service
-        scope: user
-        enabled: true
-        daemon_reload: true
-      when: claude_orchestrator_enabled | bool
-      register: _orchestrator_enable
-      ignore_errors: true
-
-    - name: Warn if the orchestrator unit could not be enabled
-      ansible.builtin.debug:
-        msg: "WARNING: claude-orchestrator.service not enabled ({{ _orchestrator_enable.msg | default('unknown error') }})."
-      when: _orchestrator_enable.failed | default(false)
-
-    - name: Remove session orchestrator unit (when disabled)
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - "{{ ansible_facts['user_dir'] }}/.config/systemd/user/default.target.wants/claude-orchestrator.service"
-        - "{{ ansible_facts['user_dir'] }}/.config/systemd/user/claude-orchestrator.service"
-      when: not (claude_orchestrator_enabled | bool)
-
 # --- macOS: launchd agent list (single source of truth for cleanup and load loops) ---
 - name: Set launchd agent list
   ansible.builtin.set_fact:
@@ -763,6 +726,17 @@
           '.claude-queue.plist',
           'enabled': claude_queue_enabled | bool}] }}
 
+- name: Add agent-getty pairs to the launchd agent list (macOS)
+  ansible.builtin.set_fact:
+    _claude_launchd_agents: >-
+      {{ _claude_launchd_agents + [{'label': 'getty-' ~ item,
+          'plist_path': ansible_facts['user_dir'] ~ '/Library/LaunchAgents/com.' ~ dotfiles_github_user ~
+          '.claude-getty-' ~ item ~ '.plist',
+          'template': 'agent-getty.plist.j2',
+          'enabled': (item | replace('-', '/', 1)) in agent_getty_pairs}] }}
+  loop: "{{ _getty_all }}"
+  when: is_macos
+
 # --- macOS: launchd cleanup when disabled ---
 - name: Cleanup disabled launchd agents (macOS)
   ansible.builtin.include_tasks: launchd_cleanup.yml
@@ -773,6 +747,20 @@
   loop: "{{ _claude_launchd_agents }}"
   loop_control:
     label: "{{ item.label }}"
+  when: is_macos
+
+# launchd's bootout kills the job's process group only; a disabled pair's tmux server (setsid) and daemon outlive it.
+- name: Stop disabled agent-getty daemons (macOS)
+  ansible.builtin.command:
+    argv: [tmux, -L, "agent-getty-{{ item.label | regex_replace('^getty-', '') }}", kill-server]
+  environment:
+    PATH: "/opt/homebrew/bin:/usr/local/bin:{{ ansible_env.PATH | default('/usr/bin:/bin') }}"
+  loop: "{{ _claude_launchd_agents | selectattr('label', 'match', '^getty-') | rejectattr('enabled') | list }}"
+  loop_control:
+    label: "{{ item.label }}"
+  register: _getty_killed
+  changed_when: _getty_killed.rc == 0
+  failed_when: false
   when: is_macos
 
 # --- Queue log directory ---
@@ -787,6 +775,7 @@
   ansible.builtin.include_tasks: launchd_load.yml
   vars:
     _launchd_label: "{{ item.label }}"
+    _launchd_template: "{{ item.template | default('claude-' ~ item.label ~ '.plist.j2') }}"
     _launchd_plist_path: "{{ item.plist_path }}"
     _launchd_enabled: "{{ item.enabled }}"
   loop: "{{ _claude_launchd_agents }}"
