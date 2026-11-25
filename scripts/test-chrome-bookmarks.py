@@ -112,6 +112,25 @@ class ChromeBookmarksTests(unittest.TestCase):
             self.assertTrue(result.stderr.startswith('chrome-bookmarks: '), result.stderr)
             self.assertFalse((self.dir / 'out').exists(), data)
 
+    def test_fuzz_finds_are_refused_cleanly(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('cb', SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        for name in ('ok \ud800', 'a\x85b', 'a\u2028b', 'a\x7fb'):
+            with self.subTest(name=repr(name)), self.assertRaises(mod.Invalid):
+                mod.check_name(name, 'p')
+        for url in ('https://e.com:99999/', 'https://e.com:abc/', 'https://e.com/\x85', 'https://e.com/\u2028',
+                    'https://e.com/\ud800'):
+            with self.subTest(url=repr(url)), self.assertRaises(mod.Invalid):
+                mod.check_url(url, 'p')
+        for url in ('https://e.com/\u202e', 'https://e\u200b.com/', 'https://e.com/\ufeff'):
+            with self.subTest(url=repr(url)), self.assertRaises(mod.Invalid):
+                mod.check_url(url, 'p')
+        mod.check_name('Family \U0001F468\u200d\U0001F469', 'p')  # a ZWJ emoji title stays fine
+        mod.check_url('https://e.com:8443/a', 'p')  # a real port is fine
+        mod.check_name('Café ☕', 'p')
+
     def test_a_missing_file_points_at_the_example(self):
         result = subprocess.run([sys.executable, '-I', str(SCRIPT), '--source', str(self.dir / 'none.yml'),
                                  '--output-dir', str(self.dir / 'out')], capture_output=True, text=True)

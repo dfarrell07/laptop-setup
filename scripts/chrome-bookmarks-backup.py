@@ -174,7 +174,8 @@ def recipients_of(path):
     lines = [l.strip() for l in path.read_text(encoding='utf-8').splitlines()]
     found = [l for l in lines if l and not l.startswith('#')]
     for r in found:
-        if not re.fullmatch(r'age1[0-9a-z]{20,200}', r):
+        # bech32 data characters only (no b, i, o or 1 after the separator): recipient_tag decodes YubiKey ones
+        if not re.fullmatch(r'age1(yubikey1)?[' + BECH32 + r']{20,200}', r):
             raise Refused(f'{path}: not an age recipient line: {r[:16]}...')
     if len(set(found)) != len(found):
         raise Refused(f'{path}: a recipient is listed twice')
@@ -245,8 +246,12 @@ def split(items, hosts):
             if p or not w:
                 personal.append({'folder': item['folder'], 'items': p})
         else:
-            host = (urlsplit(item['url']).hostname or '').rstrip('.').lower()
-            (work if any(host == h or host.endswith('.' + h) for h in hosts) else personal).append(item)
+            try:
+                host = (urlsplit(item['url']).hostname or '').rstrip('.').lower()
+                is_work = any(host == h or host.endswith('.' + h) for h in hosts)
+            except ValueError:  # an unparsable URL is still backed up, in the work set: never a work link in personal
+                is_work = True
+            (work if is_work else personal).append(item)
     return work, personal
 
 

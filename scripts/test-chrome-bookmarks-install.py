@@ -131,6 +131,20 @@ class BackupInstallTests(unittest.TestCase):
         self.recipients.write_text('ssh-ed25519 AAAA not-age\n')
         self.assertIn('not an age recipient', self.backup().stderr)
 
+    def test_unparsable_urls_are_kept_and_bad_recipient_characters_refused(self):
+        data = json.loads((self.old / 'Default/Bookmarks').read_text())
+        data['roots']['other']['children'] += [url('V6', 'http://[::1'), url('Odd', 'https://a\u2100b.com/')]
+        (self.old / 'Default/Bookmarks').write_text(json.dumps(data))
+        result = self.backup()
+        self.assertEqual(result.returncode, 0, result.stderr)  # kept (personal), no traceback
+        self.assertIn('all 13 links', result.stdout)
+        self.assertIn('sets: work 6, personal 7', result.stdout)  # unparsable URLs fail closed: work
+        recips = self.recipients.read_text()
+        self.recipients.write_text(recips + 'age1yubikey1qbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n')  # b is not bech32
+        result = self.backup('--force')
+        self.assertIn('not an age recipient line', result.stderr)
+        self.assertNotIn('Traceback', result.stderr)
+
     def test_archive_must_match_recipients_and_published_hash(self):
         self.assertEqual(self.backup().returncode, 0)
         other = self.root / 'other-recipients'
