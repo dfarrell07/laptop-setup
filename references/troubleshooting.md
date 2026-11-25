@@ -180,6 +180,8 @@ processes can use `bpf()` (including package-manager dependencies) once unprivil
 - **Firewall tasks on RHEL CSB** skip the drop-zone and libvirt edits (IT owns zone policy), but the CSB fallback still opens the SSH port
   in the default zone. The `Assert trusted zone incompatible with CSB hardening` task fails the run when the default zone is `trusted`;
   move the host to `public` or `FedoraWorkstation` (or set `system_firewall_manage_zone: true`) before re-running.
+- **NetBird from the shell (Linux, where installed):** `nb` (`netbird up`; an expired login opens the browser for SSO),
+  `nbd` (down), `nbs` (status). After up, `nb` names Tailscale peers that NetBird's routes now shadow (see the next item).
 - **Tailscale beside IT's NetBird:** both number peers in 100.64.0.0/10 (NetBird uses a /15 inside it, on `wt0`). Tailscale's own
   netfilter rules drop CGNAT-range packets that arrive on any interface but `tailscale0`, which cuts NetBird peers and NetBird's local
   DNS, so where `/usr/bin/netbird` exists `make packages` runs `tailscale set --netfilter-mode=off` (firewalld trusts `tailscale0`).
