@@ -78,11 +78,12 @@ manager.
 ## Sessions after a restart
 
 Sessions started from the phone run inside the pair's tmux server, under the service manager, not the desktop session:
-a crashed or logged-out GNOME session (or its D-Bus) leaves them running. A restart of the pair (reboot, `systemctl
+on Linux with linger on (the system role enables it), a crashed or logged-out GNOME session (or its D-Bus) leaves them
+running; without linger the user manager, and with it the pair, stops at logout. A restart of the pair (reboot, `systemctl
 --user restart`, a changed plist) ends them; their conversations stay on disk. To continue one, start a session from
 the phone and use `/resume`, or run `claude --resume <id>` at the machine. Restarting them automatically is out of scope
-for now: Claude's background sessions (`claude --bg --resume`) stop after about an hour idle, and on Linux their shared
-per-user supervisor would live in, and die with, the getty's cgroup; an interactive resume would mean scripting
+for now: Claude's background sessions (`claude --bg --resume`) stop after about an hour idle, and on Linux their
+supervisor, shared per Claude config dir, would live in, and die with, the getty's cgroup; an interactive resume would mean scripting
 Claude's trust dialog.
 
 ## Out of scope
