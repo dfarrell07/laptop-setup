@@ -1,6 +1,7 @@
 # common/tasks/csb-report.yml
 #
-# Writes ~/csb-report.md with a failure summary and IT ticket templates.
+# Writes ~/csb-report.md with a failure summary and IT ticket templates. The content carries no run time, so a
+# re-run with the same failures leaves it unchanged (the file's mtime is when the failures last changed).
 # Included as a post_task of Play 2 (site.yml),
 # which has gather_facts: true — ansible_user_dir is always available.
 
@@ -22,7 +23,6 @@
       {% for failure in csb_failures %}
       ### {{ loop.index }}. {{ failure.task }}
       - **Role:** {{ failure.role }}
-      - **Time:** {{ failure.timestamp }}
       - **Error:** {{ failure.error | truncate(300) }}
       - **Suggested action:** {{ failure.suggested_action }}
 
