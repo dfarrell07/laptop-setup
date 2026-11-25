@@ -11,6 +11,7 @@ PATH=${PATH:-/usr/bin:/bin}:{{ ansible_facts['user_dir'] }}/.local/bin:{{ dotfil
 sketchybar=${SKETCHYBAR:-{{ ansible_facts['user_dir'] }}/.local/bin/sketchybar}
 cache=$HOME/.cache/sketchybar
 mkdir -p "$cache"
+find "$cache" -name '*.[0-9]*' -mmin +1 -delete 2>/dev/null  # temp files of runs killed mid-probe
 fg={{ sb(desktop_bar_fg) }}
 red={{ sb(desktop_alacritty_color_normal_red) }}
 green={{ sb(desktop_alacritty_color_normal_green) }}
@@ -33,23 +34,16 @@ set_field() { # item label [color] [drawing]
 }
 hide() { args+=(--set "$1" drawing=off); }
 
-# A command that may hang (a VPN, podman or df call) gets 2 s, then SIGKILL (macOS has no timeout(1)). The parent
-# kills the child's whole process group: Go programs (podman, tailscale) ignore an inherited alarm. The command writes
-# to a pipe perl reads, and perl prints it only after the command exits: a process that survives the kill (a df
-# stuck on a hung network mount, a child in its own group) holds that inner pipe, never $(...)'s. Death by a signal is
-# a failure (128 + signal), never 0.
-limit() {
-  perl -e 'my $t = shift; pipe(my $r, my $w) or exit 127; my $p = fork // exit 127;
-    if (!$p) { close $r; setpgrp; open(STDOUT, ">&", $w) or exit 127; exec {$ARGV[0]} @ARGV; exit 127 }
-    close $w; $SIG{ALRM} = sub { kill "KILL", -$p; exit 124 }; alarm $t;
-    my $out = do { local $/; <$r> } // ""; waitpid $p, 0; alarm 0; print $out;
-    exit($? & 127 ? 128 + ($? & 127) : $? >> 8)' 2 "$@"
-}
+{% endraw %}
+{% include 'sketchybar-limit.sh.j2' %}
+{% raw %}
 
-# VOL: output volume, or muted; no field without an output device
+# VOL: output volume, or muted; no field without an output device; left as it is when osascript hangs
 vol_field() {
-  local vol
-  vol=$(osascript -e 'set v to get volume settings' -e 'return (output volume of v as text) & " " & (output muted of v as text)' 2>/dev/null)
+  local vol rc
+  vol=$(limit osascript -e 'set v to get volume settings' -e 'return (output volume of v as text) & " " & (output muted of v as text)' 2>/dev/null)
+  rc=$?
+  ((rc == 124 || rc > 128)) && return
   case $vol in
     *' true') set_field vol "VOL muted" ;;
     [0-9]*) set_field vol "VOL ${vol%% *}%" ;;
@@ -59,21 +53,22 @@ vol_field() {
 # A volume key updates only VOL, at once: the full run takes over a second (the CPU sample)
 if [[ ${SENDER:-} == volume_change ]]; then
   vol_field
+  ((${#args[@]})) || exit 0  # osascript hung: VOL stays as it was (and bash 3.2 calls an empty "${args[@]}" unbound)
   exec "$sketchybar" "${args[@]}"
 fi
 
 # Cached probe: prints the cache file's content when younger than $2 seconds, else runs $3.. and stores its output
 cached() {
-  local file=$cache/$1 max=$2 now
+  local file=$cache/$1 max=$2 now out
   shift 2
   now=$(date +%s)
   if [[ -f $file ]] && ((now - $(date -r "$file" +%s) < max)); then
     cat "$file"
   else
     # runs can overlap (the timer and an event): each writes its own temp file, then renames it into place
-    "$@" >"$file.$$" 2>/dev/null
-    mv -f "$file.$$" "$file"
-    cat "$file"
+    out=$("$@" 2>/dev/null)  # an abort inside the probe (set -u) keeps what it printed
+    printf "%s\n" "$out" 2>/dev/null >"$file.$$" && mv -f "$file.$$" "$file" 2>/dev/null
+    printf "%s\n" "$out"  # shown even when the cache cannot be written
   fi
 }
 
@@ -166,11 +161,12 @@ vpn_probe() {
       echo "$i down"
     fi
   done
-  scutil --nc list 2>/dev/null | sed -n 's/.*(Connected).*"\(.*\)".*/nc \1/p' | tr -d '\\'
+  limit scutil --nc list 2>/dev/null | sed -n 's/.*(Connected).*"\(.*\)".*/nc \1/p' | tr -d '\\'
 }
 if ((show_vpn)); then
   nc=
   while read -r i state; do
+    [[ $i == nc || ( $i =~ ^[0-9]+$ && -n ${vpn_names[i]+set} ) ]] || continue  # a cache from a longer VPN list
     case $i:$state in
       nc:*) nc+="${nc:+,}$state" ;;
       *:up) set_field "vpn.$i" "${vpn_names[i]} up" "$green" ;;
@@ -200,7 +196,7 @@ if [[ -n $addr ]]; then
   now=$(date +%s)
   rate=
   if read -r prev_at prev_iface prev_rx prev_tx 2>/dev/null <"$cache/net" && [[ $prev_iface == "$iface" ]] &&
-    ((now > prev_at)); then
+    [[ $prev_at$prev_rx$prev_tx$rx$tx =~ ^[0-9]+$ ]] && ((now > prev_at)); then
     rate=$(awk -v r=$((rx - prev_rx)) -v t=$((tx - prev_tx)) -v s=$((now - prev_at)) '
       function h(b) {b /= s; return b >= 2^20 ? sprintf("%.1fM", b / 2^20) : sprintf("%dK", b / 2^10)}
       BEGIN {if (r >= 0 && t >= 0) printf " ↓%s ↑%s", h(r), h(t)}')

@@ -13,13 +13,22 @@ active_bg={{ sb(desktop_bar_active_ws_bg) }}
 active_fg={{ sb(desktop_bar_active_ws_text) }}
 inactive_bg={{ sb(desktop_bar_inactive_ws_bg) }}
 inactive_fg={{ sb(desktop_bar_inactive_ws_text) }}
+{% include 'sketchybar-limit.sh.j2' %}
 {% raw %}
 # Always the live state, never an event's FOCUSED_WORKSPACE: runs from quick switches overlap, and the last to finish
-# must not paint an older workspace as focused
-focused=$("$aerospace" list-workspaces --focused 2>/dev/null)
-existing=$'\n'$("$aerospace" list-workspaces --all 2>/dev/null)$'\n'
-visible=$'\n'$("$aerospace" list-workspaces --monitor all --visible 2>/dev/null)$'\n'
-mode=$("$aerospace" list-modes --current 2>/dev/null)
+# must not paint an older workspace as focused. An AeroSpace query that hangs (timed out or killed) fails, and the run
+# then exits leaving the buttons as they are; one that just errors (AeroSpace not running) reads as empty.
+query() {
+  local out rc
+  out=$(limit "$aerospace" "$@" 2>/dev/null)
+  rc=$?
+  ((rc == 124 || rc > 128)) && return 1
+  printf "%s" "$out"
+}
+focused=$(query list-workspaces --focused) || exit 0
+existing=$'\n'$(query list-workspaces --all)$'\n' || exit 0
+visible=$'\n'$(query list-workspaces --monitor all --visible)$'\n' || exit 0
+mode=$(query list-modes --current) || exit 0
 
 args=()
 for ws in 1 2 3 4 5 6 7 8 9 10 S; do

@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 import time
@@ -471,9 +472,9 @@ class RenderedConfigTests(unittest.TestCase):
             # pts/0 and pts/3: a second agent process on a terminal is the same session
             self.assertIn('"full_text":"AI 2"', update)
 
-    def run_sketchybar_script(self, name, stubs, env=None):
+    def run_sketchybar_script(self, name, stubs, env=None, stderr=''):
         """Run a rendered SketchyBar script with stub commands first on PATH; returns {item: {key: value}} from the
-        stub sketchybar's --set arguments."""
+        stub sketchybar's --set arguments, or None when it never called sketchybar. stderr: a regex it must match."""
         stub_dir = Path(stubs['__dir'])
         for command, body in stubs.items():
             if command != '__dir':
@@ -485,11 +486,17 @@ class RenderedConfigTests(unittest.TestCase):
         script = stub_dir / name
         script.write_text(self.read(name))
         result = subprocess.run(['bash', str(script)], capture_output=True, text=True, timeout=30,
-                                env=dict(os.environ, PATH=f'{stub_dir}:/usr/bin:/bin', HOME=str(stub_dir),
-                                         SKETCHYBAR=str(stub_dir / 'sketchybar'), **(env or {})))
-        self.assertEqual(result.stderr, '')
+                                env={**os.environ, 'PATH': f'{stub_dir}:/usr/bin:/bin', 'HOME': str(stub_dir),
+                                     'SKETCHYBAR': str(stub_dir / 'sketchybar'), **(env or {})})
+        if stderr:
+            self.assertRegex(result.stderr, stderr)
+        else:
+            self.assertEqual(result.stderr, '')
+        if not out.exists():
+            return None
         items, current = {}, None
         args = out.read_text().splitlines()
+        out.unlink()
         for i, arg in enumerate(args):
             if arg == '--set':
                 current = items.setdefault(args[i + 1], {})
@@ -596,6 +603,76 @@ class RenderedConfigTests(unittest.TestCase):
             items = self.run_sketchybar_script('sketchybar_status', stubs, {'RX': str(1000 + 2**20)})
             self.assertRegex(items['net']['label'], r'^WIFI 10\.0\.0\.5 ↓(1\.0M|512K) ↑0K$')  # 1 MiB over 1 or 2 whole s
             self.assertEqual(items['bat']['label'], 'BAT 80%')  # held below full: not charging, no ⚡
+        with tempfile.TemporaryDirectory() as name:
+            # Caches from an older config (a longer VPN list) or a torn write: skipped, never an abort of the update
+            cache = Path(name, '.cache/sketchybar')
+            cache.mkdir(parents=True)
+            (cache / 'vpn').write_text('0 up\n7 up\n-1 up\nx\n\n')
+            (cache / 'net').write_text('abc en0 x y\n')
+            items = self.run_sketchybar_script('sketchybar_status', {
+                '__dir': name, **quiet, 'route': 'echo "  interface: en0"', 'ipconfig': 'echo 10.0.0.5',
+                'networksetup': 'printf "Hardware Port: Wi-Fi\\nDevice: en0\\n"',
+                'netstat': 'printf "Name Mtu Network Address Ipkts Ierrs Ibytes Opkts Oerrs Obytes Coll\\n'
+                           'en0 1500 <Link#4> aa:bb 1 0 1000 1 0 2048 0\\n"'})
+            self.assertEqual(items['vpn.0']['label'], 'Tailscale up')
+            self.assertNotIn('vpn.7', items)
+            self.assertEqual(items['net']['label'], 'WIFI 10.0.0.5')
+        with tempfile.TemporaryDirectory() as name:
+            # Volume and network-extension probes that hang are cut off like the others; VOL stays as it was
+            start = time.monotonic()
+            hang = 'exec perl -e \'$SIG{ALRM} = "IGNORE"; sleep 20\''
+            items = self.run_sketchybar_script('sketchybar_status', {'__dir': name, **quiet, 'osascript': hang,
+                                                                     'scutil': hang})
+            self.assertLess(time.monotonic() - start, 12)
+            self.assertNotIn('vol', items)
+            # The same on a volume key: no update at all, and no error
+            self.assertIsNone(self.run_sketchybar_script('sketchybar_status', {'__dir': name, **quiet, 'osascript': hang},
+                                                         {'SENDER': 'volume_change'}))
+        with tempfile.TemporaryDirectory() as name:
+            # No writable cache (a read-only or full home): the probes still show, only uncached
+            if os.geteuid() == 0:
+                self.skipTest('root writes to a read-only home')
+            home = Path(name, 'home')
+            home.mkdir(mode=0o500)
+            try:
+                items = self.run_sketchybar_script('sketchybar_status', {
+                    '__dir': name, **quiet, 'podman': '[ "$1" = ps ] && printf "a1\\n"',
+                    'tailscale': 'echo \'"BackendState": "Running"\''}, {'HOME': str(home)},
+                    stderr='Permission denied')
+            finally:
+                home.chmod(0o700)
+            self.assertEqual(items['ctr']['label'], 'CTR 1')
+            self.assertEqual(items['vpn.0']['label'], 'Tailscale up')
+
+    def test_sketchybar_status_killed_mid_probe_leaves_no_process(self):
+        # The bar stopping a run (TERM to its process group) must not leave a limited command running past its bound
+        quiet = {c: 'exit 1' for c in ('iostat', 'sysctl', 'vm_stat', 'df', 'pmset', 'osascript', 'ps', 'scutil',
+                                       'route', 'ipconfig', 'networksetup', 'netstat')}
+        with tempfile.TemporaryDirectory() as name:
+            stub_dir = Path(name)
+            started = stub_dir / 'podman.started'
+            marker = f'podman-stub-{os.getpid()}-{stub_dir.name}'  # names only this test's process
+            for command, body in {**quiet, 'podman': f'touch {started}\nexec perl -e \'sleep 20\' {marker}'}.items():
+                (stub_dir / command).write_text('#!/bin/sh\n' + body + '\n')
+                (stub_dir / command).chmod(0o755)
+            (stub_dir / 'sketchybar').write_text('#!/bin/sh\n')
+            (stub_dir / 'sketchybar').chmod(0o755)
+            script = stub_dir / 'status.sh'
+            script.write_text(self.read('sketchybar_status'))
+            process = subprocess.Popen(['bash', str(script)], start_new_session=True, stderr=subprocess.DEVNULL,
+                                       env=dict(os.environ, PATH=f'{stub_dir}:/usr/bin:/bin', HOME=name,
+                                                SKETCHYBAR=str(stub_dir / 'sketchybar')))
+            deadline = time.monotonic() + 10
+            while not started.exists() and time.monotonic() < deadline:
+                time.sleep(0.05)
+            time.sleep(0.2)
+            os.killpg(process.pid, signal.SIGTERM)
+            process.wait(timeout=10)
+            time.sleep(0.5)
+            left = subprocess.run(['pgrep', '-f', marker], capture_output=True, text=True).stdout.split()
+            for pid in left:
+                os.kill(int(pid), signal.SIGKILL)
+            self.assertEqual(left, [], 'the limited podman outlived the killed run')
 
     def test_sketchybar_workspaces_follow_aerospace_like_i3bar_buttons(self):
         defaults = yaml.safe_load((ROOT / 'roles/desktop/defaults/main.yml').read_text())
@@ -620,6 +697,18 @@ class RenderedConfigTests(unittest.TestCase):
             self.assertEqual(items['ws.2']['background.color'], color['focused_ws_bg'])
             self.assertEqual(items['ws.S']['background.color'], color['inactive_ws_bg'])
             self.assertEqual(items['mode'], {'drawing': 'off'})
+            # A hung AeroSpace query, the first or a later one, is cut off after 2 s and leaves the buttons as they are
+            hang = 'exec perl -e \'$SIG{ALRM} = "IGNORE"; sleep 20\''
+            for hung in ('list-workspaces --focused', 'list-workspaces --all', 'list-modes --current'):
+                start = time.monotonic()
+                stubs['aerospace'] = f'[ "$*" = "{hung}" ] && {hang}\necho 1'
+                self.assertIsNone(self.run_sketchybar_script('sketchybar_workspaces', stubs,
+                                                             {'AEROSPACE': str(Path(name) / 'aerospace')}), hung)
+                self.assertLess(time.monotonic() - start, 6)
+            # No AeroSpace at all (not running, or not installed): every button hides, as before
+            stubs['aerospace'] = 'exit 1'
+            items = self.run_sketchybar_script('sketchybar_workspaces', stubs, {'AEROSPACE': str(Path(name) / 'aerospace')})
+            self.assertEqual({items[f'ws.{ws}']['drawing'] for ws in (*range(1, 11), 'S')}, {'off'})
 
     def test_aerospace_keeps_room_for_the_bar_only_once_it_is_built(self):
         import tomllib

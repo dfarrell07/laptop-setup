@@ -1,0 +1,19 @@
+{# limit(): included by sketchybar-status.sh.j2 and sketchybar-workspaces.sh.j2 #}
+{% raw %}
+# A command that may hang (VPN, podman, df, osascript, scutil, aerospace) gets 2 s, then SIGKILL (macOS has no
+# timeout(1)). The parent kills the child's whole process group: Go programs (podman, tailscale) ignore an inherited
+# alarm. The child has its own group, so a TERM, INT or HUP that ends perl (the bar stopping the script) kills that
+# group too; those signals stay blocked from before the fork until the handler is set, so none slips between. The
+# command writes to a pipe perl reads, and perl prints it only after the command exits: a process that survives the
+# kill (a df stuck on a hung network mount, a child in its own group) holds that inner pipe, never $(...)'s. Death
+# by a signal is a failure (128 + signal), never 0.
+limit() {
+  perl -MPOSIX=SIGTERM,SIGINT,SIGHUP,SIG_BLOCK,SIG_UNBLOCK,sigprocmask -e 'my $t = shift; pipe(my $r, my $w) or exit 127; my $s = POSIX::SigSet->new(SIGTERM, SIGINT, SIGHUP);
+    sigprocmask(SIG_BLOCK, $s); my $p = fork // exit 127;
+    if (!$p) { close $r; setpgrp; sigprocmask(SIG_UNBLOCK, $s); open(STDOUT, ">&", $w) or exit 127; exec {$ARGV[0]} @ARGV; exit 127 }
+    close $w; setpgrp $p, $p; $SIG{ALRM} = $SIG{TERM} = $SIG{INT} = $SIG{HUP} = sub { kill "KILL", -$p; exit 124 };
+    sigprocmask(SIG_UNBLOCK, $s); alarm $t;
+    my $out = do { local $/; <$r> } // ""; waitpid $p, 0; alarm 0; print $out;
+    exit($? & 127 ? 128 + ($? & 127) : $? >> 8)' 2 "$@"
+}
+{% endraw %}
