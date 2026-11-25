@@ -2,40 +2,59 @@
 # Load a LaunchAgent, reloading it when its plist changed (macOS).
 # Params: _launchd_agent_label (the plist's Label), _launchd_agent_plist (its path), _launchd_agent_changed (bool),
 # _launchd_agent_domain (default gui/<uid>), _launchd_agent_launchctl (default /bin/launchctl; tests stub it).
+# Without a graphical login (a run over SSH alone) and no explicit domain, the job is left for launchd to load from
+# ~/Library/LaunchAgents at the next login: loading it into user/<uid> instead could leave it running twice then.
 - name: Load launchd job {{ _launchd_agent_label }}
   vars:
     _launchd_agent_dom: "{{ _launchd_agent_domain | default('gui/' ~ ansible_facts['user_uid']) }}"
     _launchd_agent_bin: "{{ _launchd_agent_launchctl | default('/bin/launchctl') }}"
   block:
-    - name: Check launchd job {{ _launchd_agent_label }}  # noqa: command-instead-of-module
+    - name: Check for a graphical login - {{ _launchd_agent_label }}  # noqa: command-instead-of-module
       ansible.builtin.command:
-        argv: ["{{ _launchd_agent_bin }}", print, "{{ _launchd_agent_dom }}/{{ _launchd_agent_label }}"]
-      register: _launchd_agent_job
+        argv: ["{{ _launchd_agent_bin }}", print, "gui/{{ ansible_facts['user_uid'] }}"]
+      register: _launchd_agent_gui
       changed_when: false
       failed_when: false
       check_mode: false  # read-only probe
+      when: _launchd_agent_domain is not defined
 
-    - name: Unload changed launchd job {{ _launchd_agent_label }}  # noqa: command-instead-of-module
-      ansible.builtin.command:
-        argv: ["{{ _launchd_agent_bin }}", bootout, "{{ _launchd_agent_dom }}/{{ _launchd_agent_label }}"]
-      changed_when: true
-      when: _launchd_agent_job.rc == 0 and _launchd_agent_changed | bool
-
-    # bootout returns before launchd finishes tearing the job down, so an immediate bootstrap can fail
-    # ("Bootstrap failed: 5: Input/output error"): retry until it loads.
-    - name: Bootstrap launchd job {{ _launchd_agent_label }}  # noqa: command-instead-of-module
-      ansible.builtin.command:
-        argv: ["{{ _launchd_agent_bin }}", bootstrap, "{{ _launchd_agent_dom }}", "{{ _launchd_agent_plist }}"]
-      register: _launchd_agent_bootstrap
-      retries: 5
-      delay: 2
-      until: _launchd_agent_bootstrap.rc == 0
-      changed_when: true
-      when: _launchd_agent_job.rc != 0 or _launchd_agent_changed | bool
-
-    # Check mode skips the commands above, so a job that is not loaded would otherwise plan as changed=0
-    - name: Report a launchd job would load - {{ _launchd_agent_label }}
+    - name: Report a launchd job waits for a graphical login - {{ _launchd_agent_label }}
       ansible.builtin.debug:
-        msg: "CHECK MODE: {{ _launchd_agent_label }} would be bootstrapped"
-      changed_when: true
-      when: ansible_check_mode and (_launchd_agent_job.rc != 0 or _launchd_agent_changed | bool)
+        msg: "No graphical login: {{ _launchd_agent_label }} loads at the next one"
+      when: _launchd_agent_domain is not defined and _launchd_agent_gui.rc != 0
+
+    - name: Load into the login domain - {{ _launchd_agent_label }}
+      when: _launchd_agent_domain is defined or _launchd_agent_gui.rc == 0
+      block:
+        - name: Check launchd job {{ _launchd_agent_label }}  # noqa: command-instead-of-module
+          ansible.builtin.command:
+            argv: ["{{ _launchd_agent_bin }}", print, "{{ _launchd_agent_dom }}/{{ _launchd_agent_label }}"]
+          register: _launchd_agent_job
+          changed_when: false
+          failed_when: false
+          check_mode: false  # read-only probe
+
+        - name: Unload changed launchd job {{ _launchd_agent_label }}  # noqa: command-instead-of-module
+          ansible.builtin.command:
+            argv: ["{{ _launchd_agent_bin }}", bootout, "{{ _launchd_agent_dom }}/{{ _launchd_agent_label }}"]
+          changed_when: true
+          when: _launchd_agent_job.rc == 0 and _launchd_agent_changed | bool
+
+        # bootout returns before launchd finishes tearing the job down, so an immediate bootstrap can fail
+        # ("Bootstrap failed: 5: Input/output error"): retry until it loads.
+        - name: Bootstrap launchd job {{ _launchd_agent_label }}  # noqa: command-instead-of-module
+          ansible.builtin.command:
+            argv: ["{{ _launchd_agent_bin }}", bootstrap, "{{ _launchd_agent_dom }}", "{{ _launchd_agent_plist }}"]
+          register: _launchd_agent_bootstrap
+          retries: 5
+          delay: 2
+          until: _launchd_agent_bootstrap.rc == 0
+          changed_when: true
+          when: _launchd_agent_job.rc != 0 or _launchd_agent_changed | bool
+
+        # Check mode skips the commands above, so a job that is not loaded would otherwise plan as changed=0
+        - name: Report a launchd job would load - {{ _launchd_agent_label }}
+          ansible.builtin.debug:
+            msg: "CHECK MODE: {{ _launchd_agent_label }} would be bootstrapped"
+          changed_when: true
+          when: ansible_check_mode and (_launchd_agent_job.rc != 0 or _launchd_agent_changed | bool)

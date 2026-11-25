@@ -76,7 +76,14 @@ class FileHeredocGuardTests(unittest.TestCase):
                         "for((i=0;i<1<<2;i++)); do :; done\ncat > f <<EOF\nx\nEOF",
                         "diff <((sort a) ) b; cat > f <<EOF\nx\nEOF",
                         'echo "$((1<<2))"\ncat > f <<\'EOF\'\nx\nEOF',  # arithmetic still expands in "..."
-                        "n=$(basename $(pwd)); echo $((1<<2))\ncat > f <<'EOF'\nx\nEOF"]:
+                        "n=$(basename $(pwd)); echo $((1<<2))\ncat > f <<'EOF'\nx\nEOF",
+                        # the delimiter is the whole word with its quotes and backslashes removed
+                        'cat <<E"OF"\nx\nEOF\ncat > f <<Z\nz\nZ',
+                        "cat <<E'OF'\nx\nEOF\ncat > f <<Z\nz\nZ",
+                        "cat <<E\\OF\nx\nEOF\ncat > f <<Z\nz\nZ",
+                        "cat <<'E'\"F\"\nx\nEF\ncat > f <<Z\nz\nZ",
+                        "git commit -F - <<$'EOF'\nmsg\nEOF\ncat > f <<Z\nz\nZ",
+                        'cat <<"E\\"F"\nx\nE"F\ncat > f <<Z\nz\nZ']:
             with self.subTest(command=command[:40]):
                 self.assertEqual(decide(command), 'deny')
 
@@ -124,7 +131,8 @@ class FileHeredocGuardTests(unittest.TestCase):
                         "(cd /x && (ls)); tee out <<< $((1<<2))",
                         # bash ends lines only at \n: a \r or \f does not end a body
                         "git commit -F - <<'EOF'\nline\r\nEOF\r\ncat > f <<X\nEOF",
-                        "python3 - <<'EOF'\nx = 1\x0cEOF\ncat > f <<X\ny\nX\nEOF"]:
+                        "python3 - <<'EOF'\nx = 1\x0cEOF\ncat > f <<X\ny\nX\nEOF",
+                        "git commit -F - <<E\"OF\"\ncat > f <<X\nEOF"]:
             with self.subTest(command=command[:40]):
                 self.assertEqual(decide(command), 'pass')
 
@@ -132,6 +140,9 @@ class FileHeredocGuardTests(unittest.TestCase):
         start = time.monotonic()
         self.assertEqual(decide("python3 - --arg '" + 'x' * 60000 + "' <<EOF\nx\nEOF"), 'pass')
         self.assertLess(time.monotonic() - start, 3)  # was 15 s+: the function-header regex retried every offset
+        start = time.monotonic()
+        self.assertEqual(decide('echo ' + '"a<<b" ' * 8000), 'pass')
+        self.assertLess(time.monotonic() - start, 3)  # was about 40 s: each string was scanned to the end of the line
 
     def test_other_tools_and_bad_input_pass(self):
         self.assertEqual(decide("cat > f <<'EOF'\nx\nEOF", tool='Write'), 'pass')

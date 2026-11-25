@@ -86,8 +86,62 @@ is_allowed_actor() {
 # The agent works in a throwaway detached worktree of the clone at REPO_PATH (often the user's own checkout): it never
 # touches their files or branches, and nothing it writes, gitignored files included, outlives the run.  Neither repair
 # nor prune here: both can act on the user's own worktrees.
+# remove_worktree CLONE WORKTREE GITDIR: point the worktree's .git file back at GITDIR (the agent may have changed it,
+# and git would then refuse to remove it), remove it, then the mktemp directory holding it.
 remove_worktree() {
+  [[ -n "$2" ]] || return 0
+  if [[ -n "$3" && -d "$2" ]]; then
+    rm -rf "$2/.git"
+    printf 'gitdir: %s\n' "$3" > "$2/.git"
+  fi
   git -C "$1" worktree remove --force --force "$2" >/dev/null 2>&1 || true
+  rm -rf "$(dirname "$2")"
+}
+
+# Whether the poller refuses tool $1 in a list that grants file edits when $2 is true.  An allowlist: Read/Edit/Write/
+# NotebookEdit under ./ (bare, they reach any file not denied), Grep and Glob, and Bash with one exact command (no
+# wildcard, which Bash(g*) uses to cover git; no quote, backslash, $ or backtick, which hide a word) but only in a list
+# without edits: the agent could edit what that command runs (a Makefile, a script, a submodule's .git and config,
+# whose core.fsmonitor even git status runs) and so run anything.  No git rule, as the poller commits; the test on a
+# command's text is a backstop, and without edits the agent has nothing of its own for git to run.  Stops a
+# queue-repos.conf from an older release granting more.
+tool_refused() {
+  if [[ "$1" == Grep || "$1" == Glob ]]; then
+    return 1  # read-only, and --restricted confines them to the worktree
+  elif [[ "$1" =~ ^(Read|Edit|Write|NotebookEdit)\(\./[^()]*\)$ ]]; then
+    [[ "$1" == *..* ]]
+  elif [[ "$1" =~ ^Bash\([^()*]*[^()*[:space:]][^()*]*\)$ ]] && ! $2; then
+    [[ "$1" == *[\\\'\"\$\`]* || "$(tr '[:upper:]' '[:lower:]' <<< "$1")" =~ (^|[^[:alnum:]_.-])git([^[:alnum:]_.-]|$) ]]
+  else
+    return 0
+  fi
+}
+
+# The first tool in list $1 the poller refuses, if any.  Splits the list as Claude Code does (at commas and spaces
+# outside a parenthesis, which the first ")" closes), and refuses a list with anything but printable ASCII, which
+# Claude Code may read differently, or with a parenthesis left open.
+unsafe_tool() {
+  local list="$1," tool="" c i open=false edits=false LC_ALL=C
+  local -a tools=()
+  if [[ "$1" == *[![:print:]]* ]]; then printf '%s' "$1"; return; fi
+  for ((i = 0; i < ${#list}; i++)); do
+    c="${list:i:1}"
+    if ! $open && [[ "$c" == [,\ ] ]]; then
+      [[ -z "$tool" ]] || tools+=("$tool")
+      tool=""
+      continue
+    fi
+    [[ "$c" != "(" ]] || open=true
+    [[ "$c" != ")" ]] || open=false
+    tool+="$c"
+  done
+  if [[ -n "$tool" ]]; then printf '%s' "${tool%,}"; return; fi
+  for tool in "${tools[@]}"; do
+    case "$tool" in Edit\(* | Write\(* | NotebookEdit\(*) edits=true ;; esac
+  done
+  for tool in "${tools[@]}"; do
+    if tool_refused "$tool" "$edits"; then printf '%s' "$tool"; return; fi
+  done
 }
 
 # Commit everything in worktree $1 (git directory $2) on top of $3 with message $4 and print the commit, or nothing
@@ -217,11 +271,21 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
 
   TARGET_DIR="${REPO_PATH[$REPO_SHORT]}"
   TARGET_REMOTE="${REPO_REMOTE[$REPO_SHORT]}"
-  # Files only inside the worktree (Edit covers Write); git diff/log only in exact forms, as --output=<file> writes
-  # anywhere.  No git commit: its hooks run code from the tree, and -F <file> reads files the deny rules hide.
-  TOOLS="${REPO_ALLOWED_TOOLS[$REPO_SHORT]:-Read(./**),Edit(./**),Bash(git diff),Bash(git diff --stat),Bash(git log --oneline -20),Bash(git status)}"
+  # Files only inside the worktree (Edit covers Write), and no commands: see tool_refused.
+  TOOLS="${REPO_ALLOWED_TOOLS[$REPO_SHORT]:-Read(./**),Edit(./**)}"
   DEFAULT_BRANCH="${REPO_DEFAULT_BRANCH[$REPO_SHORT]:-main}"
   PROMPT=$(extract_issue_body "$ISSUE_BODY")
+  BAD_TOOL=$(unsafe_tool "$TOOLS")
+  # The built-in tools the agent has at all: the ones its list names (Edit needs Write to create files), no others
+  # (--restricted would still give it SendMessage, Task, WebSearch and the like).  Bash only by name.
+  BUILTIN_TOOLS="Read,Grep,Glob"
+  [[ ! "$TOOLS" =~ (^|[, ])(Edit|Write)\( ]] || BUILTIN_TOOLS+=",Edit,Write"
+  [[ ! "$TOOLS" =~ (^|[, ])NotebookEdit\( ]] || BUILTIN_TOOLS+=",NotebookEdit"
+  [[ ! "$TOOLS" =~ (^|[, ])Bash\( ]] || BUILTIN_TOOLS+=",Bash"
+  if [[ -n "$BAD_TOOL" ]]; then
+    mark_issue_failed "$ISSUE_NUM" "REPO_ALLOWED_TOOLS[$REPO_SHORT] in $REPO_CONFIG grants \`$BAD_TOOL\`, which the poller refuses: keep Read and Edit to ./**, and grant Bash only without them (see the comments in that file)."
+    continue
+  fi
 
   if [[ -z "$PROMPT" ]]; then
     mark_issue_failed "$ISSUE_NUM" "Empty prompt after \`repo:\` line."
@@ -230,6 +294,18 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
 
   if [[ ! -d "$TARGET_DIR" ]]; then
     mark_issue_failed "$ISSUE_NUM" "Repo path not found: \`$TARGET_DIR\`"
+    continue
+  fi
+  # The branch is pushed to origin and the PR opened in REPO_REMOTE, so they must be the same repo.  A push goes to
+  # pushurl when one is set (pull from upstream, push to a fork); the raw values, before any insteadOf.
+  ORIGIN_URL=$(git -C "$TARGET_DIR" config --get remote.origin.pushurl \
+    || git -C "$TARGET_DIR" config --get remote.origin.url) || ORIGIN_URL=""
+  ORIGIN_REPO="${ORIGIN_URL%.git}"
+  for _prefix in https://github.com/ git@github.com: ssh://git@github.com/; do
+    [[ "$ORIGIN_REPO" != "$_prefix"* ]] || ORIGIN_REPO="${ORIGIN_REPO#"$_prefix"}"
+  done
+  if [[ "$ORIGIN_REPO" != "$TARGET_REMOTE" ]]; then
+    mark_issue_failed "$ISSUE_NUM" "The clone at \`$TARGET_DIR\` pushes to origin \`${ORIGIN_URL:-<none>}\`, not github.com/$TARGET_REMOTE (REPO_REMOTE[$REPO_SHORT])."
     continue
   fi
 
@@ -241,7 +317,7 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
   # deterministic tiebreak, which in turn requires those labels to already
   # exist in the target repo and cleanup on every exit path — too invasive
   # for a minimal fix.  Practical worst-case: the slower host's subshell
-  # fails at git push --force-with-lease and calls mark_issue_failed on an already-
+  # fails at git push (the branch exists) and calls mark_issue_failed on an already-
   # closed issue; mark_issue_failed uses || true on all gh calls so concurrent
   # invocation is safe (cosmetic label noise only).  The stale-recovery
   # threshold (TIMEOUT_SECONDS+300) cannot fire on a closed issue because
@@ -276,24 +352,30 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
   START_TIME=$(date +%s)
   TMPFILE=$(mktemp)
   WORKTREE="$(mktemp -d)/$REPO_SHORT"
-  trap 'rm -f "${TMPFILE:-}"; [[ -z "${WORKTREE:-}" ]] || remove_worktree "$TARGET_DIR" "$WORKTREE"' EXIT
+  GITDIR=""
+  trap 'rm -f "${TMPFILE:-}"; [[ -z "${WORKTREE:-}" ]] || remove_worktree "$TARGET_DIR" "$WORKTREE" "$GITDIR"' EXIT
   chmod 0600 "$TMPFILE"
   printf '%s\n' "$PROMPT" > "$TMPFILE"
 
-  # The poller (not Claude) fetches, commits and pushes; Claude only edits files in the worktree.
+  # The poller (not Claude) fetches, commits and pushes; Claude only edits files in the worktree.  Set up out here, so
+  # that cleanup knows the git directory; name it for the agent's git too, as the worktree's .git file is in its reach.
+  git -C "$TARGET_DIR" fetch origin "$DEFAULT_BRANCH" \
+    && BASE=$(git -C "$TARGET_DIR" rev-parse --verify "origin/$DEFAULT_BRANCH^{commit}") \
+    && git -C "$TARGET_DIR" worktree add -q --detach "$WORKTREE" "$BASE" \
+    && GITDIR=$(git -C "$WORKTREE" rev-parse --absolute-git-dir) || true
   (
     # set -e is suppressed inside a subshell on the left of ||, so fail explicitly.
+    [[ -n "$GITDIR" ]] || exit 1
     cd "$TARGET_DIR" || exit 1
-    git fetch origin "$DEFAULT_BRANCH" || exit 1
-    BASE=$(git rev-parse --verify "origin/$DEFAULT_BRANCH^{commit}") || exit 1
-    git worktree add -q --detach "$WORKTREE" "$BASE" || exit 1
-    # Name the git directory from here on, for the agent's git too: the worktree's .git file is the agent's to edit.
-    GITDIR=$(git -C "$WORKTREE" rev-parse --absolute-git-dir) || exit 1
 
     set +e
-    # dontAsk denies instead of prompting and keeps a bypassPermissions defaultMode from widening this run. Settings
-    # allow rules (instance and the target repo's .claude/settings.json) still apply on top of --allowedTools.
+    # dontAsk denies instead of prompting.  --restricted ignores the user, project and local settings files, whose allow
+    # rules would add to --allowedTools (Bash(make lint) beside Edit runs whatever the agent wrote), confines the file
+    # tools to the worktree and refuses writes to settings and git files; managed settings still apply.
+    # --strict-mcp-config leaves out MCP servers.
     (cd "$WORKTREE" && GIT_DIR="$GITDIR" GIT_WORK_TREE="$WORKTREE" exec "$TIMEOUT_BIN" -k 30 "$TIMEOUT_SECONDS" "$CLAUDE_BIN" -p \
+      --restricted --strict-mcp-config \
+      --tools "$BUILTIN_TOOLS" \
       --permission-mode dontAsk \
       --allowedTools "$TOOLS" \
       --max-turns "$MAX_TURNS" \
@@ -309,6 +391,13 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
     if [[ "$CLAUDE_EXIT" -ne 0 ]]; then
       mark_issue_failed "$ISSUE_NUM" "Task failed (exit $CLAUDE_EXIT, ${DURATION}s); its changes were discarded. Re-open and re-label as \`queued\` to retry."
       exit 0  # already handled — exit 0 prevents outer || handler from double-calling mark_issue_failed
+    fi
+
+    # git add opens any repository a .git below the root names, and runs its config's core.fsmonitor.  The worktree
+    # starts with none (submodules are not checked out), so one there now is the agent's.
+    if [[ -n "$(find "$WORKTREE" -mindepth 2 -iname .git -print -quit)" ]]; then  # -i: .GIT is .git on APFS
+      mark_issue_failed "$ISSUE_NUM" "The changes add a \`.git\` below the repository root, which git would act on; nothing was committed or pushed."
+      exit 0
     fi
 
     COMMIT=$(commit_worktree "$WORKTREE" "$GITDIR" "$BASE" "$ISSUE_TITLE
@@ -329,8 +418,12 @@ Signed-off-by: $(git var GIT_COMMITTER_IDENT | sed 's/>.*/>/')") || exit 1
     fi
 
     # Push from this clone, never the worktree: its hooks are the user's, not code the agent could have changed.  No
-    # local branch: a re-queued issue must not move or delete one the user made from the earlier PR.
-    git push --force-with-lease origin "$COMMIT:refs/heads/$BRANCH_NAME" || exit 1
+    # local branch, and the lease expects none on origin (a plain push would fast-forward one): a re-queued issue must
+    # not move a branch left by the earlier run or made from it, here or on origin.
+    if ! git push --force-with-lease="refs/heads/$BRANCH_NAME:" origin "$COMMIT:refs/heads/$BRANCH_NAME" >>"$LOG_DIR/issue-${ISSUE_NUM}-stderr.log" 2>&1; then
+      mark_issue_failed "$ISSUE_NUM" "Could not push \`$BRANCH_NAME\` to origin; nothing was overwritten. If an earlier run left that branch, delete it (or retitle the issue) and re-label as \`queued\`. See $LOG_DIR/issue-${ISSUE_NUM}-stderr.log."
+      exit 0
+    fi
 
     PR_URL=$(gh pr create \
       --repo "$TARGET_REMOTE" \
@@ -354,7 +447,6 @@ Signed-off-by: $(git var GIT_COMMITTER_IDENT | sed 's/>.*/>/')") || exit 1
     mark_issue_failed "$ISSUE_NUM" "Internal error: git or PR creation failed (post-PR label/comment/close may also have failed). Check logs at $LOG_DIR/issue-${ISSUE_NUM}-stderr.log."
   }
   rm -f "$TMPFILE"
-  remove_worktree "$TARGET_DIR" "$WORKTREE"
-  rmdir "$(dirname "$WORKTREE")" 2>/dev/null || true
+  remove_worktree "$TARGET_DIR" "$WORKTREE" "$GITDIR"
   WORKTREE=""
 done

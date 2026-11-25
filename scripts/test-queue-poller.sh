@@ -233,6 +233,8 @@ _qrun() {
   "${g[@]}" clone -q --bare "$_Q/seed" "$_Q/origin.git"
   "${g[@]}" clone -q "$_Q/origin.git" "$_Q/clone"
   "${g[@]}" -C "$_Q/clone" config core.hooksPath .githooks
+  "${g[@]}" -C "$_Q/clone" remote set-url origin https://github.com/owner/testrepo.git
+  "${g[@]}" -C "$_Q/clone" config url."$_Q/origin.git".insteadOf https://github.com/owner/testrepo.git
   "${g[@]}" -C "$_Q/clone" checkout -q -b feature/mine
   echo mine > "$_Q/clone/notes.txt"
   eval "${Q_SETUP:-}"
@@ -251,13 +253,13 @@ GHEOF
     > "$_Q/bin/claude-stub"
   printf '#!/bin/bash\necho "gitleaks $*" >> "$GH_LOG_FILE"\nexit "${GITLEAKS_RC:-0}"\n' > "$_Q/bin/gitleaks"
   chmod +x "$_Q/bin"/*
-  printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n' "$_Q/clone" \
+  printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n%s\n' "$_Q/clone" "${Q_CONF:-}" \
     > "$_Q/home/.config/claude/queue-repos.conf"
   sed 's|LOCKFILE=.*|LOCKFILE="'"$_Q/test.lock"'"|' "$POLLER" > "$_Q/poller.sh"
   : > "$_Q/gh.log"
   set +e
   _q_out=$(GH_LOG_FILE="$_Q/gh.log" Q_NUM="$1" Q_TITLE="$2" CLAUDE_QUEUE_REPO="test/q" CLAUDE_BIN="$_Q/bin/claude-stub" \
-    CLAUDE_QUEUE_TIMEOUT=10 HOME="$_Q/home" GIT_CONFIG_NOSYSTEM=1 GIT_COMMITTER_NAME=Poller GIT_COMMITTER_EMAIL=p@example.invalid \
+    CLAUDE_QUEUE_TIMEOUT="${Q_TIMEOUT:-10}" HOME="$_Q/home" GIT_CONFIG_NOSYSTEM=1 GIT_COMMITTER_NAME=Poller GIT_COMMITTER_EMAIL=p@example.invalid \
     GIT_AUTHOR_NAME=Poller GIT_AUTHOR_EMAIL=p@example.invalid PATH="$_Q/bin:$PATH" bash "$_Q/poller.sh" 2>&1)
   _q_exit=$?
   set -e
@@ -270,7 +272,8 @@ _has() { [[ -e "$1" ]] && echo yes || echo no; }
 _q_clone_untouched() {
   assert_eq "$1: clone stays on the user's branch" "feature/mine" "$(git -C "$_Q/clone" branch --show-current)"
   assert_eq "$1: user's untracked file kept" "mine" "$(cat "$_Q/clone/notes.txt")"
-  assert_eq "$1: worktree removed" "1" "$(git -C "$_Q/clone" worktree list | wc -l | tr -d ' ')"
+  assert_eq "$1: worktree and its registration removed" "1 " \
+    "$(git -C "$_Q/clone" worktree list | wc -l | tr -d ' ') $(ls "$_Q/clone/.git/worktrees" 2>/dev/null)"
   assert_eq "$1: no local poller branch" "" "$(git -C "$_Q/clone" branch --list 'claude/*')"
 }
 
@@ -284,12 +287,12 @@ assert_eq       "integration: log dir and files owner-only" "700 600 " \
   "$(_mode "$_logdir" || echo missing) $( (for _f in "$_logdir"/*.log; do _mode "$_f" || echo missing; done | sort -u | tr '\n' ' ') || true)"
 assert_contains "integration: queued→processing"  "issue edit 7 --repo test/q --remove-label queued --add-label processing" "$_q_gh"
 assert_contains "integration: default tool allowlist, permission mode pinned" \
-  "claude -p --permission-mode dontAsk --allowedTools Read(./**),Edit(./**),Bash(git diff),Bash(git diff --stat),Bash(git log --oneline -20),Bash(git status) --max-turns" "$_q_gh"
+  "claude -p --restricted --strict-mcp-config --tools Read,Grep,Glob,Edit,Write --permission-mode dontAsk --allowedTools Read(./**),Edit(./**) --max-turns" "$_q_gh"
 assert_eq       "integration: claude ran in a worktree, not the clone" "yes no" \
   "$([[ "$_wt" == */testrepo ]] && echo yes || echo no) $([[ "$_wt" == "$_Q/clone"* ]] && echo yes || echo no)"
 assert_eq       "integration: claude's git names the real git directory, not the worktree's .git file" "yes" \
   "$([[ "$_q_gh" == *"claude git dir /"*"/clone/.git/worktrees/testrepo"* ]] && echo yes || echo no)"
-assert_eq       "integration: worktree directory gone" "no" "$(_has "$_wt")"
+assert_eq       "integration: worktree and its mktemp directory gone" "no" "$(_has "$(dirname "$_wt")")"
 assert_eq       "integration: pushed branch holds the edit" "new" \
   "$(git --git-dir="$_Q/origin.git" show claude/7-fix-the-thing:feature.txt 2>&1)"
 assert_eq       "integration: one commit, message names the issue and signs off" "1|Fix the thing||From test/q#7.||Signed-off-by: Poller <p@example.invalid>" \
@@ -331,6 +334,59 @@ assert_eq       "re-queued: pushed" "y" "$(git --git-dir="$_Q/origin.git" show c
 assert_eq       "re-queued: user's branch and worktree untouched" "$(git -C "$_Q/clone" rev-parse main) " \
   "$(git -C "$_Q/clone" rev-parse claude/14-retry) $(git -C "$_Q/mine" status --porcelain)"
 _qdone
+
+# The agent points the worktree's .git file elsewhere: the work is still pushed, and the worktree, its mktemp
+# directory and its registration are all removed
+CLAUDE_ACT='echo z > f; echo "gitdir: /nonexistent" > .git' _qrun 16 "Tamper"
+_wt=$(sed -n 's/^claude .* in //p' <<< "$_q_gh")
+assert_eq "tampered .git: pushed" "z" "$(git --git-dir="$_Q/origin.git" show claude/16-tamper:f 2>&1)"
+assert_eq "tampered .git: mktemp directory gone" "no" "$(_has "$(dirname "$_wt")")"
+_q_clone_untouched "tampered .git"
+_qdone
+
+# An earlier run's branch is still on origin, with the user's commit on it: refused, never overwritten
+Q_SETUP='git -C "$_Q/clone" push -q "$_Q/origin.git" main:refs/heads/claude/15-exists' CLAUDE_ACT='echo y > f' _qrun 15 "Exists"
+assert_contains     "branch exists: issue marked failed" "--add-label failed" "$_q_gh"
+assert_contains     "branch exists: comment explains" "Could not push \`claude/15-exists\` to origin; nothing was overwritten" "$_q_gh"
+assert_not_contains "branch exists: no PR" "pr create" "$_q_gh"
+assert_eq           "branch exists: origin branch unchanged" "$(git -C "$_Q/clone" rev-parse main)" \
+  "$(git --git-dir="$_Q/origin.git" rev-parse claude/15-exists)"
+_q_clone_untouched "branch exists"
+_qdone
+
+# A .git below the root (a submodule's, pointing at a config whose core.fsmonitor git add would run): refused
+CLAUDE_ACT='mkdir -p sub evil; echo "gitdir: ../evil" > sub/.git; echo x > f' _qrun 22 "Nested git"
+_q_failed nested-git "add a \`.git\` below the repository root"
+CLAUDE_ACT='mkdir -p sub; echo "gitdir: ../evil" > sub/.GIT; echo x > f' _qrun 23 "Nested GIT"
+_q_failed nested-git-case "add a \`.git\` below the repository root"
+
+# A Claude run past the timeout is killed and its work discarded
+Q_TIMEOUT=1 CLAUDE_ACT='echo x > f; sleep 5' _qrun 17 "Slow"; _q_failed timeout "exit 124"
+
+# A tool list from an older queue-repos.conf, or an origin other than REPO_REMOTE: refused before Claude runs
+for _tools in 'Read,Edit(./**)' 'Read(./**),Edit(/etc/**)' 'Edit(./../x)' 'Write' 'Bash(git commit *)' 'Bash(git:*)' \
+              'Bash' 'Bash(*)' 'Bash(git add -A)' 'Edit(./**) Edit(//etc/**)' 'Read(./**) Bash(git commit *)' \
+              'Bash(/usr/bin/git commit *)' 'Bash(env git commit *)' 'Bash(Git commit *)' 'Edit(./**)Bash(git add .)' \
+              'Bash(g*)' 'Glob(a(b)c,Bash(git commit:*),x)' 'Grep(/etc)' "$(printf '\xef\xbb\xbfBash(git commit:*)')" \
+              'Edit(./**),Bash(make lint)' 'Bash(g\\it commit)' "Bash(g'i't commit)" 'Bash(touch x),Bash(' \
+              'Edit(./**),Bash(git status)' 'Bash(git diff)'; do
+  Q_CONF="REPO_ALLOWED_TOOLS[testrepo]=\"Read(./**),$_tools\"" CLAUDE_ACT='echo x > f' _qrun 18 "Tools"
+  assert_not_contains "tools $_tools: claude not run" "claude -p" "$_q_gh"
+  _q_failed "tools $_tools" "which the poller refuses"
+done
+Q_CONF='REPO_ALLOWED_TOOLS[testrepo]="Read(./**), Edit(./src/**),Grep,Glob"' CLAUDE_ACT='echo x > f' _qrun 19 "Tools ok"
+assert_contains "tools within ./: run" "pr create" "$_q_gh"
+_qdone
+Q_CONF='REPO_ALLOWED_TOOLS[testrepo]="Read(./**) Bash(make lint)"' _qrun 19 "Review only"
+assert_contains "exact Bash command without edits: run with Bash, no edit tools" "claude -p --restricted --strict-mcp-config --tools Read,Grep,Glob,Bash " "$_q_gh"
+_qdone
+Q_SETUP='git -C "$_Q/clone" remote set-url origin https://github.com/someone-else/testrepo.git' CLAUDE_ACT='echo x > f' _qrun 20 "Origin"
+assert_not_contains "origin mismatch: claude not run" "claude -p" "$_q_gh"
+_q_failed "origin mismatch" "pushes to origin \`https://github.com/someone-else/testrepo.git\`, not github.com/owner/testrepo"
+# Pulls from the right repo but pushes elsewhere (a pushurl): refused too
+Q_SETUP='git -C "$_Q/clone" config remote.origin.pushurl "$_Q/elsewhere.git"' CLAUDE_ACT='echo x > f' _qrun 21 "Pushurl"
+assert_not_contains "pushurl mismatch: claude not run" "claude -p" "$_q_gh"
+_q_failed "pushurl mismatch" "pushes to origin \`$_Q/elsewhere.git\`"
 
 # HOST_LABEL names the host in the "Processing started" comment, and only when set
 CLAUDE_QUEUE_HOST_LABEL=myhost _qrun 12 "Host"
@@ -433,7 +489,8 @@ case "$1 $2" in
 esac
 exit 0
 GHEOF
-  printf '#!/bin/bash\nexit 0\n' > "$bin/git"
+  printf '#!/bin/bash\ncase "$*" in *remote.origin.url) echo https://github.com/owner/testrepo.git ;; *pushurl) exit 1 ;; esac\n' \
+    > "$bin/git"
   printf '#!/bin/bash\ncat >/dev/null\nexit 0\n' > "$bin/claude-stub"
   chmod +x "$bin"/*
   printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n' "$repo" \
