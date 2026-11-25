@@ -63,7 +63,8 @@ def decrypt(archive, identity, key=None):
             with os.fdopen(fd, 'w') as stream:
                 stream.write(stub.stdout)
             pin = '' if key.get('pin') == 'Never' else 'enter its PIN if asked, then '
-            print(f'chrome-bookmarks-install: YubiKey {key["serial"]}: {pin}touch it when it blinks', file=sys.stderr)
+            print(f'chrome-bookmarks-install: YubiKey {key["serial"]}: {pin}touch it when it blinks (within about 15 '
+                  's)', file=sys.stderr)
         result = subprocess.run(['age', '--decrypt', '-i', str(ids), str(archive)], capture_output=True, timeout=300)
     if result.returncode:
         raise Failure(f'cannot decrypt {archive.name}: {result.stderr.decode(errors="replace").strip()[:200]}')
@@ -71,8 +72,18 @@ def decrypt(archive, identity, key=None):
 
 
 def recipient_keys(recipients):
-    """The plugged-in YubiKeys whose recipient is listed, in serial order."""
-    return sorted((k for k in backup.plugged_keys() if k['recipient'] in recipients), key=lambda k: k['serial'])
+    """The plugged-in YubiKeys whose recipient is listed: touch-only keys first, then by serial."""
+    return sorted((k for k in backup.plugged_keys() if k['recipient'] in recipients),
+                  key=lambda k: (k.get('pin') != 'Never', k['serial']))
+
+
+def can_prompt():
+    """age asks for a plugin's PIN on the terminal: is there one?"""
+    try:
+        with open('/dev/tty', 'rb'):
+            return True
+    except OSError:
+        return False
 
 
 def open_archive(archive, identity, recipients_file, key=None):
@@ -255,21 +266,40 @@ def main():
                 raise Failure('no plugged-in YubiKey is listed in recipients: plug in an enrolled key')
         if not args.verify_only:
             keys = keys[:1]  # one key opens it; the others stay untouched
+        no_pin = [] if args.identity or can_prompt() else [k for k in keys if k.get('pin') != 'Never']
+        for key in no_pin:
+            print(f'YubiKey {key["serial"]}: not checked here: it asks for its PIN, which needs a terminal; run '
+                  f'make chrome-bookmarks-verify{" MACHINE=" + args.machine if args.machine else ""} in one')
+        keys = [k for k in keys if k not in no_pin]
+        if not keys:
+            raise Failure('every plugged-in listed key needs a PIN and there is no terminal: run this in a terminal')
+        opened, failed_keys = [], []
         for key in keys:
-            manifest, sets, members = open_archive(archive, args.identity, args.recipients, key)
+            try:
+                manifest, sets, members = open_archive(archive, args.identity, args.recipients, key)
+            except Failure as error:
+                if not (args.verify_only and key):
+                    raise
+                hint = ': retry it (touch within ~15 s)' if str(error).startswith('cannot decrypt') else ''
+                print(f'YubiKey {key["serial"]}: failed ({error}); not checked{hint}')
+                failed_keys.append(key)
+                continue
+            opened.append(key)
             total = sum(e['links'] for e in manifest['profiles'].values())
             who = f'YubiKey {key["serial"]}' if key else 'the given identity'
             print(f'{archive.name}: {who} opens it; verified: {len(manifest["profiles"])} profiles, {total} links (work '
                   f'{manifest["sets"]["work"]}, personal {manifest["sets"]["personal"]}); every file and link matches the '
                   'manifest')
         if args.verify_only and not args.identity:
-            plugged = {k['recipient'] for k in keys}
-            unchecked = [backup.recipient_tag(r) or r[:16] for r in recipients if r not in plugged]
+            opened = {k['recipient'] for k in opened}
+            unchecked = [backup.recipient_tag(r) or r[:16] for r in recipients if r not in opened]
             if unchecked:
-                print(f'not checked (not plugged in): {", ".join(unchecked)}: the backup is safe to rely on once every '
-                      'listed key has opened it')
+                print(f'not checked: {", ".join(unchecked)} (not plugged in, or no terminal for its PIN): the backup is '
+                      'safe to rely on once every listed key has opened it')
             else:
                 print(f'all {len(recipients)} listed keys open the archive: safe to rely on')
+            if failed_keys or not opened:
+                return 1
         if args.extract:
             args.extract.mkdir(mode=0o700, parents=True, exist_ok=False)
             base = args.extract.resolve()
