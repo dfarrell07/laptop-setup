@@ -3,7 +3,7 @@
 # ~/.zshrc — managed by Ansible (roles/dotfiles)
 
 export ZSH="$HOME/.local/share/oh-my-zsh"
-ZSH_THEME="{{ dotfiles_oh_my_zsh_theme }}"
+ZSH_THEME={{ dotfiles_oh_my_zsh_theme | quote }}
 
 zstyle ':omz:update' mode disabled
 
@@ -77,7 +77,7 @@ export KIND_EXPERIMENTAL_PROVIDER=podman  # use rootless Podman provider (not do
 command -v direnv &>/dev/null && eval "$(direnv hook zsh)"
 command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
 {% if _system == 'Linux' %}
-if command -v fzf &>/dev/null; then
+if [[ -t 0 ]] && command -v fzf &>/dev/null; then  # no terminal: see the Darwin lines below
   if fzf --zsh &>/dev/null; then source <(fzf --zsh)  # fzf >= 0.48 (Fedora, Debian 13)
   elif [[ -f /usr/share/fzf/shell/key-bindings.zsh ]]; then source /usr/share/fzf/shell/key-bindings.zsh; fi
 fi
@@ -87,8 +87,9 @@ command -v fd &>/dev/null || { command -v fdfind &>/dev/null && alias fd=fdfind;
 # Fedora rpm ships completion via /usr/share/zsh/site-functions/_fzf (picked up by compinit);
 # completion.zsh does not exist in the Fedora package. No explicit source needed for rpm installs.
 {% elif _system == 'Darwin' %}
-command -v fzf &>/dev/null && [[ -f "{{ dotfiles_homebrew_prefix | trim }}/opt/fzf/shell/key-bindings.zsh" ]] && source "{{ dotfiles_homebrew_prefix | trim }}/opt/fzf/shell/key-bindings.zsh"
-command -v fzf &>/dev/null && [[ -f "{{ dotfiles_homebrew_prefix | trim }}/opt/fzf/shell/completion.zsh" ]] && source "{{ dotfiles_homebrew_prefix | trim }}/opt/fzf/shell/completion.zsh"
+# [[ -t 0 ]]: without a terminal (an editor reading the login environment) these print "can't change option: zle"
+[[ -t 0 ]] && command -v fzf &>/dev/null && [[ -f "{{ dotfiles_homebrew_prefix | trim }}/opt/fzf/shell/key-bindings.zsh" ]] && source "{{ dotfiles_homebrew_prefix | trim }}/opt/fzf/shell/key-bindings.zsh"
+[[ -t 0 ]] && command -v fzf &>/dev/null && [[ -f "{{ dotfiles_homebrew_prefix | trim }}/opt/fzf/shell/completion.zsh" ]] && source "{{ dotfiles_homebrew_prefix | trim }}/opt/fzf/shell/completion.zsh"
 {% endif %}
 {% if _system == 'Linux' %}
 command -v vimx &>/dev/null && alias vim=vimx  # vimx (+clipboard) from vim-X11 package
@@ -233,12 +234,12 @@ gper2() (
 
 # --- Device access (Tailscale + mosh) ---
 {% if dotfiles_laptop_tailscale_host %}
-alias laptop='mosh "{{ dotfiles_laptop_tailscale_host }}"'
-laptop-claude() { mosh "{{ dotfiles_laptop_tailscale_host }}" -- tmux new-session -A -s "${1:-work}"; }
+alias laptop={{ ('mosh ' ~ (dotfiles_laptop_tailscale_host | quote)) | quote }}
+laptop-claude() { mosh {{ dotfiles_laptop_tailscale_host | quote }} -- tmux new-session -A -s "${1:-work}"; }
 {% endif %}
 {% if dotfiles_mac_tailscale_host %}
-alias mac='mosh "{{ dotfiles_mac_tailscale_host }}"'
-mac-claude() { mosh "{{ dotfiles_mac_tailscale_host }}" -- tmux new-session -A -s "${1:-personal}"; }
+alias mac={{ ('mosh ' ~ (dotfiles_mac_tailscale_host | quote)) | quote }}
+mac-claude() { mosh {{ dotfiles_mac_tailscale_host | quote }} -- tmux new-session -A -s "${1:-personal}"; }
 {% endif %}
 {% if _system == 'Linux' %}
 # NetBird (IT's VPN on CSB machines): nb up, nbd down, nbs status. The daemon keeps its management URL and profile, so
@@ -270,7 +271,7 @@ alias ovnk='cd ~/src/ovnk'
 alias evpn='cd ~/src/evpn'
 alias rhrepos='cd ~/src/rh-context'
 {% endif %}
-alias notes="cd {{ notes_repo_path }}"
+alias notes={{ ('cd ' ~ (notes_repo_path | regex_replace('^~(?=/|$)', ansible_facts['user_dir']) | quote)) | quote }}
 {% if profile == 'work' and dotfiles_konflux_api_url %}
 
 # --- Konflux ---
@@ -280,9 +281,10 @@ alias konflux-login={{ ('oc login --web ' ~ (dotfiles_konflux_api_url | quote)) 
 
 # --- Task queue ---
 cq() {
-  [[ "{{ dotfiles_claude_queue_repo }}" == CHANGE_ME/* ]] && { echo "cq: set dotfiles_github_user in config.yml first" >&2; return 1; }
+  local repo={{ dotfiles_claude_queue_repo | quote }}
+  [[ "$repo" == CHANGE_ME/* ]] && { echo "cq: set dotfiles_github_user in config.yml first" >&2; return 1; }
   [[ -z "${1:-}" ]] && { echo "Usage: cq <title> [body]" >&2; return 1; }
-  gh issue create --repo "{{ dotfiles_claude_queue_repo | replace('"', '') | replace(';', '') | replace('`', '') }}" --title "$1" --body "${2:-}"
+  gh issue create --repo "$repo" --title "$1" --body "${2:-}"
 }
 
 # --- Kubernetes ---

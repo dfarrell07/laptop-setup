@@ -51,6 +51,18 @@
   tags: [always]
 
 
+- name: Assert the Tailscale host names are host names (written into the mosh aliases in zshrc)
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - item is match('^(|([A-Za-z0-9_][A-Za-z0-9._-]*@)?([A-Za-z0-9][A-Za-z0-9.-]*|[0-9A-Fa-f]*:[0-9A-Fa-f:.]+))\\Z')
+    fail_msg: "{{ item }}: a host name, IPv6 address or user@host, not starting with '-' (mosh would read it as an option)"
+  loop:
+    - "{{ dotfiles_laptop_tailscale_host }}"
+    - "{{ dotfiles_mac_tailscale_host }}"
+  loop_control:
+    label: "{{ item }}"
+
 - name: Ensure user config directories exist
   ansible.builtin.file:
     path: "{{ item.path }}"
