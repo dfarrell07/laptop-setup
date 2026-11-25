@@ -164,8 +164,10 @@ runs `git_repos` for one `repo_category`. `make help` lists everything; scenario
   that may fail on CSB use block/rescue to feed the CSB report.
 - **Variable visibility**: role defaults are invisible to other plays; variables read outside their role live in `vars.yml` with mirrors
   checked by `make check-vars-sync`.
-- **Local repo list**: repos on internal hosts go in gitignored `group_vars/all/local_repos.yml` (`git_repos_local`; copy
-  `local_repos.yml.example`); `repos.yml` holds public repos only and both concatenate into `git_repos_list`.
+- **Local repo list**: repos on internal hosts go in gitignored `group_vars/all/local_repos.yml` (`git_repos_local` only; copy
+  `local_repos.yml.example`); `repos.yml` holds public repos only and both concatenate into `git_repos_list`. The wrapper
+  refuses untracked or ignored files anywhere in the checkout outside a short allowlist, and asks for a typed `yes` on a terminal
+  when tracked files differ from HEAD (SECURITY.md § "Ansible Playbook Safety"); keep scratch files outside the checkout or in `tmp/`.
 - **Config**: tracked `default.config.yml` plus gitignored `config.yml` overrides. Top-level keys: `profile`, `desktop_environment`,
   `rollout_enable`, `ssh_port` (722), feature toggles (`install_vpn`, `install_virtualization`), `repo_*` toggles and
   `container_*` settings. Its `Additional toggles` comment block documents 100+ role-default variables; read it, not this file, for

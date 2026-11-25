@@ -10,7 +10,33 @@
   gather_facts: false
 
   tasks:
-    # Collection verification, again, as the first task: it catches tampering with collections/ made before the run
+    # Defence in depth for direct ansible-playbook runs; the check that counts is the wrapper's
+    # (scripts/verify-ansible-args.sh), before Ansible starts. By now planted vars files are loaded (Jinja in an
+    # ansible_* connection variable is templated while this task's connection is set up) and a planted filter or
+    # lookup plugin is imported when this task templates, so it cannot stop those. It does stop plain values such as
+    # ansible_python_interpreter or ansible_become_exe: it runs no module (pipe lookup and assert on the controller)
+    # and must stay ahead of every module and become task. Tracked files that differ from HEAD (exit 4) pass here:
+    # the wrapper has the terminal to confirm them on.
+    - name: SECURITY CRITICAL — Refuse untracked group_vars, host_vars, inventory and plugin files
+      vars:
+        _pf_vars_files_report: >-
+          {{ lookup('ansible.builtin.pipe', (ansible_playbook_python | quote) ~ ' -I -S '
+          ~ ((playbook_dir ~ '/scripts/parse-config.py') | quote) ~ ' --vars-files '
+          ~ (ansible_inventory_sources | map('quote') | map('regex_replace', '^', '--inventory ') | join(' '))
+          ~ ' 2>&1; echo "exit=$?"') }}
+      ansible.builtin.assert:
+        that:
+          - (_pf_vars_files_report.splitlines() | last) in ['exit=0', 'exit=4']
+        fail_msg: >-
+          SECURITY: the checkout has files git does not account for, which Ansible could load (they outrank
+          ansible.cfg and the plugin pins; run through make they are refused before Ansible starts):
+          {{ _pf_vars_files_report }}.
+          Move each one out of the checkout; settings belong in config.yml, internal repos in
+          group_vars/all/local_repos.yml (git_repos_local only).
+        quiet: true
+      tags: [always]
+
+    # Collection verification, again, as the first module task: it catches tampering with collections/ made before the run
     # and covers direct ansible-playbook invocations that skip the wrapper's check. It is not a guard against a same-uid
     # process changing files during the run: callback plugins are imported before this play starts, and modules are
     # read lazily when a task first uses them.
