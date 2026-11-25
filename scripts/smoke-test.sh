@@ -906,6 +906,22 @@ elif [[ "$_ssh_add_rc" -eq 1 ]]; then
   record "ssh-agent-key" "WARN" "no keys loaded in ssh-agent (normal after login: AddKeysToAgent loads the key on its first use)"
 else record "ssh-agent-key" "WARN" "key loaded but not sk-ssh-ed25519 type"; fi
 
+# The user D-Bus broker exits on EMFILE, ending the desktop session: the dotfiles drop-in raises its limit. Read the
+# running broker's limit: with linger it outlives logouts, so the drop-in applies from its next start (reboot).
+_dbus_unit=${SMOKE_DBUS_BROKER_UNIT:-/usr/lib/systemd/user/dbus-broker.service}
+if $IS_LINUX && [[ -f "$_dbus_unit" ]]; then
+  _dbus_pid=$(systemctl --user show dbus-broker.service -p MainPID --value 2>/dev/null || true)
+  _dbus_nofile=""
+  [[ "$_dbus_pid" =~ ^[1-9][0-9]*$ ]] &&
+    _dbus_nofile=$(awk '/^Max open files/ {print $4}' "/proc/$_dbus_pid/limits" 2>/dev/null || true)
+  if [[ ! -f "$HOME/.config/systemd/user/dbus-broker.service.d/50-nofile.conf" ]]; then
+    record "dbus-broker-nofile" "WARN" "no open-file drop-in for the user D-Bus broker — run: make dotfiles"
+  elif [[ "$_dbus_nofile" =~ ^[0-9]+$ ]] && (( _dbus_nofile >= 65536 )); then record "dbus-broker-nofile" "PASS"
+  else record "dbus-broker-nofile" "WARN" "the running user D-Bus broker's open-file limit is ${_dbus_nofile:-unknown}; the drop-in applies from its next start (reboot)"; fi
+  unset _dbus_pid _dbus_nofile
+fi
+unset _dbus_unit
+
 # LUKS discard protection (Linux only — mitigates SSD wear-pattern fingerprinting attacks)
 if $IS_LINUX; then
   if ! grep -qE 'rd\.luks\.options=[^[:space:]]*discard|rd\.luks\.allow-discards' /proc/cmdline 2>/dev/null; then

@@ -429,6 +429,44 @@
       non-negative integer (seconds). A non-numeric value would be coerced to 0
       (unlimited lifetime) by ssh-agent. Correct config.yml.
 
+# The user dbus-broker runs with a 1024 open-file soft limit and exits on EMFILE, which ends the desktop session and
+# every terminal in it. Each gh call holds a session-bus connection while it reads its token from the keyring, so a
+# few hundred parallel gh calls were enough (2026-11-24). EMFILE on accept() stays fatal (dbus-broker 37 sets no
+# connection-count quota), so the limit is the hard maximum, about 500x the connections that crashed it. With linger
+# the broker outlives a logout: the limit applies from its next start (a reboot, or systemd's restart after a crash).
+- name: User D-Bus broker open-file limit
+  when: is_linux and not system_is_container
+  block:
+    - name: Check for the user D-Bus broker unit
+      ansible.builtin.stat:
+        path: /usr/lib/systemd/user/dbus-broker.service
+      register: _dotfiles_dbus_broker_unit
+
+    - name: Create the user D-Bus broker drop-in directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/dbus-broker.service.d"
+        state: directory
+        mode: "0755"
+      when: _dotfiles_dbus_broker_unit.stat.exists
+
+    - name: Raise the user D-Bus broker's open-file limit (from its next start)
+      ansible.builtin.copy:
+        content: |
+          # Managed by laptop-setup (roles/dotfiles): at the default 1024 soft limit parallel clients crash the bus
+          [Service]
+          LimitNOFILE=524288
+        dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/dbus-broker.service.d/50-nofile.conf"
+        mode: "0644"
+      when: _dotfiles_dbus_broker_unit.stat.exists
+      register: _dotfiles_dbus_broker_dropin
+
+    - name: Reload the user manager so the broker's next start uses the limit  # noqa: no-handler
+      ansible.builtin.systemd:
+        daemon_reload: true
+        scope: user
+      when: _dotfiles_dbus_broker_dropin is changed
+      failed_when: false  # no user manager (an SSH run without linger): systemd reads it at the next start anyway
+
 - name: SSH agent systemd user service
   when: is_linux and not system_is_container  # containers lack ~/.config/systemd/user; user systemd scope unused
   block:
