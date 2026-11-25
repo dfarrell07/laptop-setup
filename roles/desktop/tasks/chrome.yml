@@ -24,13 +24,32 @@
       - desktop_chrome_page_zoom | string is match('^([0-9]{2,3})?$')
       - desktop_chrome_page_zoom | string | length == 0 or 25 <= (desktop_chrome_page_zoom | int) <= 500
       - desktop_chrome_color_scheme in ['', 'dark', 'light', 'system']
-      - _chrome_extensions | map(attribute='id') | select('match', '^[a-p]{32}$') | list | length
+      - _chrome_extensions | map(attribute='id') | select('string') | select('match', '^[a-p]{32}\Z') | list | length
         == _chrome_extensions | length
+      - _chrome_extensions | selectattr('install', 'defined') | map(attribute='install') | reject('boolean') | list
+        | length == 0
       - _chrome_extensions | map(attribute='id') | unique | list | length == _chrome_extensions | length
+      # Policy values files/chrome.py also checks, checked here too, before any policy file is written
+      - _chrome_policy_items | selectattr('key', 'in', _chrome_bool_policies) | map(attribute='value')
+        | reject('boolean') | list | length == 0
+      - _chrome_policy_items | selectattr('key', 'equalto', 'SafeBrowsingProtectionLevel') | map(attribute='value')
+        | reject('integer') | list | length == 0
+      - _chrome_policy_items | selectattr('key', 'equalto', 'SafeBrowsingProtectionLevel') | map(attribute='value')
+        | select('integer') | reject('in', [0, 1, 2]) | list | length == 0
+      - _chrome_policy_items | selectattr('key', 'equalto', 'RestoreOnStartup') | map(attribute='value')
+        | reject('integer') | list | length == 0
+      - _chrome_policy_items | selectattr('key', 'equalto', 'RestoreOnStartup') | map(attribute='value')
+        | select('integer') | reject('in', [1, 4, 5]) | list | length == 0
     fail_msg: >-
       desktop_chrome_page_zoom must be a whole percent from 25 to 500 (or ''), desktop_chrome_color_scheme dark, light,
-      system or '', and every desktop_chrome_extensions(_extra) id a Chrome Web Store ID (32 letters a-p) listed once.
+      system or '', and every desktop_chrome_extensions(_extra) id a Chrome Web Store ID (32 letters a-p) listed once,
+      with install (if given) true or false, unquoted. In the policy maps {{ _chrome_bool_policies | join(', ') }}
+      take true or false, SafeBrowsingProtectionLevel 0, 1 or 2, and RestoreOnStartup 1, 4 or 5.
     quiet: true
+  vars:
+    _chrome_policy_items: "{{ [_chrome_policies, _chrome_policies_enforced] | map('dict2items') | flatten }}"
+    _chrome_bool_policies: [PasswordManagerEnabled, AutofillCreditCardEnabled, AutofillAddressEnabled,
+                            BookmarkBarEnabled, BlockThirdPartyCookies]
 
 # --- Whose Chrome policy is this? Ours only when nobody else writes it: never on a CSB laptop, never beside another
 # party's policy files (IT's Kerberos ones on an older work laptop), never under a macOS configuration profile. Two
@@ -212,7 +231,7 @@
     # IDs this role wrote before, from its state file (validated: it is user-writable and drives root deletions)
     _chrome_ext_before_ids: >-
       {{ (_chrome_ext_before.content | default('W10=') | b64decode | from_yaml | default([], true))
-         | select('string') | select('match', '^[a-p]{32}$') | list }}
+         | select('string') | select('match', '^[a-p]{32}\Z') | list }}
     # A file the distribution ships (Fedora's GNOME Shell integration) belongs to its package, and one already there that
     # this role did not write belongs to whoever put it there: neither is written or removed.
     _chrome_ext_owned_ids: >-
@@ -357,7 +376,7 @@
           WARNING: Chrome's Local State in {{ desktop_chrome_user_data_dir }} cannot be read, so no profile was treated
           as personal: only the page zoom was set. Start and quit Chrome once to rewrite it, then run make apply
           CHUNK=chrome again.
-      when: "'personal-unknown' in _chrome_prefs.stdout_lines"
+      when: "'personal-unknown' in _chrome_prefs.stdout_lines and _chrome_prefs_status != 'running'"
 
     - name: Audit Chrome's personal-profile extensions
       ansible.builtin.command:
