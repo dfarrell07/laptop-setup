@@ -43,6 +43,7 @@
         gpgcheck: true
         repo_gpgcheck: true
         gpgkey: "https://dl.google.com/linux/linux_signing_key.pub"
+        includepkgs: [google-chrome-*]  # the baseurl may come from config.yml: it can supply Chrome and nothing else
         enabled: true
   rescue:
     - name: Warn Google Chrome repo failed (non-CSB network error)
@@ -60,15 +61,14 @@
     # CSB: IT's cron owns google-chrome.repo / google-cloud-sdk.repo (same repo ids); RHEL CSB forbids them
     - not csb_detected
   block:
+    # The el9/el10 choice is computed inline (no block or task var: config.yml values, set as facts, outrank those)
     - name: Add google-cloud-cli repo
-      vars:
-        _gcloud_use_el10: >-
-          {{ (is_fedora and ansible_facts['distribution_major_version'] | int >= 40)
-             or (not is_fedora and ansible_facts['distribution_major_version'] | int >= 10) }}
       ansible.builtin.yum_repository:
         name: google-cloud-cli
         description: Google Cloud CLI
-        baseurl: "https://packages.cloud.google.com/yum/repos/cloud-sdk-{{ 'el10' if _gcloud_use_el10 else 'el9' }}-x86_64"
+        baseurl: >-
+          https://packages.cloud.google.com/yum/repos/cloud-sdk-{{ 'el10' if ansible_facts['distribution_major_version'] | int
+          >= (40 if is_fedora else 10) else 'el9' }}-x86_64
         gpgcheck: true
         repo_gpgcheck: false  # packages.cloud.google.com does not sign repomd.xml;
           # residual risk: MITM can manipulate repo metadata (version list, package
@@ -76,8 +76,9 @@
           # RPM-level gpgcheck above remains the effective guard against malicious
           # payload delivery. Mitigated by the version floor and, after first install,
           # versionlock (see tasks below).
-        # yamllint disable-line rule:line-length
-        gpgkey: "https://packages.cloud.google.com/yum/doc/{{ 'rpm-package-key-v10.gpg' if _gcloud_use_el10 else 'rpm-package-key.gpg' }}"
+        gpgkey: >-
+          https://packages.cloud.google.com/yum/doc/{{ 'rpm-package-key-v10.gpg' if ansible_facts['distribution_major_version']
+          | int >= (40 if is_fedora else 10) else 'rpm-package-key.gpg' }}
         enabled: true
     - name: Install dnf versionlock plugin for google-cloud-cli pin
       ansible.builtin.dnf:
@@ -155,156 +156,141 @@
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
 
-- name: Add acli repo
-  # URL-as-toggle: task is enabled by defining repos_dnf_acli_baseurl in config.yml
-  # (not a repo_X boolean, because the URL is an internal secret)
-  # Risk acceptance: gpgcheck and repo_gpgcheck are disabled — this internal Red Hat repo
-  # publishes no GPG key or signed metadata. Mitigations: opt-in only (explicit baseurl in
-  # config.yml), profile==work scoped, URL assert requires the host to be listed in
-  # repos_dnf_internal_hosts (no domain check beyond that list).
-  # SECURITY — first-install window: versionlock (below) only guards against post-provision
-  # unauthenticated updates; it does NOT protect the first-install window. A compromised repo
-  # host at first provision delivers a malicious package which versionlock then pins permanently.
-  # Mitigate by setting repos_dnf_acli_binary_sha256 in config.yml (gitignored) to the SHA256
-  # of the trusted acli binary — the play fails after the install if it mismatches (the package and
-  # its scriptlets have already run and the versionlock is not applied; dnf remove acli). Obtain the hash
-  # out-of-band from IT or internal release notes before provisioning.
-  when:
-    - profile == 'work'
-    - repos_dnf_acli_baseurl is defined
-  block:
-    - name: Assert acli baseurl targets expected internal domain
-      vars:
-        _acli_hosts_re: "{{ repos_dnf_internal_hosts | default([]) | map('regex_escape') | join('|') }}"
-      ansible.builtin.assert:
-        that:
-          - repos_dnf_internal_hosts | default([]) | length > 0
-          - repos_dnf_acli_baseurl is match('^https://(' ~ _acli_hosts_re ~ ')/\S*\Z')
-        fail_msg: "repos_dnf_acli_baseurl host must be listed in repos_dnf_internal_hosts"
-    - name: Add acli repo
-      ansible.builtin.yum_repository:
-        name: acli
-        description: Atlassian CLI
-        baseurl: "{{ repos_dnf_acli_baseurl }}"
-        gpgcheck: false  # Internal Red Hat repo does not publish a GPG key
-        repo_gpgcheck: false  # metadata also unsigned — same limitation as gpgcheck above
-        enabled: true
-    - name: Install dnf versionlock plugin for acli pin
-      ansible.builtin.dnf:
-        name: python3-dnf-plugin-versionlock
-        state: present
-    - name: Install acli to enable versionlock protection on first install
-      ansible.builtin.dnf:
-        name: acli
-        state: present
-      ignore_errors: "{{ ansible_check_mode }}"  # the repo file is not written in check mode, so the package may not resolve
-    - name: Warn when acli first-install SHA256 check is not configured
-      ansible.builtin.debug:
-        msg: >-
-          SECURITY ADVISORY: repos_dnf_acli_binary_sha256 is not set in config.yml.
-          The acli binary was installed from an unsigned repo with no integrity check.
-          Obtain the SHA256 hash out-of-band from IT and add
-          repos_dnf_acli_binary_sha256 to config.yml to enable a post-install check (it detects a mismatch after
-          the package scriptlets have run; it does not prevent them).
-      when: repos_dnf_acli_binary_sha256 is not defined
-    - name: Stat acli binary for SHA256 first-install integrity check
-      ansible.builtin.stat:
-        path: /usr/bin/acli
-        checksum_algorithm: sha256
-        get_checksum: true
-      register: _acli_stat
-      when: repos_dnf_acli_binary_sha256 is defined
-    - name: Assert acli binary SHA256 matches expected hash
-      ansible.builtin.assert:
-        that: _acli_stat.stat.checksum == repos_dnf_acli_binary_sha256
-        fail_msg: >-
-          SECURITY: acli binary SHA256 mismatch.
-          Expected: {{ repos_dnf_acli_binary_sha256 }}
-          Got:      {{ _acli_stat.stat.checksum | default('unavailable') }}
-          The installed binary does not match the trusted hash in config.yml.
-          Possible supply-chain compromise — do not proceed. Re-obtain the binary
-          hash out-of-band from IT or internal release notes before re-running.
-      when:
-        - repos_dnf_acli_binary_sha256 is defined
-        # check mode may skip or fail the install above, so the binary may legitimately not exist yet
-        - not ansible_check_mode or _acli_stat.stat.exists
-    - name: Pin acli version to limit unauthenticated update exposure
-      community.general.dnf_versionlock:
-        name: acli
-        state: present
-      ignore_errors: "{{ ansible_check_mode }}"  # package may be absent in check mode
-  rescue:
-    - name: Abort on acli baseurl or binary checksum integrity failure
-      ansible.builtin.fail:
-        msg: "{{ ansible_failed_result.msg | default('integrity check failed') }}"
-      when: ansible_failed_task.name is match('Assert acli (baseurl|binary SHA256)')
-    - name: Record acli repo failure
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: repos_dnf
-        _csb_task_name: "Add acli repository"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
-        _csb_action: "Request access to the internal acli RPM repository; it is the only supported channel"
-        _csb_ticket_summary: "Exception request: acli RPM repository"
-        _csb_ticket_body: >-
-          acli is a Red Hat-internal command-line tool for Jira and Confluence automation.
-          Repo URL: {{ repos_dnf_acli_baseurl }} (internal Red Hat package repository).
-          No public RPM is available; the internal repo is the only supported distribution channel.
-          pip install atlassian-cli is a different third-party project and not a drop-in replacement.
-          Blocked workflows: Jira ticket management, Confluence updates, sprint planning scripts.
-      when: csb_rhel
-    - name: Warn acli repo failed (non-CSB network error)
-      ansible.builtin.debug:
-        msg: >-
-          REPO SETUP FAILED: Add acli repository in role repos_dnf.
-          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
-          This is likely a transient network error (DNS timeout, expired GPG key).
-          Continuing playbook execution.
-      when: not csb_rhel
+# acli comes from Atlassian's SHA256-pinned rpm (roles/packages, install_standalone_binaries.yml). The old internal mirror
+# path added an unsigned repo whose URL came from config.yml and dnf-installed acli as root from it; it is retired, and a
+# repo file it left behind is removed below (it stayed enabled, so dnf-automatic could pull any package from it).
+- name: Warn that repos_dnf_acli_baseurl is no longer used
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: repos_dnf_acli_baseurl in config.yml is ignored and can be removed: config.yml may not add an unsigned
+      repo. acli installs from Atlassian's SHA256-pinned rpm (make packages; RHEL CSB gets no host acli: use the
+      container).
+  when: repos_dnf_acli_baseurl is defined
 
+- name: Remove the retired unsigned acli repo
+  ansible.builtin.yum_repository:
+    name: acli
+    state: absent
+  register: _repos_dnf_acli_repo_removed
+
+# The old path also version-locked acli, which keeps make packages from updating it to the pinned rpm.
+- name: Read dnf version locks after removing the acli repo  # noqa: no-handler -- a read whose result the next task needs now
+  ansible.builtin.command:
+    argv: [dnf, versionlock, list]
+  register: _repos_dnf_versionlock
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: _repos_dnf_acli_repo_removed is changed
+
+- name: Warn that a stale acli version lock remains
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: acli is version-locked from the retired internal-mirror repo. Run sudo dnf versionlock delete acli, then
+      make packages, so acli updates to Atlassian's pinned rpm.
+  when:
+    - _repos_dnf_acli_repo_removed is changed
+    - _repos_dnf_versionlock.stdout | default('') is search('(^|\W)acli(\W|$)', multiline=True)
+
+# config.yml names this repo's URLs and the packages it may supply, never what it trusts. The keys it may use are pinned in
+# repos_dnf_redhat_trusted_fingerprints in roles/repos_dnf/defaults/main.yml and read from that file at the point of use
+# (role_path is a magic variable no other source overrides); the key import gets them, the fixed key path and the
+# validated URL through its environment. The verified key is written to a fixed local file for gpgkey, so dnf never
+# imports a key from the configured URL unchecked.
 - name: Add Red Hat internal repos
   when:
     - repo_redhat
     - profile == 'work'
     - repos_dnf_redhat_baseurl is defined
   block:
+    - name: Read an existing Red Hat internal repo file
+      ansible.builtin.slurp:
+        src: /etc/yum.repos.d/redhat-internal.repo
+      register: _repos_dnf_redhat_existing
+      failed_when: false
+      when: not csb_detected
+    # A file written before keys were pinned trusts a key from a config.yml URL: remove it unless it has the pinned shape
+    # (gpgcheck on, gpgkey only the fixed local file, includepkgs set), so a later abort below cannot leave it enabled.
+    # Not on CSB, where redhat-internal.repo may be IT's file (as in the disabled-repo cleanup below); there the role
+    # only ever replaces it after every check passes, as before.
+    - name: Remove a Red Hat internal repo file that does not trust only the pinned key
+      ansible.builtin.yum_repository:
+        name: redhat-internal
+        state: absent
+      when:
+        - not csb_detected
+        - _repos_dnf_redhat_existing.content is defined
+        - >-
+          not ((_repos_dnf_redhat_existing.content | b64decode) is search('(?m)^gpgcheck\s*=\s*1\s*$')
+          and (_repos_dnf_redhat_existing.content | b64decode) is search('(?m)^gpgkey\s*=\s*'
+          ~ ('file:///etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-redhat-internal' | regex_escape) ~ '\s*$')
+          and (_repos_dnf_redhat_existing.content | b64decode) is search('(?m)^includepkgs\s*=\s*\S'))
     - name: Assert Red Hat internal repo URLs target expected internal domain
-      vars:
-        _redhat_hosts_re: >-
-          {{ (['repo.redhat.com', 'keys.redhat.com'] + (repos_dnf_internal_hosts | default([])))
-          | map('regex_escape') | join('|') }}
       ansible.builtin.assert:
         that:
-          - repos_dnf_redhat_baseurl is match('^https://(' ~ _redhat_hosts_re ~ ')/\S*\Z')
-          # URL and fingerprint are interpolated into a shell script below: no shell metacharacters
-          - repos_dnf_redhat_gpgkey is match('^https://(' ~ _redhat_hosts_re ~ ')/[A-Za-z0-9._~/%+-]*\.gpg\Z')
-          # the pin is mandatory: the key is only imported after its fingerprint matches
-          - repos_dnf_redhat_gpg_fingerprint is match('^[0-9A-Fa-f]{40}\Z')
+          - repos_dnf_internal_hosts is sequence and repos_dnf_internal_hosts is not string
+          - repos_dnf_internal_hosts | reject('match', '^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?\Z') | list | length == 0
+          - repos_dnf_redhat_baseurl is match('^https://(' ~ (['repo.redhat.com', 'keys.redhat.com'] + repos_dnf_internal_hosts)
+            | map('regex_escape') | join('|') ~ ')/[A-Za-z0-9._~/%+$-]*\Z')
+          - repos_dnf_redhat_gpgkey is match('^https://(' ~ (['repo.redhat.com', 'keys.redhat.com'] + repos_dnf_internal_hosts)
+            | map('regex_escape') | join('|') ~ ')/[A-Za-z0-9._~/%+-]*\.gpg\Z')
         fail_msg: >-
-          repos_dnf_redhat_baseurl and repos_dnf_redhat_gpgkey must target known Red Hat
-          hosts (repo.redhat.com, keys.redhat.com, or repos_dnf_internal_hosts);
+          repos_dnf_redhat_baseurl and repos_dnf_redhat_gpgkey must be plain https URLs on known Red Hat
+          hosts (repo.redhat.com, keys.redhat.com, or repos_dnf_internal_hosts, a list of hostnames);
           this prevents subdomain hijacking attacks. Do not use arbitrary redhat.com subdomains.
-          repos_dnf_redhat_gpg_fingerprint must also be set (the key's full fingerprint).
+    - name: Assert Red Hat internal repo trust is pinned in the tracked defaults file
+      ansible.builtin.assert:
+        # the tracked file is read inline (no intermediate variable another source could override); a differing
+        # variable means an override somewhere, which would mislead, so it stops the run too
+        that:
+          - repos_dnf_redhat_trusted_fingerprints
+            == (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml') | from_yaml).repos_dnf_redhat_trusted_fingerprints
+          - repos_dnf_redhat_trusted_fingerprints | length > 0
+          - repos_dnf_redhat_trusted_fingerprints | reject('match', '^[0-9A-Fa-f]{40}\Z') | list | length == 0
+        fail_msg: >-
+          SECURITY: the Red Hat internal repo needs its signing key pinned in repos_dnf_redhat_trusted_fingerprints in
+          roles/repos_dnf/defaults/main.yml (a reviewed commit), as full 40-hex primary fingerprints. That variable must not
+          be set in config.yml or any other file, and repos_dnf_redhat_gpg_fingerprint in config.yml is no longer read: move
+          its value into the defaults file by PR, or remove repos_dnf_redhat_baseurl from config.yml.
+    - name: Assert Red Hat internal repo packages are named
+      ansible.builtin.assert:
+        that:
+          - repos_dnf_redhat_packages is sequence and repos_dnf_redhat_packages is not string
+          - repos_dnf_redhat_packages | length > 0
+          - repos_dnf_redhat_packages | reject('match', '^[A-Za-z0-9][A-Za-z0-9._+-]*\Z') | list | length == 0
+          - repos_dnf_redhat_repo_gpgcheck | string | lower in ['true', 'false']
+        fail_msg: >-
+          Set repos_dnf_redhat_packages in config.yml to the package names the Red Hat internal repo supplies (a list of
+          plain names, no globs; dnf includepkgs), e.g. [rhpkg]. repos_dnf_redhat_repo_gpgcheck must be true or false.
     - name: Import Red Hat internal GPG key
-      ansible.builtin.include_tasks: import_gpg_key.yml
-      vars:
-        _gpg_name: redhat
-        _gpg_url: "{{ repos_dnf_redhat_gpgkey }}"
-        _gpg_fingerprint: "{{ repos_dnf_redhat_gpg_fingerprint }}"
+      ansible.builtin.script: import-pinned-key.sh  # skipped in check mode
+      environment:
+        KEY_URL: "{{ repos_dnf_redhat_gpgkey }}"
+        PINNED: >-
+          {{ (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml') | from_yaml).repos_dnf_redhat_trusted_fingerprints
+          | join(' ') }}
+        PIN_VAR: repos_dnf_redhat_trusted_fingerprints (roles/repos_dnf/defaults/main.yml)
+        DEST: /etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-redhat-internal
+      changed_when: false
     - name: Add Red Hat internal repo
       ansible.builtin.yum_repository:
         name: redhat-internal
         description: Red Hat Internal Tools
         baseurl: "{{ repos_dnf_redhat_baseurl }}"
         gpgcheck: true
-        repo_gpgcheck: true
-        gpgkey: "{{ repos_dnf_redhat_gpgkey }}"
+        repo_gpgcheck: "{{ repos_dnf_redhat_repo_gpgcheck | bool }}"
+        gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-redhat-internal
+        includepkgs: "{{ repos_dnf_redhat_packages }}"
         enabled: true
   rescue:
-    - name: Abort on invalid Red Hat internal repo configuration
+    - name: Abort on invalid Red Hat internal repo configuration or an unpinned key
       ansible.builtin.fail:
-        msg: "{{ ansible_failed_result.msg | default('invalid Red Hat internal repo configuration') }}"
-      when: ansible_failed_task.name is match('Assert Red Hat internal repo URLs')
+        msg: >-
+          {{ ansible_failed_result.msg | default('invalid Red Hat internal repo configuration') }}
+          {{ ansible_failed_result.stderr | default('') }}
+      when: >-
+        ansible_failed_task.name is match('Assert Red Hat internal repo')
+        or 'SECURITY:' in (ansible_failed_result.stderr | default(''))
     - name: Record Red Hat repo failure
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
       vars:
@@ -324,8 +310,7 @@
         msg: >-
           REPO SETUP FAILED: Add Red Hat internal repository in role repos_dnf.
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
-          This is likely a transient network error (DNS timeout, expired GPG key) or a
-          key fingerprint mismatch (possible tampering; check repos_dnf_redhat_gpg_fingerprint).
+          This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
       when: not csb_rhel
 
@@ -339,9 +324,14 @@
     - is_fedora
     - not csb_rhel
   block:
-    - name: Assert RPM Fusion free GPG fingerprint is 40 hex digits (interpolated into a shell script)
+    - name: Assert RPM Fusion free GPG fingerprint is the tracked pin
       ansible.builtin.assert:
-        that: repos_dnf_rpmfusion_gpg_fingerprint is match('^[0-9A-Fa-f]{40}\Z')
+        that: >-
+          repos_dnf_rpmfusion_gpg_fingerprint
+          == (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml') | from_yaml).repos_dnf_rpmfusion_gpg_fingerprint
+        fail_msg: >-
+          SECURITY: repos_dnf_rpmfusion_gpg_fingerprint must not be overridden (config.yml, group_vars or -e); the key
+          import uses the pin in roles/repos_dnf/defaults/main.yml. Change it there by PR.
     # noqa: command-instead-of-module — installed-state probe so a rerun skips the URL download
     - name: Check whether RPM Fusion free release is installed
       ansible.builtin.command:
@@ -351,24 +341,30 @@
       failed_when: false
       check_mode: false
     - name: Import RPM Fusion free GPG key
-      ansible.builtin.include_tasks: import_gpg_key.yml
-      vars:
-        _gpg_name: rpmfusion_free
-        _gpg_url: "https://download1.rpmfusion.org/free/fedora/RPM-GPG-KEY-rpmfusion-free-fedora-2020"
-        _gpg_fingerprint: "{{ repos_dnf_rpmfusion_gpg_fingerprint }}"
+      ansible.builtin.script: import-pinned-key.sh  # skipped in check mode
+      environment:
+        KEY_URL: https://download1.rpmfusion.org/free/fedora/RPM-GPG-KEY-rpmfusion-free-fedora-2020
+        PINNED: >-
+          {{ (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml') | from_yaml).repos_dnf_rpmfusion_gpg_fingerprint }}
+        PIN_VAR: repos_dnf_rpmfusion_gpg_fingerprint (roles/repos_dnf/defaults/main.yml)
+      changed_when: false
     - name: Install RPM Fusion free release
       when:
         - _rpmfusion_free_installed.rc != 0  # the URL install re-downloads the RPM on every run
         - not ansible_check_mode  # the key import above is skipped in check mode, so dnf would reject the RPM
       ansible.builtin.dnf:
         # yamllint disable-line rule:line-length
-        name: "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"
+        name: "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_facts['distribution_major_version'] | int }}.noarch.rpm"
         state: present
   rescue:
-    - name: Abort on malformed GPG fingerprint configuration
+    - name: Abort on a GPG fingerprint override, an unpinned key or a bad repo path
       ansible.builtin.fail:
-        msg: "{{ ansible_failed_result.msg | default('invalid GPG fingerprint configuration') }}"
-      when: ansible_failed_task.name is match('Assert .* GPG fingerprint')
+        msg: >-
+          {{ ansible_failed_result.msg | default('invalid GPG fingerprint configuration') }}
+          {{ ansible_failed_result.stderr | default('') }}
+      when: >-
+        ansible_failed_task.name is match('Assert .* (GPG fingerprint|repo path)')
+        or 'SECURITY:' in (ansible_failed_result.stderr | default(''))
     - name: Warn RPM Fusion free failed (network error)
       ansible.builtin.debug:
         msg: >-
@@ -389,9 +385,14 @@
     - is_fedora
     - not csb_rhel
   block:
-    - name: Assert RPM Fusion nonfree GPG fingerprint is 40 hex digits (interpolated into a shell script)
+    - name: Assert RPM Fusion nonfree GPG fingerprint is the tracked pin
       ansible.builtin.assert:
-        that: repos_dnf_rpmfusion_nonfree_gpg_fingerprint is match('^[0-9A-Fa-f]{40}\Z')
+        that: >-
+          repos_dnf_rpmfusion_nonfree_gpg_fingerprint
+          == (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml') | from_yaml).repos_dnf_rpmfusion_nonfree_gpg_fingerprint
+        fail_msg: >-
+          SECURITY: repos_dnf_rpmfusion_nonfree_gpg_fingerprint must not be overridden (config.yml, group_vars or -e); the key
+          import uses the pin in roles/repos_dnf/defaults/main.yml. Change it there by PR.
     # noqa: command-instead-of-module — installed-state probe so a rerun skips the URL download
     - name: Check whether RPM Fusion nonfree release is installed
       ansible.builtin.command:
@@ -401,11 +402,13 @@
       failed_when: false
       check_mode: false
     - name: Import RPM Fusion nonfree GPG key
-      ansible.builtin.include_tasks: import_gpg_key.yml
-      vars:
-        _gpg_name: rpmfusion_nonfree
-        _gpg_url: "https://download1.rpmfusion.org/nonfree/fedora/RPM-GPG-KEY-rpmfusion-nonfree-fedora-2020"
-        _gpg_fingerprint: "{{ repos_dnf_rpmfusion_nonfree_gpg_fingerprint }}"
+      ansible.builtin.script: import-pinned-key.sh  # skipped in check mode
+      environment:
+        KEY_URL: https://download1.rpmfusion.org/nonfree/fedora/RPM-GPG-KEY-rpmfusion-nonfree-fedora-2020
+        PINNED: >-
+          {{ (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml') | from_yaml).repos_dnf_rpmfusion_nonfree_gpg_fingerprint }}
+        PIN_VAR: repos_dnf_rpmfusion_nonfree_gpg_fingerprint (roles/repos_dnf/defaults/main.yml)
+      changed_when: false
     - name: Install RPM Fusion nonfree release
       when:
         - _rpmfusion_nonfree_installed.rc != 0  # the URL install re-downloads the RPM on every run
@@ -413,13 +416,17 @@
       ansible.builtin.dnf:
         name: >-  # yamllint disable-line rule:line-length
           https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_facts['distribution_major_version']
-          }}.noarch.rpm
+          | int }}.noarch.rpm
         state: present
   rescue:
-    - name: Abort on malformed GPG fingerprint configuration
+    - name: Abort on a GPG fingerprint override, an unpinned key or a bad repo path
       ansible.builtin.fail:
-        msg: "{{ ansible_failed_result.msg | default('invalid GPG fingerprint configuration') }}"
-      when: ansible_failed_task.name is match('Assert .* GPG fingerprint')
+        msg: >-
+          {{ ansible_failed_result.msg | default('invalid GPG fingerprint configuration') }}
+          {{ ansible_failed_result.stderr | default('') }}
+      when: >-
+        ansible_failed_task.name is match('Assert .* (GPG fingerprint|repo path)')
+        or 'SECURITY:' in (ansible_failed_result.stderr | default(''))
     - name: Warn RPM Fusion nonfree failed (network error)
       ansible.builtin.debug:
         msg: >-
@@ -434,33 +441,55 @@
   when:
     - repo_tailscale
     - not csb_detected  # IT repo allowlist; tailscale installs from the base Fedora repos
-  vars:
-    _ts_path: "{{ 'rhel/' ~ ansible_facts['distribution_major_version'] if not is_fedora else 'fedora' }}"
+  # The repo path is computed inline from facts at each use, never through a block var (config.yml values, set as
+  # facts, outrank block and task vars: a comma in it would give dnf a second baseurl on another host).
   block:
-    - name: Assert Tailscale GPG fingerprint is 40 hex digits (interpolated into a shell script)
+    - name: Assert Tailscale GPG fingerprint is the tracked pin
       ansible.builtin.assert:
-        that: repos_dnf_tailscale_gpg_fingerprint is match('^[0-9A-Fa-f]{40}\Z')
+        that: >-
+          repos_dnf_tailscale_gpg_fingerprint
+          == (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml') | from_yaml).repos_dnf_tailscale_gpg_fingerprint
+        fail_msg: >-
+          SECURITY: repos_dnf_tailscale_gpg_fingerprint must not be overridden (config.yml, group_vars or -e); the key
+          import uses the pin in roles/repos_dnf/defaults/main.yml. Change it there by PR.
+    - name: Assert Tailscale repo path is fedora or rhel/<major>
+      ansible.builtin.assert:
+        that: >-
+          ('fedora' if is_fedora else 'rhel/' ~ (ansible_facts['distribution_major_version'] | int))
+          is match('^(fedora|rhel/[0-9]+)\Z')
     - name: Import Tailscale GPG key
-      ansible.builtin.include_tasks: import_gpg_key.yml
-      vars:
-        _gpg_name: tailscale
-        _gpg_url: "https://pkgs.tailscale.com/stable/{{ _ts_path }}/repo.gpg"
-        _gpg_fingerprint: "{{ repos_dnf_tailscale_gpg_fingerprint }}"
+      ansible.builtin.script: import-pinned-key.sh  # skipped in check mode
+      environment:
+        KEY_URL: >-
+          https://pkgs.tailscale.com/stable/{{ ('fedora' if is_fedora else 'rhel/' ~ (ansible_facts['distribution_major_version'] | int))
+          }}/repo.gpg
+        PINNED: >-
+          {{ (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml') | from_yaml).repos_dnf_tailscale_gpg_fingerprint }}
+        PIN_VAR: repos_dnf_tailscale_gpg_fingerprint (roles/repos_dnf/defaults/main.yml)
+        DEST: /etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-tailscale
+      changed_when: false
     - name: Add Tailscale stable repo
       ansible.builtin.yum_repository:
         name: tailscale-stable
         description: Tailscale stable
         # Tailscale uses a single static 'fedora' path for all Fedora releases (no per-version subdirectory)
-        baseurl: "https://pkgs.tailscale.com/stable/{{ _ts_path }}/$basearch"
+        baseurl: >-
+          https://pkgs.tailscale.com/stable/{{ ('fedora' if is_fedora else 'rhel/' ~ (ansible_facts['distribution_major_version'] | int))
+          }}/$basearch
         gpgcheck: true
         repo_gpgcheck: true
-        gpgkey: "https://pkgs.tailscale.com/stable/{{ _ts_path }}/repo.gpg"
+        # the checked key bytes, not the URL: dnf would import whatever key that URL served later, unchecked
+        gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-tailscale
         enabled: true
   rescue:
-    - name: Abort on malformed GPG fingerprint configuration
+    - name: Abort on a GPG fingerprint override, an unpinned key or a bad repo path
       ansible.builtin.fail:
-        msg: "{{ ansible_failed_result.msg | default('invalid GPG fingerprint configuration') }}"
-      when: ansible_failed_task.name is match('Assert .* GPG fingerprint')
+        msg: >-
+          {{ ansible_failed_result.msg | default('invalid GPG fingerprint configuration') }}
+          {{ ansible_failed_result.stderr | default('') }}
+      when: >-
+        ansible_failed_task.name is match('Assert .* (GPG fingerprint|repo path)')
+        or 'SECURITY:' in (ansible_failed_result.stderr | default(''))
     - name: Warn Tailscale repo failed (non-CSB network error)
       ansible.builtin.debug:
         msg: >-
@@ -479,14 +508,9 @@
   ansible.builtin.package_facts:
     manager: rpm
 
+# The repo lists are inline in each loop: a block var would let config.yml (set as facts, it outranks it) name any repo file
+# for removal as root.
 - name: Third-party repo cleanup for disabled toggles
-  vars:
-    _repos_dnf_toggled:
-      - {repo: gh-cli, pkg: gh, toggle: repo_gh_cli, enabled: "{{ repo_gh_cli }}"}
-      - {repo: google-chrome, pkg: google-chrome-stable, toggle: repo_google_chrome, enabled: "{{ repo_google_chrome }}"}
-      - {repo: google-cloud-cli, pkg: google-cloud-cli, toggle: repo_google_cloud_sdk, enabled: "{{ repo_google_cloud_sdk }}"}
-      - {repo: mullvad, pkg: mullvad-vpn, toggle: repo_mullvad, enabled: "{{ repo_mullvad }}"}
-      - {repo: tailscale-stable, pkg: tailscale, toggle: repo_tailscale, enabled: "{{ repo_tailscale }}"}
   block:
     - name: Keep disabled third-party repos whose packages are installed
       # tailscale is not noticed: it may come from the base repos. The removal task below still keeps its repo file.
@@ -495,7 +519,11 @@
           Keeping the {{ item.repo }} repo although {{ item.toggle }} is false: {{ item.pkg }} is
           installed and would stop receiving updates. Set {{ item.toggle }}: true in config.yml to
           silence this, or remove the package first.
-      loop: "{{ _repos_dnf_toggled | rejectattr('repo', 'eq', 'tailscale-stable') | list }}"
+      loop:
+        - {repo: gh-cli, pkg: gh, toggle: repo_gh_cli, enabled: "{{ repo_gh_cli }}"}
+        - {repo: google-chrome, pkg: google-chrome-stable, toggle: repo_google_chrome, enabled: "{{ repo_google_chrome }}"}
+        - {repo: google-cloud-cli, pkg: google-cloud-cli, toggle: repo_google_cloud_sdk, enabled: "{{ repo_google_cloud_sdk }}"}
+        - {repo: mullvad, pkg: mullvad-vpn, toggle: repo_mullvad, enabled: "{{ repo_mullvad }}"}
       loop_control:
         label: "{{ item.repo }}"
       when:
@@ -507,21 +535,18 @@
       ansible.builtin.yum_repository:
         name: "{{ item.repo }}"
         state: absent
-      loop: "{{ _repos_dnf_toggled }}"
+      loop:
+        - {repo: gh-cli, pkg: gh, toggle: repo_gh_cli, enabled: "{{ repo_gh_cli }}"}
+        - {repo: google-chrome, pkg: google-chrome-stable, toggle: repo_google_chrome, enabled: "{{ repo_google_chrome }}"}
+        - {repo: google-cloud-cli, pkg: google-cloud-cli, toggle: repo_google_cloud_sdk, enabled: "{{ repo_google_cloud_sdk }}"}
+        - {repo: mullvad, pkg: mullvad-vpn, toggle: repo_mullvad, enabled: "{{ repo_mullvad }}"}
+        - {repo: tailscale-stable, pkg: tailscale, toggle: repo_tailscale, enabled: "{{ repo_tailscale }}"}
       loop_control:
         label: "{{ item.repo }}"
       when:
         - not (item.enabled | bool)
         - item.pkg not in ansible_facts.packages
         - not (csb_detected and item.repo in ['google-chrome', 'google-cloud-cli'])  # IT-managed repo files
-
-- name: Remove acli repo when disabled
-  ansible.builtin.yum_repository:
-    name: acli
-    state: absent
-  when:
-    - repos_dnf_acli_baseurl is not defined or profile != 'work'
-    - "'acli' not in ansible_facts.packages"  # keep updates flowing for an installed acli
 
 - name: Remove redhat-internal repo when disabled
   ansible.builtin.yum_repository:

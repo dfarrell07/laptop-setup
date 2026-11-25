@@ -172,7 +172,9 @@ processes can use `bpf()` (including package-manager dependencies) once unprivil
 - **Ansible `AnsiballZ_*.py: Operation not permitted`:** `ansible.cfg` sets `pipelining = true`; run from the repo root so it loads.
 - **Chrome and Tailscale repos on CSB:** both are skipped on any CSB (Tailscale installs from the base Fedora repos; IT owns the
   Chrome repo file, which the disabled-repo cleanup leaves alone). Other repo failures print only a
-  `REPO SETUP FAILED` warning; only the acli and Red Hat internal repos record IT-ticket text (RHEL CSB). Use the container for those tools.
+  `REPO SETUP FAILED` warning; only the Red Hat internal repo records IT-ticket text (RHEL CSB). Use the container for those tools.
+- **acli on RHEL CSB:** the packages role installs acli only from Atlassian's SHA256-pinned rpm and skips third-party rpms on RHEL
+  CSB, and the old internal-mirror repo is retired, so there is no host acli there: use it from the container.
 - **Login shell stays `/bin/bash` on an SSSD account:** the role writes `override_shell` to `/etc/sssd/conf.d/90-laptop-setup-shell.conf`
   only if `sssd.conf` or `conf.d` has a `[domain/...]` section. Otherwise add `override_shell = /bin/zsh` to the `[domain/...]`
   stanza in a root-owned `/etc/sssd/conf.d/*.conf` (same group and mode as `sssd.conf`), then `sudo systemctl restart sssd`, or ask IT to

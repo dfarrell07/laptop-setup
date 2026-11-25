@@ -17,6 +17,8 @@ repo_tailscale: true
 
 repos_dnf_google_chrome_repo: "https://dl.google.com/linux/chrome/rpm/stable/x86_64"
 
+# Pinned fingerprints below are read from this tracked file at the point of use (role_path lookup); a different value
+# of the variable from config.yml, group_vars or -e stops the run. Change them here by PR.
 # RPM Fusion GPG key fingerprints — pinned to detect MITM on initial key fetch.
 # Primary fingerprints of the upstream 2020 certificates published at
 # https://download1.rpmfusion.org/{free,nonfree}/fedora/RPM-GPG-KEY-rpmfusion-{free,nonfree}-fedora-2020
@@ -29,17 +31,28 @@ repos_dnf_rpmfusion_nonfree_gpg_fingerprint: "79BDB88F9BBF73910FD4095B6A2AF96194
 # Compare the primary certificate fingerprint, excluding subkey fingerprints.
 repos_dnf_tailscale_gpg_fingerprint: "2596A99EAAB33821893C0A79458CA832957F5868"
 
-# Red Hat internal GPG key fingerprint (work profile only)
-# Pinned to detect MITM attacks on initial key fetch from internal Red Hat domains.
-# If GPG key is compromised at fetch time, fingerprint verification fails before import.
-# Fingerprint valid for: Red Hat internal package repos (an internal package host).
-# Must be defined in config.yml (gitignored) as 40 hex digits whenever repos_dnf_redhat_baseurl is defined.
-# To extract fingerprint: gpg --show-keys --with-colons /path/to/key.gpg | grep "^fpr" | head -n1 | cut -d: -f10
-repos_dnf_redhat_gpg_fingerprint: ""
+# Signing keys trusted for the Red Hat internal repo (work profile; repos_dnf_redhat_baseurl in config.yml).
+# config.yml may name the repo's hosts and URLs but not what it trusts: the key import reads this list from this
+# tracked, PR-reviewed file at the point of use (role_path lookup), so no variable override reaches it, and a differing
+# value of the variable (config.yml, a gitignored group_vars file, -e) stops the run. Every key in the file at
+# repos_dnf_redhat_gpgkey, as both gpg and rpm parse it, must be listed, or nothing is imported and no repo is written.
+# Empty: the repo cannot be enabled. Add a key's full primary fingerprint by PR (public-key fingerprints are not secrets):
+#   gpg --show-keys --with-colons key.gpg | awk -F: '$1 == "pub" {p=1} $1 == "fpr" && p {print $10; p=0}'
+repos_dnf_redhat_trusted_fingerprints: []
 
-# Exact hostnames (besides public repo.redhat.com / keys.redhat.com) that internal repo URLs
-# (repos_dnf_redhat_baseurl/_gpgkey, repos_dnf_acli_baseurl) may target. Set in config.yml;
-# e.g. [pkgs.example.internal]. Empty: only the public hosts are accepted. Matching is anchored.
+# Package names the Red Hat internal repo may supply (dnf includepkgs; plain names, no globs). Set in config.yml;
+# required when repos_dnf_redhat_baseurl is set. It narrows what the repo offers; since config.yml sets it, the control
+# against unsigned code is the pinned key, not this list.
+repos_dnf_redhat_packages: []
+
+# Whether the Red Hat internal repo's metadata (repomd.xml) must be signed by a trusted key. Set false in config.yml
+# only for a repo that signs packages but not metadata; package signatures (gpgcheck) are always required.
+repos_dnf_redhat_repo_gpgcheck: true
+
+# Exact hostnames (besides public repo.redhat.com / keys.redhat.com) that repos_dnf_redhat_baseurl and
+# repos_dnf_redhat_gpgkey may target (letters, digits, dots and hyphens). Set in config.yml; e.g. [pkgs.example.internal].
+# Empty: only the public hosts are accepted. Matching is anchored. Trust comes from repos_dnf_redhat_trusted_fingerprints,
+# not from this list.
 repos_dnf_internal_hosts: []
 
 # Minimum google-cloud-cli version floor (MITM downgrade protection).
@@ -50,7 +63,7 @@ repos_dnf_internal_hosts: []
 repos_dnf_gcloud_min_version: "500.0.0"
 
 # Internal Red Hat / work-profile repo URLs — set in config.yml (gitignored), NOT here.
-# If defined (in config.yml), these are used by the acli and redhat-internal repo tasks.
+# If defined (in config.yml), these are used by the redhat-internal repo tasks.
 # Setting them here (even commented-out and re-enabled) defeats the 'is defined' guard
 # and passes an empty baseurl to yum_repository, causing a cryptic failure.
 # See default.config.yml Additional toggles for the correct override location.

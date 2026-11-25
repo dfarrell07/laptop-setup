@@ -522,7 +522,7 @@ syntax-check: .venv
 	$(VERIFY_AND_RUN) .venv/bin/ansible-playbook site.yml --syntax-check
 
 shellcheck:
-	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh roles/packages/files/*.sh .githooks/pre-commit .githooks/commit-msg .githooks/prepare-commit-msg .githooks/pre-push roles/dotfiles/files/git-template-*
+	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh roles/packages/files/*.sh roles/repos_dnf/files/*.sh .githooks/pre-commit .githooks/commit-msg .githooks/prepare-commit-msg .githooks/pre-push roles/dotfiles/files/git-template-*
 
 markdownlint:
 	@if [ -d node_modules ]; then npm run lint:markdown; \
@@ -587,6 +587,7 @@ TEST_SCRIPTS := \
 	'.venv/bin/python3 -I scripts/test-vault-shared.py' \
 	'.venv/bin/python3 -I scripts/test-vault-signing-key.py' \
 	'.venv/bin/python3 -I scripts/test-vault-acli-token.py' \
+	'.venv/bin/python3 -I scripts/test-repos-dnf.py' \
 	'.venv/bin/python3 -I scripts/test-collection-source-verifier.py' \
 	'.venv/bin/python3 -I scripts/test-rollout.py' \
 	'bash test-var-override.sh'
