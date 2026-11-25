@@ -381,7 +381,8 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
       --max-turns "$MAX_TURNS" \
       < "$TMPFILE" \
       2>"$LOG_DIR/issue-${ISSUE_NUM}-stderr.log" \
-      >"$LOG_DIR/issue-${ISSUE_NUM}-stdout.log")
+      >"$LOG_DIR/issue-${ISSUE_NUM}-stdout.log" \
+      200>&-)  # the lock's fd: a process the agent leaves running must not keep later polls out
     CLAUDE_EXIT=$?
     set -e
 

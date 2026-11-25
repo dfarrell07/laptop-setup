@@ -363,6 +363,14 @@ _q_failed nested-git-case "add a \`.git\` below the repository root"
 # A Claude run past the timeout is killed and its work discarded
 Q_TIMEOUT=1 CLAUDE_ACT='echo x > f; sleep 5' _qrun 17 "Slow"; _q_failed timeout "exit 124"
 
+# A process the agent leaves running must not hold the poller's lock, or every later run exits "Another instance"
+CLAUDE_ACT='echo x > f; (sleep 30 >/dev/null 2>&1 & echo $! > "${GH_LOG_FILE%/*}/bg.pid")' _qrun 24 "Leftover"
+assert_eq "leftover process: run succeeds" "0" "$_q_exit"
+_lock_free=no; flock -n "$_Q/test.lock" true && _lock_free=yes
+kill "$(cat "$_Q/bg.pid")" 2>/dev/null || true
+assert_eq "leftover process: lock released when the poller exits" "yes" "$_lock_free"
+_qdone
+
 # A tool list from an older queue-repos.conf, or an origin other than REPO_REMOTE: refused before Claude runs
 for _tools in 'Read,Edit(./**)' 'Read(./**),Edit(/etc/**)' 'Edit(./../x)' 'Write' 'Bash(git commit *)' 'Bash(git:*)' \
               'Bash' 'Bash(*)' 'Bash(git add -A)' 'Edit(./**) Edit(//etc/**)' 'Read(./**) Bash(git commit *)' \
