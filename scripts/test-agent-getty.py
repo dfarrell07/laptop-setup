@@ -8,6 +8,7 @@ import plistlib
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -157,7 +158,7 @@ class AgentGettyTests(unittest.TestCase):
                                 text=True)
         self.assertEqual(result.returncode, 0, result.stdout)
 
-    def script_env(self, fake):
+    def script_env(self, fake, claude_prompt=None):
         """A bin dir whose claude and codex log their arguments and environment, then wait."""
         bindir = self.out / f'bin-{fake}'
         bindir.mkdir(exist_ok=True)
@@ -166,13 +167,17 @@ class AgentGettyTests(unittest.TestCase):
             body = (f'#!/bin/bash\necho "start {name} $* | CLAUDE_CONFIG_DIR=${{CLAUDE_CONFIG_DIR-unset}} '
                     f'ANTHROPIC_API_KEY=${{ANTHROPIC_API_KEY-unset}} CODEX_HOME=${{CODEX_HOME-unset}}" >> {log}\n')
             if name == 'claude':
-                body += f'echo "Trust {self.home}? [y/N]"; read -r a; echo "answer $a" >> {log}\n'
+                # like Claude: the screen clears once the question is answered
+                body += claude_prompt or (f'echo "Trust {self.home}? [y/N]"; read -r a; echo "answer $a" >> {log}; '
+                                          "printf '\\033[2J\\033[H'\n")
             body += f'echo $$ > {log}.pid; exec sleep 300\n'
             (bindir / name).write_text(body)
             (bindir / name).chmod(0o755)
-        tmux_dir = self.out / f'tmux-{fake}'
-        tmux_dir.mkdir(exist_ok=True)
+        # short: a macOS socket path must stay under 104 characters, and $TMPDIR there is long
+        tmux_dir = Path(tempfile.mkdtemp(dir='/tmp'))
+        self.addCleanup(shutil.rmtree, tmux_dir, True)
         env = dict(os.environ, PATH=f'{bindir}:{os.environ["PATH"]}', TMUX_TMPDIR=str(tmux_dir), AGENT_GETTY_POLL='1',
+                   HOME=str(self.home), XDG_STATE_HOME=str(self.out / f'state-{fake}'),
                    CLAUDE_CONFIG_DIR='/leaked', ANTHROPIC_API_KEY='leaked')
         env.pop('TMUX', None)
         return env, log
@@ -212,6 +217,43 @@ class AgentGettyTests(unittest.TestCase):
             _, err = proc.communicate(timeout=20)
             self.assertEqual(proc.returncode, 1)
             self.assertIn('getty-claude-personal ended', err)
+
+    def test_an_answer_claude_finds_too_quick_is_given_again(self):
+        # Claude ignores an answer within its grace window after the question and asks again, redrawing the screen
+        # (clear and clear-history, as Ink does), so the question never piles up in history
+        question = f'echo "Trust {self.home}? [y/N]"'
+        prompt = ('ask() { printf \'\\033[2J\\033[3J\\033[H\'; ' + question + '; t=$(date +%s%N); read -r a; '
+                  'if [ $(( ($(date +%s%N) - t) / 1000000 )) -lt 2500 ]; then ask; '
+                  'else echo "answer $a" >> LOG; printf \'\\033[2J\\033[H\'; fi; }; ask\n')
+        env, log = self.script_env('reask', prompt.replace('LOG', str(self.out / 'log-reask')))
+        proc = self.getty(env, 'run', 'claude-personal')
+        self.addCleanup(self.reap, proc)
+        self.addCleanup(self.stop_server, env, 'claude-personal')
+        self.assertTrue(wait_for(lambda: log.exists() and 'answer y' in log.read_text(), timeout=30),
+                        log.read_text() if log.exists() else 'no log')
+
+    def test_a_stop_during_start_up_stops_the_daemon(self):
+        # a claude whose trust question never appears keeps run() in its start-up wait
+        env, log = self.script_env('early', 'echo starting; read -r a\n')
+        proc = self.getty(env, 'run', 'claude-personal')
+        self.addCleanup(self.reap, proc)
+        self.addCleanup(self.stop_server, env, 'claude-personal')
+        self.assertTrue(wait_for(lambda: Path(f'{log}.pid').exists() or log.exists()))
+        time.sleep(2)
+        proc.terminate()
+        proc.communicate(timeout=15)
+        listing = subprocess.run(['tmux', '-L', 'agent-getty-claude-personal', 'ls'], env=env, capture_output=True)
+        self.assertNotEqual(listing.returncode, 0)  # nothing left running
+
+    def test_the_daemons_output_is_kept_in_a_log(self):
+        env, _ = self.script_env('logged', 'echo "not logged in"; exec sleep 300\n')
+        logs = self.home / 'Library/Logs' if sys.platform == 'darwin' else self.out / 'state-logged/agent-getty'
+        daemon_log = logs / 'agent-getty-claude-personal-daemon.log'
+        claude = self.getty(env, 'run', 'claude-personal')
+        self.addCleanup(self.reap, claude)
+        self.addCleanup(self.stop_server, env, 'claude-personal')
+        self.assertTrue(wait_for(lambda: daemon_log.exists() and 'not logged in' in daemon_log.read_text()),
+                        daemon_log.read_text() if daemon_log.exists() else 'no log')
 
     def test_stopping_the_run_stops_the_daemon(self):
         env, log = self.script_env('stop')

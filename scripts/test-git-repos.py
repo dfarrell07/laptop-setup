@@ -22,7 +22,7 @@ UNREACHABLE = '192.0.2.1'  # TEST-NET-1: never answers
 
 def git(*args, cwd=None):
     subprocess.run(['git', *args], cwd=cwd, check=True, capture_output=True,
-                   env={**os.environ, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_AUTHOR_NAME': 't', 'GIT_AUTHOR_EMAIL': 't@t',
+                   env={**os.environ, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_AUTHOR_NAME': 't', 'GIT_AUTHOR_EMAIL': 't@t',
                         'GIT_COMMITTER_NAME': 't', 'GIT_COMMITTER_EMAIL': 't@t'})
 
 
@@ -97,14 +97,15 @@ class GitReposSkipTests(unittest.TestCase):
             result, 'no Red Hat git key (~/.ssh/id_rh): add vault_rh_git_key (make vault-edit), then make apply')
         self.assertNotIn('VPN down?', result.stdout)
 
-    def kept_by_probe(self, repos, env=None):
-        """Run the role's tasks up to the unreachable-host skip; return the dests it keeps."""
+    def kept_by_probe(self, repos, env=None, until='Skip repos on unreachable git hosts', **extra):
+        """Run the role's tasks up to and including the task named until; return the dests it keeps."""
         tasks = yaml.safe_load((ROOT / 'roles/git_repos/tasks/main.yml').read_text())
-        end = next(i for i, t in enumerate(tasks) if t.get('name') == 'Skip repos on unreachable git hosts')
+        end = next(i for i, t in enumerate(tasks) if t.get('name') == until)
         tasks = tasks[:end + 1] + [{'ansible.builtin.debug': {'msg': 'KEPT={{ git_repos_filtered | map(attribute="dest") | join(",") }}'}}]
         variables = {'ansible_facts': {'user_dir': str(self.home)}, 'profile': 'work', 'git_repos_list': repos,
                      'git_repos_base_dir': str(self.home / 'src'), 'git_repos_category_filter': '',
-                     'git_repos_work_categories': ['t'], 'git_repos_personal_categories': ['t']}
+                     'git_repos_work_categories': ['t'], 'git_repos_personal_categories': ['t'],
+                     'dotfiles_ssh_redhat_key_basename': 'id_rh', **extra}
         playbook = self.home / 'probe.yml'
         playbook.write_text(yaml.safe_dump([{'hosts': 'localhost', 'gather_facts': False, 'vars': variables,
                                              'tasks': tasks}]))
@@ -130,6 +131,30 @@ class GitReposSkipTests(unittest.TestCase):
         # behind a proxy git reaches HTTPS hosts through it, so a direct probe says nothing about them
         self.assertEqual(self.kept_by_probe(repos, {'https_proxy': 'http://proxy.example.internal:3128'}),
                          ['b', 'd', 'e'])
+
+    def test_the_ssh_config_decides_where_a_host_is_probed(self):
+        listener = socket.create_server(('127.0.0.1', 0))
+        self.addCleanup(listener.close)
+        # an alias to a listening port, a host behind a jump host (never probed), and a plain unreachable host
+        (self.home / '.ssh/config').write_text(
+            f'Host gerrit-alias\n  HostName 127.0.0.1\n  Port {listener.getsockname()[1]}\n'
+            f'Host jumped.example.internal\n  ProxyJump bastion.example.internal\n')
+        repos = [{'url': 'git@gerrit-alias:a.git', 'dest': 'a', 'category': 't'},
+                 {'url': 'ssh://jumped.example.internal/b.git', 'dest': 'b', 'category': 't'},
+                 {'url': f'git@{UNREACHABLE}:c.git', 'dest': 'c', 'category': 't'}]
+        self.assertEqual(self.kept_by_probe(repos), ['a', 'b'])
+
+    def test_internal_repos_are_kept_when_the_red_hat_key_is_there(self):
+        repos = [{'url': 'ssh://127.0.0.1:1/r.git', 'dest': 'r', 'category': 't'}]
+        until = 'Skip repos on internal hosts without the Red Hat git key'
+        work = {'dotfiles_ssh_work_hosts': [{'host': '127.0.0.1'}]}
+        listener = socket.create_server(('127.0.0.1', 0))
+        self.addCleanup(listener.close)
+        repos[0]['url'] = f'ssh://127.0.0.1:{listener.getsockname()[1]}/r.git'
+        self.assertEqual(self.kept_by_probe(repos, until=until, **work), [''])  # no key: dropped
+        (self.home / '.ssh/id_rh').write_text('placeholder')
+        self.assertEqual(self.kept_by_probe(repos, until=until, **work), ['r'])
+
 
 if __name__ == '__main__':
     unittest.main()

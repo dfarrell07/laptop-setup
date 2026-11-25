@@ -19,11 +19,14 @@ CLAUDE_PERSONAL={{ claude_default_config_dir | quote }}
 CLAUDE_PERSONAL2={{ claude_personal2_config_dir | quote }}
 MODE={{ claude_default_mode | quote }}
 POLL=${AGENT_GETTY_POLL:-15}
+# The daemon's own output (e.g. "not logged in"), kept after its pane is gone
+case $(uname -s) in Darwin) LOGDIR=$HOME/Library/Logs ;; *) LOGDIR=${XDG_STATE_HOME:-$HOME/.local/state}/agent-getty ;; esac
+umask 077 # the logs can hold session URLs
 TMUX_BIN=${AGENT_GETTY_TMUX:-tmux}
 
 die() { echo "agent-getty: $1" >&2; exit "${2:-1}"; }
 t() { env -u TMUX "$TMUX_BIN" -L "agent-getty-$PAIR" -f /dev/null "$@"; }
-alive() { t has-session -t "=getty-$PAIR" 2>/dev/null && [ "$(t display-message -p -t "=getty-$PAIR:" '#{pane_dead}' 2>/dev/null)" != 1 ]; }
+alive() { t has-session -t "=getty-$PAIR" 2>/dev/null; }
 
 # The pair's daemon, with only that profile's account (the variables mirror cper, cper2, owork and oper in zshrc.j2).
 command_for() {
@@ -45,16 +48,26 @@ command_for() {
 	CMD+=(claude remote-control --name "$HOST-$1" --permission-mode "$MODE")
 }
 
-# Claude asks once whether to trust the folder it starts sessions in; agent_getty_dir is the owner's choice of folder,
-# so the prompt naming exactly it is answered. Any other prompt is left for the owner (agent-getty attach).
+# Claude asks whether to trust the folder it starts sessions in; agent_getty_dir is the owner's choice of folder, so the
+# prompt naming exactly it is answered. Claude ignores an answer that comes too soon after the question and asks again
+# (redrawn in place), so the question is answered whenever it is on screen, a moment after it appeared and at least 3 s
+# after the last answer, at most 3 times. Any other prompt is left for the owner (agent-getty attach).
 answer_trust() {
-	local _
-	for _ in 1 2 3 4 5 6 7 8 9 10; do
-		if t capture-pane -p -t "=getty-$PAIR:" 2>/dev/null | grep -qxF "Trust $DIR? [y/N]"; then
-			t send-keys -t "=getty-$PAIR:" y Enter
-			return
+	local n=0 seen='' last=-100 answers=0 question="Trust $DIR? [y/N]"
+	while [ "$n" -lt 45 ] && [ "$answers" -lt 3 ]; do
+		alive || return
+		if t capture-pane -p -t "=getty-$PAIR:" 2>/dev/null | grep -qxF "$question"; then
+			[ -n "$seen" ] || seen=$SECONDS
+			if [ $((SECONDS - seen)) -ge 1 ] && [ $((SECONDS - last)) -ge 3 ]; then
+				t send-keys -t "=getty-$PAIR:" y Enter
+				last=$SECONDS
+				answers=$((answers + 1))
+			fi
+		elif [ "$answers" -gt 0 ]; then
+			return # answered, and the question is gone
 		fi
-		sleep 2
+		sleep 1
+		n=$((n + 1))
 	done
 }
 
@@ -70,12 +83,18 @@ stop() {
 run() {
 	PAIR=$1
 	command_for "$PAIR"
+	trap stop TERM INT HUP # before starting: a stop during start-up must not leave the daemon behind
 	if ! alive; then
 		t kill-server 2>/dev/null # a server whose session died: start clean
-		t new-session -d -s "getty-$PAIR" -x 200 -y 50 -c "$DIR" -- "${CMD[@]}" || die "could not start getty-$PAIR"
+		mkdir -p "$LOGDIR"
+		# The pane waits for one Enter, sent once its output is piped to the log, so even a daemon that prints one
+		# error and exits at once leaves it in the log
+		t new-session -d -s "getty-$PAIR" -x 200 -y 50 -c "$DIR" -- sh -c 'read -r _; exec "$@"' sh "${CMD[@]}" ||
+			die "could not start getty-$PAIR"
+		t pipe-pane -o -t "=getty-$PAIR:" "cat >> $(printf %q "$LOGDIR/agent-getty-$PAIR-daemon.log")"
+		t send-keys -t "=getty-$PAIR:" Enter
 		case $PAIR in claude-*) answer_trust ;; esac
 	fi
-	trap stop TERM INT HUP
 	while alive; do
 		sleep "$POLL" &
 		wait $! # so a stop signal is handled at once, not after the sleep

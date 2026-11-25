@@ -44,15 +44,19 @@ manager.
   not yet seen); the role only registers it (`agy remote-control start --name
   <host>-agy-personal`) when it is not active, and stops that one when the pair leaves the list. On a fresh machine agy
   is installed after this step, so the second run registers it.
-- Stopping a pair stops its daemon: `run` kills the pane's process group and the pair's tmux server on SIGTERM, since
-  tmux built with systemd support moves panes out of the unit's cgroup and launchd's bootout misses the tmux server; on
-  macOS the role also runs `tmux -L agent-getty-<pair> kill-server` for a disabled pair.
+- Stopping a pair stops its daemon: `run` kills the pane's process group and the pair's tmux server on SIGTERM (set
+  before it starts anything), since tmux built with systemd support moves panes out of the unit's cgroup and launchd's
+  bootout misses the tmux server.
 - Config per machine, `agent_getty_pairs` in `config.yml` (default `[]`, off). Linux work laptop: `[claude/personal,
   codex/work, codex/personal, agy/personal]`. Mac: `[claude/personal, claude/personal2, codex/personal,
   agy/personal]`. A pair from "Not possible yet" below is skipped with a warning; anything else fails provisioning,
   and so does a personal2 pair on a `profile: work` machine.
 - A new build of the script or unit does not restart a running pair, since that ends the sessions its daemon started:
-  the run warns and names the restart command.
+  the run warns and names the restart command. On macOS a changed plist does reload the job, which restarts the pair,
+  and the run warns first. launchd restarts a failing pair every 30 s with no backoff (systemd backs off to 10
+  minutes); the script's stderr goes to `~/Library/Logs/agent-getty-<pair>.log`. The daemon's own output (such as "not
+  logged in") goes to `agent-getty-<pair>-daemon.log` in `~/Library/Logs` (macOS) or `~/.local/state/agent-getty`
+  (Linux).
 - Replaces `claude_orchestrator_*` and `claude-orchestrator.service` (default off): the role removes the old unit.
 
 ## Not possible yet

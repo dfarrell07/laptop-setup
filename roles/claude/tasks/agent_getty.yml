@@ -150,6 +150,11 @@
     # the antigravity role's install path, off Ansible's PATH
     _getty_agy_bin: "{{ antigravity_bin_dir | default(ansible_facts['user_dir'] ~ '/.local/bin') }}/agy"
   block:
+    - name: Check for agy
+      ansible.builtin.stat:
+        path: "{{ _getty_agy_bin }}"
+      register: _getty_agy_installed
+
     - name: Read the Antigravity remote-control daemon status
       ansible.builtin.command:
         argv: ["{{ _getty_agy_bin }}", remote-control, status]
@@ -157,6 +162,7 @@
       changed_when: false
       failed_when: false
       check_mode: false  # read-only probe
+      when: _getty_agy_installed.stat.exists
 
     - name: Start the Antigravity remote-control daemon
       ansible.builtin.command:
@@ -169,7 +175,8 @@
         - _getty_agy.rc | default(1) == 0  # agy installed (the antigravity role runs later: a first run starts it next time)
         - "'Daemon status: active' not in _getty_agy.stdout | default('')"
 
-    # Only the daemon agent-getty registered (its name), never one the owner started by hand
+    # Only the daemon agent-getty registered (its name), never one the owner started by hand; stopped even when inactive
+    # (signed out, crashed), since stop also unregisters its service
     - name: Stop the Antigravity remote-control daemon (agy/personal removed)
       ansible.builtin.command:
         argv: ["{{ _getty_agy_bin }}", remote-control, stop]
@@ -179,7 +186,6 @@
       when:
         - "'agy/personal' not in agent_getty_pairs"
         - _getty_agy.rc | default(1) == 0
-        - "'Daemon status: active' in _getty_agy.stdout | default('')"
         - >-
           _getty_agy.stdout | default('') is search('(?m)^Instance name: ' ~ agent_getty_host ~ '-agy-personal( |$)')
 
@@ -198,7 +204,7 @@
   ansible.builtin.debug:
     msg: >-
       WARNING: agent-getty changed; pairs that were already running keep the old build until restarted, which ends the
-      sessions they started: {{ 'tmux -L agent-getty-<pair> kill-server (launchd starts it again)' if is_macos
+      sessions they started: {{ 'launchctl kickstart -k gui/$(id -u)/com.<user>.claude-getty-<pair>' if is_macos
       else "systemctl --user restart 'agent-getty@<pair>'" }}.
   when:
     - _getty_before.stat.exists
