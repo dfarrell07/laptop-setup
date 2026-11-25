@@ -575,7 +575,8 @@ class PortablePreferencesTests(unittest.TestCase):
                 playbook.write_text(yaml.safe_dump([{'hosts': 'localhost', 'gather_facts': False,
                                                      'vars': {'packages_extra_pipx': extras}, 'tasks': [task]}]))
                 result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(playbook)], cwd=ROOT,
-                                        capture_output=True, text=True, timeout=max(30, TEST_TIMEOUT))
+                                        capture_output=True, text=True, timeout=max(30, TEST_TIMEOUT),
+                                        env=dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')))
                 self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
 
     @unittest.skipUnless(shutil.which('dbus-run-session') and shutil.which('dconf'), 'isolated DBus/dconf required')

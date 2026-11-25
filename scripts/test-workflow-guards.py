@@ -21,6 +21,18 @@ MOLECULE_SKIPPABLE = {'.ansible-lint', '.claude', '.githooks', '.github', '.giti
 
 
 class WorkflowGuardTests(unittest.TestCase):
+    def test_suites_that_run_ansible_pin_the_ci_vault_password(self):
+        """ansible.cfg points at scripts/vault-pass.sh, which make setup-yubikeys turns into the YubiKey script: a suite
+        that runs ansible-playbook without ANSIBLE_VAULT_PASSWORD_FILE would call it from make gate (a touch, a hang). This is a
+        file-level check; run-tests.py also pins it for every suite, which covers a missed call in a pinned file."""
+        unpinned = [path.name for path in sorted((ROOT / 'scripts').glob('test-*.py'))
+                    if 'ansible-playbook' in (text := path.read_text(encoding='utf-8'))
+                    and 'vault-pass-ci.sh' not in text]
+        self.assertEqual(unpinned, [], 'set ANSIBLE_VAULT_PASSWORD_FILE to scripts/vault-pass-ci.sh for every ansible run')
+        # The backstop for make test-scripts: a missed call in a file that pins others still gets the CI script there
+        runner = (ROOT / 'scripts/run-tests.py').read_text(encoding='utf-8')
+        self.assertRegex(runner, r"os\.environ\['ANSIBLE_VAULT_PASSWORD_FILE'\] = .*\n.*'vault-pass-ci\.sh'")
+
     def test_every_top_level_path_runs_molecule_or_is_listed_as_skippable(self):
         steps = yaml.safe_load((ROOT / '.github/workflows/molecule.yml').read_text())['jobs']['changes']['steps']
         script = next(s['run'] for s in steps if s.get('id') == 'filter')

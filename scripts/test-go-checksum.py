@@ -116,7 +116,8 @@ class GoToolGuardTests(unittest.TestCase):
                 ansible = Path(shutil.which('ansible-playbook'))
             result = subprocess.run([str(ansible), '-i', 'localhost,', '-c', 'local', str(home / 'play.yml')],
                                     capture_output=True, text=True, timeout=180,
-                                    env=dict(os.environ, PATH=f"{stubs}:{os.environ['PATH']}", ANSIBLE_NOCOLOR='1'))
+                                    env=dict(os.environ, PATH=f"{stubs}:{os.environ['PATH']}", ANSIBLE_NOCOLOR='1',
+                                             ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')))
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(json.loads(out.read_text()), [tools[1], tools[3], tools[4]])
 

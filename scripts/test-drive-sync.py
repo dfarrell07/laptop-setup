@@ -73,7 +73,7 @@ class DriveSyncTests(unittest.TestCase):
                      'mode': '0755'}}]}]
         (cls.dir / 'play.yml').write_text(yaml.safe_dump(play))
         result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(cls.dir / 'play.yml')],
-                                capture_output=True, text=True, timeout=180, env=dict(os.environ, ANSIBLE_NOCOLOR='1'))
+                                capture_output=True, text=True, timeout=180, env=dict(os.environ, ANSIBLE_NOCOLOR='1', ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')))
         if result.returncode:
             raise AssertionError(result.stdout + result.stderr)
         cls.template = script.read_text()
@@ -403,7 +403,7 @@ class RealToolTests(unittest.TestCase):
                      'src': str(ROOT / 'roles/drive_sync/templates' / template), 'dest': str(dest), 'mode': '0600'}}]}]
         (dest.parent / 'play.yml').write_text(yaml.safe_dump(play))
         result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(dest.parent / 'play.yml')],
-                                capture_output=True, text=True, timeout=180, env=dict(os.environ, ANSIBLE_NOCOLOR='1'))
+                                capture_output=True, text=True, timeout=180, env=dict(os.environ, ANSIBLE_NOCOLOR='1', ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')))
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def tree(self, base):

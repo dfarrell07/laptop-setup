@@ -60,7 +60,8 @@ class GitReposSkipTests(unittest.TestCase):
         playbook.write_text(yaml.safe_dump(play))
         return subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(playbook)],
                               capture_output=True, text=True, timeout=TIMEOUT, cwd=self.home,
-                              env={**os.environ, 'HOME': str(self.home), 'ANSIBLE_LOCAL_TEMP': str(self.home / 'tmp')})
+                              env={**os.environ, 'HOME': str(self.home), 'ANSIBLE_LOCAL_TEMP': str(self.home / 'tmp'),
+                                   'ANSIBLE_VAULT_PASSWORD_FILE': str(ROOT / 'scripts/vault-pass-ci.sh')})
 
     def local_repo(self):
         return {'url': f'file://{self.bare}', 'dest': 'local/repo', 'category': 't'}
@@ -111,7 +112,8 @@ class GitReposSkipTests(unittest.TestCase):
                                              'tasks': tasks}]))
         result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(playbook)], capture_output=True,
                                 text=True, timeout=TIMEOUT, cwd=self.home,
-                                env={**os.environ, 'HOME': str(self.home), **(env or {})})
+                                env={**os.environ, 'HOME': str(self.home),
+                                     'ANSIBLE_VAULT_PASSWORD_FILE': str(ROOT / 'scripts/vault-pass-ci.sh'), **(env or {})})
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return re.search(r'KEPT=([a-z0-9,/]*)', result.stdout).group(1).split(',')
 
