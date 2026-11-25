@@ -35,8 +35,8 @@ manager.
   `codex-work` (`owork`), `codex-personal` (`oper`). Claude daemons get `--permission-mode` from `claude_default_mode`
   and the name `<host>-<pair>`; Claude's trust question for `agent_getty_dir` (default `~`) is answered, since that folder is
   the owner's choice.
-- Linux: systemd user template `agent-getty@<pair>.service`, `Restart=always` with a growing delay (systemd 254+) and
-  no start limit, `WantedBy=default.target`: it starts at login, or at boot where the system role enabled linger. macOS: LaunchAgent
+- Linux: systemd user template `agent-getty@<pair>.service`, `Restart=always` every 30 s and no
+  start limit, `WantedBy=default.target`: it starts at login, or at boot where the system role enabled linger. macOS: LaunchAgent
   `com.<user>.claude-getty-<pair>` (`RunAtLoad`, `KeepAlive`, `ThrottleInterval` 30, Homebrew on `PATH`); LaunchAgents
   start at GUI login; stderr goes to `~/Library/Logs/agent-getty-<pair>.log`.
 - `agy/personal`: agy installs and supervises its own daemon service, started at boot (Linux:
@@ -53,10 +53,10 @@ manager.
   and so does a personal2 pair on a `profile: work` machine.
 - A new build of the script or unit does not restart a running pair, since that ends the sessions its daemon started:
   the run warns and names the restart command. On macOS a changed plist does reload the job, which restarts the pair,
-  and the run warns first. launchd restarts a failing pair every 30 s with no backoff (systemd backs off to 10
-  minutes); the script's stderr goes to `~/Library/Logs/agent-getty-<pair>.log`. The daemon's own output (such as "not
-  logged in") goes to `agent-getty-<pair>-daemon.log` in `~/Library/Logs` (macOS) or `~/.local/state/agent-getty`
-  (Linux).
+  and the run warns first. A failing pair restarts every 30 s on both systems (no growing delay: systemd would reset
+  it only on a manual start). On macOS the script's stderr goes to `~/Library/Logs/agent-getty-<pair>.log`. The
+  daemon's own output (such as "not logged in") goes to `agent-getty-<pair>-daemon.log` in `~/Library/Logs` (macOS)
+  or `~/.local/state/agent-getty` (Linux).
 - Replaces `claude_orchestrator_*` and `claude-orchestrator.service` (default off): the role removes the old unit.
 
 ## Not possible yet
@@ -74,6 +74,16 @@ manager.
   socket (account variables stripped, trust answered, a duplicate run adopts, the run exits when the daemon ends).
 - This laptop, with the rendered files and without rebooting or logging out: the unit starts the daemon, it shows in
   Remote Control, killing it brings it back, and stopping the unit stops it.
+
+## Sessions after a restart
+
+Sessions started from the phone run inside the pair's tmux server, under the service manager, not the desktop session:
+a crashed or logged-out GNOME session (or its D-Bus) leaves them running. A restart of the pair (reboot, `systemctl
+--user restart`, a changed plist) ends them; their conversations stay on disk. To continue one, start a session from
+the phone and use `/resume`, or run `claude --resume <id>` at the machine. Restarting them automatically is out of scope
+for now: Claude's background sessions (`claude --bg --resume`) stop after about an hour idle, and on Linux their shared
+per-user supervisor would live in, and die with, the getty's cgroup; an interactive resume would mean scripting
+Claude's trust dialog.
 
 ## Out of scope
 
