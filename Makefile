@@ -563,6 +563,7 @@ TEST_SCRIPTS := \
 	'.venv/bin/python3 scripts/test-module-args.py' \
 	'.venv/bin/python3 scripts/test-pam-faillock-debian.py' \
 	'.venv/bin/python3 scripts/test-critical-assertions.py' \
+	'.venv/bin/python3 scripts/test-csb-report.py' \
 	'.venv/bin/python3 scripts/test-claude-settings-merge.py' \
 	'.venv/bin/python3 scripts/test-claude-file-heredoc-guard.py' \
 	'.venv/bin/python3 scripts/test-claude-project-modes.py' \
