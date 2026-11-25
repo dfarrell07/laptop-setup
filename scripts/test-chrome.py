@@ -6,6 +6,7 @@ import math
 import os
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -22,6 +23,31 @@ CHROME = (shutil.which('google-chrome') or shutil.which('google-chrome-stable')
 UBOL = 'ddkjiahejlhfcafbddmgiahcphecmpfh'
 BITWARDEN = 'nngceckbapebfimnlniiiahkandclblb'
 LASTPASS = 'hdokiejnpimakedhajhdlcegeplioahd'
+
+
+def headless_chrome(args, env, timeout=60):
+    """Run a real headless Chrome and return its CompletedProcess. On a loaded Mac, Chrome sometimes prints the page
+    and then hangs in shutdown for minutes. So it gets its own process group: a timeout kills every helper (killing
+    only the parent leaves helpers holding its pipes), and then it is run once more."""
+    for attempt in (1, 2):
+        with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+            proc = subprocess.Popen(args, env=env, stdout=out, stderr=err, start_new_session=True)
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                if attempt == 2:
+                    raise
+                continue
+            finally:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)  # helpers left behind, if any
+                except (ProcessLookupError, PermissionError):
+                    pass
+                proc.wait()
+            out.seek(0)
+            err.seek(0)
+            return subprocess.CompletedProcess(args, proc.returncode, out.read().decode(errors='replace'),
+                                               err.read().decode(errors='replace'))
 
 
 def level(percent):
@@ -407,10 +433,8 @@ class ChromeHelperTests(unittest.TestCase):
         home = self.root / 'home'  # Chrome also writes Crash Reports, the NSS db and mimeapps under HOME
         env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(home / '.config'),
                    XDG_CACHE_HOME=str(home / '.cache'), XDG_DATA_HOME=str(home / '.local/share'))
-        out = subprocess.run([CHROME, f'--user-data-dir={self.data}', '--headless', '--no-first-run',
-                              '--disable-gpu', '--password-store=basic', '--use-mock-keychain', '--dump-dom', url],
-                             capture_output=True, text=True, timeout=120, env=env)
-        return out
+        return headless_chrome([CHROME, f'--user-data-dir={self.data}', '--headless', '--no-first-run', '--disable-gpu',
+                                '--password-store=basic', '--use-mock-keychain', '--dump-dom', url], env)
 
     @unittest.skipUnless(CHROME, 'google-chrome not installed')
     def test_chrome_renders_at_the_zoom_the_helper_writes(self):
