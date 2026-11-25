@@ -534,6 +534,7 @@ TEST_SCRIPTS := \
 	'.venv/bin/python3 scripts/test-workstation-audit.py' \
 	'.venv/bin/python3 scripts/test-go-checksum.py' \
 	'.venv/bin/python3 scripts/test-drive-sync.py' \
+	'.venv/bin/python3 scripts/test-chrome-page-zoom.py' \
 	'.venv/bin/python3 scripts/test-pull.py' \
 	'.venv/bin/python3 scripts/test-laptop-migration.py' \
 	'.venv/bin/python3 scripts/test-claude-privacy.py' \

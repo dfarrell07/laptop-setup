@@ -147,6 +147,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Verify:** no check is mapped on Linux (macOS has one), so `make verify CHUNK=desktop` exits 1 (state unknown) by design. Pass criterion: `make plan
   CHUNK=desktop` shows changed=0 and no dconf warning, then log in again from a TTY or second session.
 - **Before:** `dconf dump / > ~/dconf-before.ini` (the system snapshot block also takes it; do it before the first desktop run).
+- **Chrome:** with `desktop_chrome_page_zoom` set, each profile's default page zoom (`Preferences`, written only while Chrome
+  is closed; a running Chrome gets a warning). Undo: set it to `''`, then choose the zoom in Chrome's Settings > Appearance.
 - **Undo:** `dconf reset <key>` for each key the role wrote (`/org/gnome/desktop/interface/color-scheme` under sway; the
   `desktop_gnome_hardening_dconf` and `desktop_gnome_ui_dconf` keys in `roles/desktop/defaults/main.yml` under gnome, and the two
   `desktop_gnome_scroll_dconf` natural-scroll keys under either), then
