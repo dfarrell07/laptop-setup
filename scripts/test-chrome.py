@@ -590,7 +590,8 @@ class ShippedTaskTests(unittest.TestCase):
             play.write_text(yaml.safe_dump([{'hosts': 'localhost', 'connection': 'local', 'gather_facts': False,
                                              'tasks': tasks}]))
             out = subprocess.run([str(ROOT / '.venv/bin/ansible-playbook'), str(play)], capture_output=True,
-                                 text=True, timeout=300, env=dict(os.environ, ANSIBLE_STDOUT_CALLBACK='default'))
+                                 text=True, timeout=300,
+                                 env=dict(os.environ, ANSIBLE_STDOUT_CALLBACK='default', ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')))
         self.assertEqual(out.returncode, 0, out.stdout[-2000:])
         for i, (_, _, _, ours, own) in enumerate(cases):
             self.assertIn(f'CASE {i} {ours} {own}', out.stdout, i)
@@ -603,7 +604,7 @@ class ShippedTaskTests(unittest.TestCase):
         block = self.task('Chrome external extensions')
         removal = self.task('Remove Chrome external extension files no longer declared')
         gnome, old = 'gphhapmejobijbbhgpjhcjognlahblep', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-        env = dict(os.environ, ANSIBLE_STDOUT_CALLBACK='default')
+        env = dict(os.environ, ANSIBLE_STDOUT_CALLBACK='default', ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh'))
         before = base64.b64encode(json.dumps([old, gnome, UBOL, '../../etc/x', 7]).encode()).decode()
         variables = dict(block['vars'], is_macos=False, is_linux=True, _chrome_policy_ours=True,
                          _chrome_state_dir='/home/x/.config/laptop-setup',

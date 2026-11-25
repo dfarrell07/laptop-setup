@@ -58,6 +58,10 @@ def main():
     args.commands = commands
     # Under parallel load the Ansible-driven suites run slower; give their internal deadlines room unless set.
     os.environ.setdefault('LAPTOP_SETUP_TEST_TIMEOUT', '300')
+    # ansible.cfg's scripts/vault-pass.sh becomes the YubiKey script after make setup-yubikeys: no suite may call it.
+    # Make targets a suite runs still go through verify-ansible-args.sh, which sets its own value.
+    os.environ['ANSIBLE_VAULT_PASSWORD_FILE'] = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                                             'scripts', 'vault-pass-ci.sh')
     start = time.monotonic()
     failed = []
     total = 0.0

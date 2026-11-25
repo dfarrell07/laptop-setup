@@ -93,7 +93,8 @@ class RoleTaskTests(unittest.TestCase):
         result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(playbook)]
                                 + (['--check'] if check else []),
                                 capture_output=True, text=True, timeout=TIMEOUT, cwd=home,
-                                env={**os.environ, 'HOME': str(home), 'ANSIBLE_LOCAL_TEMP': str(home / 'tmp')})
+                                env={**os.environ, 'HOME': str(home), 'ANSIBLE_LOCAL_TEMP': str(home / 'tmp'),
+                                     'ANSIBLE_VAULT_PASSWORD_FILE': str(ROOT / 'scripts/vault-pass-ci.sh')})
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return result.stdout
 
