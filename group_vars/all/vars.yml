@@ -57,7 +57,7 @@ csb_ca_cert_paths:
   - /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem
   - /etc/pki/ca-trust/source/anchors/Eng-CA.crt
   - /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem
-needs_container_tier: "host-only"  # runtime set_fact by csb_detect.yml (p19>include_vars p18); override via -e needs_container_tier=<tier>
+needs_container_tier: "host-only"  # runtime set_fact by csb_detect.yml (after config.yml); override via -e needs_container_tier=<tier>
 network_proxied: false  # runtime set_fact in csb_detect.yml; config.yml cannot override — set HTTPS_PROXY/HTTP_PROXY env vars
 proxy_url: ''           # runtime set_fact in csb_detect.yml; config.yml cannot override — set HTTPS_PROXY env var
 
@@ -68,7 +68,7 @@ packages_install_binaries: true  # fallback copies in packages/claude/codex/dist
 profile: work  # fallback copies in dotfiles/packages/repos_dnf/system/git_repos/claude/ssh defaults; add a fallback for new consuming roles
 
 # Feature toggle baselines (single source of truth) — eliminates | default(X) in role tasks.
-# Users override these in config.yml (higher precedence via include_vars).
+# Users override these in config.yml (higher precedence via set_fact).
 repo_gh_cli: true
 repo_google_chrome: false
 repo_google_cloud_sdk: false

@@ -277,7 +277,7 @@
 
     - name: SECURITY CRITICAL — Validate config integrity before container provisioning
       # Also loads default.config.yml/config.yml into the container host's vars
-      # (include_vars is per inventory host; Play 3 runs on the container, not localhost).
+      # (facts are per inventory host; Play 3 runs on the container, not localhost).
       delegate_to: localhost
       become: false
       tags: [always]

@@ -308,7 +308,7 @@ fi
 # --- vault_* key guard (mirrors pre_flight_checks.yml assert) ---
 if [[ -f "$CONFIG_FILE" ]]; then
   if grep -qE '^["'"'"']?vault_[^:]*:' "$CONFIG_FILE"; then
-    record "config_vault_keys" "fail" "config.yml defines vault_* key(s) — include_vars outranks group_vars (precedence 18 > 4-5), silently shadowing the encrypted vault value; remove vault_* keys from config.yml"
+    record "config_vault_keys" "fail" "config.yml defines vault_* key(s) — config.yml values outrank group_vars (precedence 19 > 4-5), silently shadowing the encrypted vault value; remove vault_* keys from config.yml"
   else
     record "config_vault_keys" "pass" "no vault_* keys in config.yml"
   fi

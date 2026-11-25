@@ -47,7 +47,7 @@
 
     - name: Assert missing config clears previously cached raw values
       ansible.builtin.assert:
-        that: _config_raw == {}
+        that: _pf_config_raw == {}
       when: _ssti_case.content is not defined
 
     - name: Assert no payload executed while the guard processed the fixture

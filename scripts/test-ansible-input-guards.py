@@ -274,6 +274,33 @@ class InputGuardTests(unittest.TestCase):
                 self.check(task, {'system_is_container': False, 'csb_rhel': False,
                                   'system_sysctl_extra': extra, 'system_sysctl_extra_additional': {}}, accepted)
 
+    def test_config_ssh_port_is_a_plain_port_number(self):
+        """A bool is an int to Python: true rendered Port 0 in sshd but True/tcp in firewalld."""
+        task = guard('common/tasks/pre_flight_checks.yml', 'Assert ssh_port in config.yml is a plain decimal port')
+        cases = [(None, True), (722, True), ('722', True), (2222, True), (65535, True),
+                 (True, False), (False, False), (722.9, False), ('722.0', False), (' 722', False), ('+722', False),
+                 ('7_22', False), ('722\n', False), ('0x2d2', False), (22, False), (0, False), (65536, False),
+                 ('', False), ([722], False)]
+        for value, accepted in cases:
+            with self.subTest(value=value):
+                self.check(task, {'_pf_config_raw': {} if value is None else {'ssh_port': value}}, accepted)
+
+    def test_usbguard_allow_rules_are_narrow(self):
+        task = guard('common/tasks/pre_flight_checks.yml', 'Assert USBGuard whitelist/extra_rules in play namespace')
+        defaults = yaml.safe_load((ROOT / 'roles/system/defaults/main.yml').read_text())['system_usbguard_whitelist']
+        cases = [('allow id 046d:c52b', True), ('allow id 1d6b:* via-port "1-1"', True),
+                 ('allow id 3297:1969 name "Moonlander Mark I" with-interface one-of { 03:*:* }', True),
+                 ('allow id 2109:0817 name "USB3.0 Hub" with-interface 09:00:00', True),
+                 ('allow serial "abc123"', True), ('block id *:*', True), ('reject with-interface { 08:*:* }', True),
+                 ('allow id *:*', False), ('allow id  *:c52b', False), ('allow id one-of { 046d:c52b *:* }', False),
+                 ('allow id *:* hash "jEP/6WzviqdJ5VSeTUY8PatCNBKeaREvo2OqdplND/o="', True),
+                 ('allow id *:* via-port "1-1"', False), ('allow name "Keyboard"', False), ('allow', False),
+                 ('allow name "foo id bar"', False), ('allow name "x" serial "y via-port z"', True)]
+        for rule, accepted in cases:
+            with self.subTest(rule=rule):
+                self.check(task, {'system_usbguard_whitelist': defaults, 'system_usbguard_extra_rules': [rule]},
+                           accepted)
+
     def test_container_integer_limits(self):
         for variable in ['containers_pids_limit', 'containers_nofile_limit']:
             task = guard('roles/containers/tasks/main.yml', f'Assert {variable} is a non-negative integer')
