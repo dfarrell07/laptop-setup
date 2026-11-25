@@ -719,6 +719,95 @@ class MigrationTests(unittest.TestCase):
             self.assertNotIn('nb()', config.read_text())
 
     @unittest.skipUnless(shutil.which('zsh'), 'zsh required for launcher regression')
+    def test_rendered_shell_passes_config_values_literally(self):
+        # Host names, the queue repo, the notes path and the theme come from config.yml: a quote, a space or $(...)
+        # in one must reach the command as text, never run or break .zshrc.
+        hostile = "a b'c\"d$(touch {m})`touch {m}`"
+        for notes, where in (('{d}/my notes', 'my notes'), ('~/my notes', 'my notes'), ('~', '.')):
+            with self.subTest(notes=notes), tempfile.TemporaryDirectory() as name:
+                directory = Path(name)
+                marker = directory / 'ran'
+                value = hostile.format(m=marker)
+                defaults = yaml.safe_load((ROOT / 'roles/dotfiles/defaults/main.yml').read_text())
+                defaults.update({'ansible_managed': 'test', 'ansible_facts': {'user_dir': name, 'system': 'Darwin'},
+                                 'profile': 'personal', 'packages_gotoolchain': 'local',
+                                 'dotfiles_oh_my_zsh_theme': value, 'dotfiles_laptop_tailscale_host': value,
+                                 'dotfiles_mac_tailscale_host': value, 'dotfiles_claude_queue_repo': value,
+                                 'notes_repo_path': notes.format(d=name), 'dotfiles_homebrew_prefix': name + '/brew'})
+                config = directory / 'zshrc'
+                run_play(directory, tasks=[{'name': 'Render production shell', 'ansible.builtin.template': {
+                    'src': str(ROOT / 'roles/dotfiles/templates/zshrc.j2'), 'dest': str(config), 'mode': '0600'}}],
+                    variables=defaults)
+                subprocess.run(['zsh', '-n', str(config)], check=True)
+                content = config.read_text()
+                theme = next(line for line in content.splitlines() if line.startswith('ZSH_THEME='))
+                block = content[content.index('# --- Device access'):content.index('# --- Kubernetes')]
+                binary_dir = directory / 'bin'
+                binary_dir.mkdir()
+                recorder = '#!/usr/bin/env python3\nimport os,sys,json\nprint(json.dumps([os.path.basename(sys.argv[0])] + sys.argv[1:]))\n'
+                for tool in ['mosh', 'gh']:
+                    (binary_dir / tool).write_text(recorder)
+                    (binary_dir / tool).chmod(0o700)
+                (directory / 'my notes').mkdir()
+                probe = directory / 'probe.zsh'
+                probe.write_text(theme + '\n' + block + '''
+print -r -- "THEME:$ZSH_THEME"
+laptop
+laptop-claude s1
+mac
+mac-claude s2
+cq 'a title' body
+notes && print -r -- "PWD:$PWD"
+''')
+                result = subprocess.run(['zsh', '-f', str(probe)], cwd='/', capture_output=True, text=True,
+                                        env=dict(os.environ, HOME=name, PATH=str(binary_dir) + ':' + os.environ['PATH']))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stderr, '')
+                rows = result.stdout.splitlines()
+                self.assertEqual(rows[0], 'THEME:' + value)
+                self.assertEqual([json.loads(row) for row in rows[1:6]], [
+                    ['mosh', value], ['mosh', value, '--', 'tmux', 'new-session', '-A', '-s', 's1'],
+                    ['mosh', value], ['mosh', value, '--', 'tmux', 'new-session', '-A', '-s', 's2'],
+                    ['gh', 'issue', 'create', '--repo', value, '--title', 'a title', '--body', 'body']])
+                self.assertEqual(Path(rows[6].removeprefix('PWD:')).resolve(), (directory / where).resolve())
+                self.assertFalse(marker.exists())
+                # Homebrew's fzf widgets need a terminal: an editor reading the login environment has none
+                shell_dir = directory / 'brew/opt/fzf/shell'
+                shell_dir.mkdir(parents=True)
+                for widget in ('key-bindings', 'completion'):
+                    (shell_dir / (widget + '.zsh')).write_text(f'print -r -- loaded-{widget}\n')
+                (binary_dir / 'fzf').write_text('#!/bin/sh\n')
+                (binary_dir / 'fzf').chmod(0o700)
+                fzf_lines = '\n'.join(line for line in content.splitlines() if '/opt/fzf/shell/' in line)
+                loaded = subprocess.run(['zsh', '-f', '-c', fzf_lines], stdin=subprocess.DEVNULL, capture_output=True,
+                                        text=True, env=dict(os.environ, PATH=str(binary_dir) + ':' + os.environ['PATH']))
+                self.assertEqual(loaded.stdout, '')
+
+    def test_bad_tailscale_host_fails_before_zshrc_is_written(self):
+        # The host names go into .zshrc's mosh aliases: the role refuses a bad one before deploying it
+        tasks = yaml.safe_load((ROOT / 'roles/dotfiles/tasks/main.yml').read_text())
+        names = [t.get('name', '') for t in tasks]
+        check = names.index('Assert the Tailscale host names are host names (written into the mosh aliases in zshrc)')
+        deploy = names.index('Deploy zshrc')
+        self.assertLess(check, deploy)
+        deploy_task = dict(tasks[deploy])
+        deploy_task['ansible.builtin.template'] = dict(deploy_task['ansible.builtin.template'],
+                                                       src=str(ROOT / 'roles/dotfiles/templates/zshrc.j2'))
+        for host, ok in (('', True), ('laptop.tail', True), ('me@mac-desktop.tail', True), ('fd7a:115c:a1e0::1', True),
+                         ('-oProxyCommand=touch x', False), ('-x@host', False), ('host\n', False), ('a b', False)):
+            with self.subTest(host=host), tempfile.TemporaryDirectory() as name:
+                directory = Path(name)
+                defaults = yaml.safe_load((ROOT / 'roles/dotfiles/defaults/main.yml').read_text())
+                defaults.update({'ansible_managed': 'test', 'ansible_facts': {'user_dir': name, 'system': 'Darwin'},
+                                 'profile': 'personal', 'packages_gotoolchain': 'local', 'notes_repo_path': name + '/notes',
+                                 'dotfiles_mac_tailscale_host': host})
+                if ok:
+                    run_play(directory, tasks=[tasks[check], deploy_task], variables=defaults)
+                else:
+                    with self.assertRaises(AssertionError):
+                        run_play(directory, tasks=[tasks[check], deploy_task], variables=defaults)
+                self.assertEqual((directory / '.zshrc').exists(), ok)
+
     def test_rendered_shell_accounts_arguments_and_environment(self):
         with tempfile.TemporaryDirectory() as name:
             directory = Path(name)
