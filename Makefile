@@ -8,7 +8,7 @@
        test-scripts test-poller test-gitleaks test-% \
        repos-% \
        preflight guard-not-root guard-libvirt-group \
-       pip-lock pip-sync npm setup-yubikeys collections vendor-collections migration-inventory workstation-audit chrome-bookmarks chrome-bookmarks-export usb-add aide-rebaseline \
+       pip-lock pip-sync npm setup-yubikeys collections vendor-collections migration-inventory workstation-audit chrome-bookmarks chrome-bookmarks-export chrome-bookmarks-install chrome-bookmarks-backup chrome-bookmarks-verify chrome-bookmarks-keys usb-add aide-rebaseline \
        test-vm repos-dnf
 
 # *** ORDERING CRITICAL — DO NOT MOVE THESE BLOCKS ***
@@ -135,6 +135,10 @@ help:
 	@echo "  migration-inventory    Write a private JSON report for a laptop move"
 	@echo "  chrome-bookmarks       Render local_bookmarks.yml as one bookmarks file per Chrome profile"
 	@echo "  chrome-bookmarks-export  Write local_bookmarks.yml from this machine's Chrome profiles (read-only)"
+	@echo "  chrome-bookmarks-backup  Every Chrome profile's bookmarks, complete, encrypted to the YubiKeys (no key needed)"
+	@echo "  chrome-bookmarks-verify  Decrypt the backup with each plugged-in listed YubiKey and check it; no Chrome file touched"
+	@echo "  chrome-bookmarks-keys    Plugged-in YubiKeys by serial against chrome-bookmarks/recipients (SERIAL=<n> adds that key)"
+	@echo "  chrome-bookmarks-install Restore the backup's work and personal sets into the matching profiles (Chrome closed)"
 	@echo "  workstation-audit      Write a private JSON audit of this workstation"
 	@echo
 	@echo "Development:"
@@ -421,6 +425,23 @@ chrome-bookmarks: guard-not-root .venv
 chrome-bookmarks-export: guard-not-root .venv
 	.venv/bin/python3 -I scripts/chrome-bookmarks-export.py
 
+# Complete encrypted bookmark backup in chrome-bookmarks/ (docs/chrome-bookmarks.md): encrypting needs only the public
+# recipients; verify and install decrypt with a YubiKey touch
+# MACHINE= names the archive (the script validates it; it reaches it through the environment, never the shell)
+chrome-bookmarks-backup chrome-bookmarks-verify chrome-bookmarks-install: export CHROME_BOOKMARKS_MACHINE = $(MACHINE)
+chrome-bookmarks-keys: export CHROME_BOOKMARKS_ADD_SERIAL = $(SERIAL)
+chrome-bookmarks-backup: guard-not-root .venv
+	.venv/bin/python3 -I scripts/chrome-bookmarks-backup.py $(if $(filter 1,$(FORCE)),--force) $(if $(filter 1,$(ALLOW_RUNNING)),--allow-running)
+
+chrome-bookmarks-keys: guard-not-root .venv
+	.venv/bin/python3 -I scripts/chrome-bookmarks-backup.py --keys
+
+chrome-bookmarks-verify: guard-not-root .venv
+	.venv/bin/python3 -I scripts/chrome-bookmarks-install.py --verify-only
+
+chrome-bookmarks-install: guard-not-root .venv
+	.venv/bin/python3 -I scripts/chrome-bookmarks-install.py
+
 
 preflight:
 	scripts/preflight.sh
@@ -543,6 +564,7 @@ TEST_SCRIPTS := \
 	'.venv/bin/python3 scripts/test-agent-getty.py' \
 	'.venv/bin/python3 scripts/test-chrome-bookmarks.py' \
 	'.venv/bin/python3 scripts/test-chrome-bookmarks-export.py' \
+	'.venv/bin/python3 scripts/test-chrome-bookmarks-install.py' \
 	'.venv/bin/python3 scripts/test-smoke-test.py' \
 	'.venv/bin/python3 scripts/test-workstation-audit.py' \
 	'.venv/bin/python3 scripts/test-go-checksum.py' \

@@ -115,6 +115,7 @@ make vault-import FROM=host:path  # new machine, existing vault: writes vault-pa
 make migration-inventory | workstation-audit  # private reports for a laptop move
 make chrome-bookmarks       # local_bookmarks.yml -> one bookmarks file per Chrome profile to import (docs/chrome-bookmarks.md)
 make chrome-bookmarks-export  # fill local_bookmarks.yml from this machine's Chrome profiles (read-only on Chrome)
+make chrome-bookmarks-backup | chrome-bookmarks-verify | chrome-bookmarks-install  # encrypted complete backup | check it | restore
 make lint                   # ansible-lint, yamllint, shellcheck, markdownlint, check-vars-sync, script integrity
 make syntax-check | shellcheck | markdownlint | commitlint | check-vars-sync
 make test-scripts           # hook tests + scripts/test-*.py suites, in parallel (JOBS=1: serial)

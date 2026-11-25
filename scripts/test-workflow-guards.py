@@ -17,7 +17,7 @@ JOBS = yaml.safe_load((ROOT / '.github/workflows/linting.yml').read_text())['job
 MOLECULE_SKIPPABLE = {'.ansible-lint', '.claude', '.githooks', '.github', '.gitignore', '.gitleaks.toml', '.gpg-enforcement',
                       '.markdownlint.yml', '.npmrc', '.yamllint', 'AGENTS.md', 'CLAUDE.md', 'LICENSE', 'Makefile.sha256',
                       'README.md', 'SECURITY.md', 'commitlint.config.js', 'docs', 'package-lock.json', 'package.json',
-                      'local_bookmarks.yml.example', 'references', 'test-var-override.sh'}
+                      'chrome-bookmarks', 'local_bookmarks.yml.example', 'references', 'test-var-override.sh'}
 
 
 class WorkflowGuardTests(unittest.TestCase):
