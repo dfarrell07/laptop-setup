@@ -892,6 +892,32 @@
               {{ _desktop_gnome_scroll_results.results | selectattr('failed') | map(attribute='item.key') | join(', ') }}
           when: _desktop_gnome_scroll_results.results | selectattr('failed') | list | length > 0
 
+# --- Chrome default page zoom (Linux and macOS) ---
+# No Chrome policy sets it: it is each profile's Preferences, which Chrome rewrites from memory while it runs, so the
+# helper writes only while Chrome is closed and otherwise asks for a re-run.
+- name: Chrome default page zoom
+  when:
+    - desktop_chrome_page_zoom | string | length > 0
+    - not (system_is_container | default(false))
+  block:
+    - name: Set Chrome's default page zoom in every profile
+      ansible.builtin.command:
+        argv: >-
+          {{ [ansible_facts.get('python', {}).get('executable', 'python3'), '-I', '-c',
+              lookup('ansible.builtin.file', role_path ~ '/files/chrome-page-zoom.py'),
+              desktop_chrome_user_data_dir, desktop_chrome_page_zoom | string]
+             + (['--check'] if ansible_check_mode else []) }}
+      register: _desktop_chrome_zoom
+      changed_when: _desktop_chrome_zoom.stdout | trim == 'changed'
+      check_mode: false
+
+    - name: Warn that Chrome must be closed to set its page zoom
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: Chrome is running, so its default page zoom ({{ desktop_chrome_page_zoom }}%) was not set: quit
+          Chrome (every window), then run make desktop again.
+      when: _desktop_chrome_zoom.stdout | trim == 'running'
+
 # --- GNOME hardening (Linux only, GNOME desktops) ---
 - name: GNOME hardening dconf settings
   when:

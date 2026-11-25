@@ -184,6 +184,7 @@ _codex_personal=$(_cfg_value codex_personal_config_dir)
 # Tailscale operator the packages role manages: the login user unless config.yml sets packages_tailscale_operator
 _ts_want=${SUDO_USER:-$USER}
 grep -q '^packages_tailscale_operator:' "$_cfg" 2>/dev/null && _ts_want=$(_cfg_value packages_tailscale_operator)
+_chrome_zoom=$(_cfg_value desktop_chrome_page_zoom)  # Chrome's default page zoom check (desktop role)
 _claude_home2_off=false
 grep -qiE '^claude_personal2_instance_enabled:[[:space:]]*["'"'"']?(false|no|off|n|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null \
   && _claude_home2_off=true
@@ -716,6 +717,20 @@ if [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
     unset _scroll
   fi
 fi
+
+# Chrome's default page zoom (desktop_chrome_page_zoom), read by the helper the desktop role runs, in check mode
+if [[ -n "$_chrome_zoom" && -z "$CONTAINER" ]] && ! $SYSTEM_ONLY && [[ "$EUID" -ne 0 ]]; then
+  if $IS_LINUX; then _chrome_dir="$HOME/.config/google-chrome"; else _chrome_dir="$HOME/Library/Application Support/Google/Chrome"; fi
+  case $(python3 -I "$SCRIPT_DIR/../roles/desktop/files/chrome-page-zoom.py" "$_chrome_dir" "$_chrome_zoom" --check 2>&1) in
+    unchanged) record "chrome-page-zoom" "PASS" ;;
+    absent) record "chrome-page-zoom" "PASS" "no Chrome profile yet" ;;
+    running) record "chrome-page-zoom" "WARN" "default page zoom is not ${_chrome_zoom}%: quit Chrome, then make desktop" ;;
+    changed) record "chrome-page-zoom" "WARN" "default page zoom is not ${_chrome_zoom}%: make desktop" ;;
+    *) record "chrome-page-zoom" "WARN" "cannot read Chrome's profiles in $_chrome_dir" ;;
+  esac
+  unset _chrome_dir
+fi
+unset _chrome_zoom
 
 # macOS settings that need root to apply but not to read, so a no-sudo run (NOSUDO=1) shows what is left
 if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then

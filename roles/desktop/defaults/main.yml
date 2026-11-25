@@ -435,3 +435,11 @@ is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml
 is_macos: false  # fallback; authoritative value in group_vars/all/vars.yml
 dotfiles_homebrew_prefix: /opt/homebrew  # fallback; authoritative value in group_vars/all/vars.yml; Intel x86 uses /usr/local (set there)
 system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml
+
+# Chrome's default page zoom in percent (Settings > Appearance > Page zoom), set in every profile while Chrome is
+# closed; '' leaves Chrome's own setting alone. Text-heavy pages read large at a fractional sway scale (1.5 on a
+# 1920x1200 16" panel): 80 there. Choose it in config.yml, not in Chrome: each run sets it back.
+desktop_chrome_page_zoom: ''
+desktop_chrome_user_data_dir: >-
+  {{ ansible_facts['user_dir'] ~ ('/Library/Application Support/Google/Chrome'
+     if ansible_facts['system'] | default('Linux') == 'Darwin' else '/.config/google-chrome') }}
