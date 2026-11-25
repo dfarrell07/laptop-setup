@@ -795,7 +795,7 @@ if [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY && [[ "$EUID" -ne 0 ]]; then
     $IS_LINUX || _chrome_tcc=" (macOS: give the terminal Full Disk Access)"
     _chrome_out=$("${_chrome_py[@]}" prefs "$_chrome_spec" --check 2>&1) || true
     _chrome_status=$(grep -v '^chrome\.py: ' <<<"$_chrome_out" | head -1 || true)
-    grep -qx 'personal-unknown' <<<"$_chrome_out" && _chrome_status=personal-unknown
+    [[ $_chrome_status != running ]] && grep -qx 'personal-unknown' <<<"$_chrome_out" && _chrome_status=personal-unknown
     case $_chrome_status in
       personal-unknown) record "chrome-profiles" "WARN" "cannot read Chrome's Local State, so no profile counts as personal: start and quit Chrome once, then make apply CHUNK=chrome" ;;
       unchanged) record "chrome-profiles" "PASS" ;;
@@ -810,6 +810,7 @@ if [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY && [[ "$EUID" -ne 0 ]]; then
       ok) record "chrome-extensions" "PASS" ;;
       absent) record "chrome-extensions" "PASS" "no Chrome profile yet" ;;
       blocked) record "chrome-extensions" "WARN" "cannot read Chrome's profiles$_chrome_tcc" ;;
+      chrome.py:*Local\ State*$'\n'blocked) record "chrome-extensions" "WARN" "cannot read Chrome's Local State, so no profile counts as personal: start and quit Chrome once, then make apply CHUNK=chrome" ;;
       chrome.py:*) record "chrome-extensions" "WARN" "$_chrome_out" ;;
       *) record "chrome-extensions" "WARN" "$(tr '\n' ';' <<<"$_chrome_out" | sed 's/;$//'): make chrome-extensions installs missing ones, docs/chrome.md" ;;
     esac
