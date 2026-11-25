@@ -934,6 +934,21 @@ for tool in yamllint ansible-lint; do
   fi
 done
 
+# --- Scripts an earlier setup left in ~/.local/bin whose #! interpreter is gone (a removed Python or Homebrew): first on
+# PATH, each one shadows the working tool of the same name ---
+_dead_scripts=""
+for _script in "$HOME"/.local/bin/*; do
+  [[ -f "$_script" && -x "$_script" ]] || continue
+  _first=""
+  { IFS= read -r -n 256 _first; } < "$_script" 2>/dev/null || true
+  [[ $_first == '#!/'* ]] || continue
+  read -r _interp _ <<< "${_first#\#!}" # the interpreter ends at a space or a tab
+  [[ -e "$_interp" ]] || _dead_scripts+="${_script##*/} "
+done
+if [[ -z "$_dead_scripts" ]]; then record "local-bin-interpreters" "PASS"
+else record "local-bin-interpreters" "WARN" "interpreter missing for ~/.local/bin/{${_dead_scripts% }} (it shadows the managed tool): remove each, or pipx install --force <tool>"; fi
+unset _dead_scripts _script _first _interp
+
 # --- Dotfiles checks ---
 for f in .zshrc .bashrc; do
   if [[ ! -f "$HOME/$f" ]]; then record "dotfile-$f" "FAIL" "not deployed — run: make dotfiles"

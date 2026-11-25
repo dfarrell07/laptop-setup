@@ -46,6 +46,34 @@ class WorkstationAuditTests(unittest.TestCase):
                 self.assertEqual(audit.main(), 1)
             self.assertEqual(json.loads(output.read_text())['pipx'][0]['version'], '1.2.3')
 
+    def test_leftovers_from_an_old_setup_are_findings(self):
+        with tempfile.TemporaryDirectory() as name:
+            home = Path(name)
+            scripts = home / '.local/bin'
+            scripts.mkdir(parents=True)
+            (scripts / 'dead').write_text('#!/nonexistent/python3.13\nprint()\n')
+            (scripts / 'alive').write_text('#!/bin/sh\n')
+            (scripts / 'binary').write_bytes(b'\x7fELF')
+            (home / '.local/share/pipx/venvs/.tool.lock').mkdir(parents=True)  # pipx's lock, not an environment
+            (home / '.gitconfig').write_text('[http]\n\tsslVerify = false\n[safe]\n\tdirectory = *\n\tdirectory = *\n'
+                                             '[user]\n\tname = fixture-secret\n[include]\n\tpath = extra\n')
+            (home / 'extra').write_text('[http "https://git.example.internal/"]\n\tsslVerify = no\n'
+                                        '[http "https://ok.example/"]\n\tsslVerify\n')  # bare key: true
+            def git_only(command, *args, **kwargs):
+                if command[0] != 'git':
+                    return None
+                return subprocess.run(command, capture_output=True, text=True, check=True).stdout
+
+            with patch.object(audit, 'probe', side_effect=git_only), patch.object(audit.shutil, 'which', return_value=None):
+                report = audit.collect(home=home, path_value='')
+        self.assertEqual(report['findings']['dead_interpreters'], ['~/.local/bin/dead'])
+        self.assertEqual(report['findings']['risky_git_settings'],
+                         ['.gitconfig: http.sslverify=false', '.gitconfig: safe.directory=*',
+                          '.gitconfig: http.<url>.sslverify=no'])
+        self.assertNotIn('example.internal', json.dumps(report))
+        self.assertNotIn('fixture-secret', json.dumps(report))
+        self.assertEqual(report['errors'], [])
+
     @unittest.skipIf(os.geteuid() == 0, 'unreadable-directory fixture needs an unprivileged user')
     def test_unreadable_pipx_paths_are_reported_probe_errors(self):
         for relative in ['.local/share/pipx', '.local/share/pipx/venvs', '.local/share/pipx/venvs/tool',
@@ -534,6 +562,20 @@ class PortablePreferencesTests(unittest.TestCase):
                 result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(playbook)],
                     cwd=ROOT, env=dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
                     capture_output=True, text=True, timeout=max(30, TEST_TIMEOUT))
+                self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+
+    def test_extra_pipx_entries_are_plain_package_names(self):
+        task = next(t for t in yaml.safe_load((ROOT / 'roles/packages/tasks/install_pipx.yml').read_text())
+                    if t.get('name') == 'Assert packages_extra_pipx lists plain package names')
+        for extras, expected in [([], 0), (['ruff', 'chirp==20240706', 'jinjanator'], 0),
+                                 (['git+https://example.com/x'], 2), (['--index-url=https://evil'], 2),
+                                 (['./local'], 2), ('ruff', 2), (['ruff ; rm -rf ~'], 2), (['ruff\n'], 2)]:
+            with self.subTest(extras=extras), tempfile.TemporaryDirectory() as name:
+                playbook = Path(name) / 'play.yml'
+                playbook.write_text(yaml.safe_dump([{'hosts': 'localhost', 'gather_facts': False,
+                                                     'vars': {'packages_extra_pipx': extras}, 'tasks': [task]}]))
+                result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(playbook)], cwd=ROOT,
+                                        capture_output=True, text=True, timeout=max(30, TEST_TIMEOUT))
                 self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
 
     @unittest.skipUnless(shutil.which('dbus-run-session') and shutil.which('dconf'), 'isolated DBus/dconf required')

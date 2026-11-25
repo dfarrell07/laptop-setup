@@ -10,7 +10,9 @@ audits it for gaps the automation does not cover yet.
 
 1. Run `make migration-inventory` and `make workstation-audit`. Both write private JSON reports in your home;
    review probe errors and omissions and keep the reports in encrypted storage. Git status counts do not show
-   that work was pushed.
+   that work was pushed. The audit's `findings` name what not to carry over: scripts whose interpreter is gone
+   (they shadow managed tools), leftover install prefixes (Linuxbrew, `/usr/local/go`), and git settings that turn
+   off safety checks (`http.sslVerify=false`, `safe.directory=*`).
 2. Run `make backup-dry-run`, inspect the copied paths and skipped-link warnings, then `make backup`. Move its
    timestamped home directory (mode 0700) over an encrypted channel and keep it out of Git. Ordinary copied files
    lose group/other access; GnuPG key and database copies keep their source modes.

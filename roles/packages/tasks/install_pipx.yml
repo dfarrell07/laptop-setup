@@ -1,6 +1,6 @@
 ---
 # roles/packages/tasks/install_pipx.yml
-# Install yamllint and ansible-lint via pipx (version-pinned).
+# Install yamllint and ansible-lint via pipx (version-pinned), plus packages_extra_pipx.
 # Called from main.yml when is_dnf or is_apt or is_macos, and packages_install_binaries.
 
 - name: Check for pipx
@@ -16,6 +16,15 @@
   when:
     - ansible_check_mode
     - _packages_pipx_probe.rc | default(0) != 0
+
+- name: Assert packages_extra_pipx lists plain package names
+  ansible.builtin.assert:
+    that:
+      - packages_extra_pipx is sequence and packages_extra_pipx is not string
+      - packages_extra_pipx | reject('match', '^[A-Za-z0-9][A-Za-z0-9_.-]*(==[0-9][A-Za-z0-9.+!-]*)?\Z') | list | length == 0
+    fail_msg: >-
+      packages_extra_pipx entries must be PyPI names, optionally pinned as name==version (no URLs, paths or options):
+      {{ packages_extra_pipx | reject('match', '^[A-Za-z0-9][A-Za-z0-9_.-]*(==[0-9][A-Za-z0-9.+!-]*)?\Z') | list }}
 
 - name: Install pipx packages (yamllint, ansible-lint)
   when:
@@ -35,6 +44,16 @@
         python: "{{ packages_pipx_python }}"
         name: "ansible-lint=={{ packages_ansible_lint_version }}"
         state: install
+      timeout: 300
+
+    # The owner's own pipx apps (config.yml); a pinned one also belongs in packages_user_updates_pipx_skip
+    - name: Extra pipx packages present
+      community.general.pipx:
+        executable: pipx
+        python: "{{ packages_pipx_python }}"
+        name: "{{ item }}"
+        state: install
+      loop: "{{ packages_extra_pipx }}"
       timeout: 300
   rescue:
     - name: Record pipx install failure (CSB)
