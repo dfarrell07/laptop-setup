@@ -10,9 +10,12 @@ prefs      Sets each profile's Preferences: the default page zoom in every profi
            where this machine's Chrome policy belongs to someone else, the policy-equivalent preferences in personal
            profiles only. Chrome reads Preferences at start and rewrites it from memory, so nothing is written while
            it runs. Prints one word: changed, unchanged, running (quit Chrome and re-run), absent (no profile yet) or
-           blocked (the data dir cannot be read: on macOS, Full Disk Access). --check writes nothing.
+           blocked (the data dir cannot be read: on macOS, Full Disk Access). A second line, personal-unknown, says
+           Local State (the profile list) cannot be read, so no profile was treated as personal (the page zoom still
+           applies). --check writes nothing.
 extensions Lists, per personal profile, declared extensions that are missing or disabled and Web Store extensions
-           installed by hand that are not declared. Prints "ok", "absent", "blocked", or one problem per line.
+           installed by hand that are not declared. Prints "ok", "absent", "blocked" (the data dir or Local State
+           cannot be read), or one problem per line.
 policy     Compares this machine's Chrome policy (the Linux recommended/managed files, or the macOS user defaults)
            with SPEC. Prints "ok" or one difference per line.
 open       Opens the Web Store page of each missing declared extension in its personal profile (owner use).
@@ -35,7 +38,7 @@ EXTENSION_ID = re.compile(r'^[a-p]{32}$')
 SITE_TYPES = {'notifications', 'popups', 'geolocation', 'media_stream_camera', 'media_stream_mic', 'javascript',
               'images', 'sound', 'automatic_downloads', 'clipboard', 'cookies'}
 SITE_VALUES = {'allow': 1, 'block': 2, 'ask': 3}
-ALLOW_BLOCK_ONLY = {'images', 'javascript', 'popups', 'sound'}  # Chromium registers no "ask" for these
+ALLOW_BLOCK_ONLY = {'images', 'javascript', 'popups', 'sound', 'cookies'}  # Chromium registers no "ask" for these
 ORIGIN = re.compile(r'^(https?)://([a-z0-9-]+(?:\.[a-z0-9-]+)*)(?::([0-9]{1,5}))?/?$')
 DOMAIN_PATTERN = re.compile(r'^\[\*\.\]([a-z0-9-]+(?:\.[a-z0-9-]+)+)$')
 COLOR_SCHEMES = {'system': 0, 'light': 1, 'dark': 2}
@@ -168,14 +171,16 @@ def profile_dirs(data_dir):
 
 
 def info_cache(data_dir):
-    """Local State's profile list; an unreadable one means no personal profile (the zoom still applies)."""
+    """Local State's profile list, or None when it cannot be read (then no profile is personal; the zoom still
+    applies, and the caller reports it)."""
     try:
         state = json.loads((data_dir / 'Local State').read_text(encoding='utf-8'))
     except FileNotFoundError:
         return {}
-    except (UnicodeDecodeError, ValueError):
-        print(f'chrome.py: cannot parse {data_dir / "Local State"}; treating no profile as personal', file=sys.stderr)
-        return {}
+    except (UnicodeDecodeError, ValueError, PermissionError) as err:
+        print(f'chrome.py: cannot read {data_dir / "Local State"} ({type(err).__name__}); treating no profile as personal',
+              file=sys.stderr)
+        return None
     if not isinstance(state, dict):
         return {}
     profile = state.get('profile')
@@ -183,9 +188,9 @@ def info_cache(data_dir):
     return cache if isinstance(cache, dict) else {}
 
 
-def personal_profiles(data_dir, domains):
-    """Profile dir names whose signed-in account is a consumer account in domains. Anything unknown is not personal."""
-    cache = info_cache(data_dir)
+def personal_profiles(cache, domains):
+    """Profile dir names (from info_cache) whose signed-in account is a consumer account in domains. Anything unknown
+    is not personal."""
     found = set()
     for name, info in (cache.items() if isinstance(cache, dict) else []):
         if not isinstance(info, dict):
@@ -296,6 +301,12 @@ def backup(path):
 
 
 def cmd_prefs(spec, check):
+    unreadable = []
+    status = apply_prefs(spec, check, unreadable)
+    return status + ('\npersonal-unknown' if unreadable and status in ('changed', 'unchanged', 'running') else '')
+
+
+def apply_prefs(spec, check, unreadable):
     """Site exceptions and default site settings this helper wrote are recorded per profile (state_dir), so one
     removed from the settings is removed from Chrome too; ones the user set in Chrome are never recorded."""
     data_dir = Path(spec['user_data_dir']).expanduser()
@@ -303,7 +314,10 @@ def cmd_prefs(spec, check):
         found = profile_dirs(data_dir) if data_dir.is_dir() else []
         if not found:
             return 'absent'
-        personal = personal_profiles(data_dir, set(spec['personal_domains']))
+        cache = info_cache(data_dir)
+        if cache is None:
+            unreadable.append(data_dir / 'Local State')
+        personal = personal_profiles(cache or {}, set(spec['personal_domains']))
         state_file = applied_file(spec)
         applied = read_json(state_file)
         plans = []
@@ -420,13 +434,15 @@ def audit(spec):
     try:
         if not data_dir.is_dir() or not profile_dirs(data_dir):
             return 'absent', []
-        personal = personal_profiles(data_dir, set(spec['personal_domains']))
+        cache = info_cache(data_dir)
+        if cache is None:  # which profiles are personal is unknown, so nothing can be checked
+            return 'blocked', []
+        personal = personal_profiles(cache, set(spec['personal_domains']))
         exts = spec.get('extensions', [])
         want = {e['id']: e.get('name', '') for e in exts if e.get('install', True)}
         known = {e['id'] for e in exts}
         blocked = blocked_by_policy(spec)
         problems = []
-        cache = info_cache(data_dir)
         for name in sorted(personal):
             if cache.get(name, {}).get('is_consented_primary_account'):
                 # Sync would carry settings and extensions from other machines and undo these (docs/chrome.md)

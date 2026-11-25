@@ -213,9 +213,14 @@
     _chrome_ext_before_ids: >-
       {{ (_chrome_ext_before.content | default('W10=') | b64decode | from_yaml | default([], true))
          | select('string') | select('match', '^[a-p]{32}$') | list }}
-    # A file the distribution ships (Fedora's GNOME Shell integration) belongs to its package: never written or removed
+    # A file the distribution ships (Fedora's GNOME Shell integration) belongs to its package, and one already there that
+    # this role did not write belongs to whoever put it there: neither is written or removed.
     _chrome_ext_owned_ids: >-
-      {{ _chrome_ext_owned.stdout_lines | default([]) | map('basename') | map('regex_replace', '\.json$', '') | list }}
+      {{ (_chrome_ext_owned.stdout_lines | default([]) | select('match', '^owned ') | map('regex_replace', '^owned ', '')
+          | list
+          + _chrome_ext_owned.stdout_lines | default([]) | select('match', '^exists ') | map('regex_replace', '^exists ', '')
+          | map('basename') | map('regex_replace', '\.json$', '') | reject('in', _chrome_ext_before_ids) | list)
+         | map('basename') | map('regex_replace', '\.json$', '') | unique | list }}
     _chrome_ext_want: "{{ _chrome_ext_want_all | difference(_chrome_ext_owned_ids) }}"
     _chrome_ext_remove: >-
       {{ _chrome_ext_before_ids | difference(_chrome_ext_declared) | difference(_chrome_ext_owned_ids) }}
@@ -227,17 +232,26 @@
       register: _chrome_ext_before
       failed_when: false
 
-    - name: Find Chrome external extension files a package owns (Linux)
+    # "owned": a package's (rpm and dpkg are both asked, and a package database error counts as owned: fail closed);
+    # "exists": present (a dangling symlink included), not a package's. macOS has neither tool, so its files are "exists".
+    - name: Find Chrome external extension files present or a package's
       ansible.builtin.command:
         argv: >-
-          {{ ['sh', '-c', 'for f; do [ -e "$f" ] || continue;
-               if rpm -qf "$f" >/dev/null 2>&1 || dpkg -S "$f" >/dev/null 2>&1; then echo "$f"; fi; done', 'sh']
+          {{ ['sh', '-c', 'for f; do [ -e "$f" ] || [ -L "$f" ] || continue; owner=no;
+               if command -v rpm >/dev/null; then
+               if out=$(rpm -qf "$f" 2>&1); then owner=yes;
+               else case $out in *"not owned by any package"*) ;; *) owner=unknown;; esac; fi; fi;
+               if [ "$owner" = no ] && command -v dpkg >/dev/null; then
+               if out=$(dpkg -S "$f" 2>&1); then owner=yes;
+               else case $out in *"no path found"*) ;; *) owner=unknown;; esac; fi; fi;
+               if [ "$owner" = no ]; then echo "exists $f"; else echo "owned $f"; fi; done', 'sh']
              + ((_chrome_ext_declared + _chrome_ext_before_ids) | unique
                 | map('regex_replace', '^', _chrome_ext_dir ~ '/') | map('regex_replace', '$', '.json') | list) }}
+      environment:
+        LC_ALL: C  # the "not owned" messages above are matched in English
       register: _chrome_ext_owned
       changed_when: false
       check_mode: false
-      when: is_linux
 
     - name: Write and remove Chrome external extension files
       become: true
@@ -281,7 +295,9 @@
           extension files written before stay in {{ _chrome_ext_dir }} ({{ _chrome_ext_kept | join(', ') }}): removing
           them would uninstall those extensions, with their data, from every profile. Delete them by hand if wanted.
       vars:
-        _chrome_ext_kept: "{{ _chrome_ext_before_ids | difference(_chrome_ext_remove) | difference(_chrome_ext_want) }}"
+        _chrome_ext_kept: >-
+          {{ _chrome_ext_before_ids | difference(_chrome_ext_remove) | difference(_chrome_ext_want)
+             | difference(_chrome_ext_owned_ids) }}
       when: _chrome_ext_kept | length > 0
 
 # --- Reconciled level and page zoom: files/chrome.py on the rendered settings ---
@@ -303,6 +319,7 @@
     _chrome_helper: >-
       {{ [ansible_facts.get('python', {}).get('executable', 'python3'), '-I', '-c',
           lookup('ansible.builtin.file', role_path ~ '/files/chrome.py')] }}
+    _chrome_prefs_status: "{{ _chrome_prefs.stdout_lines | default([]) | first | default('') }}"
   block:
     # No secrets: the smoke checks and make chrome-extensions read the same file.
     - name: Write the Chrome settings for the helper
@@ -316,7 +333,7 @@
         argv: "{{ _chrome_helper + ['prefs', '-'] + (['--check'] if ansible_check_mode else []) }}"
         stdin: "{{ _chrome_spec | to_json }}"
       register: _chrome_prefs
-      changed_when: _chrome_prefs.stdout | trim == 'changed'
+      changed_when: _chrome_prefs_status == 'changed'
       check_mode: false
 
     - name: Warn that Chrome must be closed to set its profile settings
@@ -324,7 +341,7 @@
         msg: >-
           WARNING: Chrome is running, so its profile settings (page zoom, color scheme, site settings) were not set:
           quit Chrome ({{ 'Cmd-Q' if is_macos else 'every window' }}), then run make apply CHUNK=chrome again.
-      when: _chrome_prefs.stdout | trim == 'running'
+      when: _chrome_prefs_status == 'running'
 
     - name: Warn that Chrome's data cannot be read
       ansible.builtin.debug:
@@ -332,7 +349,15 @@
           WARNING: Chrome's data directory {{ desktop_chrome_user_data_dir }} cannot be read, so its profile settings
           were not set.{{ ' On macOS give the terminal Full Disk Access (System Settings > Privacy & Security), then
           run make apply CHUNK=chrome again.' if is_macos else '' }}
-      when: _chrome_prefs.stdout | trim == 'blocked'
+      when: _chrome_prefs_status == 'blocked'
+
+    - name: Warn that Chrome's profile list cannot be read
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: Chrome's Local State in {{ desktop_chrome_user_data_dir }} cannot be read, so no profile was treated
+          as personal: only the page zoom was set. Start and quit Chrome once to rewrite it, then run make apply
+          CHUNK=chrome again.
+      when: "'personal-unknown' in _chrome_prefs.stdout_lines"
 
     - name: Audit Chrome's personal-profile extensions
       ansible.builtin.command:
