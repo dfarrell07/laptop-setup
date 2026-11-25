@@ -2,5 +2,5 @@
 # Security hardening sysctl values
 # No trailing comments on value lines: text after the value would be written to /proc.
 {% for key, value in system_sysctl_hardening.items() %}
-{{ key | regex_replace('[^a-zA-Z0-9._-]', '') }} = {{ (value | string | regex_replace('[`$();&<>]', '') if key == 'kernel.core_pattern' else value | string) | regex_replace('[\r\n].*', '') }}
+{{ key | regex_replace('[^a-zA-Z0-9._-]', '') }} = {{ (value | string | regex_replace('[`$();&<>]', '') if key == 'kernel.core_pattern' else value | string) | regex_replace('[\r\n\x00].*', '') }}
 {% endfor %}

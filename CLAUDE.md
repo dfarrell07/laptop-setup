@@ -11,13 +11,16 @@ facts go in the gitignored `CLAUDE.local.md`. Sessions on several machines at on
 
 ### SECURITY: config.yml template injection (SSTI)
 
-Ansible loads `config.yml` with `trusted_as_template=True`, so `{{ ... }}` / `{% ... %}` in any value is evaluated with the privilege of the
-play (root in Play 1). `common/tasks/config_ssti_guard.yml` scans every value and rejects template markers before any task runs. Never put
-Jinja in `config.yml`; mark values containing braces literal with `!unsafe` (the scan still rejects `{{` and `{%` inside tagged values):
+Loaded with `include_vars` (`trusted_as_template=True`), `{{ ... }}` / `{% ... %}` in a `config.yml` value would run with the privilege of
+the play (root in Play 1). Pre-flight sets the values as data from the guard's parsed dict, and `common/tasks/config_ssti_guard.yml` still
+rejects template markers before any task runs. Never put Jinja in `config.yml`; mark values containing braces literal with `!unsafe` (the
+scan still rejects `{{` and `{%` inside tagged values):
 
 ```yaml
 dotfiles_goprivate: !unsafe 'git.example.internal,pkgs.example.internal'
 ```
+
+The same guard rejects `ansible_*`, underscore-prefixed, protected and vault-mapped keys and control characters (SECURITY.md).
 
 ### SECURITY: never use `--start-at-task`
 
@@ -182,8 +185,8 @@ runs `git_repos` for one `repo_category`. `make help` lists everything; scenario
 - One vault file, `group_vars/all/vault.yml`; password from a YubiKey via `make setup-yubikeys`; `make vault-edit|vault-view`.
   `vault-pass.sh` is written by `scripts/write-vault-pass.sh`. Shared across machines (`make vault-share-init`,
   `vault-join`, `vault-add-key`): [docs/shared-vault.md](docs/shared-vault.md).
-- **Never define `vault_*` variables in `config.yml`**: `include_vars` (precedence 18) outranks `group_vars` and silently shadows the vault
-  value. `common/tasks/pre_flight_checks.yml` asserts this.
+- **Never define `vault_*` variables in `config.yml`**: its values (`set_fact`, precedence 19) outrank `group_vars` and silently shadow the
+  vault value. `common/tasks/pre_flight_checks.yml` asserts this.
 - **The GRUB password hash must be vault-sourced** (`system_grub_password_enabled: true`): generate with `grub2-mkpasswd-pbkdf2`, store as
   `vault_grub_password_hash`, which the playbook maps to `system_grub_password_hash`. A PBKDF2 hash in plaintext config or CI artifacts
   allows offline brute force.

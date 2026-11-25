@@ -2,17 +2,24 @@
 # SSTI guard: read config.yml as raw bytes (bypasses include_vars trusted_as_template tagging)
 # and reject Jinja2 expressions before loading any user overrides into the play.
 # Missing config is allowed; unreadable or invalid config fails closed.
+# One path for the stat and the slurp; pre_flight_checks.yml sets config.yml values from the dict parsed here.
+# _pf_* names are protected from -e by scripts/verify-ansible-args.sh.
+- name: Set the config.yml path the guard checks
+  ansible.builtin.set_fact:
+    _pf_config_path: "{{ playbook_dir }}/config.yml"
+  tags: [always]
+
 - name: Stat config.yml (a missing file is allowed)
   ansible.builtin.stat:
-    path: "{{ playbook_dir }}/config.yml"
-  register: _config_yml_stat
+    path: "{{ _pf_config_path }}"
+  register: _pf_config_yml_stat
   tags: [always]
 
 - name: Slurp config.yml for SSTI guard (raw bytes, bypasses include_vars trusted_as_template)
   ansible.builtin.slurp:
-    src: "{{ playbook_dir }}/config.yml"
-  register: _config_yml_raw
-  when: _config_yml_stat.stat.exists
+    src: "{{ _pf_config_path }}"
+  register: _pf_config_yml_raw
+  when: _pf_config_yml_stat.stat.exists
   no_log: true
   tags: [always]
 
@@ -21,12 +28,12 @@
     argv:
       - "{{ ansible_playbook_python }}"
       - "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | default(playbook_dir, true) }}/scripts/parse-config.py"
-    stdin: "{{ _config_yml_raw.content | b64decode }}"
+    stdin: "{{ _pf_config_yml_raw.content | b64decode }}"
     stdin_add_newline: false
   delegate_to: localhost
   become: false
-  when: _config_yml_stat.stat.exists
-  register: _config_parsed
+  when: _pf_config_yml_stat.stat.exists
+  register: _pf_config_parsed
   changed_when: false
   failed_when: false  # reported below: no_log would otherwise hide the parse error
   check_mode: false
@@ -37,42 +44,77 @@
 - name: Fail when config.yml cannot be parsed
   ansible.builtin.fail:
     msg: >-
-      config.yml is not valid YAML or not a mapping ({{ _config_parsed.stderr | default('unknown error') | trim }}).
+      config.yml is not valid YAML or not a mapping ({{ _pf_config_parsed.stderr | default('unknown error') | trim }}).
       Find the line with: python3 -c 'import sys, yaml; yaml.safe_load(open(sys.argv[1]))' config.yml
   when:
-    - _config_yml_stat.stat.exists
-    - _config_parsed.rc | default(0) != 0
+    - _pf_config_yml_stat.stat.exists
+    - _pf_config_parsed.rc | default(0) != 0
   tags: [always]
 
 - name: Cache parsed config.yml dict for SSTI guard assertions
   ansible.builtin.set_fact:
-    _config_raw: "{{ (_config_parsed.stdout | from_json) if _config_yml_stat.stat.exists else {} }}"
+    _pf_config_raw: "{{ (_pf_config_parsed.stdout | from_json) if _pf_config_yml_stat.stat.exists else {} }}"
   no_log: true
   tags: [always]
 
 - name: Comprehensively scan all config.yml values for Jinja2 template expressions (SSTI guard)
-  when: _config_raw is defined
+  when: _pf_config_raw is defined
   vars:
     # Serialize entire config dict to JSON for unified template marker scanning
     # This detects {{ or {% in ANY value (string, list element, dict value), and a #jinja2: override
     # header, which redefines the delimiters (variable_start_string) so a value needs neither marker
-    _config_json: "{{ _config_raw | to_nice_json }}"
+    _pf_config_json: "{{ _pf_config_raw | to_nice_json }}"
   ansible.builtin.assert:
     that:
       # Reject {{, {% and the delimiter-override header in the entire serialized config
       # The combination of the three checks prevents SSTI in all config variables
-      - ('{' ~ '{') not in _config_json
-      - ('{' ~ '%') not in _config_json
-      - ('#' ~ 'jinja2') not in _config_json
+      - ('{' ~ '{') not in _pf_config_json
+      - ('{' ~ '%') not in _pf_config_json
+      - ('#' ~ 'jinja2') not in _pf_config_json
     fail_msg: >-
       {% raw -%}
-      SECURITY: config.yml contains {{, {% or a #jinja2 delimiter-override header — Ansible evaluates these as live Jinja2
+      SECURITY: config.yml contains {{, {% or a #jinja2 delimiter-override header — Ansible would evaluate these as live Jinja2
       templates (trusted_as_template=True), allowing arbitrary code execution as the
       provisioning user (become: true in Play 1).
       Input: the entire config.yml including all strings, list elements, dict values.
-      Mechanism: include_vars with trusted_as_template evaluates any {{ }} or {% %} block, and a value
+      Mechanism: include_vars with trusted_as_template would evaluate any {{ }} or {% %} block, and a value
       starting with a #jinja2: header can switch to other delimiters that this scan could not list.
       Example: dotfiles_goprivate="{{lookup('pipe','id')}}" runs id() at provision time.
       Impact: SSTI — arbitrary Ansible code execution with become: true.
       Fix: remove template markers from configuration values. !unsafe tags are supported,
       but do not exempt values from this scan. Literal values without template markers are safe.{%- endraw %}
+
+# After the SSTI scan, before config.yml values are set: keys that pick what runs or how (ansible_* such as
+# ansible_python_interpreter or ansible_become_exe outrank inventory and ansible.cfg), internal
+# (underscore), magic and protected variables, names mapped from vault_* values, and control
+# characters in any key or value (a NUL renders as a line break in /etc/sysctl.d).
+- name: Check config.yml keys and characters
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_playbook_python }}"
+      - "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | default(playbook_dir, true) }}/scripts/parse-config.py"
+      - --policy
+    stdin: "{{ _pf_config_yml_raw.content | b64decode }}"
+    stdin_add_newline: false
+  delegate_to: localhost
+  become: false
+  when: _pf_config_yml_stat.stat.exists
+  register: _pf_config_policy
+  changed_when: false
+  failed_when: false  # reported below; the output names keys and code points, never values
+  check_mode: false
+  no_log: true
+  tags: [always]
+
+- name: Fail when config.yml sets keys or characters that change execution
+  ansible.builtin.fail:
+    msg: >-
+      SECURITY: config.yml sets variables or characters it must not (config.yml values outrank inventory,
+      ansible.cfg and group_vars, and Play 1 runs as root):
+      {{ ((_pf_config_policy.stdout | default('')) ~ ' ' ~ (_pf_config_policy.stderr | default(''))) | trim }}.
+      Remove these keys from config.yml (vault values belong in group_vars/all/vault.yml: make vault-edit)
+      and control characters (tab, newline, NUL, ...) from every key and value.
+  when:
+    - _pf_config_yml_stat.stat.exists
+    - _pf_config_policy.rc | default(0) != 0
+  tags: [always]

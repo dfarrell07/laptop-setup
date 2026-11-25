@@ -49,6 +49,37 @@
         reject: false
         content: |
           dotfiles_goprivate: !unsafe 'git.example.internal,pkgs.example.internal'
+      - name: interpreter override
+        reject: true
+        failure_task: Fail when config.yml sets keys or characters that change execution
+        content: |
+          ansible_python_interpreter: /tmp/ssti-guard-payload-executed
+      - name: internal variable
+        reject: true
+        failure_task: Fail when config.yml sets keys or characters that change execution
+        content: |
+          _csb_molecule_force: true
+      - name: protected variable
+        reject: true
+        failure_task: Fail when config.yml sets keys or characters that change execution
+        content: |
+          system_sysctl_hardening: {kernel.core_pattern: core}
+      - name: vault-mapped secret
+        reject: true
+        failure_task: Fail when config.yml sets keys or characters that change execution
+        content: |
+          acli_api_token: shadow
+      - name: NUL in a nested value
+        reject: true
+        failure_task: Fail when config.yml sets keys or characters that change execution
+        content: |
+          system_sysctl_extra:
+            vm.swappiness: "1\0kernel.core_pattern = |/tmp/ssti-guard-payload-executed %p"
+      - name: chunk selection and port
+        reject: false
+        content: |
+          rollout_enable: [ssh_client]
+          ssh_port: 722
 
   pre_tasks:
     - name: Ensure the fixture config directory exists inside the test container

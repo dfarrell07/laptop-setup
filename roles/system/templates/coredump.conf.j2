@@ -1,8 +1,8 @@
 # {{ ansible_managed }}
 [Coredump]
-Storage={{ system_coredump_storage | regex_replace('[\r\n].*', '') }}
-ProcessSizeMax={{ system_coredump_process_size_max | regex_replace('[\r\n].*', '') }}
-ExternalSizeMax={{ system_coredump_process_size_max | regex_replace('[\r\n].*', '') }}
-Compress={{ system_coredump_compress | regex_replace('[\r\n].*', '') }}
-MaxUse={{ system_coredump_max_use | regex_replace('[\r\n].*', '') }}
-KeepFree={{ system_coredump_keep_free | regex_replace('[\r\n].*', '') }}
+Storage={{ system_coredump_storage | regex_replace('[\r\n\x00].*', '') }}
+ProcessSizeMax={{ system_coredump_process_size_max | regex_replace('[\r\n\x00].*', '') }}
+ExternalSizeMax={{ system_coredump_process_size_max | regex_replace('[\r\n\x00].*', '') }}
+Compress={{ system_coredump_compress | regex_replace('[\r\n\x00].*', '') }}
+MaxUse={{ system_coredump_max_use | regex_replace('[\r\n\x00].*', '') }}
+KeepFree={{ system_coredump_keep_free | regex_replace('[\r\n\x00].*', '') }}

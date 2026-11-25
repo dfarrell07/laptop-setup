@@ -91,6 +91,36 @@ class SysctlTemplateTests(unittest.TestCase):
                 self.assertEqual(assignments[key], str(value), key)
             self.assertEqual(assignments['kernel.core_pattern'], '|/usr/lib/systemd/systemd-coredump %Ptouch xid')
 
+    def test_nul_cannot_start_a_new_assignment(self):
+        """systemd-sysctl reads a NUL as a line break: a value must not smuggle in kernel.core_pattern."""
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / 'sysctl.conf'
+            play = [{'hosts': 'localhost', 'gather_facts': False,
+                     'vars': {'ansible_managed': 'Ansible managed',
+                              'system_sysctl_hardening': {'vm.swappiness': '1\0kernel.core_pattern = |/tmp/x %p'}},
+                     'tasks': [{'name': 'Render sysctl template', 'ansible.builtin.template': {
+                         'src': str(ROOT / 'roles/system/templates/sysctl-hardening.conf.j2'),
+                         'dest': str(output), 'mode': '0600'}}]}]
+            playbook = Path(directory) / 'test.yml'
+            playbook.write_text(yaml.safe_dump(play))
+            result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(playbook)],
+                cwd=ROOT, env=dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
+                capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            text = output.read_text()
+            self.assertNotIn('\0', text)
+            self.assertIn('vm.swappiness = 1\n', text)
+            self.assertNotIn('core_pattern', text)
+
+    def test_systemd_parsed_templates_cut_values_at_nul(self):
+        for template in ['roles/system/templates/journald-99-hardening.conf.j2', 'roles/system/templates/coredump.conf.j2',
+                         'roles/system/templates/aide-check.timer.j2', 'roles/claude/templates/claude-queue.service.j2',
+                         'roles/system/templates/sysctl-hardening.conf.j2']:
+            with self.subTest(template=template):
+                text = (ROOT / template).read_text()
+                self.assertIn(r'[\r\n\x00', text)
+                self.assertNotIn(r"'[\r\n].*'", text)
+
 
 if __name__ == '__main__':
     unittest.main()

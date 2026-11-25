@@ -15,7 +15,8 @@
             (_ssti_report.content | b64decode | from_json) ==
             ['string', 'list', 'nested mapping', 'statement', 'unsafe tagged template', 'delimiter override header',
             'missing config after rejected payload', 'malformed YAML', 'non-mapping YAML',
-            'safe values', 'unsafe tagged safe value']
+            'safe values', 'unsafe tagged safe value', 'interpreter override', 'internal variable',
+            'protected variable', 'vault-mapped secret', 'NUL in a nested value', 'chunk selection and port']
 
     - name: Inspect controller payload execution marker
       ansible.builtin.stat:

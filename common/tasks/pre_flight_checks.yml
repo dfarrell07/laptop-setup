@@ -15,12 +15,42 @@
     - name: Scan user config for template injection
       ansible.builtin.include_tasks: config_ssti_guard.yml
 
-    - name: Load configuration
-      ansible.builtin.include_vars: default.config.yml
+    # A relative include_vars path is searched for in common/tasks/vars/, common/tasks/ and vars/ before
+    # the project root, so a planted copy there would load unscanned. Both loads use absolute paths;
+    # refuse to run while such a copy exists so nobody edits a file that is silently ignored.
+    - name: Assert no copy of config.yml or default.config.yml shadows the project-root files
+      vars:
+        _pf_shadow_candidates: >-
+          {{ [playbook_dir ~ '/', (common_project_root | default(playbook_dir)) ~ '/'] | unique
+          | product(['vars/', 'common/tasks/', 'common/tasks/vars/'], ['config.yml', 'default.config.yml'])
+          | map('join') | list }}
+        _pf_shadow_found: >-
+          {{ ((_pf_shadow_candidates | select('exists') | list)
+          + (_pf_shadow_candidates | select('link') | list)) | unique }}
+      ansible.builtin.assert:
+        that: _pf_shadow_found | length == 0
+        fail_msg: >-
+          SECURITY: remove {{ _pf_shadow_found | join(', ') }}. Only {{ playbook_dir }}/config.yml and
+          {{ playbook_dir }}/default.config.yml are configuration; a copy in vars/ or common/tasks/ would win
+          Ansible's relative include search and bypass the config.yml guard.
 
-    - name: Load user overrides
-      ansible.builtin.include_vars: config.yml
-      when: _config_yml_stat.stat.exists
+    - name: Load configuration
+      ansible.builtin.include_vars: "{{ playbook_dir }}/default.config.yml"
+
+    # config.yml is never read again after the guard: its values come from the dict the guard parsed
+    # from the one slurp and checked, set as facts on the inventory host (the container in Play 3).
+    # set_fact (precedence 19) outranks default.config.yml's include_vars (18), so config.yml still
+    # wins; like include_vars it still loses to role and include params and -e. Unlike include_vars it
+    # also overwrites facts set earlier on the host, so parse-config.py refuses those keys.
+    # The values are data, never templates (the guard rejects template markers anyway).
+    - name: Load user overrides from the dict the guard checked
+      ansible.builtin.set_fact:
+        "{{ _pf_config_item.key }}": "{{ _pf_config_item.value }}"
+      loop: "{{ _pf_config_raw | dict2items }}"
+      loop_control:
+        loop_var: _pf_config_item
+        label: "{{ _pf_config_item.key }}"
+      when: _pf_config_yml_stat.stat.exists
 
     - name: Assert playbook is not running inside a container host (hardening bypass guard)
       ansible.builtin.assert:
@@ -42,46 +72,46 @@
         - name: Check if vault-pass.sh contains hardcoded CHANGE_ME placeholder
           ansible.builtin.slurp:
             src: "{{ playbook_dir }}/scripts/vault-pass.sh"
-          register: _vault_pass_sh
+          register: _pf_vault_pass_sh
           failed_when: false
           no_log: true
 
         - name: Check if vault.yml exists and may be plaintext
           ansible.builtin.slurp:
             src: "{{ playbook_dir }}/group_vars/all/vault.yml"
-          register: _vault_yml
+          register: _pf_vault_yml
           failed_when: false
           no_log: true
 
         - name: Assert vault-pass.sh and vault.yml were readable for the stub check
           ansible.builtin.assert:
             that:
-              - _vault_pass_sh.content is defined
-              - _vault_yml.content is defined
+              - _pf_vault_pass_sh.content is defined
+              - _pf_vault_yml.content is defined
             fail_msg: >-
               SECURITY: could not read scripts/vault-pass.sh or group_vars/all/vault.yml
               (slurp failed), so the CHANGE_ME stub / plaintext vault checks cannot run.
               group_vars/all/vault.yml ships in this repo; scripts/vault-pass.sh is gitignored and is
               created by make bootstrap (CI stub) or make setup-yubikeys. Restore the missing one and re-run.
-              vault-pass.sh: {{ _vault_pass_sh.msg | default('ok') }};
-              vault.yml: {{ _vault_yml.msg | default('ok') }}
+              vault-pass.sh: {{ _pf_vault_pass_sh.msg | default('ok') }};
+              vault.yml: {{ _pf_vault_yml.msg | default('ok') }}
             quiet: true
 
         - name: Assert vault.yml is not encrypted with weak password stub
           when:
-            - _vault_pass_sh.content is defined
-            - _vault_yml.content is defined
+            - _pf_vault_pass_sh.content is defined
+            - _pf_vault_yml.content is defined
           vars:
-            _vpass_content: "{{ _vault_pass_sh.content | b64decode }}"
-            _vaultfile_first_line: "{{ (_vault_yml.content | b64decode).splitlines() | first | default('') }}"
-            _is_encrypted: >-
-              {{ _vaultfile_first_line is search('^\$ANSIBLE_VAULT') }}
-            _is_stub: >-
-              {{ _vpass_content is search("pass='CHANGE_ME'|ci-dummy-vault-password") }}
+            _pf_vpass_content: "{{ _pf_vault_pass_sh.content | b64decode }}"
+            _pf_vaultfile_first_line: "{{ (_pf_vault_yml.content | b64decode).splitlines() | first | default('') }}"
+            _pf_is_encrypted: >-
+              {{ _pf_vaultfile_first_line is search('^\$ANSIBLE_VAULT') }}
+            _pf_is_stub: >-
+              {{ _pf_vpass_content is search("pass='CHANGE_ME'|ci-dummy-vault-password") }}
           ansible.builtin.assert:
             that:
               - >-
-                (not _is_stub) or (not _is_encrypted)
+                (not _pf_is_stub) or (not _pf_is_encrypted)
             fail_msg: >-
               SECURITY CRITICAL: vault.yml is encrypted with a placeholder password ('CHANGE_ME' or the CI dummy).
               Input: scripts/vault-pass.sh is the CHANGE_ME stub or the CI dummy script.
@@ -99,44 +129,51 @@
         - name: Stat vault-pass.sh
           ansible.builtin.stat:
             path: "{{ playbook_dir }}/scripts/vault-pass.sh"
-          register: _stat_vault_pass
+          register: _pf_stat_vault_pass
 
         - name: Stat vault.yml
           ansible.builtin.stat:
             path: "{{ playbook_dir }}/group_vars/all/vault.yml"
-          register: _stat_vault_yml
+          register: _pf_stat_vault_yml
 
         - name: Assert vault-pass.sh is mode 0700
-          when: _stat_vault_pass.stat.exists
+          when: _pf_stat_vault_pass.stat.exists
           ansible.builtin.assert:
             that:
-              - _stat_vault_pass.stat.mode == '0700'
+              - _pf_stat_vault_pass.stat.mode == '0700'
             fail_msg: >-
-              SECURITY: scripts/vault-pass.sh has mode {{ _stat_vault_pass.stat.mode }}, expected 0700.
+              SECURITY: scripts/vault-pass.sh has mode {{ _pf_stat_vault_pass.stat.mode }}, expected 0700.
               Other local users must not be able to read or run it. Restrict it: chmod 0700 scripts/vault-pass.sh.
               The Makefile bootstrap target sets 0700; this check detects accidental permission drift.
 
         - name: Assert vault.yml is mode 0600
-          when: _stat_vault_yml.stat.exists
+          when: _pf_stat_vault_yml.stat.exists
           ansible.builtin.assert:
             that:
-              - _stat_vault_yml.stat.mode == '0600'
+              - _pf_stat_vault_yml.stat.mode == '0600'
             fail_msg: >-
-              SECURITY: group_vars/all/vault.yml has mode {{ _stat_vault_yml.stat.mode }}, expected 0600.
+              SECURITY: group_vars/all/vault.yml has mode {{ _pf_stat_vault_yml.stat.mode }}, expected 0600.
               Mode 0600 limits read access to the owner only.
               Restrict it: chmod 0600 group_vars/all/vault.yml.
 
     - name: Assert ssh_port in config.yml is a plain decimal port number (sshd injection guard)
+      vars:
+        _pf_ssh_port_raw: "{{ _pf_config_raw.get('ssh_port', 722) }}"
       ansible.builtin.assert:
         that:
-          - _config_raw.get('ssh_port', 722) | int >= 1
-          - _config_raw.get('ssh_port', 722) | int <= 65535
-          - _config_raw.get('ssh_port', 722) | int != 22
+          # A YAML int (the integer test excludes booleans: true would render Port 0 in sshd but True/tcp in
+          # firewalld) or a quoted string of digits only; floats, signs, spaces and underscores fail.
+          - >-
+            _pf_ssh_port_raw is integer or (_pf_ssh_port_raw is string
+            and _pf_ssh_port_raw | regex_search('^[0-9]{1,5}$') == _pf_ssh_port_raw)
+          - _pf_ssh_port_raw | int >= 1
+          - _pf_ssh_port_raw | int <= 65535
+          - _pf_ssh_port_raw | int != 22
         fail_msg: >-
           SECURITY: ssh_port in config.yml must be a plain decimal integer (1-65535) and must not be 22.
           Threat: setting ssh_port: 22 silently removes the port-obscurity layer, exposing hardened sshd
           to direct internet scanning and automated credential-stuffing on the standard SSH port.
-          Input: ssh_port={{ _config_raw.get('ssh_port', 722) }} in config.yml.
+          Input: ssh_port={{ _pf_config_raw.get('ssh_port', 722) }} in config.yml.
           Mechanism: the SELinux relabeling block in sshd.yml is gated `when: ssh_port | int != 22`
           and silently skips; sshd.socket masking leaves the standard port-22 path unchanged.
           Impact: all auth hardening remains intact but port-obscurity is lost without operator awareness.
@@ -146,11 +183,11 @@
     - name: Assert system_selinux_policy is an allowlisted value (SELinux policy weakening guard)
       ansible.builtin.assert:
         that:
-          - _config_raw.get('system_selinux_policy', 'targeted') in ['targeted', 'strict']
+          - _pf_config_raw.get('system_selinux_policy', 'targeted') in ['targeted', 'strict']
         fail_msg: >-
           SECURITY: system_selinux_policy in config.yml must be 'targeted' or 'strict'.
           Threat: setting system_selinux_policy: minimum applies near-permissive MAC enforcement.
-          Input: system_selinux_policy='{{ _config_raw.get('system_selinux_policy', 'targeted') }}' in config.yml.
+          Input: system_selinux_policy='{{ _pf_config_raw.get('system_selinux_policy', 'targeted') }}' in config.yml.
           Mechanism: ansible.posix.selinux applies the named policy; the post-apply assertion in
           hardening_core.yml checks ansible_facts['selinux'].type == system_selinux_policy, so
           'minimum' passes verification while SELinux is effectively near-permissive.
@@ -161,7 +198,7 @@
     - name: Assert system_tmout in config.yml contains only safe digits (shell injection guard)
       ansible.builtin.assert:
         that:
-          - _config_raw.get('system_tmout', '0') | string is match('^[0-9]*$')
+          - _pf_config_raw.get('system_tmout', '0') | string is match('^[0-9]*$')
         fail_msg: >-
           SECURITY: system_tmout in config.yml must be a non-negative integer (seconds).
           This value is rendered verbatim into /etc/profile.d/tmout.sh, /etc/bash.bashrc,
@@ -172,9 +209,9 @@
     - name: Assert system_umask and system_keymap contain only safe characters (login.defs/vconsole injection guard)
       ansible.builtin.assert:
         that:
-          - _config_raw.get('system_umask', '027') is string
-          - _config_raw.get('system_umask', '027') | string is match('^[0-7]+$')
-          - _config_raw.get('system_keymap', 'us') | string is match('^[a-zA-Z0-9_-]+$')
+          - _pf_config_raw.get('system_umask', '027') is string
+          - _pf_config_raw.get('system_umask', '027') | string is match('^[0-7]+$')
+          - _pf_config_raw.get('system_keymap', 'us') | string is match('^[a-zA-Z0-9_-]+$')
         fail_msg: >-
           SECURITY: system_umask or system_keymap in config.yml contains unsafe characters.
           system_umask is written into /etc/login.defs via lineinfile line:; the octal-only
@@ -187,11 +224,11 @@
     - name: Assert system_sudo_timestamp_timeout is an integer in [0, 60] (sudoers injection guard)
       ansible.builtin.assert:
         that:
-          - _config_raw.get('system_sudo_timestamp_timeout', 15) | string is match('^[0-9]+$')
-          - _config_raw.get('system_sudo_timestamp_timeout', 15) | int <= 60
+          - _pf_config_raw.get('system_sudo_timestamp_timeout', 15) | string is match('^[0-9]+$')
+          - _pf_config_raw.get('system_sudo_timestamp_timeout', 15) | int <= 60
         fail_msg: >-
           SECURITY: system_sudo_timestamp_timeout in config.yml must be an integer in [0, 60].
-          Input: system_sudo_timestamp_timeout='{{ _config_raw.get("system_sudo_timestamp_timeout", 15) }}' in config.yml.
+          Input: system_sudo_timestamp_timeout='{{ _pf_config_raw.get("system_sudo_timestamp_timeout", 15) }}' in config.yml.
           Mechanism: the value is rendered verbatim into /etc/sudoers.d/99-hardening as
           'Defaults timestamp_timeout=<value>'; non-integer or out-of-range values break sudoers
           syntax (visudo -cf rejects the file) or produce unexpected sudo cache behavior.
@@ -205,7 +242,7 @@
           # system_core_pattern is a sysctl VALUE, not a key; blocks newlines and shell metacharacters.
           # Pipe-based coredump handlers (e.g. '|/usr/lib/systemd/systemd-coredump ...') are reserved
           # for role defaults only and must not be overridden via config.yml — pipe exec runs as root.
-          - _config_raw.get('system_core_pattern', '') | string is match('^[a-zA-Z0-9/_.%-]*$')
+          - _pf_config_raw.get('system_core_pattern', '') | string is match('^[a-zA-Z0-9/_.%-]*$')
         fail_msg: >-
           SECURITY: system_core_pattern in config.yml contains unsafe characters or a pipe handler.
           Threat: kernel.core_pattern with a leading pipe ('|') causes the kernel to exec the named
@@ -222,7 +259,7 @@
     - name: Assert system_ssh_rekey_limit in config.yml has safe format (sshd config injection guard)
       ansible.builtin.assert:
         that:
-          - _config_raw.get('system_ssh_rekey_limit', '1G 1h') | string is match('^[0-9]+[KMG]?( [0-9]+[smhdw])?$|^(none|default)$')
+          - _pf_config_raw.get('system_ssh_rekey_limit', '1G 1h') | string is match('^[0-9]+[KMG]?( [0-9]+[smhdw])?$|^(none|default)$')
         fail_msg: >-
           SECURITY: system_ssh_rekey_limit in config.yml contains unsafe characters.
           This value is rendered into RekeyLimit in sshd_config.d/00-hardening.conf;
@@ -234,10 +271,10 @@
     - name: Assert SSH integer vars contain only plain non-negative integers (sshd injection guard)
       ansible.builtin.assert:
         that:
-          - _config_raw.get('system_ssh_max_sessions', '10') | string is match('^[0-9]+$')
-          - _config_raw.get('system_ssh_client_alive_interval', '300') | string is match('^[0-9]+$')
-          - _config_raw.get('system_ssh_client_alive_count_max', '2') | string is match('^[0-9]+$')
-          - _config_raw.get('system_ssh_unused_connection_timeout', '600') | string is match('^[0-9]*$')
+          - _pf_config_raw.get('system_ssh_max_sessions', '10') | string is match('^[0-9]+$')
+          - _pf_config_raw.get('system_ssh_client_alive_interval', '300') | string is match('^[0-9]+$')
+          - _pf_config_raw.get('system_ssh_client_alive_count_max', '2') | string is match('^[0-9]+$')
+          - _pf_config_raw.get('system_ssh_unused_connection_timeout', '600') | string is match('^[0-9]*$')
         fail_msg: >-
           SECURITY: system_ssh_max_sessions, system_ssh_client_alive_interval,
           system_ssh_client_alive_count_max, or system_ssh_unused_connection_timeout
@@ -249,11 +286,11 @@
     - name: Assert SSH algorithm vars contain only safe characters (sshd injection guard)
       ansible.builtin.assert:
         that:
-          - _config_raw.get('ssh_host_key_algorithms', 'ssh-ed25519') | string is match('^[a-zA-Z0-9@.,_-]+$')
-          - _config_raw.get('ssh_ciphers', '') | string is match('^[a-zA-Z0-9@.,_-]*$')
-          - _config_raw.get('ssh_macs', '') | string is match('^[a-zA-Z0-9@.,_-]*$')
-          - _config_raw.get('ssh_kex_algorithms', '') | string is match('^[a-zA-Z0-9@.,_-]*$')
-          - _config_raw.get('ssh_pubkey_accepted_algorithms', []) | map('string') | join(',') is match('^[a-zA-Z0-9@.,_-]*$')
+          - _pf_config_raw.get('ssh_host_key_algorithms', 'ssh-ed25519') | string is match('^[a-zA-Z0-9@.,_-]+$')
+          - _pf_config_raw.get('ssh_ciphers', '') | string is match('^[a-zA-Z0-9@.,_-]*$')
+          - _pf_config_raw.get('ssh_macs', '') | string is match('^[a-zA-Z0-9@.,_-]*$')
+          - _pf_config_raw.get('ssh_kex_algorithms', '') | string is match('^[a-zA-Z0-9@.,_-]*$')
+          - _pf_config_raw.get('ssh_pubkey_accepted_algorithms', []) | map('string') | join(',') is match('^[a-zA-Z0-9@.,_-]*$')
         fail_msg: >-
           SECURITY: ssh_host_key_algorithms, ssh_ciphers, ssh_macs, ssh_kex_algorithms, or
           ssh_pubkey_accepted_algorithms in config.yml contains unsafe characters. These values
@@ -267,8 +304,8 @@
     - name: Assert system_bluetooth_* vars contain no newlines (BlueZ config injection guard)
       ansible.builtin.assert:
         that:
-          - _config_raw.get('system_bluetooth_name', 'Bluetooth') | string is not search('\n')
-          - _config_raw.get('system_bluetooth_privacy', 'device') | string is not search('\n')
+          - _pf_config_raw.get('system_bluetooth_name', 'Bluetooth') | string is not search('\n')
+          - _pf_config_raw.get('system_bluetooth_privacy', 'device') | string is not search('\n')
         fail_msg: >-
           SECURITY: system_bluetooth_name or system_bluetooth_privacy in config.yml
           contains embedded newlines. These values are rendered verbatim into
@@ -283,12 +320,12 @@
     - name: Assert system_chrony_* vars in config.yml contain only safe characters (chrony.conf injection guard)
       ansible.builtin.assert:
         that:
-          - _config_raw.get('system_chrony_logdir', '') | string is match('^[a-zA-Z0-9/._-]*$')
-          - _config_raw.get('system_chrony_driftfile', '') | string is match('^[a-zA-Z0-9/._-]*$')
-          - _config_raw.get('system_chrony_ntsdumpdir', '') | string is match('^[a-zA-Z0-9/._-]*$')
-          - _config_raw.get('system_chrony_leapsecmode', '') | string is match('^[a-zA-Z0-9-]*$')
-          - _config_raw.get('system_chrony_leapseclist', '') | string is match('^[a-zA-Z0-9/._-]*$')
-          - _config_raw.get('system_chrony_minsources', '') | string is match('^[0-9]*$')
+          - _pf_config_raw.get('system_chrony_logdir', '') | string is match('^[a-zA-Z0-9/._-]*$')
+          - _pf_config_raw.get('system_chrony_driftfile', '') | string is match('^[a-zA-Z0-9/._-]*$')
+          - _pf_config_raw.get('system_chrony_ntsdumpdir', '') | string is match('^[a-zA-Z0-9/._-]*$')
+          - _pf_config_raw.get('system_chrony_leapsecmode', '') | string is match('^[a-zA-Z0-9-]*$')
+          - _pf_config_raw.get('system_chrony_leapseclist', '') | string is match('^[a-zA-Z0-9/._-]*$')
+          - _pf_config_raw.get('system_chrony_minsources', '') | string is match('^[0-9]*$')
         fail_msg: >-
           SECURITY: system_chrony_logdir, system_chrony_driftfile, system_chrony_ntsdumpdir,
           system_chrony_leapsecmode, system_chrony_leapseclist,
@@ -301,11 +338,11 @@
 
     - name: Assert system_chrony_nts_servers override requires explicit trust acknowledgement
       when:
-        - _config_yml_raw.content is defined
-        - _config_raw.get('system_chrony_nts_servers') is not none
+        - _pf_config_yml_raw.content is defined
+        - _pf_config_raw.get('system_chrony_nts_servers') is not none
       ansible.builtin.assert:
         that:
-          - _config_raw.get('system_chrony_nts_servers_confirmed', false) | bool
+          - _pf_config_raw.get('system_chrony_nts_servers_confirmed', false) | bool
         fail_msg: >-
           SECURITY: system_chrony_nts_servers is set in config.yml but
           system_chrony_nts_servers_confirmed is not true. NTS servers are clock
@@ -315,11 +352,11 @@
 
     - name: Assert system_chrony_authselectmode prefer requires explicit acknowledgement
       when:
-        - _config_yml_raw.content is defined
-        - _config_raw.get('system_chrony_authselectmode', '') == 'prefer'
+        - _pf_config_yml_raw.content is defined
+        - _pf_config_raw.get('system_chrony_authselectmode', '') == 'prefer'
       ansible.builtin.assert:
         that:
-          - _config_raw.get('system_chrony_authselectmode_prefer_confirmed', false) | bool
+          - _pf_config_raw.get('system_chrony_authselectmode_prefer_confirmed', false) | bool
         fail_msg: >-
           SECURITY: system_chrony_authselectmode=prefer is set in config.yml but
           system_chrony_authselectmode_prefer_confirmed is not true. prefer mode allows
@@ -330,66 +367,52 @@
 
     - name: Assert system_aide_monitoring_etc_paths contains only safe path characters (AIDE monitoring bypass guard)
       vars:
-        _aide_paths: "{{ _config_raw.get('system_aide_monitoring_etc_paths', []) }}"
-        _unsafe_entries: "{{ _aide_paths | map('string') | select('search', '[^a-zA-Z0-9._/-]') | list }}"
+        _pf_aide_paths: "{{ _pf_config_raw.get('system_aide_monitoring_etc_paths', []) }}"
+        _pf_unsafe_entries: "{{ _pf_aide_paths | map('string') | select('search', '[^a-zA-Z0-9._/-]') | list }}"
       ansible.builtin.assert:
         that:
-          - _unsafe_entries | length == 0
+          - _pf_unsafe_entries | length == 0
         fail_msg: >-
           SECURITY: system_aide_monitoring_etc_paths entries must contain only alphanumerics, dots,
           underscores, hyphens and slashes; a newline or other character would be written into
           /etc/aide.conf as extra directives.
-          Unsafe entries found: {{ _unsafe_entries }}.
+          Unsafe entries found: {{ _pf_unsafe_entries }}.
 
     # NOTE: vault assertion is NOT gated by _pf_is_molecule — catching vault_* in config.yml is always an error, even in CI.
     # NOTE: This block is unconditional (no _pf_vault_asserted is not defined guard) so that
     # passing -e _pf_vault_asserted=true cannot bypass these security assertions. The guard was
     # removed because extra-vars (precedence 22) can pre-define any simple variable, silently
-    # skipping all four checks below. verify-ansible-args.sh rejects _pf_vault_asserted= on the
+    # skipping the checks below. verify-ansible-args.sh rejects _pf_vault_asserted= on the
     # CLI as a first line of defence; this unconditional block is the Ansible-layer backstop.
     - name: Assert config.yml vault and secret-key constraints
       block:
         - name: Assert config.yml contains no vault_* keys
           ansible.builtin.assert:
             that: >-
-              (_config_raw.keys() | select('match', 'vault_') | list | length == 0)
+              (_pf_config_raw.keys() | select('match', 'vault_') | list | length == 0)
             fail_msg: >-
-              config.yml must not define vault_* variables — include_vars outranks
-              group_vars (precedence 18 vs 4-5), so these keys silently shadow
-              vault.yml: {{ (_config_raw | default({})).keys() | select('match', 'vault_') | list }}
+              config.yml must not define vault_* variables — config.yml values outrank
+              group_vars (precedence 19 vs 4-5), so these keys silently shadow
+              vault.yml: {{ (_pf_config_raw | default({})).keys() | select('match', 'vault_') | list }}
 
-        - name: Assert config.yml contains no indirection-layer secret keys
-          ansible.builtin.assert:
-            # Update this list when new direct-secret keys are added to group_vars/all/vault.yml
-            that: >-
-              (_config_raw.keys() | select('in', ['ssh_auth_key', 'ssh_auth_key_pub',
-               'ssh_signing_key', 'ssh_signing_key_pub', 'rh_git_key',
-               'notes_transcrypt_password', 'registry_tokens', 'system_grub_password_hash',
-               'codex_api_key']) | list | length == 0)
-            fail_msg: >-
-              config.yml must not define these indirection-layer keys — include_vars
-              outranks group_vars/all/vars.yml (precedence 18 vs 4-5), silently
-              bypassing vault for: {{ (_config_raw | default({})).keys()
-              | select('in', ['ssh_auth_key', 'ssh_auth_key_pub', 'ssh_signing_key',
-              'ssh_signing_key_pub', 'rh_git_key', 'notes_transcrypt_password',
-              'registry_tokens', 'system_grub_password_hash']) | list }}. Use group_vars/all/vault.yml for these secrets instead.
-
+        # Names mapped from vault_* values (ssh_auth_key, acli_api_token, ...) are rejected earlier by
+        # config_ssti_guard.yml, which derives them from group_vars/all and the role defaults.
         - name: Assert config.yml contains no security-policy key overrides
           ansible.builtin.assert:
             that: >-
-              (_config_raw.keys() | select('in', ['claude_deny_sensitive',
+              (_pf_config_raw.keys() | select('in', ['claude_deny_sensitive',
                'claude_deny_write_only',
                'claude_own_instance_deny_read', 'claude_own_instance_deny_write']) | list | length == 0)
             fail_msg: >-
               config.yml must not override claude_deny_sensitive, claude_deny_write_only,
               claude_own_instance_deny_read or claude_own_instance_deny_write — these variables
-              control the Claude settings.json deny-list. include_vars (precedence 18) outranks
+              control the Claude settings.json deny-list. config.yml values (precedence 19) outrank
               role defaults (precedence 2), so defining them in config.yml silently empties
               deny-lists. Remove them from config.yml; set them in
               roles/claude/defaults/main.yml if policy change is intentional.
 
         - name: Assert redhat_splunk_nologin_shell is a non-login shell (CIS 5.6)
-          when: "'redhat_splunk_nologin_shell' in (_config_raw | default({}))"
+          when: "'redhat_splunk_nologin_shell' in (_pf_config_raw | default({}))"
           ansible.builtin.assert:
             that:
               - redhat_splunk_nologin_shell in ['/sbin/nologin', '/usr/sbin/nologin', '/usr/bin/nologin', '/bin/false']
@@ -449,18 +472,30 @@
         - name: Assert USBGuard whitelist/extra_rules in play namespace are well-formed
             (USBGuard injection guard)
           vars:
-            _wl_invalid: >-
+            _pf_wl_invalid: >-
               {{ system_usbguard_whitelist | default([]) | map('string')
               | reject('match', '^(allow|block|reject)\s+.+') | list }}
-            _er_invalid: >-
+            _pf_er_invalid: >-
               {{ system_usbguard_extra_rules | default([]) | map('string')
               | reject('match', '^(allow|block|reject)\s+.+') | list }}
+            # allow rules that admit any vendor (id *:* or *:<pid>, also inside an id set) unless a hash pins the
+            # device, or name no narrowing attribute (a name alone is whatever the device reports). Quoted
+            # strings are blanked first so `name "foo id bar"` is not read as an id keyword.
+            _pf_allow_rules: >-
+              {{ [system_usbguard_whitelist | default([]), system_usbguard_extra_rules | default([])] | flatten(levels=1)
+              | map('string') | select('match', '^\s*allow\s') | map('regex_replace', '"[^"]*"', '""') | list }}
+            _pf_allow_open: >-
+              {{ (_pf_allow_rules | select('search', '(^|\s)id\s+([a-z-]+\s+)?(\{\s*([0-9a-fA-F*]{1,4}:[0-9a-fA-F*]{1,4}\s+)*)?\*:')
+              | reject('search', '(^|\s)hash\s') | list)
+              + (_pf_allow_rules
+              | reject('search', '(^|\s)(id|hash|parent-hash|serial|via-port|with-interface|with-connect-type)\s') | list) }}
           ansible.builtin.assert:
             that:
               - system_usbguard_whitelist | default([]) | map('string') | select('search', '\n') | list | length == 0
               - system_usbguard_extra_rules | default([]) | map('string') | select('search', '\n') | list | length == 0
-              - _wl_invalid | length == 0
-              - _er_invalid | length == 0
+              - _pf_wl_invalid | length == 0
+              - _pf_er_invalid | length == 0
+              - _pf_allow_open | length == 0
             fail_msg: >-
               SECURITY: USBGuard rules in the play namespace are malformed:
               system_usbguard_whitelist={{ system_usbguard_whitelist | default([]) }},
@@ -474,8 +509,13 @@
               rule that allows ALL unwhitelisted devices. Each rule must include a selector
               (e.g. 'allow id 1234:5678', 'allow serial "abc123"').
 
-              Invalid whitelist entries: {{ _wl_invalid }}.
-              Invalid extra_rules entries: {{ _er_invalid }}.
+              An allow rule must also pin the vendor or a hash ('id *:*' or 'id *:1234' admits any device) and
+              narrow by id, hash, parent-hash, serial, via-port, with-interface or with-connect-type
+              ('allow name "x"' matches whatever name a device reports). make usb-add writes 'allow id VVVV:PPPP ...'.
+
+              Invalid whitelist entries: {{ _pf_wl_invalid }}.
+              Invalid extra_rules entries: {{ _pf_er_invalid }}.
+              Over-broad allow rules: {{ _pf_allow_open }}.
 
         - name: Assert DNS server/domain vars in play namespace contain only safe characters (-e override guard)
           ansible.builtin.assert:
