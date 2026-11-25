@@ -242,8 +242,8 @@ packages_oras_sha256_arm64: "b84269e78dfc2d5329a4aab373da3200de95e6c138338cf6c66
 # acli (Atlassian CLI: Jira for submariner-release-management and the jira skill); every profile. On Fedora x86_64
 # (not RHEL CSB) the rpm is fetched by version and SHA256 and installed as a file, with no third-party repo file (CSB IT flags repos outside
 # its allowlist). The rpm header is unsigned; the pin was cross-checked against Atlassian's GPG-signed repo metadata
-# (repomd primary.xml, https://acli.atlassian.com/linux/rpm/). The internal-mirror path (repos_dnf_acli_baseurl)
-# still works and takes precedence when set.
+# (repomd primary.xml, https://acli.atlassian.com/linux/rpm/). This is the only acli source: the unsigned internal-mirror
+# repo (repos_dnf_acli_baseurl) is retired.
 packages_acli_version: "1.3.40-stable"
 packages_acli_rpm_sha256: "952cb41746843d71fb7433ce569c8abc0739dc059dcde8f9c4b0dcfa2a482476"
 # macOS: the same release's tarball into ~/.local/bin (no sudo). Checksums cross-checked against the 1.3.40 formula in

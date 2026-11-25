@@ -402,7 +402,8 @@
             that: >-
               (_pf_config_raw.keys() | select('in', ['claude_deny_sensitive',
                'claude_deny_write_only',
-               'claude_own_instance_deny_read', 'claude_own_instance_deny_write']) | list | length == 0)
+               'claude_own_instance_deny_read', 'claude_own_instance_deny_write',
+               'repos_dnf_redhat_trusted_fingerprints']) | list | length == 0)
             fail_msg: >-
               config.yml must not override claude_deny_sensitive, claude_deny_write_only,
               claude_own_instance_deny_read or claude_own_instance_deny_write — these variables
@@ -410,6 +411,8 @@
               role defaults (precedence 2), so defining them in config.yml silently empties
               deny-lists. Remove them from config.yml; set them in
               roles/claude/defaults/main.yml if policy change is intentional.
+              Nor repos_dnf_redhat_trusted_fingerprints, the signing keys a config.yml repo may use:
+              pin them in roles/repos_dnf/defaults/main.yml by PR.
 
         - name: Assert redhat_splunk_nologin_shell is a non-login shell (CIS 5.6)
           when: "'redhat_splunk_nologin_shell' in (_pf_config_raw | default({}))"

@@ -347,7 +347,9 @@ open until you are done. To undo:
 - **Verify:** no check mapped; `dnf repolist`.
 - **Undo:** delete the `.repo` files the role wrote under `/etc/yum.repos.d` (RPM Fusion ones belong to the `rpmfusion-free-release` /
   `rpmfusion-nonfree-release` packages: `sudo dnf remove` those instead), `sudo dnf versionlock delete google-cloud-cli acli` if the role
-  pinned them, then `sudo dnf clean all`. Imported repo GPG keys stay in the rpmdb (harmless).
+  pinned them (acli: the retired internal-mirror path), then `sudo dnf clean all`. Imported repo GPG keys stay in the rpmdb (harmless),
+  as do the verified key files `/etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-tailscale` and
+  `/etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-redhat-internal` (the latter only if that repo was set).
 
 ## sys_baseline
 

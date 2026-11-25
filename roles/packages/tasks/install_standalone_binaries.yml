@@ -48,7 +48,6 @@
     - is_dnf
     - not csb_rhel  # IT owns RHEL CSB hosts: no third-party rpm there
     - ansible_facts['architecture'] == 'x86_64'
-    - repos_dnf_acli_baseurl is not defined  # the internal mirror path in repos_dnf installs it instead
   vars:
     _acli_pin: "{{ packages_acli_version | regex_replace('-.*', '') }}"
   block:
@@ -129,6 +128,16 @@
     - name: Assert the acli version is a plain release string (interpolated into the URL)
       ansible.builtin.assert:
         that: packages_acli_version is match('^[0-9]+(\\.[0-9]+)*-stable\\Z')
+
+    # config.yml values are set as facts, which outrank the block vars above: check the path and arch they feed (a
+    # command, the download URL and the install destination) against their inline values before any use.
+    - name: Assert the acli install path and arch are the computed ones (macOS)
+      ansible.builtin.assert:
+        that:
+          - _acli_bin == ansible_facts['user_dir'] ~ '/.local/bin/acli'
+          - _acli_arch == ('arm64' if ansible_facts['architecture'] == 'arm64' else 'amd64')
+        fail_msg: >-
+          SECURITY: _acli_bin and _acli_arch are internal; remove them from config.yml (or wherever they are set).
 
     - name: Read the installed acli version (macOS)
       ansible.builtin.command:

@@ -224,6 +224,21 @@ the guard and pre-flight register or set starts with `_pf_`, which the wrapper p
 Each role also re-validates its critical inputs at the start of `main.yml` (for example, `roles/claude/tasks/main.yml` constrains
 `claude_install_url` to `claude.ai` or `anthropic.com`), so a skipped `pre_tasks` does not reach the installer.
 
+**config.yml names hosts, not trust.** A dnf repo whose URL comes from `config.yml` (the Red Hat internal repo) needs `gpgcheck`, a
+signing key whose primary fingerprint is pinned in `repos_dnf_redhat_trusted_fingerprints` in `roles/repos_dnf/defaults/main.yml`,
+and a fixed local `gpgkey` written only after that check. The key import reads the pins from that file at the point of use and gets
+them, the key path and the validated URL through its environment, not as script text; a different value of the variable from any
+other source stops the run. The fetched key is parsed by both gpg and rpm (in a scratch rpmdb); it is refused unless it is an
+armored public key block, both parsers see the same keys, and every one is pinned. `includepkgs` (`repos_dnf_redhat_packages`, also
+from `config.yml`) only narrows the repo; the pinned key is the control. A `redhat-internal.repo` without that shape (from before
+the pins) is removed before any check can stop the run (not on CSB, where the file may be IT's). The RPM Fusion and Tailscale
+pins are read from the same tracked file the same way. `tailscale-stable.repo` also points `gpgkey` at the checked key file
+(`/etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-tailscale`), not the URL. RPM Fusion's repo files come from its release package, whose
+signature is checked against the pinned key, and already use package-owned `file://` keys. `config.yml` values are set as
+facts (precedence 19), which outrank block and task `vars:`, so in `roles/repos_dnf` and the acli tasks no block or task var feeds a
+URL, path or shell: each value is computed inline or checked against its inline value before use. acli installs only from
+Atlassian's SHA256-pinned rpm; the unsigned internal-mirror repo (`repos_dnf_acli_baseurl`) is retired and its repo file removed.
+
 **Chunk selection** (`rollout_enable` in `config.yml`): the wrapper turns disabled chunks into `--skip-tags` and a Play 0 `always` assert
 rejects a direct run that would apply one. Skipping a chunk also skips `always` guards inside it; top-level guards stay. Details:
 [docs/rollout-plan.md](docs/rollout-plan.md).

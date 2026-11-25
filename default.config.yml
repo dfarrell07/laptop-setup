@@ -571,14 +571,19 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     packages_subctl_versioned: [{version, suffix}]  (go install older versions as subctlXX)
 
 # Internal Red Hat repo URLs — absent here intentionally (gitignored secrets).
-# Set these in config.yml to activate the acli and redhat-internal repo tasks:
-#   repos_dnf_acli_baseurl: "https://..."        # acli/rosa CLI internal mirror
+# Set these in config.yml to activate the redhat-internal repo task:
 #   repos_dnf_redhat_baseurl: "https://..."      # Red Hat internal RPM repo
 #   repos_dnf_redhat_gpgkey: "https://..."       # GPG key URL for the above repo
-#   repos_dnf_redhat_gpg_fingerprint: "<40 hex>" # full fingerprint of that key (required when repos_dnf_redhat_baseurl is set)
+#   repos_dnf_redhat_packages: [rhpkg]           # packages the repo may supply (includepkgs; required, plain names)
+#   repos_dnf_redhat_repo_gpgcheck: false        # only if the repo signs packages but not its metadata (default true)
 #   repos_dnf_internal_hosts: [pkgs.example.internal]  # exact hosts those URLs may target (empty: only
-#     public repo.redhat.com/keys.redhat.com are accepted; acli needs an entry here)
-# Without them the tasks are silently skipped (guarded by `is defined`).
+#     public repo.redhat.com/keys.redhat.com are accepted)
+# Without them the task is silently skipped (guarded by `is defined`). config.yml names hosts, not trust: the repo's
+# signing key must be pinned in repos_dnf_redhat_trusted_fingerprints in roles/repos_dnf/defaults/main.yml (by PR;
+# config.yml may not set it), and every key at the gpgkey URL (an armored public key block) must match a pin, or no key
+# or repo is added.
+# repos_dnf_redhat_gpg_fingerprint and repos_dnf_acli_baseurl are no longer read: acli installs only from Atlassian's
+# SHA256-pinned rpm (packages_acli_version), and the old unsigned acli repo file is removed.
 
 # Container settings
 # container_image defaults to a digest-pinned registry.fedoraproject.org/fedora-toolbox:44 (roles/distrobox/defaults). To use another
