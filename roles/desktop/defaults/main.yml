@@ -40,8 +40,21 @@ desktop_gtk_icon_theme: Adwaita  # GTK icon theme for Sway
 # k10temp hwmon index on ThinkPad P16v Gen 1 AMD. hwmon index varies by machine/kernel; verify with:
 # ls /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon*/temp1_input
 desktop_i3status_cpu_temp_path: ""  # set correct hwmon sysfs path in config.yml; empty disables the block
-# Status-bar VPN field naming active VPNs (NetworkManager VPN/WireGuard, Tailscale, NetBird) via a bar wrapper
+# Status-bar VPN blocks via the bar wrapper: one per entry of desktop_i3status_vpns, always shown ("NetBird up" in
+# green, "Tailscale down", "<name> missing" in yellow when its command is not installed), plus active NetworkManager
+# VPN/WireGuard connections by name
 desktop_i3status_vpn: true
+# A VPN is up when `command` (an argv list, run with a 2 s timeout) prints a line matching the extended regex
+# `connected`. NetBird (IT's VPN, CSB machines only) counts as up while its management connection is: peers or Signal
+# can still be down. Add a VPN in config.yml with desktop_i3status_vpns_extra, e.g.
+#   desktop_i3status_vpns_extra: [{name: Mullvad, command: [mullvad, status], connected: '^Connected'}]
+desktop_i3status_vpns_extra: []
+desktop_i3status_vpns: >-
+  {{ ([{'name': 'NetBird', 'command': ['netbird', 'status'], 'connected': '^Management: Connected'}]
+      if csb_detected | default(false) | bool else [])
+     + [{'name': 'Tailscale', 'command': ['tailscale', 'status', '--json', '--peers=false'],
+         'connected': '"BackendState": *"Running"'}]
+     + desktop_i3status_vpns_extra }}
 # Status-bar free-space fields, in order; unmounted paths are skipped. / is the whole btrfs volume (/home, containers,
 # VMs); /tmp is RAM-backed tmpfs, so it shows memory that builds can fill
 desktop_i3status_disks: [/, /tmp]

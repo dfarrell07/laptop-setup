@@ -186,8 +186,9 @@ processes can use `bpf()` (including package-manager dependencies) once unprivil
   The first `tailscale up` on a never-logged-in node resets it, so log in with `tailscale up --netfilter-mode=off`; the smoke check
   `tailscale-netbird-netfilter` catches a revert. Check with `tailscale debug prefs` (`"NetfilterMode": 0`). Remaining overlaps: NetBird routes 100.100.100.100-102 to `wt0` ahead of
   Tailscale's table, so query MagicDNS through systemd-resolved (`resolvectl query`), not `dig @100.100.100.100`; and a Tailscale
-  device whose address falls in NetBird's /15 (`netbird status`) is routed to `wt0`, so change that device's IP in the Tailscale
-  admin console.
+  device whose address falls in NetBird's /15 (`netbird status`) is routed to `wt0` (the smoke check `tailscale-netbird-routes`
+  names such peers while Tailscale runs), so change that device's IP in the Tailscale admin console. The sway bar shows each
+  VPN on its own (`NetBird up`, `Tailscale down`); add one with `desktop_i3status_vpns_extra`.
 
 ## Notes repo
 

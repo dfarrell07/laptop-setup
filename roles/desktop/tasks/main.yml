@@ -214,7 +214,31 @@
         mode: "0644"
         backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
 
-    - name: Deploy the bar status_command wrapper (RAM units, VPN field)
+    - name: Validate desktop_i3status_vpns
+      ansible.builtin.assert:
+        that:
+          - desktop_i3status_vpns is sequence and desktop_i3status_vpns is not string
+          - desktop_i3status_vpns | select('mapping') | list | length == desktop_i3status_vpns | length
+          - desktop_i3status_vpns | rejectattr('name', 'defined') | list | length == 0
+          - desktop_i3status_vpns | map(attribute='name') | reject('match', '^[A-Za-z0-9][A-Za-z0-9 ._-]{0,31}$') | list | length == 0
+          - desktop_i3status_vpns | rejectattr('command', 'defined') | list | length == 0
+          - desktop_i3status_vpns | map(attribute='command') | reject('sequence') | list | length == 0
+          - desktop_i3status_vpns | map(attribute='command') | select('string') | list | length == 0
+          - desktop_i3status_vpns | map(attribute='command') | map('length') | select('eq', 0) | list | length == 0
+          - desktop_i3status_vpns | map(attribute='command') | flatten | reject('string') | list | length == 0
+          - desktop_i3status_vpns | rejectattr('connected', 'defined') | list | length == 0
+          - desktop_i3status_vpns | map(attribute='connected') | reject('string') | list | length == 0
+          - desktop_i3status_vpns | map(attribute='connected') | select('eq', '') | list | length == 0
+          # control characters (a YAML block scalar's trailing newline) would break the bar's JSON or match every line
+          - desktop_i3status_vpns | map(attribute='name') | select('search', '[\x00-\x1f\x7f]') | list | length == 0
+          - desktop_i3status_vpns | map(attribute='connected') | select('search', '[\x00-\x1f\x7f]') | list | length == 0
+        fail_msg: >-
+          desktop_i3status_vpns must be a list of {name, command, connected}: name 1-32 letters, digits, space, . _ -;
+          command a non-empty list of strings (argv, no shell); connected a non-empty extended regex. Example:
+          {name: Mullvad, command: [mullvad, status], connected: '^Connected'}
+      when: desktop_i3status_vpn | bool
+
+    - name: Deploy the bar status_command wrapper (RAM units, VPN blocks)
       ansible.builtin.template:
         src: i3status-bar.sh.j2
         dest: "{{ ansible_facts['user_dir'] }}/.config/i3status/bar-status"

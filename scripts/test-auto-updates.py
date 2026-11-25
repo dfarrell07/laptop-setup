@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Automatic updates: dnf-automatic config and CSB guard, Flatpak timer, the user updater and the bar's UPD field."""
+import json
 import os
 from pathlib import Path
 import shutil
@@ -338,6 +339,63 @@ class AutoUpdateTests(unittest.TestCase):
                 result = subprocess.run(['bash', str(directory / 'bar-status')], capture_output=True, text=True,
                                         timeout=30, env=dict(os.environ, PATH=f'{stubs}:/usr/bin:/bin', HOME=name))
                 self.assertEqual('"full_text":"UPD"' in result.stdout.splitlines()[-1], failed is not None)
+
+    def test_bar_shows_every_configured_vpn_with_its_own_state(self):
+        defaults = yaml.safe_load((ROOT / 'roles/desktop/defaults/main.yml').read_text())
+        extra = [{'name': 'Mullvad', 'command': ['mullvad', 'status'], 'connected': '^Connected'}]  # not installed here
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            script = render(directory, 'roles/desktop/templates/i3status-bar.sh.j2',
+                            {**defaults, 'csb_detected': True, 'desktop_i3status_vpns_extra': extra,
+                             'ansible_managed': 'test'}, 'bar-status')
+            stubs = directory / 'stubs'
+            stubs.mkdir()
+            # two updates, so the second one comes from the 15 s cache: the VPN commands run once
+            stub(stubs, 'i3status', 'printf \'{"version":1}\\n[\\n[{"name":"wireless","full_text":"W"}]\\n'
+                 ',[{"name":"wireless","full_text":"W"}]\\n\'')
+            stub(stubs, 'netbird', f'echo run >> {directory}/netbird.calls; '
+                 'printf "OS: linux\\nManagement: Connected\\nSignal: Connected\\n"')
+            stub(stubs, 'tailscale', 'printf \'{"BackendState": "Stopped"}\\n\'; exit 1')  # down exits non-zero
+            stub(stubs, 'nmcli', 'echo "corp-wg:wireguard"')
+            for quiet in ['systemctl', 'rpm', 'podman']:
+                stub(stubs, quiet, 'exit 1')
+            (directory / 'bar-status').write_text(script)
+            result = subprocess.run(['bash', str(directory / 'bar-status')], capture_output=True, text=True,
+                                    timeout=30, env=dict(os.environ, PATH=f'{stubs}:/usr/bin:/bin', HOME=name))
+            lines = result.stdout.splitlines()
+            for line in lines[-2:]:
+                blocks = json.loads(line.lstrip(','))
+                vpn = [(b['full_text'], b.get('color')) for b in blocks if b['name'].startswith('vpn')]
+                self.assertEqual(vpn, [('NetBird up', '#00FF00'), ('Tailscale down', None),
+                                       ('Mullvad missing', '#FFFF00'), ('VPN corp-wg', '#00FF00')], result.stderr)
+                self.assertEqual(blocks[-1]['name'], 'wireless')  # VPN blocks go before the Wi-Fi field
+            self.assertEqual((directory / 'netbird.calls').read_text().count('run'), 1)
+
+    def test_bar_vpn_assert_refuses_entries_that_would_break_the_bar(self):
+        tasks = yaml.safe_load((ROOT / 'roles/desktop/tasks/main.yml').read_text())
+        found = [t for block in tasks for t in block.get('block', [block]) if t.get('name') == 'Validate desktop_i3status_vpns']
+        self.assertEqual(len(found), 1)
+        check = {k: v for k, v in found[0].items() if k != 'when'}
+        good = {'name': 'Mullvad', 'command': ['mullvad', 'status'], 'connected': '^Connected'}
+        cases = [(good, True), ({**good, 'name': 'Mullvad\n'}, False), ({**good, 'connected': '^Connected\n'}, False),
+                 ({**good, 'name': 'a"b'}, False), ({**good, 'command': 'mullvad status'}, False),
+                 ({**good, 'command': []}, False), ({**good, 'connected': ''}, False)]
+        for entry, ok in cases:
+            with self.subTest(entry=entry), tempfile.TemporaryDirectory() as name:
+                if ok:
+                    run_play(Path(name), [check], {'desktop_i3status_vpns': [entry]})
+                else:
+                    with self.assertRaises(AssertionError):
+                        run_play(Path(name), [check], {'desktop_i3status_vpns': [entry]})
+
+    def test_bar_vpn_list_has_netbird_only_on_csb_machines(self):
+        defaults = yaml.safe_load((ROOT / 'roles/desktop/defaults/main.yml').read_text())
+        for csb, names in [(False, 'Tailscale'), (True, 'NetBird Tailscale')]:
+            with self.subTest(csb=csb), tempfile.TemporaryDirectory() as name:
+                script = render(Path(name), 'roles/desktop/templates/i3status-bar.sh.j2',
+                                {**defaults, 'csb_detected': csb, 'ansible_managed': 'test'}, 'bar-status')
+                line = next(l for l in script.splitlines() if l.startswith('vpn_names='))
+                self.assertEqual(line, f'vpn_names=({names} )')
 
     def test_aide_rebaselines_only_after_an_rpm_transaction(self):
         tasks = yaml.safe_load((ROOT / 'roles/system/tasks/dnf_automatic.yml').read_text())

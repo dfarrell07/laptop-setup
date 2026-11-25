@@ -4,10 +4,17 @@
 # (893.1G), adds watts to the battery while discharging, and adds fields i3status cannot produce: REBOOT (a core
 # package is newer than the boot), UPD (an automatic update job failed), CSB FAIL (IT's last compliance run failed),
 # STALL (memory pressure), MIC (the default microphone: muted, or on in yellow), CTR (running rootless Podman
-# containers), AI (interactive agent sessions) and, with
-# desktop_i3status_vpn, VPN (active VPN names).
+# containers), AI (interactive agent sessions) and, with desktop_i3status_vpn, one block per configured VPN (up, down
+# or missing) plus active NetworkManager VPNs.
 set -u
 show_vpn={{ desktop_i3status_vpn | bool | ternary('1', '0') }}
+# VPNs (NetBird on CSB, Tailscale, desktop_i3status_vpns_extra): names, status commands, the regex that means connected
+{% set _vpns = desktop_i3status_vpns if desktop_i3status_vpn | bool else [] %}
+vpn_names=({% for v in _vpns %}{{ v.name | quote }} {% endfor %})
+vpn_connected=({% for v in _vpns %}{{ v.connected | quote }} {% endfor %})
+{% for v in _vpns %}
+vpn_cmd_{{ loop.index0 }}=({{ v.command | map('quote') | join(' ') }})
+{% endfor %}
 battery=/sys/class/power_supply/BAT{{ desktop_i3status_battery_num | string | regex_replace('[^0-9]', '') }}
 {% raw %}
 red='#FF0000'
@@ -25,21 +32,36 @@ field() { # name text [color]
   fi
 }
 
-vpn_field() {
-  local names=() n t
-  while IFS=: read -r n t; do
-    case "$t" in vpn | wireguard) names+=("${n//[\"\\]/}") ;; esac
-  done < <(nmcli -t -f NAME,TYPE connection show --active 2>/dev/null)
-  if command -v tailscale >/dev/null &&
-    tailscale status --json --peers=false 2>/dev/null | grep -q '"BackendState": "Running"'; then
-    names+=(Tailscale)
-  fi
-  [[ -e /sys/class/net/wt0 ]] && names+=(NetBird)
-  if ((${#names[@]})); then
-    local IFS=,
-    field vpn "VPN ${names[*]}" "$green"
-  else
-    field vpn "VPN off"
+# One block per configured VPN, always shown: up (green), down, or missing (its command is not installed). The
+# commands run at most every 15 s (a status call can take half a second; the bar updates every few seconds), so
+# this sets vpn_cache instead of printing: a $(...) subshell would lose the cache.
+vpn_cache=
+vpn_cache_at=-100
+vpn_fields() {
+  if ((SECONDS - vpn_cache_at >= 15)); then
+    local i out fields= n t nm=()
+    for i in "${!vpn_names[@]}"; do
+      local -n cmd="vpn_cmd_$i"
+      out=
+      if ! command -v "${cmd[0]}" >/dev/null; then
+        fields+="$(field "vpn$i" "${vpn_names[i]} missing" "$yellow"),"
+      elif out=$(timeout -k 1 2 "${cmd[@]}" 2>/dev/null || true) &&  # a VPN that is down may exit non-zero
+        grep -Eq -- "${vpn_connected[i]}" <<<"$out"; then
+        fields+="$(field "vpn$i" "${vpn_names[i]} up" "$green"),"
+      else
+        fields+="$(field "vpn$i" "${vpn_names[i]} down"),"
+      fi
+      unset -n cmd
+    done
+    while IFS=: read -r n t; do
+      case "$t" in vpn | wireguard) nm+=("${n//[\"\\]/}") ;; esac
+    done < <(nmcli -t -f NAME,TYPE connection show --active 2>/dev/null)
+    if ((${#nm[@]})); then
+      local IFS=,
+      fields+="$(field vpn "VPN ${nm[*]}" "$green"),"
+    fi
+    vpn_cache=$fields
+    vpn_cache_at=$SECONDS
   fi
 }
 
@@ -150,7 +172,7 @@ i3status --config "$HOME/.config/i3status/config" | {
     tail_fields=
     [[ -n $containers ]] && tail_fields+="$(field containers "CTR $containers"),"
     tail_fields+="$(field agents "AI $(agent_sessions)"),"
-    ((show_vpn)) && tail_fields+="$(vpn_field),"
+    if ((show_vpn)); then vpn_fields; tail_fields+=$vpn_cache; fi
     if [[ $line == *'{"name":"wireless"'* ]]; then
       line=${line/'{"name":"wireless"'/"$tail_fields"'{"name":"wireless"'}
     else
