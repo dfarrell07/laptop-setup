@@ -3,17 +3,16 @@
 # tmux. Docs: docs/agent-getty.md. Attach: agent-getty attach %i
 [Unit]
 Description=agent-getty %i (agent-getty attach %i)
-# Never give up: a daemon that cannot log in yet retries with a growing delay (systemd 254+; older ones retry every
-# 10s) instead of failing for good.
+# Never give up: a daemon that cannot log in yet retries every 30 s, like launchd's ThrottleInterval on macOS. A growing
+# delay (RestartSteps) is not used: systemd resets it only on a manual start, so after a few crashes every later
+# recovery would wait the maximum.
 StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 ExecStart=/bin/bash %h/.local/bin/agent-getty run %i
 Restart=always
-RestartSec=10
-RestartSteps=5
-RestartMaxDelaySec=10min
+RestartSec=30
 # The default KillMode signals the script, whose stop trap ends the daemon (tmux may move it to a scope of its own).
 Environment=PATH=%h/.local/bin:%h/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
 # The shells' tmux socket directory (zshrc.j2), so agent-getty attach and ls from a shell find the daemon
