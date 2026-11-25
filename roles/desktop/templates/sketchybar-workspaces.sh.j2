@@ -1,0 +1,42 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# SketchyBar workspace buttons and binding mode (sketchybarrc.j2), like i3bar: a workspace shows while it exists in
+# AeroSpace (it has windows or is on a monitor), focused / visible elsewhere / other in the desktop_bar_*_ws colors.
+# AeroSpace triggers aerospace_workspace_change and aerospace_mode_change.
+{% macro sb(hex) %}0xff{{ (hex | regex_replace('[^0-9a-fA-F]', ''))[-6:] | lower }}{% endmacro %}
+set -u
+aerospace=${AEROSPACE:-{{ ansible_facts['user_dir'] }}/.local/bin/aerospace}
+sketchybar=${SKETCHYBAR:-{{ ansible_facts['user_dir'] }}/.local/bin/sketchybar}
+focused_bg={{ sb(desktop_bar_focused_ws_bg) }}
+focused_fg={{ sb(desktop_bar_focused_ws_text) }}
+active_bg={{ sb(desktop_bar_active_ws_bg) }}
+active_fg={{ sb(desktop_bar_active_ws_text) }}
+inactive_bg={{ sb(desktop_bar_inactive_ws_bg) }}
+inactive_fg={{ sb(desktop_bar_inactive_ws_text) }}
+{% raw %}
+# Always the live state, never an event's FOCUSED_WORKSPACE: runs from quick switches overlap, and the last to finish
+# must not paint an older workspace as focused
+focused=$("$aerospace" list-workspaces --focused 2>/dev/null)
+existing=$'\n'$("$aerospace" list-workspaces --all 2>/dev/null)$'\n'
+visible=$'\n'$("$aerospace" list-workspaces --monitor all --visible 2>/dev/null)$'\n'
+mode=$("$aerospace" list-modes --current 2>/dev/null)
+
+args=()
+for ws in 1 2 3 4 5 6 7 8 9 10 S; do
+  if [[ $ws == "$focused" ]]; then
+    args+=(--set "ws.$ws" drawing=on background.drawing=on background.color="$focused_bg" label.color="$focused_fg")
+  elif [[ $visible == *$'\n'"$ws"$'\n'* ]]; then
+    args+=(--set "ws.$ws" drawing=on background.drawing=on background.color="$active_bg" label.color="$active_fg")
+  elif [[ $existing == *$'\n'"$ws"$'\n'* ]]; then
+    args+=(--set "ws.$ws" drawing=on background.drawing=on background.color="$inactive_bg" label.color="$inactive_fg")
+  else
+    args+=(--set "ws.$ws" drawing=off)
+  fi
+done
+if [[ -n $mode && $mode != main ]]; then
+  args+=(--set mode drawing=on label="$mode")
+else
+  args+=(--set mode drawing=off)
+fi
+"$sketchybar" "${args[@]}"
+{% endraw %}

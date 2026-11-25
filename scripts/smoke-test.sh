@@ -912,6 +912,37 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   else record "aerospace-running" "$([[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && echo WARN || echo FAIL)" "AeroSpace is not running — run: make apply CHUNK=desktop NOSUDO=1 (or open -a AeroSpace)"; fi
 fi
 
+# macOS: the bar (SketchyBar) and the focus border (JankyBorders) run from their LaunchAgents when AeroSpace is the window
+# manager, unless config.yml turns them off (desktop_macos_bar / desktop_macos_borders: false)
+if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
+  # Prints off, PASS, or FAIL (WARN in Molecule: a CI runner has no login session for LaunchAgents)
+  _macos_agent_state() { # process config_key
+    local on bins
+    on=$(awk -F': ' -v k="$2" '$1 == k {gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
+    bins=$(awk -F': ' '$1 == "packages_install_binaries" {gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
+    # off by config, or never built (packages_install_binaries: false skips the source builds)
+    if [[ "$_desktop_env" != aerospace || "$on" =~ ^([Ff]alse|[Nn]o|0)$ || "$bins" =~ ^([Ff]alse|[Nn]o|0)$ ]]; then echo off
+    elif pgrep -x "$1" &>/dev/null; then echo PASS
+    elif [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then echo WARN
+    else echo FAIL; fi
+  }
+  _fix="run: make apply CHUNK=packages, then make apply CHUNK=desktop NOSUDO=1"
+  _state=$(_macos_agent_state sketchybar desktop_macos_bar)
+  case $_state in
+    off) record "macos-sketchybar" "PASS" "off (desktop_environment, desktop_macos_bar or packages_install_binaries)" ;;
+    PASS) record "macos-sketchybar" "PASS" ;;
+    *) record "macos-sketchybar" "$_state" "SketchyBar is not running — $_fix (log: ~/.local/state/log/sketchybar.log)" ;;
+  esac
+  _state=$(_macos_agent_state borders desktop_macos_borders)
+  case $_state in
+    off) record "macos-borders" "PASS" "off (desktop_environment, desktop_macos_borders or packages_install_binaries)" ;;
+    PASS) record "macos-borders" "PASS" ;;
+    *) record "macos-borders" "$_state" "JankyBorders is not running — $_fix (log: ~/.local/state/log/borders.log)" ;;
+  esac
+  unset -f _macos_agent_state
+  unset _fix _state
+fi
+
 # macOS: containers run in the podman machine VM, which the containers chunk creates and starts at login
 if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   if ! $_podman_machine; then record "podman-machine" "PASS" "containers_macos_machine_enabled is off"
@@ -3191,7 +3222,7 @@ if [[ -n "$ONLY" ]]; then
       continue
     fi
     # macOS-only checks have nothing to verify on Linux
-    if $IS_LINUX && [[ " podman-machine docker-shim macos-dev-tools macos-zshenv-path macos-launchd-ssh-auth-sock macos-launchd-path aerospace-running aerospace-config macos-git-difftool macos-remote-access macos-firewall macos-always-on macos-screen macos-screen-lock tailscaled-daemon usr-local-bin " == *" $_only_name "* ]]; then
+    if $IS_LINUX && [[ " podman-machine docker-shim macos-dev-tools macos-zshenv-path macos-launchd-ssh-auth-sock macos-launchd-path aerospace-running aerospace-config macos-sketchybar macos-borders macos-git-difftool macos-remote-access macos-firewall macos-always-on macos-screen macos-screen-lock tailscaled-daemon usr-local-bin " == *" $_only_name "* ]]; then
       $JSON || printf 'N/A   %s (macOS-only check; nothing to verify on Linux)\n' "$_only_name"
       continue
     fi

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- {{ ansible_managed }} -->
+<!-- A desktop LaunchAgent (roles/desktop/tasks/macos_bar.yml): starts at login, restarts if it exits -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{{ _desktop_agent.label | e }}</string>
+  <key>ProgramArguments</key>
+  <array>
+{% for arg in _desktop_agent.args %}
+    <string>{{ arg | string | e }}</string>
+{% endfor %}
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>{{ ansible_facts['user_dir'] }}/.local/bin:{{ dotfiles_homebrew_prefix | e }}/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <!-- as Homebrew's service for these tools sets it: the bar's labels are UTF-8 -->
+    <key>LANG</key>
+    <string>en_US.UTF-8</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+  <key>StandardOutPath</key>
+  <string>{{ ansible_facts['user_dir'] }}/.local/state/log/{{ _desktop_agent.name }}.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{ ansible_facts['user_dir'] }}/.local/state/log/{{ _desktop_agent.name }}.log</string>
+</dict>
+</plist>

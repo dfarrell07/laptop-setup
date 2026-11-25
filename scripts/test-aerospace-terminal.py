@@ -174,6 +174,155 @@ class AeroSpaceTests(unittest.TestCase):
             config.write_text('')
             run()  # not installed yet: passes too
 
+    def test_bar_and_borders_run_as_launch_agents_and_stop_when_turned_off(self):
+        """macos_bar.yml with stub launchctl and binaries: load once, stay unchanged, reload an edited bar config
+        without restarting its job, skip a job whose binary is missing, and unload and remove a job turned off."""
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            bin_dir, state = home / '.local/bin', home / 'loaded'
+            bin_dir.mkdir(parents=True)
+            state.mkdir()
+            log = home / 'calls'
+            launchctl = home / 'launchctl'
+            launchctl.write_text(f"""#!/bin/sh
+echo "launchctl $*" >> {log}
+case "$1" in
+  print) case "$2" in gui/*/*) [ -f "{state}/${{2##*/}}" ] ;; *) exit 0 ;; esac ;;
+  bootstrap) touch "{state}/$(basename "$3" .plist)" ;;
+  bootout) [ -f "{state}/${{2##*/}}" ] && rm "{state}/${{2##*/}}" ;;
+esac
+""")
+            for stub in ('sketchybar', 'borders'):
+                (bin_dir / stub).write_text(f'#!/bin/sh\necho "{stub} $*" >> {log}\n')
+            # defaults(1) for the menu bar setting, never the real one: the value lives in a file
+            stub_dir, menu_bar = home / 'stubs', home / 'hide-menu-bar'
+            stub_dir.mkdir()
+            (stub_dir / 'defaults').write_text(f"""#!/bin/sh
+case "$1" in
+  read-type) [ -f {menu_bar} ] && echo "Type is boolean" || exit 1 ;;
+  read) [ -f {menu_bar} ] && cat {menu_bar} || exit 1 ;;
+  write) echo "defaults $*" >> {log}; case "$5" in TRUE|true|YES|1) echo 1 ;; *) echo 0 ;; esac > {menu_bar} ;;
+esac
+""")
+            (stub_dir / 'osascript').write_text(f'#!/bin/sh\necho "osascript notify" >> {log}\n')  # the change notification
+            for stub in [launchctl, bin_dir / 'sketchybar', bin_dir / 'borders', stub_dir / 'defaults', stub_dir / 'osascript']:
+                stub.chmod(0o755)
+            play = home / 'test.yml'
+            play.write_text(yaml.safe_dump([{'hosts': 'localhost', 'gather_facts': False,
+                'vars': {'ansible_facts': {'user_dir': str(home), 'user_uid': '501', 'system': 'Darwin',
+                                           'processor_vcpus': 8},
+                         '_desktop_launchctl': str(launchctl), '_desktop_defaults_path': str(stub_dir),
+                         '_desktop_osascript': str(stub_dir / 'osascript'),
+                         # what main.yml's stat registers once the packages chunk built SketchyBar
+                         '_desktop_sketchybar_bin': {'stat': {'executable': True}}},
+                'tasks': [{'ansible.builtin.include_role': {'name': str(ROOT / 'roles/desktop'),
+                                                            'tasks_from': 'macos_bar'}}]}]))
+            agents = home / 'Library/LaunchAgents'
+
+            def run(*extra):
+                log.unlink(missing_ok=True)
+                result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(play),
+                                         '-e', 'desktop_environment=aerospace', *extra], cwd=ROOT,
+                    env=dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
+                    capture_output=True, text=True, timeout=max(120, TEST_TIMEOUT))
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                return (log.read_text() if log.exists() else ''), int(re.findall(r'changed=(\d+)', result.stdout)[-1])
+
+            calls, _ = run()
+            for name in ('sketchybar', 'borders'):
+                plist = agents / f'com.laptop-setup.{name}.plist'
+                self.assertIn(f'<string>{bin_dir / name}</string>', plist.read_text())
+                self.assertIn(f'launchctl bootstrap gui/501 {plist}', calls)
+            self.assertIn('<string>active_color=0xff89b4fa</string>', (agents / 'com.laptop-setup.borders.plist').read_text())
+            for name in ('sketchybarrc', 'plugins/status.sh', 'plugins/workspaces.sh'):
+                self.assertTrue(os.access(home / '.config/sketchybar' / name, os.X_OK), name)
+            self.assertNotIn('sketchybar --reload', calls)  # a job that just started read the new config
+            self.assertEqual(menu_bar.read_text().strip(), '1')  # the menu bar hides behind the built bar
+            self.assertIn('osascript notify', calls)  # running apps hide it at once
+            self.assertLess(calls.index('launchctl bootstrap gui/501'), calls.index('defaults write'))  # bar first
+            calls, changed = run()
+            self.assertEqual((changed, 'bootstrap' in calls, 'bootout' in calls), (0, False, False))
+
+            rc = home / '.config/sketchybar/sketchybarrc'
+            rc.write_text(rc.read_text() + '# edited\n')
+            calls, _ = run()
+            self.assertIn('sketchybar --reload', calls)  # restored config reloaded, job left running
+            self.assertNotIn('bootout', calls)
+
+            calls, _ = run('-e', 'desktop_macos_borders=false')
+            self.assertIn('launchctl bootout gui/501/com.laptop-setup.borders', calls)
+            self.assertFalse((agents / 'com.laptop-setup.borders.plist').exists())
+            self.assertTrue((agents / 'com.laptop-setup.sketchybar.plist').exists())
+
+            (bin_dir / 'borders').unlink()  # packages chunk not applied yet: warn, no job that would crash-loop
+            calls, _ = run()
+            self.assertFalse((agents / 'com.laptop-setup.borders.plist').exists())
+            self.assertNotIn('com.laptop-setup.borders', calls)
+
+            # The bar turned off: its job goes and the menu bar shows again; after that the setting is the user's
+            calls, _ = run('-e', 'desktop_macos_bar=false')
+            self.assertIn('launchctl bootout gui/501/com.laptop-setup.sketchybar', calls)
+            self.assertFalse((agents / 'com.laptop-setup.sketchybar.plist').exists())
+            self.assertEqual(menu_bar.read_text().strip(), '0')
+            self.assertIn('osascript notify', calls)
+            menu_bar.write_text('1\n')  # hidden by hand in System Settings
+            calls, changed = run('-e', 'desktop_macos_bar=false')
+            self.assertEqual((changed, 'defaults' in calls), (0, False))
+            self.assertEqual(menu_bar.read_text().strip(), '1')
+
+    def test_source_builds_skip_the_pinned_version_and_plan_a_pending_one(self):
+        """install_macos_source_build.yml without the network: an installed pinned version is left alone, check mode
+        reports a missing or older one as a change without downloading, and a malformed entry stops the run."""
+        defaults = yaml.safe_load((ROOT / 'roles/packages/defaults/main.yml').read_text())
+        entry = next(e for e in defaults['packages_macos_source_builds'] if e['name'] == 'borders')
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            (home / '.local/bin').mkdir(parents=True)
+            binary = home / '.local/bin/borders'
+            play = home / 'test.yml'
+
+            def run(build, *extra, rc=0):
+                play.write_text(yaml.safe_dump([{'hosts': 'localhost', 'gather_facts': False,
+                    'vars': {'ansible_facts': {'user_dir': str(home), 'user_uid': '501'},
+                             'desktop_macos_agent_prefix': 'com.laptop-setup'},
+                    'tasks': [{'ansible.builtin.include_tasks': str(ROOT / 'roles/packages/tasks/install_macos_source_build.yml'),
+                               'vars': {'_src_build': build}}]}]))
+                result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(play), *extra], cwd=ROOT,
+                    env=dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
+                    capture_output=True, text=True, timeout=max(60, TEST_TIMEOUT))
+                self.assertEqual(result.returncode, rc, result.stdout + result.stderr)
+                return result.stdout
+
+            binary.write_text(f'#!/bin/sh\necho borders-v{entry["version"]}\n')
+            binary.chmod(0o755)
+            out = run(entry)
+            self.assertEqual(re.findall(r'changed=(\d+)', out)[-1], '0')
+            self.assertNotIn('Download source tarball', out.split('PLAY RECAP')[0].replace('skipping', ''))
+            binary.write_text('#!/bin/sh\necho borders-v0.0.1\n')  # a version bump is pending
+            out = run(entry, '--check')
+            self.assertIn('would be downloaded and built', out)
+            self.assertEqual(re.findall(r'changed=(\d+)', out)[-1], '1')
+            self.assertEqual(binary.read_text(), '#!/bin/sh\necho borders-v0.0.1\n')  # check mode changed nothing
+            for bad in [{'sha256': 'abc'}, {'repo': 'a/b; rm -rf ~'}, {'version': '1.9'}]:
+                with self.subTest(bad=bad):
+                    run({**entry, **bad}, '--check', rc=2)
+
+        # The toggle is checked in packages/tasks/main.yml before the include reads it: a wrong toggle that is false
+        # (profile is "work") would otherwise skip the build without a word
+        tasks = yaml.safe_load((ROOT / 'roles/packages/tasks/main.yml').read_text())
+        assert_task = next(t for t in tasks if t.get('name') == 'Validate the source build toggles (macOS)')
+        check = {k: v for k, v in assert_task.items() if k != 'when'}
+        for builds, ok in [(defaults['packages_macos_source_builds'], True),
+                           ([{**entry, 'toggle': 'profile'}], False), ([{k: v for k, v in entry.items() if k != 'toggle'}], False)]:
+            with self.subTest(builds=builds), tempfile.TemporaryDirectory() as directory:
+                play = Path(directory) / 'test.yml'
+                play.write_text(yaml.safe_dump([{'hosts': 'localhost', 'gather_facts': False,
+                                                 'vars': {'packages_macos_source_builds': builds}, 'tasks': [check]}]))
+                result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(play)], cwd=ROOT,
+                    env=dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
+                    capture_output=True, text=True, timeout=max(60, TEST_TIMEOUT))
+                self.assertEqual(result.returncode == 0, ok, result.stdout)
+
     def test_firewall_enabled_and_disabled_output_formats(self):
         production = yaml.safe_load((ROOT / 'roles/desktop/tasks/main.yml').read_text())
         task = next(task for task in production if task['name'] == 'Enable macOS firewall settings')

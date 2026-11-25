@@ -10,8 +10,19 @@ config-version = 2
 # Registers AeroSpace as a login item, so the tiling layout returns after a reboot or power loss
 start-at-login = true
 
+# i3 has no hidden windows: an app hidden with cmd-h comes back, so it never leaves a hole in the layout
+automatically-unhide-macos-hidden-apps = true
+
 after-login-command = []
 after-startup-command = []
+{% if _desktop_macos_bar_on | bool %}
+
+# The bar (sketchybarrc.j2) follows the focused workspace, windows moving between workspaces and the binding mode
+{% set _sketchybar = ansible_facts['user_dir'] ~ '/.local/bin/sketchybar' %}
+exec-on-workspace-change = ['{{ _sketchybar }}', '--trigger', 'aerospace_workspace_change']
+on-focus-changed = ['exec-and-forget {{ _sketchybar }} --trigger aerospace_workspace_change']
+on-mode-changed = ['exec-and-forget {{ _sketchybar }} --trigger aerospace_mode_change']
+{% endif %}
 
 # Off, as in AeroSpace's i3-like preset: with flattening on, alt-b/alt-v splits have no effect
 enable-normalization-flatten-containers = false
@@ -27,13 +38,15 @@ inner.horizontal = {{ desktop_sway_gaps_inner | int }}
 inner.vertical = {{ desktop_sway_gaps_inner | int }}
 outer.left = {{ desktop_sway_gaps_outer | int }}
 outer.bottom = {{ desktop_sway_gaps_outer | int }}
-outer.top = {{ desktop_sway_gaps_outer | int }}
+outer.top = {{ desktop_sway_gaps_outer | int + (desktop_macos_bar_height | int if _desktop_macos_bar_on | bool else 0) }}  # plus the bar's height
 outer.right = {{ desktop_sway_gaps_outer | int }}
 
 [mode.main.binding]
 alt-enter = 'exec-and-forget open -na {{ desktop_macos_terminal_app }}'
 alt-shift-q = 'close'
 alt-shift-c = 'reload-config'
+# sway $mod+Shift+d (wdisplays): the Displays settings
+alt-shift-d = 'exec-and-forget open "x-apple.systempreferences:com.apple.Displays-Settings.extension"'
 # sway $mod+d (wofi drun): pick an app with choose (brew choose-gui) and open it
 alt-d = 'exec-and-forget ls /Applications /Applications/Utilities /System/Applications /System/Applications/Utilities "$HOME/Applications" 2>/dev/null | sed -n "s/\\.app$//p" | sort -u | {{ dotfiles_homebrew_prefix }}/bin/choose | { IFS= read -r app; [ -n "$app" ] && open -a "$app"; }'
 # sway $mod+Ctrl+l (swaylock): the macOS lock shortcut via System Events, after the held keys are released.

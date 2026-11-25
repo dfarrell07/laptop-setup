@@ -388,6 +388,19 @@ class AutoUpdateTests(unittest.TestCase):
                     with self.assertRaises(AssertionError):
                         run_play(Path(name), [check], {'desktop_i3status_vpns': [entry]})
 
+    def test_bar_vpn_assert_runs_wherever_a_bar_renders_the_list(self):
+        tasks = yaml.safe_load((ROOT / 'roles/desktop/tasks/main.yml').read_text())
+        task = next(t for t in tasks if t.get('name') == 'Validate desktop_i3status_vpns')
+        # the assert's own when, applied to a debug task that reports whether it ran
+        probe = {'name': 'probe', 'ansible.builtin.debug': {'msg': 'ASSERT-RAN'}, 'when': task['when']}
+        for env, macos, bar, vpn, runs in [('sway', False, False, True, True), ('i3', False, False, True, True),
+                                           ('gnome', False, False, True, False), ('aerospace', True, True, True, True),
+                                           ('aerospace', True, False, True, False), ('sway', False, False, False, False)]:
+            with self.subTest(env=env, bar=bar, vpn=vpn), tempfile.TemporaryDirectory() as name:
+                out = run_play(Path(name), [probe], {'desktop_environment': env, 'is_macos': macos,
+                                                     'desktop_macos_bar': bar, 'desktop_i3status_vpn': vpn})
+                self.assertEqual('ASSERT-RAN' in out, runs)
+
     def test_bar_vpn_list_has_netbird_only_on_csb_machines(self):
         defaults = yaml.safe_load((ROOT / 'roles/desktop/defaults/main.yml').read_text())
         for csb, names in [(False, 'Tailscale'), (True, 'NetBird Tailscale')]:

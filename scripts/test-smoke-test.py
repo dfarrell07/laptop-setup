@@ -763,6 +763,33 @@ class SmokeTests(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertEqual(result.stdout.strip(), 'aerospace-running ' + expected)
 
+    def test_bar_and_borders_checks_only_when_on(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('  _macos_agent_state() { # process config_key')
+        end = source.index('  unset -f _macos_agent_state', start)
+        with tempfile.TemporaryDirectory() as directory:
+            d = Path(directory)
+            (d / 'pgrep').write_text('#!/bin/sh\n[ "$1" = -x ] && case " $RUNNING " in *" $2 "*) exit 0;; esac\nexit 1\n')
+            (d / 'pgrep').chmod(0o755)
+            cfg = d / 'config.yml'
+            for wm, config, running, molecule, expected in [
+                    ('aerospace', '', 'sketchybar borders', '', ['PASS', 'PASS']),
+                    ('aerospace', '', 'borders', '', ['FAIL', 'PASS']),
+                    ('aerospace', '', '', '/src', ['WARN', 'WARN']),
+                    ('aerospace', 'desktop_macos_bar: false\ndesktop_macos_borders: "no"  # off\n', '', '', ['PASS', 'PASS']),
+                    ('aerospace', 'packages_install_binaries: false\n', '', '', ['PASS', 'PASS']),
+                    ('CHANGE_ME', '', '', '', ['PASS', 'PASS'])]:
+                with self.subTest(wm=wm, config=config, running=running, molecule=molecule):
+                    cfg.write_text(config)
+                    result = subprocess.run([BASH, '-eu', '-o', 'pipefail', '-c', 'record() { printf "%s %s\\n" "$1" "$2"; };'
+                                             f' _desktop_env={wm}; _cfg={cfg};\n' + source[start:end]],
+                                            env=dict(os.environ, PATH=f'{directory}:/usr/bin:/bin', RUNNING=running,
+                                                     MOLECULE_PROJECT_DIRECTORY=molecule),
+                                            capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout.split('\n')[:2], [f'macos-sketchybar {expected[0]}',
+                                                                      f'macos-borders {expected[1]}'])
+
     def test_macos_git_difftool_check(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
         start = source.index('  _git_tools="$(git config --file "$_gc" --get merge.tool')

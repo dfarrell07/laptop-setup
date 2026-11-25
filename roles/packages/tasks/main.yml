@@ -251,6 +251,28 @@
 - name: Install Homebrew packages and configure autoupdate (macOS)
   ansible.builtin.include_tasks: install_brew.yml
 
+# The desktop role's bar (SketchyBar) and window borders (JankyBorders), each while its toggle is on. The toggle is
+# checked before the include reads it: a wrong one that happens to be false would otherwise skip the build silently.
+- name: Validate the source build toggles (macOS)
+  ansible.builtin.assert:
+    that:
+      - packages_macos_source_builds | rejectattr('toggle', 'defined') | list | length == 0
+      - packages_macos_source_builds | map(attribute='toggle') | reject('in', ['desktop_macos_bar', 'desktop_macos_borders'])
+        | list | length == 0
+    fail_msg: packages_macos_source_builds entries need toggle desktop_macos_bar or desktop_macos_borders.
+  when: is_macos and packages_install_binaries | bool
+
+- name: Build pinned macOS tools from source (macOS)
+  ansible.builtin.include_tasks: install_macos_source_build.yml
+  loop: "{{ packages_macos_source_builds }}"
+  loop_control:
+    loop_var: _src_build
+    label: "{{ _src_build.name }} {{ _src_build.version }}"
+  when:
+    - is_macos
+    - packages_install_binaries | bool
+    - lookup('ansible.builtin.vars', _src_build.toggle) | bool
+
 # The system role runs before packages: a newly installed daemon must become
 # ready in this same provision, rather than waiting for a second make all.
 - name: Enable installed Tailscale after package installation

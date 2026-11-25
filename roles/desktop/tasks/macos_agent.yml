@@ -1,0 +1,84 @@
+---
+# roles/desktop/tasks/macos_agent.yml (macOS): one desktop LaunchAgent, from macos_bar.yml (loop_var _desktop_agent_item:
+# name, enabled, args, reload, reload_args). Enabled: write the plist and load it (common launchd-agent.yml), or reload
+# a changed config. Disabled: unload the job and remove its plist.
+- name: Desktop LaunchAgent - {{ _desktop_agent_item.name }}
+  vars:
+    _desktop_agent:
+      name: "{{ _desktop_agent_item.name }}"
+      label: "{{ desktop_macos_agent_prefix }}.{{ _desktop_agent_item.name }}"
+      args: "{{ _desktop_agent_item.args }}"
+    _desktop_agent_plist: >-
+      {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/{{ desktop_macos_agent_prefix }}.{{ _desktop_agent_item.name }}.plist
+  block:
+    - name: Check the program is installed - {{ _desktop_agent_item.name }}
+      ansible.builtin.stat:
+        path: "{{ _desktop_agent_item.args[0] }}"
+      register: _desktop_agent_bin
+      when: _desktop_agent_item.enabled | bool
+
+    # Without the binary launchd would restart a failing job every 10 s: wait for the packages chunk instead
+    - name: Warn that the program is not installed yet - {{ _desktop_agent_item.name }}
+      ansible.builtin.debug:
+        msg: >-
+          {{ _desktop_agent_item.args[0] }} is missing, so its launchd job is not loaded. Install it with
+          make apply CHUNK=packages, then re-run make apply CHUNK=desktop NOSUDO=1.
+      when:
+        - _desktop_agent_item.enabled | bool
+        - not _desktop_agent_bin.stat.executable | default(false)
+
+    - name: Load the job - {{ _desktop_agent_item.name }}
+      when:
+        - _desktop_agent_item.enabled | bool
+        - _desktop_agent_bin.stat.executable | default(false)
+      block:
+        - name: Deploy the LaunchAgent plist - {{ _desktop_agent_item.name }}
+          ansible.builtin.template:
+            src: macos-launch-agent.plist.j2
+            dest: "{{ _desktop_agent_plist }}"
+            mode: "0644"
+          register: _desktop_agent_plist_file
+
+        - name: Load the LaunchAgent - {{ _desktop_agent_item.name }}
+          ansible.builtin.include_tasks: "{{ role_path }}/../common/tasks/launchd-agent.yml"
+          vars:
+            _launchd_agent_label: "{{ _desktop_agent.label }}"
+            _launchd_agent_plist: "{{ _desktop_agent_plist }}"
+            _launchd_agent_changed: "{{ _desktop_agent_plist_file is changed }}"
+            _launchd_agent_launchctl: "{{ _desktop_launchctl | default('/bin/launchctl') }}"  # tests stub it
+
+        # A reloaded job (plist changed) reads the new config when it starts
+        - name: Reload the changed config - {{ _desktop_agent_item.name }}  # noqa: no-handler
+          ansible.builtin.command:
+            argv: "{{ _desktop_agent_item.reload_args }}"
+          register: _desktop_agent_reload
+          changed_when: _desktop_agent_reload.rc == 0
+          failed_when: false  # not running (no login session): it reads the new config when it starts
+          when:
+            - not ansible_check_mode
+            - _desktop_agent_item.reload | bool
+            - _desktop_agent_plist_file is not changed
+
+    - name: Remove the job - {{ _desktop_agent_item.name }}
+      when: not _desktop_agent_item.enabled | bool
+      block:
+        - name: Check for the LaunchAgent plist - {{ _desktop_agent_item.name }}
+          ansible.builtin.stat:
+            path: "{{ _desktop_agent_plist }}"
+          register: _desktop_agent_old
+
+        - name: Unload the job - {{ _desktop_agent_item.name }}  # noqa: command-instead-of-module
+          ansible.builtin.command:
+            argv:
+              - "{{ _desktop_launchctl | default('/bin/launchctl') }}"
+              - bootout
+              - "gui/{{ ansible_facts['user_uid'] }}/{{ _desktop_agent.label }}"
+          register: _desktop_agent_bootout
+          changed_when: _desktop_agent_bootout.rc == 0
+          failed_when: false  # not loaded
+          when: _desktop_agent_old.stat.exists
+
+        - name: Remove the LaunchAgent plist - {{ _desktop_agent_item.name }}
+          ansible.builtin.file:
+            path: "{{ _desktop_agent_plist }}"
+            state: absent

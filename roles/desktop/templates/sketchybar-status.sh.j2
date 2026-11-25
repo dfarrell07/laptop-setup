@@ -1,0 +1,210 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# SketchyBar status driver (sketchybarrc.j2): the fields i3status and i3status-bar.sh.j2 show on Linux, read from
+# macOS tools and set in one sketchybar call. Runs every 5 s and on volume and power events. /bin/bash is 3.2 here:
+# no namerefs, associative arrays or GNU timeout. Slow probes are cached in ~/.cache/sketchybar: containers 30 s,
+# VPNs 15 s.
+{% macro sb(hex) %}0xff{{ (hex | regex_replace('[^0-9a-fA-F]', ''))[-6:] | lower }}{% endmacro %}
+set -u
+# podman, tailscale (Homebrew); VPN CLIs that apps install in /usr/local/bin (Mullvad); route, networksetup (sbin)
+PATH=${PATH:-/usr/bin:/bin}:{{ ansible_facts['user_dir'] }}/.local/bin:{{ dotfiles_homebrew_prefix }}/bin:/usr/local/bin:/usr/sbin:/sbin
+sketchybar=${SKETCHYBAR:-{{ ansible_facts['user_dir'] }}/.local/bin/sketchybar}
+cache=$HOME/.cache/sketchybar
+mkdir -p "$cache"
+fg={{ sb(desktop_bar_fg) }}
+red={{ sb(desktop_alacritty_color_normal_red) }}
+green={{ sb(desktop_alacritty_color_normal_green) }}
+yellow={{ sb(desktop_alacritty_color_normal_yellow) }}
+ncpu={{ ansible_facts['processor_vcpus'] | default(4) | int }}
+disks=({% for d in _desktop_macos_bar_disks %}{{ d | quote }} {% endfor %})
+tz_labels=({% for z in desktop_i3status_timezones %}{{ z.label | regex_replace('[^A-Za-z0-9]', '') | quote }} {% endfor %})
+tz_zones=({% for z in desktop_i3status_timezones %}{{ z.timezone | regex_replace('[^A-Za-z0-9/_+-]', '') | quote }} {% endfor %})
+{% set _vpns = desktop_i3status_vpns if desktop_i3status_vpn | bool else [] %}
+show_vpn={{ desktop_i3status_vpn | bool | ternary('1', '0') }}
+vpn_names=({% for v in _vpns %}{{ v.name | quote }} {% endfor %})
+vpn_connected=({% for v in _vpns %}{{ v.connected | quote }} {% endfor %})
+{% for v in _vpns %}
+vpn_cmd_{{ loop.index0 }}=({{ v.command | map('quote') | join(' ') }})
+{% endfor %}
+{% raw %}
+args=()
+set_field() { # item label [color] [drawing]
+  args+=(--set "$1" label="$2" label.color="${3:-$fg}" drawing="${4:-on}")
+}
+hide() { args+=(--set "$1" drawing=off); }
+
+# A command that may hang (a VPN or podman call) gets 2 s, then SIGKILL (macOS has no timeout(1)). The parent kills
+# the child's whole process group: Go programs (podman, tailscale) ignore an inherited alarm, and a wrapper's leftover
+# children would keep $(...) waiting. Death by a signal is a failure (128 + signal), never 0.
+limit() {
+  perl -e 'my $t = shift; my $p = fork // exit 127; if (!$p) { setpgrp; exec {$ARGV[0]} @ARGV; exit 127 }
+    $SIG{ALRM} = sub { kill "KILL", -$p; exit 124 }; alarm $t; waitpid $p, 0;
+    exit($? & 127 ? 128 + ($? & 127) : $? >> 8)' 2 "$@"
+}
+
+# VOL: output volume, or muted; no field without an output device
+vol_field() {
+  local vol
+  vol=$(osascript -e 'set v to get volume settings' -e 'return (output volume of v as text) & " " & (output muted of v as text)' 2>/dev/null)
+  case $vol in
+    *' true') set_field vol "VOL muted" ;;
+    [0-9]*) set_field vol "VOL ${vol%% *}%" ;;
+    *) hide vol ;;
+  esac
+}
+# A volume key updates only VOL, at once: the full run takes over a second (the CPU sample)
+if [[ ${SENDER:-} == volume_change ]]; then
+  vol_field
+  exec "$sketchybar" "${args[@]}"
+fi
+
+# Cached probe: prints the cache file's content when younger than $2 seconds, else runs $3.. and stores its output
+cached() {
+  local file=$cache/$1 max=$2 now
+  shift 2
+  now=$(date +%s)
+  if [[ -f $file ]] && ((now - $(date -r "$file" +%s) < max)); then
+    cat "$file"
+  else
+    # runs can overlap (the timer and an event): each writes its own temp file, then renames it into place
+    "$@" >"$file.$$" 2>/dev/null
+    mv -f "$file.$$" "$file"
+    cat "$file"
+  fi
+}
+
+# CPU: busy share over 1 s (i3status cpu_usage; red above 80%). iostat's second report is that second ("us sy id"
+# then the load averages); top -l would walk every process's memory map each time (~0.35 s of CPU)
+cpu=$(iostat -n0 -c 2 -w 1 2>/dev/null | awk 'NF >= 3 && $3 ~ /^[0-9]+$/ {idle = $3} END {if (idle != "") print 100 - idle}')
+if [[ -n $cpu ]]; then set_field cpu "CPU ${cpu}%" "$( ((cpu > 80)) && echo "$red")"; fi
+
+# LOAD: 1/5/15 min, red when the 1 min load exceeds one task per CPU
+read -r _ l1 l5 l15 _ < <(sysctl -n vm.loadavg)
+set_field load "LOAD $l1 $l5 $l15" "$(awk -v l="$l1" -v n="$ncpu" 'BEGIN {if (l > n) print "'"$red"'"}')"
+
+# RAM used/total in GiB, used as Activity Monitor counts it: app memory, wired and compressed
+total=$(sysctl -n hw.memsize)
+ram=$(vm_stat | awk -v total="$total" '
+  /page size of/ {for (i = 1; i <= NF; i++) if ($i == "of") ps = $(i + 1)}
+  /^Anonymous pages/ {anon = $3} /^Pages purgeable/ {purg = $3} /^Pages wired down/ {wired = $4}
+  /^Pages occupied by compressor/ {comp = $5}
+  END {printf "%.1f/%.1f", (anon - purg + wired + comp) * ps / 2^30, total / 2^30}')
+set_field ram "RAM $ram"
+# PRESSURE stands in for the Linux STALL field: macOS reports memory pressure as normal (1), warn (2) or critical (4)
+case $(sysctl -n kern.memorystatus_vm_pressure_level 2>/dev/null) in
+  2) set_field pressure "PRESSURE warn" "$red" ;;
+  4) set_field pressure "PRESSURE critical" "$red" ;;
+  *) hide pressure ;;
+esac
+
+# Free space per disk, red below 10% free (i3status low_threshold). A path shows only while it is a mount point, as
+# i3status shows only mounted paths (on macOS /tmp is a directory of the data volume).
+for i in "${!disks[@]}"; do
+  size=
+  avail=
+  mnt=
+  read -r _ size _ avail _ mnt < <(df -kP "${disks[i]}" 2>/dev/null | sed -n 2p)
+  if [[ -z $avail || $mnt != "${disks[i]}" ]]; then hide "disk.$i"; continue; fi
+  text=$(awk -v a="$avail" 'BEGIN {if (a >= 2^30) printf "%.1fT", a / 2^30; else if (a >= 2^20) printf "%.1fG", a / 2^20; else printf "%.1fM", a / 2^10}')
+  set_field "disk.$i" "${disks[i]} $text" "$( ((avail * 10 < size)) && echo "$red")"
+done
+
+# BAT: percentage, ⚡ while charging, time left while (dis)charging; no field on a Mac without a battery.
+# pmset: "-InternalBattery-0 (id=…)<TAB>85%; charging; 1:30 remaining present: true"; the state is charging,
+# finishing charge, discharging, charged, or AC attached (held below full: not charging)
+batt=$(pmset -g batt 2>/dev/null | grep -m1 InternalBattery)
+if [[ -n $batt ]]; then
+  pct=$(grep -Eo '[0-9]+%' <<<"$batt" | head -1)
+  state=$(awk -F'; ' '{print $2}' <<<"$batt")
+  chr=
+  left=
+  case $state in charging | 'finishing charge') chr=⚡ ;; esac
+  case $state in charging | discharging) left=$(grep -Eo '[0-9]+:[0-9]+ remaining' <<<"$batt" | cut -d' ' -f1) ;; esac
+  [[ $left == 0:00 ]] && left=
+  low=${pct%\%}
+  set_field bat "BAT ${chr}${pct}${left:+ $left}" "$( ((${low:-100} < 10)) && echo "$red")"
+else
+  hide bat
+fi
+
+# Local time, then the team clocks
+set_field time "$(date '+%a %d %b %H:%M')"
+for i in "${!tz_labels[@]}"; do
+  set_field "tz.$i" "${tz_labels[i]} $(TZ=${tz_zones[i]} date '+%a %H:%M')"
+done
+
+# CTR: running containers in the podman machine; no field without podman or with the machine stopped
+ctr_probe() {
+  local out
+  command -v podman >/dev/null && out=$(limit podman ps -q) && printf '%s' "$out" | grep -c .
+}
+ctr=$(cached ctr 30 ctr_probe)
+if [[ -n $ctr ]]; then set_field ctr "CTR $ctr"; else hide ctr; fi
+
+# AI: terminals running a claude, codex or agy process, each terminal once (ps shows no terminal as ??)
+ai=$(ps -eo tty=,comm= 2>/dev/null | awk '{n = split($2, p, "/")} $1 != "??" && p[n] ~ /^(claude|codex|agy)$/ && !seen[$1]++ {c++} END {print c + 0}')
+set_field ai "AI $ai"
+
+# VPNs: one field per configured VPN (up in green, down, or missing in yellow), then connected macOS VPN services
+vpn_probe() {
+  local i out cmd
+  for i in "${!vpn_names[@]}"; do
+    eval 'cmd=("${vpn_cmd_'"$i"'[@]}")'  # no namerefs in bash 3.2; $i is an index of our own array
+    out=
+    if ! command -v "${cmd[0]}" >/dev/null; then
+      echo "$i missing"
+    elif out=$(limit "${cmd[@]}" 2>/dev/null || true) && grep -Eq -- "${vpn_connected[i]}" <<<"$out"; then  # a VPN that is down may exit non-zero
+      echo "$i up"
+    else
+      echo "$i down"
+    fi
+  done
+  scutil --nc list 2>/dev/null | sed -n 's/.*(Connected).*"\(.*\)".*/nc \1/p' | tr -d '\\'
+}
+if ((show_vpn)); then
+  nc=
+  while read -r i state; do
+    case $i:$state in
+      nc:*) nc+="${nc:+,}$state" ;;
+      *:up) set_field "vpn.$i" "${vpn_names[i]} up" "$green" ;;
+      *:missing) set_field "vpn.$i" "${vpn_names[i]} missing" "$yellow" ;;
+      *:down) set_field "vpn.$i" "${vpn_names[i]} down" ;;
+    esac
+  done < <(cached vpn 15 vpn_probe)
+  if [[ -n $nc ]]; then set_field vpn.nc "VPN $nc" "$green"; else hide vpn.nc; fi
+fi
+
+# NET: the default-route interface as WIFI or ETH with its address and throughput since the last update. When a VPN
+# tunnel (utun) carries the default route, the first hardware port with an address, as Linux shows Wi-Fi or Ethernet.
+ports=$(networksetup -listallhardwareports 2>/dev/null)
+iface=$(route -n get default 2>/dev/null | awk '/interface:/ {print $2}')
+addr=
+[[ $iface == en* ]] && addr=$(ipconfig getifaddr "$iface" 2>/dev/null)
+if [[ -z $addr ]]; then
+  for iface in $(awk '/^Device: en/ {print $2}' <<<"$ports"); do
+    addr=$(ipconfig getifaddr "$iface" 2>/dev/null) && [[ -n $addr ]] && break
+  done
+fi
+if [[ -n $addr ]]; then
+  kind=ETH
+  grep -A1 -x 'Hardware Port: Wi-Fi' <<<"$ports" | grep -qx "Device: $iface" && kind=WIFI
+  # Ibytes and Obytes counted from the end: the Address column is empty on some interfaces
+  read -r rx tx < <(netstat -ibn -I "$iface" 2>/dev/null | awk '$3 ~ /^<Link#/ {print $(NF - 4), $(NF - 1); exit}')
+  now=$(date +%s)
+  rate=
+  if read -r prev_at prev_iface prev_rx prev_tx 2>/dev/null <"$cache/net" && [[ $prev_iface == "$iface" ]] &&
+    ((now > prev_at)); then
+    rate=$(awk -v r=$((rx - prev_rx)) -v t=$((tx - prev_tx)) -v s=$((now - prev_at)) '
+      function h(b) {b /= s; return b >= 2^20 ? sprintf("%.1fM", b / 2^20) : sprintf("%dK", b / 2^10)}
+      BEGIN {if (r >= 0 && t >= 0) printf " ↓%s ↑%s", h(r), h(t)}')
+  fi
+  echo "$now $iface $rx $tx" >"$cache/net"
+  set_field net "$kind $addr$rate"
+else
+  hide net
+fi
+
+# VOL last, just before the update: a volume key pressed during the slow probes above must not be undone
+vol_field
+"$sketchybar" "${args[@]}"
+{% endraw %}

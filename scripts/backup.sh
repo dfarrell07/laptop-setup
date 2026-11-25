@@ -156,6 +156,9 @@ DOTFILES=(
   .config/autostart/gnome-keyring-ssh.desktop
   .config/xdg-desktop-portal/sway-portals.conf
   .config/aerospace/aerospace.toml
+  .config/sketchybar/sketchybarrc
+  .config/sketchybar/plugins/status.sh
+  .config/sketchybar/plugins/workspaces.sh
   .config/systemd/user/ssh-agent.service
   .config/systemd/user/claude-queue.service
   .config/systemd/user/claude-queue.timer

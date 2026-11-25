@@ -198,6 +198,33 @@
     - not system_is_container  # ~/.config/environment.d not created in containers (common task guards it)
 
 # --- i3status config (shared by i3 and Sway) ---
+# The sway/i3 bar wrapper and the macOS bar (macos_bar.yml) render the same VPN list
+- name: Validate desktop_i3status_vpns
+  ansible.builtin.assert:
+    that:
+      - desktop_i3status_vpns is sequence and desktop_i3status_vpns is not string
+      - desktop_i3status_vpns | select('mapping') | list | length == desktop_i3status_vpns | length
+      - desktop_i3status_vpns | rejectattr('name', 'defined') | list | length == 0
+      - desktop_i3status_vpns | map(attribute='name') | reject('match', '^[A-Za-z0-9][A-Za-z0-9 ._-]{0,31}$') | list | length == 0
+      - desktop_i3status_vpns | rejectattr('command', 'defined') | list | length == 0
+      - desktop_i3status_vpns | map(attribute='command') | reject('sequence') | list | length == 0
+      - desktop_i3status_vpns | map(attribute='command') | select('string') | list | length == 0
+      - desktop_i3status_vpns | map(attribute='command') | map('length') | select('eq', 0) | list | length == 0
+      - desktop_i3status_vpns | map(attribute='command') | flatten | reject('string') | list | length == 0
+      - desktop_i3status_vpns | rejectattr('connected', 'defined') | list | length == 0
+      - desktop_i3status_vpns | map(attribute='connected') | reject('string') | list | length == 0
+      - desktop_i3status_vpns | map(attribute='connected') | select('eq', '') | list | length == 0
+      # control characters (a YAML block scalar's trailing newline) would break the bar's JSON or match every line
+      - desktop_i3status_vpns | map(attribute='name') | select('search', '[\x00-\x1f\x7f]') | list | length == 0
+      - desktop_i3status_vpns | map(attribute='connected') | select('search', '[\x00-\x1f\x7f]') | list | length == 0
+    fail_msg: >-
+      desktop_i3status_vpns must be a list of {name, command, connected}: name 1-32 letters, digits, space, . _ -;
+      command a non-empty list of strings (argv, no shell); connected a non-empty extended regex. Example:
+      {name: Mullvad, command: [mullvad, status], connected: '^Connected'}
+  when:
+    - desktop_i3status_vpn | bool
+    - desktop_environment in ['i3', 'sway'] or (is_macos and desktop_macos_bar | bool)
+
 - name: Deploy i3status config (shared by i3 and Sway)
   when: desktop_environment in ['i3', 'sway']
   block:
@@ -213,30 +240,6 @@
         dest: "{{ ansible_facts['user_dir'] }}/.config/i3status/config"
         mode: "0644"
         backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
-
-    - name: Validate desktop_i3status_vpns
-      ansible.builtin.assert:
-        that:
-          - desktop_i3status_vpns is sequence and desktop_i3status_vpns is not string
-          - desktop_i3status_vpns | select('mapping') | list | length == desktop_i3status_vpns | length
-          - desktop_i3status_vpns | rejectattr('name', 'defined') | list | length == 0
-          - desktop_i3status_vpns | map(attribute='name') | reject('match', '^[A-Za-z0-9][A-Za-z0-9 ._-]{0,31}$') | list | length == 0
-          - desktop_i3status_vpns | rejectattr('command', 'defined') | list | length == 0
-          - desktop_i3status_vpns | map(attribute='command') | reject('sequence') | list | length == 0
-          - desktop_i3status_vpns | map(attribute='command') | select('string') | list | length == 0
-          - desktop_i3status_vpns | map(attribute='command') | map('length') | select('eq', 0) | list | length == 0
-          - desktop_i3status_vpns | map(attribute='command') | flatten | reject('string') | list | length == 0
-          - desktop_i3status_vpns | rejectattr('connected', 'defined') | list | length == 0
-          - desktop_i3status_vpns | map(attribute='connected') | reject('string') | list | length == 0
-          - desktop_i3status_vpns | map(attribute='connected') | select('eq', '') | list | length == 0
-          # control characters (a YAML block scalar's trailing newline) would break the bar's JSON or match every line
-          - desktop_i3status_vpns | map(attribute='name') | select('search', '[\x00-\x1f\x7f]') | list | length == 0
-          - desktop_i3status_vpns | map(attribute='connected') | select('search', '[\x00-\x1f\x7f]') | list | length == 0
-        fail_msg: >-
-          desktop_i3status_vpns must be a list of {name, command, connected}: name 1-32 letters, digits, space, . _ -;
-          command a non-empty list of strings (argv, no shell); connected a non-empty extended regex. Example:
-          {name: Mullvad, command: [mullvad, status], connected: '^Connected'}
-      when: desktop_i3status_vpn | bool
 
     - name: Deploy the bar status_command wrapper (RAM units, VPN blocks)
       ansible.builtin.template:
@@ -387,6 +390,13 @@
     - _zsh_local_user_check.rc | default(1) != 0
     - _sssd_domain_section.stdout | default('') | length == 0
 
+# --- macOS: is the bar built? (_desktop_macos_bar_on: the AeroSpace gap and the menu bar hiding wait for it) ---
+- name: Check whether SketchyBar is installed (macOS)
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.local/bin/sketchybar"
+  register: _desktop_sketchybar_bin
+  when: is_macos and desktop_macos_bar | bool
+
 # --- macOS: AeroSpace config ---
 - name: Deploy AeroSpace configuration (macOS)
   when: is_macos
@@ -519,6 +529,11 @@
     - >-
       _desktop_macos_defaults.results | default([]) | selectattr('changed')
       | map(attribute='item.domain') | select('in', item.domains) | list | length > 0
+
+# --- macOS: SketchyBar in place of the menu bar, JankyBorders focus border ---
+- name: Deploy the bar and window borders (macOS)
+  ansible.builtin.include_tasks: macos_bar.yml
+  when: is_macos
 
 # --- macOS: Ghostty config ---
 - name: Deploy Ghostty configuration (macOS)

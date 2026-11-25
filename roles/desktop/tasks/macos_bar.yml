@@ -1,0 +1,102 @@
+---
+# roles/desktop/tasks/macos_bar.yml (macOS): the sway/i3 bar and focus border.
+# SketchyBar replaces the menu bar (desktop_macos_bar), which auto-hides, and JankyBorders draws the focused-window
+# border (desktop_macos_borders). Both run from LaunchAgents as the user, no sudo; the packages chunk builds the
+# binaries (packages_macos_source_builds). Turning a toggle off stops and removes its job.
+
+# Before the agents run (they remove a turned-off job): was the bar's job installed?
+- name: Check for the bar's LaunchAgent (macOS)
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/{{ desktop_macos_agent_prefix }}.sketchybar.plist"
+  register: _desktop_bar_plist_before
+
+- name: Ensure the LaunchAgents and log directories (macOS)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents"
+    - "{{ ansible_facts['user_dir'] }}/.local/state/log"
+  when: desktop_macos_bar | bool or desktop_macos_borders | bool
+
+- name: Deploy the SketchyBar bar (macOS)
+  when: desktop_macos_bar | bool
+  vars:
+    # The desktop_i3status_disks paths (macOS gathers no mount facts): status.sh shows those that are mount points,
+    # as on Linux (/tmp is not one on macOS); names may have spaces (/Volumes/My Disk)
+    _desktop_macos_bar_disks: "{{ desktop_i3status_disks | map('regex_replace', '[^A-Za-z0-9/._ -]', '') | select | list }}"
+  block:
+    - name: Ensure the SketchyBar config directories (macOS)
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/sketchybar/plugins"
+        state: directory
+        mode: "0755"
+
+    - name: Deploy the SketchyBar config and plugins (macOS)
+      ansible.builtin.template:
+        src: "{{ item.src }}"
+        dest: "{{ ansible_facts['user_dir'] }}/.config/sketchybar/{{ item.dest }}"
+        mode: "0755"
+        backup: true  # hand edits survive as <file>.<timestamp>~ (written only when content changes)
+      loop:
+        - {src: sketchybarrc.j2, dest: sketchybarrc}
+        - {src: sketchybar-status.sh.j2, dest: plugins/status.sh}
+        - {src: sketchybar-workspaces.sh.j2, dest: plugins/workspaces.sh}
+      loop_control:
+        label: "{{ item.dest }}"
+      register: _desktop_sketchybar_config
+
+- name: Run the bar and border LaunchAgents (macOS)
+  ansible.builtin.include_tasks: macos_agent.yml
+  loop:
+    - name: sketchybar
+      enabled: "{{ desktop_macos_bar | bool }}"
+      args: ["{{ ansible_facts['user_dir'] }}/.local/bin/sketchybar"]
+      # the bar reads its config at start: reload a changed one while the job itself is unchanged
+      reload: "{{ _desktop_sketchybar_config is changed }}"
+      reload_args: ["{{ ansible_facts['user_dir'] }}/.local/bin/sketchybar", --reload]
+    - name: borders
+      enabled: "{{ desktop_macos_borders | bool }}"
+      args:
+        - "{{ ansible_facts['user_dir'] }}/.local/bin/borders"
+        - style=square
+        - width={{ desktop_macos_border_width | float }}
+        - hidpi=on
+        - active_color=0xff{{ (desktop_bar_focused_ws_bg | regex_replace('[^0-9a-fA-F]', ''))[-6:] | lower }}
+        - inactive_color=0xff{{ (desktop_bar_active_ws_bg | regex_replace('[^0-9a-fA-F]', ''))[-6:] | lower }}
+      reload: false
+      reload_args: []
+  loop_control:
+    loop_var: _desktop_agent_item
+    label: "{{ _desktop_agent_item.name }}"
+
+# Last, once the bar runs: the menu bar auto-hides behind a built bar (_desktop_macos_bar_on), and shows again when our
+# bar's job was installed but the bar is now off or its binary is gone. Otherwise the user's own setting (System
+# Settings > Menu Bar) is left alone.
+- name: Hide the menu bar behind the bar, or show it again (macOS)
+  community.general.osx_defaults:
+    domain: NSGlobalDomain
+    key: _HIHideMenuBar
+    type: bool
+    value: "{{ _desktop_macos_bar_on | bool }}"
+    check_type: false  # a value stored as an int (defaults write -int 1) is compared, not a failure
+    path: "{{ _desktop_defaults_path | default(omit) }}"  # tests: a stub defaults(1)
+  register: _desktop_menu_bar
+  when: _desktop_macos_bar_on | bool or _desktop_bar_plist_before.stat.exists | default(false)
+
+# What System Settings posts after the menu bar setting changes: running apps hide or show the menu bar at once
+- name: Tell running apps the menu bar setting changed (macOS)
+  ansible.builtin.command:
+    argv:
+      - "{{ _desktop_osascript | default('/usr/bin/osascript') }}"  # tests: a stub
+      - -l
+      - JavaScript
+      - -e
+      - >-
+        ObjC.import('Foundation');
+        $.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately(
+        'AppleInterfaceMenuBarHidingChangedNotification', $(), $(), true)
+  changed_when: true
+  failed_when: false  # without a login session the change applies at the next login
+  when: not ansible_check_mode and _desktop_menu_bar is changed
