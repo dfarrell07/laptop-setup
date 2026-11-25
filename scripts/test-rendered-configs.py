@@ -52,10 +52,10 @@ CASES = {
     'bar_status': ('roles/desktop/templates/i3status-bar.sh.j2', {}),
     # macOS SketchyBar (desktop_macos_bar): a second VPN that is not installed, and / as the one disk
     'sketchybarrc': ('roles/desktop/templates/sketchybarrc.j2', {
-        '_desktop_macos_bar_disks': MACOS_BAR_DISKS, 'desktop_i3status_disks': ['/', '/tmp', '/Volumes/My Disk'],
+        '_desktop_macos_bar_disks': MACOS_BAR_DISKS, 'desktop_i3status_disks': ['/', '/tmp', '/Volumes/My Disk/'],
         'desktop_i3status_vpns_extra': [{'name': 'Mullvad', 'command': ['mullvad-missing', 'status'], 'connected': '^Connected'}]}),
     'sketchybar_status': ('roles/desktop/templates/sketchybar-status.sh.j2', {
-        '_desktop_macos_bar_disks': MACOS_BAR_DISKS, 'desktop_i3status_disks': ['/', '/tmp', '/Volumes/My Disk'],
+        '_desktop_macos_bar_disks': MACOS_BAR_DISKS, 'desktop_i3status_disks': ['/', '/tmp', '/Volumes/My Disk/'],
         'desktop_i3status_vpns_extra': [{'name': 'Mullvad', 'command': ['mullvad-missing', 'status'], 'connected': '^Connected'}]}),
     'sketchybar_workspaces': ('roles/desktop/templates/sketchybar-workspaces.sh.j2', {}),
     # AeroSpace with the bar on, before and after the packages chunk built SketchyBar
@@ -508,7 +508,7 @@ class RenderedConfigTests(unittest.TestCase):
                                 'Pages wired down:  100000.\\nPages purgeable: 0.\\nAnonymous pages: 300000.\\n'
                                 'Pages occupied by compressor: 100000.\\n"',
                      'df': 'printf "Filesystem 1024-blocks Used Available Capacity Mounted on\\n"; case "$2" in'
-                           ' "/Volumes/My Disk") printf "/dev/e 1000000 950000 50000 95%% /Volumes/My Disk\\n";;'
+                           ' "/Volumes/My Disk") printf "//me@nas/My Share 1000000 950000 50000 95%% /Volumes/My Disk\\n";;'
                            ' *) printf "/dev/d 1000000 500000 500000 50%% /\\n";; esac',
                      'pmset': 'printf "Now drawing from \'AC Power\'\\n -InternalBattery-0 (id=1)\\t85%%; charging; 1:30 remaining present: true\\n"',
                      'osascript': 'echo "40 true"',
@@ -567,14 +567,18 @@ class RenderedConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as name:
             # A hung VPN CLI that ignores SIGALRM (as Go programs do), started by a wrapper that leaves a child holding
             # the output pipe, is killed with its children after 2 s and counts as down. A podman killed by a signal
-            # is a failure: no CTR field, not "CTR 0".
+            # is a failure: no CTR field, not "CTR 0". A df hung on a network mount is cut off too: that disk hides.
             start = time.monotonic()
+            hang = 'exec perl -e \'$SIG{ALRM} = "IGNORE"; sleep 20\''
+            # survives the group kill, as a df stuck in the kernel on a hung mount does, and keeps stdout open
+            survivor = 'perl -e \'setpgrp; sleep 20\' &\n'
             items = self.run_sketchybar_script('sketchybar_status', {
-                '__dir': name, **quiet, 'podman': 'kill -SEGV $$',
-                'tailscale': 'sleep 20 &\nexec perl -e \'$SIG{ALRM} = "IGNORE"; sleep 20\''})
-            self.assertLess(time.monotonic() - start, 10)
+                '__dir': name, **quiet, 'podman': 'kill -SEGV $$', 'df': survivor + hang,
+                'tailscale': 'sleep 20 &\n' + hang})
+            self.assertLess(time.monotonic() - start, 15)  # three disks and the VPN, 2 s each at most
             self.assertEqual(items['vpn.0']['label'], 'Tailscale down')
             self.assertEqual(items['ctr'], {'drawing': 'off'})
+            self.assertEqual(items['disk.0'], {'drawing': 'off'})
         with tempfile.TemporaryDirectory() as name:
             # A VPN tunnel holds the default route: the Wi-Fi link shows, its counters read without an Address column
             stubs = {'__dir': name, **quiet, 'route': 'echo "  interface: utun4"',

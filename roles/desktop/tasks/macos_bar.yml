@@ -24,8 +24,11 @@
   when: desktop_macos_bar | bool
   vars:
     # The desktop_i3status_disks paths (macOS gathers no mount facts): status.sh shows those that are mount points,
-    # as on Linux (/tmp is not one on macOS); names may have spaces (/Volumes/My Disk)
-    _desktop_macos_bar_disks: "{{ desktop_i3status_disks | map('regex_replace', '[^A-Za-z0-9/._ -]', '') | select | list }}"
+    # as on Linux (/tmp is not one on macOS); names may have spaces (/Volumes/My Disk). A trailing slash is dropped
+    # (/Volumes/X/ is mounted at /Volumes/X), / stays.
+    _desktop_macos_bar_disks: >-
+      {{ desktop_i3status_disks | map('regex_replace', '[^A-Za-z0-9/._ -]', '') | map('regex_replace', '(.)/+$', '\1')
+         | select | list }}
   block:
     - name: Ensure the SketchyBar config directories (macOS)
       ansible.builtin.file:
