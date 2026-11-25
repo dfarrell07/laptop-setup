@@ -99,6 +99,20 @@
         path: "/run/user/{{ ansible_facts['user_uid'] | default('none') }}/systemd/private"
       register: _drive_sync_user_manager
 
+    # The packages role installs rclone on Fedora and Debian only; without it every timer run would fail.
+    - name: Check for rclone
+      ansible.builtin.command:
+        argv: [sh, -c, 'command -v rclone']
+      register: _drive_sync_rclone
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Warn that rclone is missing
+      ansible.builtin.debug:
+        msg: "WARNING: rclone is not installed, so the push timer stays off. Install rclone, then make apply CHUNK=drive_sync."
+      when: _drive_sync_rclone.rc != 0
+
     - name: Enable the push timer once the OAuth client is configured
       ansible.builtin.systemd:
         name: drive-sync-push.timer
@@ -110,6 +124,18 @@
         - _drive_sync_user_manager.stat.exists
         - not (ansible_check_mode and _drive_sync_units is changed)
         - drive_sync_client_id | length > 0 and drive_sync_client_secret | length > 0
+        - _drive_sync_rclone.rc == 0
+
+    - name: Stop the push timer while rclone is missing
+      ansible.builtin.systemd:
+        name: drive-sync-push.timer
+        scope: user
+        enabled: false
+        state: stopped
+      when:
+        - _drive_sync_user_manager.stat.exists
+        - not (ansible_check_mode and _drive_sync_units is changed)
+        - _drive_sync_rclone.rc != 0
 
 # With no accounts left, a timer from an earlier run would keep pushing with the old command: stop it. The directories,
 # the remotes (and their tokens) and the Drive copies stay; docs/rollout-recovery.md lists them.

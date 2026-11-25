@@ -6,6 +6,7 @@
 #   drive-sync push [--timer] [<account>]   push now (all accounts by default); --timer: skip if a push is running
 #   drive-sync pull <account> <host>/<path> another machine's files into .pulled/<host>/ (this host: restore)
 #   drive-sync status                       remotes and Drive free space
+#   drive-sync adopt <account>              claim this host's Drive folder after a reinstall (a new machine-id)
 set -euo pipefail
 umask 077
 
@@ -15,8 +16,11 @@ HOST={{ drive_sync_host | quote }}
 ACCOUNTS=({% for a in drive_sync_accounts %}{{ a | quote }}{% if not loop.last %} {% endif %}{% endfor %})
 GITLEAKS_CONFIG="$HOME/.config/drive-sync/gitleaks.toml"
 LOCK="${XDG_RUNTIME_DIR:-$HOME/.cache}/drive-sync.lock"
-# Never pushed: pulled copies, unfinished writes, temp files and secret-shaped files. Symlinks are not followed.
-FILTERS=(--exclude '/.pulled/**' --exclude '/.gitleaksignore'
+# Never pushed: pulled copies, unfinished writes, temp files and secret-shaped files. Symlinks are refused (push_one).
+# .drive-sync-machine exists only on Drive (see push_one); excluding it keeps sync from deleting it.
+# .drive-sync-restoring marks a restore that has not finished (see pull).
+FILTERS=(--exclude '/.pulled/**' --exclude '/.gitleaksignore' --exclude '/.drive-sync-machine'
+         --exclude '/.drive-sync-restoring'
          --exclude '*.partial' --exclude '*.partial/**' --exclude '*.tmp' --exclude '*.incomplete'
          --exclude '.~lock*' --exclude '.DS_Store'
          --exclude '.env*' --exclude '*.pem' --exclude '*.key'
@@ -25,6 +29,12 @@ FILTERS=(--exclude '/.pulled/**' --exclude '/.gitleaksignore'
 die() { echo "drive-sync: $*" >&2; exit 1; }
 rc() { rclone --config "$CONF" --ask-password=false "$@"; }
 remote() { printf 'drive-%s:laptop-drive/%s' "$1" "$2"; }
+machine() {  # a hash of this machine's id; one machine pushes to each Drive folder
+  local id
+  id=$(tr -d '[:space:]' </etc/machine-id 2>/dev/null) || true
+  [[ $id =~ ^[0-9a-f]{32}$ ]] || die "/etc/machine-id is missing or invalid, so this machine cannot be told apart"
+  printf '%s' "$id" | sha256sum | cut -c1-16
+}
 known() { local a; for a in "${ACCOUNTS[@]}"; do [[ $a == "$1" ]] && return 0; done; die "unknown account '$1' (${ACCOUNTS[*]})"; }
 
 TIMER=false
@@ -52,6 +62,15 @@ push_one() {
   local account=$1 src="$ROOT/$1" dest need free
   dest=$(remote "$account" "$HOST")
   [[ -d $src ]] || die "$src does not exist"
+  [[ ! -e $src/.drive-sync-restoring ]] ||
+    die "a restore of $src did not finish (a push now would delete the rest from Drive): run drive-sync pull $account $HOST again; if nothing is left to restore, delete $src/.drive-sync-restoring"
+  # rclone skips a symlink, so a file or directory replaced by one (or a link to an unmounted disk) would be deleted
+  # from Drive. Paths the push excludes (mirrors FILTERS) may hold links.
+  local link
+  link=$(find "$src/" -mindepth 1 \( -path "$src/.pulled" -o -name '*.partial' \) -prune -o -type l \
+    ! -name '*.tmp' ! -name '*.incomplete' ! -name '.~lock*' ! -name .DS_Store ! -name '.env*' ! -name '*.pem' \
+    ! -name '*.key' ! -name 'id_rsa*' ! -name 'id_dsa*' ! -name 'id_ecdsa*' ! -name 'id_ed25519*' -print -quit)
+  [[ -z $link ]] || die "$link is a symlink, which a push skips and deletes from Drive: copy the data in or remove the link"
   authorized "$account"
   # An empty tree with a non-empty Drive copy is a wiped or re-created directory, or a host name reused on a new
   # machine: syncing it would empty Drive. A failed listing must not read as "empty" (exit 3: no folder yet).
@@ -59,13 +78,25 @@ push_one() {
   local_files=$(rc lsf -R --files-only "${FILTERS[@]}" "$src") || die "cannot list $src"
   remote_files=$(rc lsf -R --files-only "$dest" 2>/dev/null) || remote_rc=$?
   if [[ $remote_rc -ne 0 && $remote_rc -ne 3 ]]; then die "cannot list $dest (rclone exit $remote_rc)"; fi
+  # One Drive folder per machine: the same drive_sync_host on two machines (a copied config.yml) would make each push
+  # delete the other's files. The folder records a hash of the machine-id that pushes to it.
+  local me owner=""
+  me=$(machine)
+  if grep -qxF .drive-sync-machine <<<"$remote_files"; then
+    owner=$(rc cat "$dest/.drive-sync-machine" | tr -d '[:space:]') || die "cannot read $dest/.drive-sync-machine"
+    # an empty or garbled marker is not "unowned": that would let any machine take the folder over
+    [[ $owner =~ ^[0-9a-f]{16}$ ]] || die "$dest/.drive-sync-machine is empty or invalid: run drive-sync adopt $account on the machine that owns it"
+    remote_files=$(grep -vxF .drive-sync-machine <<<"$remote_files" || true)
+  fi
+  [[ -z $owner || $owner == "$me" ]] ||
+    die "$dest belongs to another machine: give this one its own drive_sync_host in config.yml. Only if this is the same machine after a reinstall: drive-sync adopt $account"
   if [[ -z $local_files && $remote_rc -eq 0 && -n $remote_files ]]; then
     die "refusing to push an empty $src over a non-empty $dest: restore it with drive-sync pull $account $HOST"
   fi
   command -v gitleaks >/dev/null || die "gitleaks not found (make packages): refusing to push unscanned files"
   local ignore=()
   [[ -f $src/.gitleaksignore ]] && ignore=(--gitleaks-ignore-path "$src/.gitleaksignore")
-  gitleaks dir "$src" --config "$GITLEAKS_CONFIG" "${ignore[@]}" --max-target-megabytes 10 --no-banner --redact -v \
+  gitleaks dir "$src/" --config "$GITLEAKS_CONFIG" "${ignore[@]}" --max-target-megabytes 10 --no-banner --redact -v \
     --log-level warn >&2 ||
     die "gitleaks stopped the push (finding above): fix the file, or add its Fingerprint line to $src/.gitleaksignore"
   # Bytes to upload: local files missing on Drive or of another size (deletions free no space for 30 days, so they are
@@ -91,21 +122,27 @@ print(sum(e["Size"] for e in json.load(open(sys.argv[1])) if dest.get(e["Path"])
   if [[ $free -ge 0 && $need -gt $free ]]; then
     die "drive-$account has $free bytes free but this push needs $need: free space on Drive (trash counts) first"
   fi
+  [[ -n $owner ]] || echo "$me" | rc rcat "$dest/.drive-sync-machine" || die "cannot claim $dest for this machine"
   rc sync "$src" "$dest" "${FILTERS[@]}" --drive-chunk-size 64M --transfers 2 --checkers 8 \
     --contimeout 60s --timeout 5m --drive-stop-on-upload-limit --drive-skip-gdocs --stats-one-line -v
 }
 
-push() {
-  [[ ${1:-} == --timer ]] && { TIMER=true; shift; }
+# One push or pull at a time: a timer push during a restore would see a partial tree and delete the rest from Drive.
+lock() {
   mkdir -p "$(dirname "$LOCK")"
   exec 9>"$LOCK"
   if $TIMER; then
-    flock -n 9 || { echo "drive-sync: a push is already running; this run is skipped"; exit 0; }
-    # offline (no route to Google): nothing to do, not a failure
-    getent hosts www.googleapis.com >/dev/null || { echo "drive-sync: offline; this run is skipped"; exit 0; }
+    flock -n 9 || { echo "drive-sync: a push or pull is already running; this run is skipped"; exit 0; }
   else
-    flock 9
+    flock -n 9 || { echo "drive-sync: waiting for a running push or pull" >&2; flock 9; }
   fi
+}
+
+push() {
+  [[ ${1:-} == --timer ]] && { TIMER=true; shift; }
+  lock
+  # offline (no route to Google): nothing to do, not a failure
+  if $TIMER && ! getent hosts www.googleapis.com >/dev/null; then echo "drive-sync: offline; this run is skipped"; exit 0; fi
   local account failed=0
   [[ $# -gt 0 ]] || set -- "${ACCOUNTS[@]}"
   for account in "$@"; do
@@ -121,38 +158,78 @@ pull() {
   known "$account"
   [[ $path != /* && $path != *..* && $path == */* || $path =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "bad path '$2'"
   host=${path%%/*}
+  lock
   authorized "$account"
   local src="drive-$account:laptop-drive/$path"
   local opts=(--transfers 2 --contimeout 60s --timeout 5m --drive-skip-gdocs --stats-one-line -v)
+  local restoring=""
   if [[ $host == "$HOST" ]]; then
-    # restore this machine's own copy; files already here are kept, never overwritten
+    # restore this machine's own copy; files already here are kept, never overwritten. Until it finishes, pushes refuse.
     dest="$ROOT/$account${path#"$host"}"
     opts+=(--ignore-existing)
+    restoring="$ROOT/$account/.drive-sync-restoring"
   else
     dest="$ROOT/$account/.pulled/$path"
   fi
-  if rc lsjson --stat "$src" | grep -q '"IsDir": *false'; then  # one file
+  local stat
+  stat=$(rc lsjson --stat "$src") || die "nothing to pull at $src"
+  # A full restore (or the pull that left the marker) clears it on success; a subpath pull never clears a marker
+  # left by a failed full restore, so pushes stay refused until the whole copy is back
+  local created=false
+  [[ -n $restoring && $path == "$HOST" ]] && created=true
+  if [[ -n $restoring && ! -e $restoring ]]; then
+    mkdir -p "$ROOT/$account" && touch "$restoring" || die "cannot write $restoring"
+    created=true
+  fi
+  if grep -q '"IsDir": *false' <<<"$stat"; then  # one file
     mkdir -p "$(dirname "$dest")"
     rc copyto "$src" "$dest" "${opts[@]}"
   else
     mkdir -p "$dest"
     rc copy "$src" "$dest" "${FILTERS[@]}" "${opts[@]}"
   fi
+  if $created; then rm -f -- "$restoring"; fi
 }
 
-# rclone comes from the packages role on Fedora and macOS only (not RHEL).
-[[ ${1:-} =~ ^(auth|push|pull|status)$ ]] && ! command -v rclone >/dev/null &&
-  die "rclone not found: make packages (Fedora and macOS install it)"
+# After a reinstall (new machine-id): claim this host's folder and restore it in one step. Pushes refuse until the
+# restore finishes, so a timer push cannot delete what is not restored yet.
+adopt() {
+  [[ $# -eq 1 ]] || die "usage: drive-sync adopt <account>"
+  known "$1"
+  [[ -t 0 ]] || die "adopt asks for confirmation: run it in a terminal"
+  local account=$1 dest me owner answer
+  me=$(machine)
+  dest=$(remote "$account" "$HOST")
+  (
+    lock
+    authorized "$account"
+    owner=$(rc cat "$dest/.drive-sync-machine" 2>/dev/null | tr -d '[:space:]') || owner=""
+    echo "drive-sync: $dest is owned by ${owner:-nobody}; this machine is $me."
+    echo "Adopt it only if this is the machine that pushed there, reinstalled. Another machine's pushes to it stop working,"
+    echo "and its files there are replaced by this machine's on its next push. Type the host name ($HOST) to adopt:"
+    read -r answer
+    [[ $answer == "$HOST" ]] || die "not adopted"
+    mkdir -p "$ROOT/$account" && touch "$ROOT/$account/.drive-sync-restoring" || die "cannot write the restore marker"
+    printf '%s\n' "$me" | rc rcat "$dest/.drive-sync-machine"
+  ) || exit 1
+  echo "drive-sync: $dest now belongs to this machine; restoring it"
+  pull "$account" "$HOST"
+}
+
+# The packages role installs rclone on Fedora and Debian; elsewhere it is installed by hand.
+[[ ${1:-} =~ ^(auth|push|pull|status|adopt)$ ]] && ! command -v rclone >/dev/null &&
+  die "rclone not found: make packages on Fedora and Debian; install it by hand elsewhere"
 
 case ${1:-} in
   auth) [[ $# -eq 2 ]] || die "usage: drive-sync auth <account>"; known "$2"; rc config reconnect "drive-$2:" ;;
   push) shift; push "$@" ;;
   pull) shift; pull "$@" ;;
+  adopt) shift; adopt "$@" ;;
   status)
     for account in "${ACCOUNTS[@]}"; do
       printf '%s: ' "$account"
       rc about "drive-$account:" 2>/dev/null | tr '\n' ' ' || printf 'not authorized (drive-sync auth %s)' "$account"
       echo
     done ;;
-  *) sed -n '4,8p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '4,9p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
