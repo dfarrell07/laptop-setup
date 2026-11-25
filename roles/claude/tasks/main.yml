@@ -781,6 +781,5 @@
 - name: Log acli in to Jira from the vault
   ansible.builtin.include_tasks: acli.yml
   when:
-    - profile | default('work') == 'work'
     - acli_api_token | default('') | length > 0
     - acli_site | default('') | length > 0

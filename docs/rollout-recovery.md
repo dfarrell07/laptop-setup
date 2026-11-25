@@ -70,7 +70,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
 - **Breaks if wrong:** a pinned-binary download can fail (the run warns and goes on). System-level effects: starts and enables `tailscaled`;
   adds you to the `libvirt` and `kvm` groups (`libvirt` membership is root-equivalent; active after the next login); enables
   `virtqemud.socket` and `virtnetworkd.socket`; overwrites same-named files in `/usr/local/bin` with no backup.
-- **Verify:** no check mapped on Linux (macOS has one). `make plan CHUNK=packages` shows changed=0 for the dnf, pipx and single-file downloads (kind) only:
+- **Verify:** no check mapped on Linux (macOS has one). With tailscaled running, `make smoke-test-user` reports
+  `tailscale-operator` and, beside NetBird, `tailscale-netbird-netfilter` (not mapped: both need a running tailscaled). `make plan CHUNK=packages` shows changed=0 for the dnf, pipx and single-file downloads (kind) only:
   check mode silently skips the helm, kustomize and k9s archives, the standalone binaries, Go tools, krew plugins and the group add.
   Check those with `scripts/smoke-test.sh --user-only --only sops,transcrypt,krew,kind,helm,kustomize,k9s` and
   `/usr/local/bin/gitleaks version` (a bare `gitleaks` may be the `make bootstrap-hooks` copy in `~/.local/bin`).
@@ -80,14 +81,15 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   also downgrades anything listed as Upgraded there, so if there are Upgraded lines, `sudo dnf remove` only the Installed ones
   instead. Undo this chunk after `login_shell`, `distrobox`, `containers` and `agents`, and keep zsh while it is the login shell.
   Then `sudo gpasswd -d "$USER" libvirt; sudo gpasswd -d "$USER" kvm`,
-  `sudo systemctl disable --now tailscaled virtqemud.socket virtnetworkd.socket`, and delete what the role placed outside dnf:
+  `sudo systemctl disable --now tailscaled virtqemud.socket virtnetworkd.socket` (before that, if wanted:
+  `sudo tailscale set --operator= --netfilter-mode=on` clears the operator and restores Tailscale's netfilter rules), and delete what the role placed outside dnf:
   the pinned files in `/usr/local/bin` (oc, kubectl, opm, kind, helm, kustomize, k9s, transcrypt, sops, gitleaks, actionlint, zizmor,
   operator-sdk, cosign, tkn, ec, oras), the acli rpm (`sudo dnf remove acli`), `/var/lib/ansible-packages`, the Go tools it installed in `~/go/bin`, `~/.local/bin/subctl*`,
   `pipx uninstall yamllint ansible-lint`, and `~/.krew` (this also removes krew plugins you added yourself). Stop the updater with
   `systemctl --user disable --now laptop-user-update.timer`, then delete `~/.local/bin/laptop-user-update` and
   `~/.config/systemd/user/laptop-user-update.{service,timer}` (or set `packages_user_updates_enabled: false`). On macOS:
   `launchctl bootout gui/$(id -u)/com.laptop-setup.user-update`, then delete `~/.local/bin/laptop-user-update` and
-  `~/Library/LaunchAgents/com.laptop-setup.user-update.plist`. acli on macOS is `~/.local/bin/acli`.
+  `~/Library/LaunchAgents/com.laptop-setup.user-update.plist`. acli on macOS is `~/.local/bin/acli` (undo: `rm ~/.local/bin/acli`).
 
 ## ssh_client
 
@@ -143,7 +145,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   CHUNK=desktop` shows changed=0 and no dconf warning, then log in again from a TTY or second session.
 - **Before:** `dconf dump / > ~/dconf-before.ini` (the system snapshot block also takes it; do it before the first desktop run).
 - **Undo:** `dconf reset <key>` for each key the role wrote (`/org/gnome/desktop/interface/color-scheme` under sway; the
-  `desktop_gnome_hardening_dconf` and `desktop_gnome_ui_dconf` keys in `roles/desktop/defaults/main.yml` under gnome), then
+  `desktop_gnome_hardening_dconf` and `desktop_gnome_ui_dconf` keys in `roles/desktop/defaults/main.yml` under gnome, and the two
+  `desktop_gnome_scroll_dconf` natural-scroll keys under either), then
   `dconf load -f / < ~/dconf-before.ini` (load merges and never unsets keys, so reset first; `-f` skips IT-locked keys, without it the first
   one cancels the load). Never
   `dconf reset /org/gnome/`: it wipes every GNOME setting. Restore or delete `~/.config/sway/config`, `~/.config/swaylock/config`,

@@ -291,6 +291,12 @@ gpg --verify collections-dist/SHA256SUMS.asc collections-dist/SHA256SUMS
   `roles/packages/tasks/install_standalone_binaries.yml`). This defends against CDN corruption but not a compromised release or maintainer
   account. Review upstream releases before updating hashes in `roles/packages/defaults/main.yml`. cosign upgrades verify the Sigstore
   bundle.
+- **Tailscale operator and netfilter (Linux)** — `packages_tailscale_operator` (default: the login user) lets every process running as
+  that user, agents included, change any Tailscale setting without sudo: exit node, Tailscale SSH, logout, and netfilter. Beside IT's
+  NetBird the packages role turns Tailscale's netfilter rules off, which also drops Tailscale's 100.64.0.0/10 anti-spoofing rule; with
+  `rp_filter=2` a host on the LAN could then send packets with a CGNAT source address. firewalld zones are per interface, so this
+  widens little, but an operator can turn netfilter back on (breaking NetBird) or off. Set `packages_tailscale_operator: ''` to stop
+  managing the operator (`sudo tailscale set --operator=` clears one already set).
 - **lockdown=integrity is not userspace integrity** — it restricts kernel self-modification (unsigned modules, `/dev/mem` writes, kexec of
   unverified kernels) and does nothing about executed binaries. No IMA appraisal policy is deployed (Fedora's default is measure-only).
   Mitigations: SELinux enforcing, optional AIDE (`system_aide_enabled: true`), or a full IMA appraisal setup this playbook does not provide.
