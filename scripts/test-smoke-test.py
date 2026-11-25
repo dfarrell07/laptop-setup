@@ -3,6 +3,7 @@
 import json
 import os
 import platform
+import re
 import shlex
 from pathlib import Path
 import subprocess
@@ -763,9 +764,18 @@ class SmokeTests(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertEqual(result.stdout.strip(), 'aerospace-running ' + expected)
 
+    def test_config_is_read_only_before_it_is_unset(self):
+        # Under set -u a later "$_cfg" aborts that check's subshell, so a config.yml toggle is silently ignored
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        after = source[source.index('\nunset _cfg\n'):]
+        self.assertEqual(re.findall(r'.*\$\{?_cfg\b.*', after), [])
+
     def test_bar_and_borders_checks_only_when_on(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
-        start = source.index('  _macos_agent_state() { # process config_key')
+        # The toggles are read near the top, where config.yml is still known, then checked further down
+        read_start = source.index('_macos_cfg() {')
+        read_end = source.index('unset -f _macos_cfg', read_start)
+        start = source.index('  _macos_agent_state() { # process toggle_value')
         end = source.index('  unset -f _macos_agent_state', start)
         with tempfile.TemporaryDirectory() as directory:
             d = Path(directory)
@@ -782,7 +792,8 @@ class SmokeTests(unittest.TestCase):
                 with self.subTest(wm=wm, config=config, running=running, molecule=molecule):
                     cfg.write_text(config)
                     result = subprocess.run([BASH, '-eu', '-o', 'pipefail', '-c', 'record() { printf "%s %s\\n" "$1" "$2"; };'
-                                             f' _desktop_env={wm}; _cfg={cfg};\n' + source[start:end]],
+                                             f' _desktop_env={wm}; _cfg={cfg};\n' + source[read_start:read_end]
+                                             + 'unset _cfg\n' + source[start:end]],
                                             env=dict(os.environ, PATH=f'{directory}:/usr/bin:/bin', RUNNING=running,
                                                      MOLECULE_PROJECT_DIRECTORY=molecule),
                                             capture_output=True, text=True)
