@@ -8,7 +8,7 @@
        test-scripts test-poller test-gitleaks test-% \
        repos-% \
        preflight guard-not-root guard-libvirt-group \
-       pip-lock pip-sync npm setup-yubikeys collections vendor-collections migration-inventory workstation-audit chrome-bookmarks usb-add aide-rebaseline \
+       pip-lock pip-sync npm setup-yubikeys collections vendor-collections migration-inventory workstation-audit chrome-bookmarks chrome-bookmarks-export usb-add aide-rebaseline \
        test-vm repos-dnf
 
 # *** ORDERING CRITICAL — DO NOT MOVE THESE BLOCKS ***
@@ -132,6 +132,7 @@ help:
 	@echo "  csb-audit              Check-mode run of the common tasks with the CSB report"
 	@echo "  migration-inventory    Write a private JSON report for a laptop move"
 	@echo "  chrome-bookmarks       Render local_bookmarks.yml as one bookmarks file per Chrome profile"
+	@echo "  chrome-bookmarks-export  Write local_bookmarks.yml from this machine's Chrome profiles (read-only)"
 	@echo "  workstation-audit      Write a private JSON audit of this workstation"
 	@echo
 	@echo "Development:"
@@ -409,6 +410,10 @@ migration-inventory: guard-not-root
 chrome-bookmarks: guard-not-root .venv
 	.venv/bin/python3 -I scripts/chrome-bookmarks.py
 
+# Fill local_bookmarks.yml from the bookmarks already in each Chrome profile (reads Chrome's files, never writes them)
+chrome-bookmarks-export: guard-not-root .venv
+	.venv/bin/python3 -I scripts/chrome-bookmarks-export.py
+
 
 preflight:
 	scripts/preflight.sh
@@ -530,6 +535,7 @@ TEST_SCRIPTS := \
 	'.venv/bin/python3 scripts/test-git-repos.py' \
 	'.venv/bin/python3 scripts/test-agent-getty.py' \
 	'.venv/bin/python3 scripts/test-chrome-bookmarks.py' \
+	'.venv/bin/python3 scripts/test-chrome-bookmarks-export.py' \
 	'.venv/bin/python3 scripts/test-smoke-test.py' \
 	'.venv/bin/python3 scripts/test-workstation-audit.py' \
 	'.venv/bin/python3 scripts/test-go-checksum.py' \

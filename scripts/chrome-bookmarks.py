@@ -72,6 +72,10 @@ def check_url(url, place):
     if not isinstance(url, str) or re.search(r'[\x00-\x20]', url):
         raise Invalid(f'{place}: url must be a string without spaces or control characters')
     try:
+        url.encode('utf-8')
+    except UnicodeEncodeError:
+        raise Invalid(f'{place}: url must be valid text') from None
+    try:
         parts = urlsplit(url)
     except ValueError as error:
         raise Invalid(f'{place}: url does not parse ({error})') from None
@@ -83,13 +87,21 @@ def check_url(url, place):
 
 def load(path):
     try:
-        data = yaml.load(path.read_text(encoding='utf-8'), Loader=UniqueKeyLoader)  # noqa: S506 (a SafeLoader)
+        text = path.read_text(encoding='utf-8')
     except FileNotFoundError:
-        raise Invalid(f'{path} not found: copy {path.name}.example next to it and edit it') from None
-    except yaml.YAMLError as error:
-        raise Invalid(f'{path}: not valid YAML ({error})') from None
+        raise Invalid(f'{path} not found: run make chrome-bookmarks-export, or copy {path.name}.example next to it '
+                      'and edit it') from None
     except UnicodeDecodeError:
         raise Invalid(f'{path}: not UTF-8 text') from None
+    return load_text(text, path)
+
+
+def load_text(text, path):
+    """Validate the YAML text of a bookmarks file; path is only named in errors."""
+    try:
+        data = yaml.load(text, Loader=UniqueKeyLoader)  # noqa: S506 (a SafeLoader)
+    except yaml.YAMLError as error:
+        raise Invalid(f'{path}: not valid YAML ({error})') from None
     if not isinstance(data, dict) or set(data) != {'chrome_bookmarks'} or not isinstance(data['chrome_bookmarks'], dict):
         raise Invalid(f'{path}: must hold one key, chrome_bookmarks, mapping each profile to its bookmarks')
     profiles = data['chrome_bookmarks']
