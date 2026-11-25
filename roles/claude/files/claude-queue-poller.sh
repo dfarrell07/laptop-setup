@@ -157,8 +157,10 @@ commit_worktree() {
 
 mark_issue_failed() {
   local issue_num="$1" message="$2"
-  gh issue edit "$issue_num" --repo "$TASK_QUEUE_REPO" \
-    --remove-label processing --remove-label queued --add-label failed 2>/dev/null || true
+  if gh issue edit "$issue_num" --repo "$TASK_QUEUE_REPO" \
+    --remove-label processing --remove-label queued --add-label failed 2>/dev/null; then
+    [[ -z "${SETTLED:-}" ]] || : > "$SETTLED"
+  fi
   gh issue comment "$issue_num" --repo "$TASK_QUEUE_REPO" \
     --body "$message" 2>/dev/null || true
   log "Issue #$issue_num failed"
@@ -210,7 +212,52 @@ if [[ -z "$ISSUES" ]]; then
   exit 0
 fi
 
-echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
+# Per-issue state the traps below act on: the claimed issue, its prompt file and worktree, and the running agent.
+# SETTLED is a file written once the claimed issue is marked failed or done, by this shell or the subshell that
+# finishes the issue.
+CLAIMED="" TMPFILE="" WORKTREE="" GITDIR="" AGENT_PID="" SETTLED=""
+cleanup_issue() {
+  [[ -z "$TMPFILE" ]] || rm -f "$TMPFILE"
+  [[ -z "$WORKTREE" ]] || remove_worktree "$TARGET_DIR" "$WORKTREE" "$GITDIR"
+  [[ -z "$SETTLED" ]] || rm -f "$SETTLED"  # removed with the mktemp directory, unless no worktree was made
+  TMPFILE="" WORKTREE="" SETTLED=""
+}
+# launchd stops the job (bootout, plist reload) with SIGTERM to this process and then SIGKILL to its process group, which
+# misses the agent: timeout runs it in a group of its own.  So on a signal, stop that group, clean up, and fail the
+# issue as any other run that ends without a result is (stale recovery would hold it in processing for half an hour,
+# then fail it anyway).  Local cleanup first: launchd's SIGKILL may cut the gh calls short.  A signal while the
+# subshell finishes the issue waits for it (launchd signals only this process); systemd's stop kills that subshell
+# too, so the issue is failed here unless the subshell settled it first.
+on_signal() {
+  local i settled=false
+  trap '' TERM HUP INT
+  if [[ -n "$AGENT_PID" ]]; then
+    kill -TERM -- "-$AGENT_PID" 2>/dev/null || kill -TERM "$AGENT_PID" 2>/dev/null || true
+    # up to 1 s to exit, then KILL (the group, or timeout alone if it had not made its group yet)
+    for ((i = 0; i < 10; i++)); do
+      kill -0 -- "-$AGENT_PID" 2>/dev/null || kill -0 "$AGENT_PID" 2>/dev/null || break
+      sleep 0.1
+    done
+    ((i < 10)) || kill -KILL -- "-$AGENT_PID" 2>/dev/null || kill -KILL "$AGENT_PID" 2>/dev/null || true
+    wait "$AGENT_PID" 2>/dev/null || true
+  fi
+  [[ -n "$SETTLED" && -e "$SETTLED" ]] && settled=true
+  cleanup_issue
+  [[ -z "$CLAIMED" ]] || $settled \
+    || mark_issue_failed "$CLAIMED" "Task interrupted: the poller was stopped (signal $1); its changes were discarded. Re-open and re-label as \`queued\` to retry."
+  exit $((128 + $1))
+}
+trap cleanup_issue EXIT
+trap 'on_signal 1' HUP
+trap 'on_signal 2' INT
+trap 'on_signal 15' TERM
+# No trap sees launchd's SIGKILL alone: a watchdog beside the agent, in its group, kills that group once the poller
+# ($0) is gone, and itself ends with the agent ($$ after the exec).
+# shellcheck disable=SC2016  # expanded by the agent's bash, not here
+AGENT_WATCHDOG='(while kill -0 "$$" 2>/dev/null; do kill -0 "$0" 2>/dev/null || kill -KILL 0; sleep 1; done) & exec "$@"'
+
+# The loop runs in this shell, not a pipeline's subshell, so that the traps above see its state.
+while IFS= read -r ISSUE; do
   ISSUE_NUM=$(echo "$ISSUE" | jq -r '.number')
   ISSUE_TITLE=$(echo "$ISSUE" | jq -r '.title')
   ISSUE_AUTHOR=$(echo "$ISSUE" | jq -r '.author.login // empty')
@@ -345,15 +392,17 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
   gh issue edit "$ISSUE_NUM" --repo "$TASK_QUEUE_REPO" \
     --remove-label queued --add-label processing \
     || { log "WARNING: could not label #$ISSUE_NUM as processing, skipping (check: gh auth status, repo write permission, 'processing' label exists)"; continue; }
+  CLAIMED="$ISSUE_NUM"
   gh issue comment "$ISSUE_NUM" --repo "$TASK_QUEUE_REPO" \
     --body "Processing started at $(date -Iseconds)${HOST_LABEL:+ on ${HOST_LABEL}}" || true
 
   BRANCH_NAME="claude/${ISSUE_NUM}-$(slugify "$ISSUE_TITLE")"
   START_TIME=$(date +%s)
-  TMPFILE=$(mktemp)
-  WORKTREE="$(mktemp -d)/$REPO_SHORT"
   GITDIR=""
-  trap 'rm -f "${TMPFILE:-}"; [[ -z "${WORKTREE:-}" ]] || remove_worktree "$TARGET_DIR" "$WORKTREE" "$GITDIR"' EXIT
+  TMPFILE=$(mktemp)
+  WTROOT=$(mktemp -d)  # its own step: under set -e a failed mktemp stops here, never leaving WORKTREE as /<repo>
+  WORKTREE="$WTROOT/$REPO_SHORT"
+  SETTLED="$WTROOT/settled"  # beside the worktree, in the private mktemp directory
   chmod 0600 "$TMPFILE"
   printf '%s\n' "$PROMPT" > "$TMPFILE"
 
@@ -363,17 +412,15 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
     && BASE=$(git -C "$TARGET_DIR" rev-parse --verify "origin/$DEFAULT_BRANCH^{commit}") \
     && git -C "$TARGET_DIR" worktree add -q --detach "$WORKTREE" "$BASE" \
     && GITDIR=$(git -C "$WORKTREE" rev-parse --absolute-git-dir) || true
-  (
-    # set -e is suppressed inside a subshell on the left of ||, so fail explicitly.
-    [[ -n "$GITDIR" ]] || exit 1
-    cd "$TARGET_DIR" || exit 1
-
-    set +e
+  CLAUDE_EXIT=0
+  if [[ -n "$GITDIR" ]]; then
     # dontAsk denies instead of prompting.  --restricted ignores the user, project and local settings files, whose allow
     # rules would add to --allowedTools (Bash(make lint) beside Edit runs whatever the agent wrote), confines the file
     # tools to the worktree and refuses writes to settings and git files; managed settings still apply.
-    # --strict-mcp-config leaves out MCP servers.
-    (cd "$WORKTREE" && GIT_DIR="$GITDIR" GIT_WORK_TREE="$WORKTREE" exec "$TIMEOUT_BIN" -k 30 "$TIMEOUT_SECONDS" "$CLAUDE_BIN" -p \
+    # --strict-mcp-config leaves out MCP servers.  In the background, as only wait lets a trap run; the subshell execs
+    # timeout, so AGENT_PID is timeout's pid and the id of the group it makes.
+    (cd "$WORKTREE" && GIT_DIR="$GITDIR" GIT_WORK_TREE="$WORKTREE" exec "$TIMEOUT_BIN" -k 30 "$TIMEOUT_SECONDS" \
+      "$BASH" -c "$AGENT_WATCHDOG" "$$" "$CLAUDE_BIN" -p \
       --restricted --strict-mcp-config \
       --tools "$BUILTIN_TOOLS" \
       --permission-mode dontAsk \
@@ -382,9 +429,18 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
       < "$TMPFILE" \
       2>"$LOG_DIR/issue-${ISSUE_NUM}-stderr.log" \
       >"$LOG_DIR/issue-${ISSUE_NUM}-stdout.log" \
-      200>&-)  # the lock's fd: a process the agent leaves running must not keep later polls out
-    CLAUDE_EXIT=$?
-    set -e
+      200>&-) &  # the lock's fd: a process the agent leaves running must not keep later polls out
+    AGENT_PID=$!
+    wait "$AGENT_PID" || CLAUDE_EXIT=$?
+    # Whatever the agent left running stops here, before the checks below read the worktree
+    kill -KILL -- "-$AGENT_PID" 2>/dev/null || true
+    AGENT_PID=""
+  fi
+  # From here the subshell settles the issue (mark_issue_failed, or the done label below), writing SETTLED first.
+  (
+    # set -e is suppressed inside a subshell on the left of ||, so fail explicitly.
+    [[ -n "$GITDIR" ]] || exit 1
+    cd "$TARGET_DIR" || exit 1
 
     END_TIME=$(date +%s)
     DURATION=$((END_TIME - START_TIME))
@@ -433,6 +489,7 @@ Signed-off-by: $(git var GIT_COMMITTER_IDENT | sed 's/>.*/>/')") || exit 1
       --title "$ISSUE_TITLE" \
       --body "From [${TASK_QUEUE_REPO}#${ISSUE_NUM}](https://github.com/${TASK_QUEUE_REPO}/issues/${ISSUE_NUM}). Duration: ${DURATION}s.") || exit 1
 
+    : > "$SETTLED"  # the PR is open: an interrupt from here on must not fail the issue
     gh issue edit "$ISSUE_NUM" --repo "$TASK_QUEUE_REPO" \
       --remove-label processing --add-label "done" \
       || log "WARNING: could not update labels for #$ISSUE_NUM (PR: $PR_URL)"
@@ -445,9 +502,8 @@ Signed-off-by: $(git var GIT_COMMITTER_IDENT | sed 's/>.*/>/')") || exit 1
     log "Issue #$ISSUE_NUM completed: $PR_URL"
   ) || {
     log "Issue #$ISSUE_NUM: subshell failed — see $LOG_DIR/issue-${ISSUE_NUM}-stderr.log"
-    mark_issue_failed "$ISSUE_NUM" "Internal error: git or PR creation failed (post-PR label/comment/close may also have failed). Check logs at $LOG_DIR/issue-${ISSUE_NUM}-stderr.log."
+    [[ -e "$SETTLED" ]] || mark_issue_failed "$ISSUE_NUM" "Internal error: git or PR creation failed (post-PR label/comment/close may also have failed). Check logs at $LOG_DIR/issue-${ISSUE_NUM}-stderr.log."
   }
-  rm -f "$TMPFILE"
-  remove_worktree "$TARGET_DIR" "$WORKTREE" "$GITDIR"
-  WORKTREE=""
-done
+  CLAIMED=""  # before cleanup removes SETTLED: a signal in between must not fail a settled issue
+  cleanup_issue
+done < <(jq -c '.' <<< "$ISSUES")

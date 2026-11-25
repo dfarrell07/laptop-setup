@@ -221,6 +221,22 @@ assert_contains "unknown repo: comment names the repo" 'Unknown or incomplete re
 # with an untracked file, and core.hooksPath=.githooks runs tracked hooks that leave a mark.
 # Sets _Q (scratch dir, removed by _qdone), _q_out, _q_exit, _q_gh (gh, claude and gitleaks calls).
 _qrun() {
+  _qsetup
+  set +e
+  _q_out=$(_qpoller "$1" "$2" 2>&1)
+  _q_exit=$?
+  set -e
+  _q_gh=$(cat "$_Q/gh.log")
+}
+# _qpoller <number> <title> [launcher...]: run the poller _qsetup prepared, through the launcher if one is given
+_qpoller() {
+  local num="$1" title="$2"
+  shift 2
+  GH_LOG_FILE="$_Q/gh.log" Q_NUM="$num" Q_TITLE="$title" CLAUDE_QUEUE_REPO="test/q" CLAUDE_BIN="$_Q/bin/claude-stub" \
+    CLAUDE_QUEUE_TIMEOUT="${Q_TIMEOUT:-10}" HOME="$_Q/home" GIT_CONFIG_NOSYSTEM=1 GIT_COMMITTER_NAME=Poller GIT_COMMITTER_EMAIL=p@example.invalid \
+    GIT_AUTHOR_NAME=Poller GIT_AUTHOR_EMAIL=p@example.invalid PATH="$_Q/bin:$PATH" "$@" bash "$_Q/poller.sh"
+}
+_qsetup() {
   _Q=$(mktemp -d)
   local g=(env HOME="$_Q/home" GIT_CONFIG_NOSYSTEM=1 git)
   mkdir -p "$_Q/bin" "$_Q/home/.config/claude" "$_Q/seed/.githooks"
@@ -251,19 +267,12 @@ exit 0
 GHEOF
   printf '#!/bin/bash\ncat >/dev/null\necho "claude $* in $PWD" >> "$GH_LOG_FILE"\necho "claude git dir $GIT_DIR" >> "$GH_LOG_FILE"\neval "${CLAUDE_ACT:-}"\nexit "${CLAUDE_RC:-0}"\n' \
     > "$_Q/bin/claude-stub"
-  printf '#!/bin/bash\necho "gitleaks $*" >> "$GH_LOG_FILE"\nexit "${GITLEAKS_RC:-0}"\n' > "$_Q/bin/gitleaks"
+  printf '#!/bin/bash\necho "gitleaks $*" >> "$GH_LOG_FILE"\n[ -z "${GITLEAKS_HANG:-}" ] || { echo $$ > "$GH_LOG_FILE.gitleaks"; sleep 40; }\nexit "${GITLEAKS_RC:-0}"\n' > "$_Q/bin/gitleaks"
   chmod +x "$_Q/bin"/*
   printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n%s\n' "$_Q/clone" "${Q_CONF:-}" \
     > "$_Q/home/.config/claude/queue-repos.conf"
   sed 's|LOCKFILE=.*|LOCKFILE="'"$_Q/test.lock"'"|' "$POLLER" > "$_Q/poller.sh"
   : > "$_Q/gh.log"
-  set +e
-  _q_out=$(GH_LOG_FILE="$_Q/gh.log" Q_NUM="$1" Q_TITLE="$2" CLAUDE_QUEUE_REPO="test/q" CLAUDE_BIN="$_Q/bin/claude-stub" \
-    CLAUDE_QUEUE_TIMEOUT="${Q_TIMEOUT:-10}" HOME="$_Q/home" GIT_CONFIG_NOSYSTEM=1 GIT_COMMITTER_NAME=Poller GIT_COMMITTER_EMAIL=p@example.invalid \
-    GIT_AUTHOR_NAME=Poller GIT_AUTHOR_EMAIL=p@example.invalid PATH="$_Q/bin:$PATH" bash "$_Q/poller.sh" 2>&1)
-  _q_exit=$?
-  set -e
-  _q_gh=$(cat "$_Q/gh.log")
 }
 _qdone() { rm -rf "$_Q"; }
 _mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
@@ -369,6 +378,52 @@ assert_eq "leftover process: run succeeds" "0" "$_q_exit"
 _lock_free=no; flock -n "$_Q/test.lock" true && _lock_free=yes
 kill "$(cat "$_Q/bg.pid")" 2>/dev/null || true
 assert_eq "leftover process: lock released when the poller exits" "yes" "$_lock_free"
+_qdone
+
+# launchd stops the job (bootout, plist reload) with SIGTERM to the poller, then SIGKILL to its process group, which
+# also comes alone: the agent (here one that ignores SIGTERM), in timeout's own group, must outlive neither.  After a
+# SIGTERM the worktree, its registration and the prompt file are gone too, and the issue is failed.
+_alive() { local s; s=$(ps -o stat= -p "$1" 2>/dev/null) && [[ "$s" != Z* ]]; }
+_q_stop() { # <name> <kill arguments, with POLLER for the poller's pid>; Q_STUB: the stub to wait for (claude)
+  local name="$1" pid="" stub="" stub_pgid="" i
+  shift
+  _qsetup
+  mkdir "$_Q/tmp"
+  # shellcheck disable=SC2016  # expanded by the stub claude
+  CLAUDE_ACT=${Q_ACT:-'echo $$ > "$GH_LOG_FILE.claude"; trap "" TERM; sleep 40'} TMPDIR="$_Q/tmp" _qpoller 24 "Stop" \
+    perl -e 'setpgrp(0, 0); open(my $f, ">", shift) or die; print $f $$; close $f; exec @ARGV' "$_Q/poller.pid" \
+    >"$_Q/out" 2>&1 &
+  disown $! # no "Killed" job notice; bash still reaps it
+  for ((i = 0; i < 100; i++)); do [[ -s "$_Q/gh.log.${Q_STUB:-claude}" ]] && break; sleep 0.1; done
+  pid=$(cat "$_Q/poller.pid" 2>/dev/null) || true
+  stub=$(cat "$_Q/gh.log.${Q_STUB:-claude}" 2>/dev/null) || true
+  [[ -z "$stub" ]] || stub_pgid=$(ps -o pgid= -p "$stub" | tr -d ' ') || true
+  assert_eq "$name: stub ${Q_STUB:-claude} started" "yes" "$([[ -n "$pid" && -n "$stub" ]] && echo yes || echo no)"
+  if [[ -n "$pid" && -n "$stub" ]]; then
+    kill "${@/POLLER/$pid}" || true
+    for ((i = 0; i < 50; i++)); do _alive "$stub" || _alive "$pid" || break; sleep 0.1; done
+    assert_eq "$name: agent and poller gone" "no no" \
+      "$(_alive "$stub" && echo yes || echo no) $(_alive "$pid" && echo yes || echo no)"
+  fi
+  # Whatever the outcome, nothing started here outlives the test
+  [[ -z "$pid" ]] || kill -KILL -- "-$pid" 2>/dev/null || true
+  [[ -z "$stub_pgid" ]] || kill -KILL -- "-$stub_pgid" 2>/dev/null || true
+  _q_gh=$(cat "$_Q/gh.log")
+}
+_q_stop sigterm -TERM POLLER
+assert_eq       "sigterm: worktree, registration and prompt file removed" "1  " \
+  "$(git -C "$_Q/clone" worktree list | wc -l | tr -d ' ') $(ls "$_Q/clone/.git/worktrees" 2>/dev/null) $(ls "$_Q/tmp")"
+assert_contains "sigterm: issue marked failed" "issue edit 24 --repo test/q --remove-label processing --remove-label queued --add-label failed" "$_q_gh"
+assert_contains "sigterm: comment explains" "Task interrupted: the poller was stopped (signal 15)" "$_q_gh"
+_qdone
+_q_stop sigkill -KILL -- -POLLER
+_qdone
+# systemd stops the unit with SIGTERM to every process in it: one landing while the subshell finishes the issue (here
+# in gitleaks, after the agent) kills that subshell too, and the issue is failed, never left in processing
+GITLEAKS_HANG=1 Q_STUB=gitleaks Q_ACT='echo x > f' _q_stop systemd-finish -TERM -- -POLLER
+assert_contains "systemd-finish: issue marked failed" "Task interrupted: the poller was stopped (signal 15)" "$_q_gh"
+assert_eq       "systemd-finish: worktree and prompt file removed" "1 " \
+  "$(git -C "$_Q/clone" worktree list | wc -l | tr -d ' ') $(ls "$_Q/tmp")"
 _qdone
 
 # A tool list from an older queue-repos.conf, or an origin other than REPO_REMOTE: refused before Claude runs
