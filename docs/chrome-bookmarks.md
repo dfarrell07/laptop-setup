@@ -54,5 +54,4 @@ Each Chrome profile (work, personal) gets its own deliberate bookmark set, kept 
 
 The installer writes only the `Bookmarks` file of the matched profiles, while Chrome is closed: tested against Chrome
 157, which loads it, gives the new nodes GUIDs and rewrites it with a checksum. It only adds missing links. Nothing
-here sets Chrome policy, which applies to every profile on a machine (no local per-profile policy exists); on CSB
-machines IT owns `/etc/opt/chrome/policies/managed`, so extensions and settings are left to IT and Chrome Sync.
+here sets Chrome policy; extensions and settings are managed separately ([chrome.md](chrome.md)).

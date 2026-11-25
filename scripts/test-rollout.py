@@ -224,7 +224,7 @@ class TagTests(unittest.TestCase):
                 self.assertTrue(self.tagged(chunk), f'no task carries the tag {chunk}; skipping it would do nothing')
 
     def test_intra_role_features_stay_inside_their_role(self):
-        for chunk, role in {'login_shell': 'desktop', 'ssh_authorized_keys': 'ssh'}.items():
+        for chunk, role in {'login_shell': 'desktop', 'ssh_authorized_keys': 'ssh', 'chrome': 'desktop'}.items():
             with self.subTest(chunk=chunk):
                 names = self.tagged(chunk)
                 self.assertTrue(names)
@@ -486,7 +486,9 @@ class LinuxOnlyTests(unittest.TestCase):
 
     def test_macos_only_checks_count_only_on_macos(self):
         # on Linux a chunk with only verify_macos checks has no smoke check: make verify sends it to make plan
+        self.assertEqual(rollout.checks_for({'verify_macos': ['macos-firewall']}, linux=True), [])
         self.assertEqual(rollout.checks_for(CATALOG['desktop'], linux=True), [])
+        self.assertEqual(rollout.checks_for(CATALOG['chrome'], linux=True), ['chrome-profiles', 'chrome-policy'])
         self.assertIn('macos-firewall', rollout.checks_for(CATALOG['desktop'], linux=False))
         self.assertEqual(rollout.checks_for(CATALOG['containers'], linux=False)[-2:], ['podman-machine', 'docker-shim'])
 

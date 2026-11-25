@@ -473,3 +473,45 @@ desktop_chrome_page_zoom: ''
 desktop_chrome_user_data_dir: >-
   {{ ansible_facts['user_dir'] ~ ('/Library/Application Support/Google/Chrome'
      if ansible_facts['system'] | default('Linux') == 'Darwin' else '/.config/google-chrome') }}
+
+# --- Chrome: personal profiles managed here instead of Chrome Sync (docs/chrome.md: mechanisms, levels, reasoning) ---
+# false: none of the settings below are applied (the page zoom above still is).
+desktop_chrome_manage: true
+# Personal profiles: signed in with a consumer Google account (not Workspace, not managed) of one of these domains.
+# Work, unsigned and other profiles keep only the page zoom.
+desktop_chrome_personal_domains: [gmail.com, googlemail.com]
+
+# Extensions for every personal profile. install: false allows one without installing it (no "undeclared" warning).
+# Installed as external extensions (Web Store, user can remove) where this machine's Chrome policy is ours; on a CSB
+# laptop only audited, since an install there reaches the work profile: make chrome-extensions opens the missing ones.
+# Why each one: docs/chrome.md#extensions.
+desktop_chrome_extensions:
+  - {id: ddkjiahejlhfcafbddmgiahcphecmpfh, name: uBlock Origin Lite}
+  - {id: pkehgijcmpdhfbdbbnkijodmdjhbjlgp, name: Privacy Badger}
+  - {id: nngceckbapebfimnlniiiahkandclblb, name: Bitwarden}
+  - {id: fcoeoabgfenejglbffodgkkbkcdhcgfn, name: Claude}
+  - {id: hehggadaopoacecdllhhajmbjkdcmajg, name: ChatGPT}
+desktop_chrome_extensions_extra: []  # config.yml: more entries, same form
+
+# Default level: Chrome policies at the recommended level (Chrome uses them until the user changes the setting;
+# chrome://policy lists them). Where machine policy is not ours (CSB: IT owns it, and it would reach the work
+# profile), the ones chrome.py knows are set in personal profiles' Preferences instead; the rest are not applied.
+# macOS without MDM: RestoreOnStartup is a sensitive policy and is ignored, so it is not set there.
+desktop_chrome_policies_recommended:
+  PasswordManagerEnabled: false  # Bitwarden holds the passwords
+  AutofillCreditCardEnabled: false  # and the cards
+  BlockThirdPartyCookies: true
+  SafeBrowsingProtectionLevel: 2  # enhanced
+  HttpsOnlyMode: force_balanced_enabled  # HTTPS first; plain-HTTP sites get a warning, internal hostnames are exempt
+  RestoreOnStartup: 1  # continue where you left off
+  BookmarkBarEnabled: true
+desktop_chrome_policies_recommended_extra: {}  # config.yml: more recommended policies (null drops one above)
+# Enforced level: mandatory policies (greyed out in Chrome). Linux only, and only where machine policy is ours.
+desktop_chrome_policies_enforced: {}
+
+# Reconciled level: personal profiles' Preferences, set again on every chrome chunk run while Chrome is closed.
+desktop_chrome_color_scheme: dark  # dark, light, system; '' leaves it alone (no Chrome policy sets it)
+# Site settings, private (config.yml): {notifications: {"https://app.slack.com": allow}, popups: {...}}; values allow,
+# block or ask; sites as https://host[:port] or [*.]domain. Types: docs/chrome.md#site-settings.
+desktop_chrome_site_settings: {}
+desktop_chrome_default_site_settings: {}  # {notifications: ask, geolocation: block, ...}

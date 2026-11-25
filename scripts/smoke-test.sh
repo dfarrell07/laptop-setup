@@ -189,7 +189,6 @@ _codex_personal=$(_cfg_value codex_personal_config_dir)
 # Tailscale operator the packages role manages: the login user unless config.yml sets packages_tailscale_operator
 _ts_want=${SUDO_USER:-$USER}
 grep -q '^packages_tailscale_operator:' "$_cfg" 2>/dev/null && _ts_want=$(_cfg_value packages_tailscale_operator)
-_chrome_zoom=$(_cfg_value desktop_chrome_page_zoom)  # Chrome's default page zoom check (desktop role)
 _claude_home2_off=false
 grep -qiE '^claude_personal2_instance_enabled:[[:space:]]*["'"'"']?(false|no|off|n|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null \
   && _claude_home2_off=true
@@ -747,19 +746,44 @@ if [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   fi
 fi
 
-# Chrome's default page zoom (desktop_chrome_page_zoom), read by the helper the desktop role runs, in check mode
-if [[ -n "$_chrome_zoom" && -z "$CONTAINER" ]] && ! $SYSTEM_ONLY && [[ "$EUID" -ne 0 ]]; then
-  if $IS_LINUX; then _chrome_dir="$HOME/.config/google-chrome"; else _chrome_dir="$HOME/Library/Application Support/Google/Chrome"; fi
-  case $(python3 -I "$SCRIPT_DIR/../roles/desktop/files/chrome-page-zoom.py" "$_chrome_dir" "$_chrome_zoom" --check 2>&1) in
-    unchanged) record "chrome-page-zoom" "PASS" ;;
-    absent) record "chrome-page-zoom" "PASS" "no Chrome profile yet" ;;
-    running) record "chrome-page-zoom" "WARN" "default page zoom is not ${_chrome_zoom}%: quit Chrome, then make desktop" ;;
-    changed) record "chrome-page-zoom" "WARN" "default page zoom is not ${_chrome_zoom}%: make desktop" ;;
-    *) record "chrome-page-zoom" "WARN" "cannot read Chrome's profiles in $_chrome_dir" ;;
-  esac
-  unset _chrome_dir
+# Chrome (desktop role, docs/chrome.md): the settings the last make apply CHUNK=chrome rendered, compared with Chrome's profiles,
+# extensions and policy by the role's own helper (read-only). Not as root: the profiles are the login user's.
+if [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY && [[ "$EUID" -ne 0 ]]; then
+  _chrome_spec="$HOME/.config/laptop-setup/chrome.json"
+  _chrome_py=(python3 -I "$SCRIPT_DIR/../roles/desktop/files/chrome.py")
+  if $IS_LINUX; then _chrome_app=/opt/google/chrome/chrome; else _chrome_app="/Applications/Google Chrome.app"; fi
+  if [[ ! -e "$_chrome_app" ]]; then
+    for _c in chrome-profiles chrome-extensions chrome-policy; do record "$_c" "PASS" "not applicable (Chrome not installed)"; done
+  elif [[ ! -f "${_chrome_py[2]}" ]]; then  # a copy of this script run alone (Molecule's script module)
+    for _c in chrome-profiles chrome-extensions chrome-policy; do record "$_c" "SKIP" "helper missing: ${_chrome_py[2]}"; done
+  elif [[ ! -f "$_chrome_spec" ]]; then
+    for _c in chrome-profiles chrome-extensions chrome-policy; do record "$_c" "WARN" "Chrome is not set up yet: make apply CHUNK=chrome"; done
+  else
+    _chrome_tcc=""
+    $IS_LINUX || _chrome_tcc=" (macOS: give the terminal Full Disk Access)"
+    case $("${_chrome_py[@]}" prefs "$_chrome_spec" --check 2>&1 | head -1 || true) in
+      unchanged) record "chrome-profiles" "PASS" ;;
+      absent) record "chrome-profiles" "PASS" "no Chrome profile yet" ;;
+      running) record "chrome-profiles" "WARN" "profile settings (zoom, color scheme, site settings) differ: quit Chrome, then make apply CHUNK=chrome" ;;
+      changed) record "chrome-profiles" "WARN" "profile settings (zoom, color scheme, site settings) differ: make apply CHUNK=chrome" ;;
+      blocked) record "chrome-profiles" "WARN" "cannot read Chrome's profiles$_chrome_tcc" ;;
+      *) record "chrome-profiles" "WARN" "cannot check Chrome's profiles: make apply CHUNK=chrome shows why" ;;
+    esac
+    _chrome_out=$("${_chrome_py[@]}" extensions "$_chrome_spec" 2>&1) || true
+    case "$_chrome_out" in
+      ok) record "chrome-extensions" "PASS" ;;
+      absent) record "chrome-extensions" "PASS" "no Chrome profile yet" ;;
+      blocked) record "chrome-extensions" "WARN" "cannot read Chrome's profiles$_chrome_tcc" ;;
+      chrome.py:*) record "chrome-extensions" "WARN" "$_chrome_out" ;;
+      *) record "chrome-extensions" "WARN" "$(tr '\n' ';' <<<"$_chrome_out" | sed 's/;$//'): make chrome-extensions installs missing ones, docs/chrome.md" ;;
+    esac
+    _chrome_out=$("${_chrome_py[@]}" policy "$_chrome_spec" 2>&1) || true
+    if [[ "$_chrome_out" == ok ]]; then record "chrome-policy" "PASS"
+    else record "chrome-policy" "WARN" "$(tr '\n' ';' <<<"$_chrome_out" | sed 's/;$//')"; fi
+    unset _chrome_out _chrome_tcc
+  fi
+  unset _chrome_spec _chrome_py _chrome_app _c
 fi
-unset _chrome_zoom
 
 # macOS settings that need root to apply but not to read, so a no-sudo run (NOSUDO=1) shows what is left
 if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
