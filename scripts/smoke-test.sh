@@ -160,6 +160,12 @@ _trackpoint_id=$(awk -F': ' '/^desktop_sway_trackpoint_id:/{gsub(/^[[:space:]]*[
 _desktop_terminal=$(awk -F': ' '/^desktop_terminal:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
 [[ -n "$_desktop_terminal" ]] || _desktop_terminal="alacritty"  # role default on Linux
 _desktop_env=$(awk -F': ' '/^desktop_environment:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
+# macOS bar and border toggles, and whether their source builds ran (macos-sketchybar, macos-borders)
+_macos_cfg() { awk -F': ' -v k="$1" '$1 == k {gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null || true; }
+_macos_bar_cfg=$(_macos_cfg desktop_macos_bar)
+_macos_borders_cfg=$(_macos_cfg desktop_macos_borders)
+_install_binaries_cfg=$(_macos_cfg packages_install_binaries)
+unset -f _macos_cfg
 # Role defaults (roles/repos_dnf, roles/notes) apply when config.yml does not override these.
 _gcloud_min_version=$(awk -F': ' '/^repos_dnf_gcloud_min_version:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
 [[ "$_gcloud_min_version" =~ ^[0-9]+(\.[0-9]+)*$ ]] || _gcloud_min_version="500.0.0"
@@ -940,31 +946,28 @@ fi
 # manager, unless config.yml turns them off (desktop_macos_bar / desktop_macos_borders: false)
 if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   # Prints off, PASS, or FAIL (WARN in Molecule: a CI runner has no login session for LaunchAgents)
-  _macos_agent_state() { # process config_key
-    local on bins
-    on=$(awk -F': ' -v k="$2" '$1 == k {gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
-    bins=$(awk -F': ' '$1 == "packages_install_binaries" {gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
+  _macos_agent_state() { # process toggle_value (read from config.yml at the top)
     # off by config, or never built (packages_install_binaries: false skips the source builds)
-    if [[ "$_desktop_env" != aerospace || "$on" =~ ^([Ff]alse|[Nn]o|0)$ || "$bins" =~ ^([Ff]alse|[Nn]o|0)$ ]]; then echo off
+    if [[ "$_desktop_env" != aerospace || "$2" =~ ^([Ff]alse|[Nn]o|0)$ || "$_install_binaries_cfg" =~ ^([Ff]alse|[Nn]o|0)$ ]]; then echo off
     elif pgrep -x "$1" &>/dev/null; then echo PASS
     elif [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then echo WARN
     else echo FAIL; fi
   }
   _fix="run: make apply CHUNK=packages, then make apply CHUNK=desktop NOSUDO=1"
-  _state=$(_macos_agent_state sketchybar desktop_macos_bar)
+  _state=$(_macos_agent_state sketchybar "$_macos_bar_cfg")
   case $_state in
     off) record "macos-sketchybar" "PASS" "off (desktop_environment, desktop_macos_bar or packages_install_binaries)" ;;
     PASS) record "macos-sketchybar" "PASS" ;;
     *) record "macos-sketchybar" "$_state" "SketchyBar is not running — $_fix (log: ~/.local/state/log/sketchybar.log)" ;;
   esac
-  _state=$(_macos_agent_state borders desktop_macos_borders)
+  _state=$(_macos_agent_state borders "$_macos_borders_cfg")
   case $_state in
     off) record "macos-borders" "PASS" "off (desktop_environment, desktop_macos_borders or packages_install_binaries)" ;;
     PASS) record "macos-borders" "PASS" ;;
     *) record "macos-borders" "$_state" "JankyBorders is not running — $_fix (log: ~/.local/state/log/borders.log)" ;;
   esac
   unset -f _macos_agent_state
-  unset _fix _state
+  unset _fix _state _macos_bar_cfg _macos_borders_cfg _install_binaries_cfg
 fi
 
 # macOS: containers run in the podman machine VM, which the containers chunk creates and starts at login
