@@ -62,32 +62,75 @@
     - git_repos_category_filter | length > 0
     - git_repos_filtered | length == 0
 
-# Hosts other than github.com (internal ones answer only on the VPN) get a TCP probe, no ssh and so no key touch: the
-# URL's port, else 22 for git@ and ssh://, else 443 for https:// (not probed when a proxy is set: git would use it). Repos
-# on a host and port that do not answer are left out of this run, so their clones and make update's pulls are not
-# reported as failures. Tested in scripts/test-git-repos.py.
+# Hosts other than github.com (internal ones answer only on the VPN) get a TCP probe, no ssh and so no key touch: SSH
+# hosts where `ssh -G` says ssh would connect, https:// hosts on the URL's port, else 443 (not probed when a proxy is
+# set: git would use it). Repos on a host and port that do not answer are left out of this run, so their clones and
+# make update's pulls are not reported as failures. Tested in scripts/test-git-repos.py.
 - name: Set git hosts to probe
   ansible.builtin.set_fact:
-    _git_repos_probe: >-
+    # SSH hosts as written in the URL ("host", or "host:port" when the URL names a port); ssh -G below resolves them
+    _git_repos_ssh_hosts: >-
       {{ git_repos_filtered | map(attribute='url')
-         | map('regex_replace', '^git@([^:/]+):.*$', '\1:22')
-         | map('regex_replace', '^(?:ssh|https)://(?:[^@/]+@)?([^/:]+):([0-9]+)/.*$', '\1:\2')
-         | map('regex_replace', '^ssh://(?:[^@/]+@)?([^/:]+)/.*$', '\1:22')
-         | map('regex_replace', '^https://(?:[^@/]+@)?([^/:]+)/.*$', '\1:443')
-         | select('match', '^[A-Za-z0-9.-]+:[0-9]+$') | reject('match', '^github\.com:') | unique
-         | reject('in', _git_repos_https if (lookup('env', 'https_proxy') or lookup('env', 'HTTPS_PROXY')) else []) | list }}
-  vars:
-    _git_repos_https: >-
-      {{ git_repos_filtered | map(attribute='url') | select('match', '^https://')
+         | map('regex_replace', '^git@([^:/]+):.*$', '\1')
+         | map('regex_replace', '^ssh://(?:[^@/]+@)?([^/:]+)(:[0-9]+)?/.*$', '\1\2')
+         | select('match', '^[A-Za-z0-9.-]+(:[0-9]+)?$') | reject('match', '^github\.com(:|$)') | unique | list }}
+    # https hosts as host:port (not probed when a proxy is set: git would go through it)
+    _git_repos_https_hosts: >-
+      {{ [] if (lookup('env', 'https_proxy') or lookup('env', 'HTTPS_PROXY')) else
+         git_repos_filtered | map(attribute='url') | select('match', '^https://')
          | map('regex_replace', '^https://(?:[^@/]+@)?([^/:]+)(?::([0-9]+))?/.*$', '\1:\2')
-         | map('regex_replace', ':$', ':443') | list }}
+         | map('regex_replace', ':$', ':443')
+         | select('match', '^[A-Za-z0-9.-]+:[0-9]+$') | reject('match', '^github\.com:') | unique | list }}
+
+- name: Check for an ssh client config
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.ssh/config"
+  register: _git_repos_ssh_config
+  when: _git_repos_ssh_hosts | length > 0
+
+# The ssh config (and the config.local it includes) can give a host another HostName or Port, or a proxy: ask ssh where
+# it would connect. Uses no key and makes no connection (a `Match exec` in the config does run).
+- name: Resolve SSH git hosts through the ssh config
+  ansible.builtin.command:
+    argv: >-
+      {{ ['ssh', '-G', '-F', (ansible_facts['user_dir'] ~ '/.ssh/config') if _git_repos_ssh_config.stat.exists
+          else '/dev/null'] + (['-p', item.split(':')[1]] if ':' in item else []) + [item.split(':')[0]] }}
+  loop: "{{ _git_repos_ssh_hosts }}"
+  register: _git_repos_ssh_resolved
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only
+
+- name: Set git host probes
+  ansible.builtin.set_fact:
+    # key|host|port: key is the host:port the URLs use (port 22 when the URL names none), host:port where to connect.
+    # A host reached through ProxyJump or ProxyCommand is not probed.
+    _git_repos_probe: >-
+      {%- set out = [] -%}
+      {%- for r in _git_repos_ssh_resolved.results | default([]) -%}
+      {%- set key = r.item if ':' in r.item else r.item ~ ':22' -%}
+      {%- set lines = r.stdout | default('') -%}
+      {%- if r.rc | default(1) != 0 -%}
+      {%- set _ = out.append(key ~ '|' ~ key | replace(':', '|')) -%}
+      {%- elif not (lines is search('(?m)^proxy(jump|command) (?!none$)')) -%}
+      {%- set host = (lines.splitlines() | select('match', '^hostname ') | first).split(' ')[1] -%}
+      {%- set port = (lines.splitlines() | select('match', '^port ') | first).split(' ')[1] -%}
+      {%- set _ = out.append(key ~ '|' ~ host ~ '|' ~ port) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- for h in _git_repos_https_hosts -%}
+      {%- set _ = out.append(h ~ '|' ~ h | replace(':', '|')) -%}
+      {%- endfor -%}
+      {{ out | join(' ') }}
 
 - name: Probe git hosts
   ansible.builtin.wait_for:
-    host: "{{ item | regex_replace(':[0-9]+$', '') }}"
-    port: "{{ item | regex_replace('^.*:', '') | int }}"
+    host: "{{ item.split('|')[1] }}"
+    port: "{{ item.split('|')[2] | int }}"
     timeout: 3
-  loop: "{{ _git_repos_probe }}"
+  loop: "{{ _git_repos_probe.split() }}"
+  loop_control:
+    label: "{{ item.split('|')[0] }}"
   register: _git_repos_probed
   failed_when: false  # an unreachable host is reported below, not as a failed task
   check_mode: false  # read-only probe; wait_for is otherwise skipped in check mode
@@ -95,7 +138,9 @@
 - name: Skip repos on unreachable git hosts
   vars:
     # host:port pairs whose probe timed out (it has no state)
-    _unreachable: "{{ _git_repos_probed.results | default([]) | rejectattr('state', 'defined') | map(attribute='item') | list }}"
+    _unreachable: >-
+      {{ _git_repos_probed.results | default([]) | rejectattr('state', 'defined') | map(attribute='item')
+         | map('regex_replace', '\|.*$', '') | list }}
     # the URLs that use one of them: an explicit port, or the scheme's default
     _unreachable_urls: >-
       {%- set ps = [] -%}

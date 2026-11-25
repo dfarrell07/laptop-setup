@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- {{ ansible_managed }} -->
 <!-- agent-getty for one harness/profile pair: its remote-control daemon in detached tmux. Docs: docs/agent-getty.md -->
-{% set pair = _launchd_label | regex_replace('^getty-', '') | regex_replace('[^a-z0-9-]', '') %}
+{% set pair = _launchd_label | regex_replace('^getty-', '') %}
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
