@@ -33,12 +33,16 @@ set_field() { # item label [color] [drawing]
 }
 hide() { args+=(--set "$1" drawing=off); }
 
-# A command that may hang (a VPN or podman call) gets 2 s, then SIGKILL (macOS has no timeout(1)). The parent kills
-# the child's whole process group: Go programs (podman, tailscale) ignore an inherited alarm, and a wrapper's leftover
-# children would keep $(...) waiting. Death by a signal is a failure (128 + signal), never 0.
+# A command that may hang (a VPN, podman or df call) gets 2 s, then SIGKILL (macOS has no timeout(1)). The parent
+# kills the child's whole process group: Go programs (podman, tailscale) ignore an inherited alarm. The command writes
+# to a pipe perl reads, and perl prints it only after the command exits: a process that survives the kill (a df
+# stuck on a hung network mount, a child in its own group) holds that inner pipe, never $(...)'s. Death by a signal is
+# a failure (128 + signal), never 0.
 limit() {
-  perl -e 'my $t = shift; my $p = fork // exit 127; if (!$p) { setpgrp; exec {$ARGV[0]} @ARGV; exit 127 }
-    $SIG{ALRM} = sub { kill "KILL", -$p; exit 124 }; alarm $t; waitpid $p, 0;
+  perl -e 'my $t = shift; pipe(my $r, my $w) or exit 127; my $p = fork // exit 127;
+    if (!$p) { close $r; setpgrp; open(STDOUT, ">&", $w) or exit 127; exec {$ARGV[0]} @ARGV; exit 127 }
+    close $w; $SIG{ALRM} = sub { kill "KILL", -$p; exit 124 }; alarm $t;
+    my $out = do { local $/; <$r> } // ""; waitpid $p, 0; alarm 0; print $out;
     exit($? & 127 ? 128 + ($? & 127) : $? >> 8)' 2 "$@"
 }
 
@@ -98,12 +102,15 @@ case $(sysctl -n kern.memorystatus_vm_pressure_level 2>/dev/null) in
 esac
 
 # Free space per disk, red below 10% free (i3status low_threshold). A path shows only while it is a mount point, as
-# i3status shows only mounted paths (on macOS /tmp is a directory of the data volume).
+# i3status shows only mounted paths (on macOS /tmp is a directory of the data volume). df runs under limit: a hung
+# network mount must not stall the bar. The line is read around its capacity field ("95%"), so a filesystem name
+# (an SMB share) or mount point with spaces still parses.
 for i in "${!disks[@]}"; do
   size=
   avail=
   mnt=
-  read -r _ size _ avail _ mnt < <(df -kP "${disks[i]}" 2>/dev/null | sed -n 2p)
+  read -r size avail mnt < <(limit df -kP "${disks[i]}" 2>/dev/null | awk 'NR == 2 && match($0, / [0-9]+% /) {
+    n = split(substr($0, 1, RSTART - 1), f, " "); print f[n - 2], f[n], substr($0, RSTART + RLENGTH)}')
   if [[ -z $avail || $mnt != "${disks[i]}" ]]; then hide "disk.$i"; continue; fi
   text=$(awk -v a="$avail" 'BEGIN {if (a >= 2^30) printf "%.1fT", a / 2^30; else if (a >= 2^20) printf "%.1fG", a / 2^20; else printf "%.1fM", a / 2^10}')
   set_field "disk.$i" "${disks[i]} $text" "$( ((avail * 10 < size)) && echo "$red")"
