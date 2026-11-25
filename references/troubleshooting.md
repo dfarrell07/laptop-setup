@@ -228,6 +228,13 @@ unclean shutdown left zero-byte loose objects, and `git add` treats them as alre
 empty files out (`find .git/objects -type f -empty`), then run `git fsck --full` and `git fetch`; if fsck still
 reports a missing object, recover it from the remote or another clone before committing.
 
+The desktop session ends on its own (back at the login screen, every terminal and the agents in them gone, but
+`uptime` shows no reboot), and the journal shows `dbus-broker-launch ... Too many open files`: the user D-Bus broker
+ran out of file descriptors and exits on that. Each `gh` call holds a session-bus connection while it reads its token
+from the keyring, so a few hundred parallel `gh` calls are enough at the default 1024 limit. `make dotfiles` raises it
+(`dbus-broker-nofile` smoke check); with linger the broker outlives a logout, so it applies from the next reboot. Agents that should outlive the session belong in tmux
+or in agent-getty (`agent_getty_pairs`), not in a terminal tab.
+
 ## Makefile refuses to run as root
 
 `ERROR: Do not run as root. Run make as your own user; targets that need root ask for your sudo password.` (`guard-not-root`): run

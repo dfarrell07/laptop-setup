@@ -123,6 +123,9 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   `~/Library/LaunchAgents/<ssh-agent label>.env.plist`, which at each login points launchd's `SSH_AUTH_SOCK` (GUI apps,
   launchd jobs) at the Homebrew agent and sets launchd's `PATH` from `~/.zshenv`. Undo: delete both, then
   `launchctl unsetenv SSH_AUTH_SOCK` and `launchctl unsetenv PATH`.
+- **Linux:** `~/.config/systemd/user/dbus-broker.service.d/50-nofile.conf` raises the user D-Bus broker's open-file limit
+  from its next start, a reboot (at 1024 it exits on EMFILE and ends the session). Undo: delete it,
+  `systemctl --user daemon-reload`, reboot.
 - **Undo:** run `make backup` BEFORE the chunk (an older backup predates earlier deploys), then restore the file from that
   `~/laptop-setup-backup-<timestamp>` directory. Replaced `.zshrc`, `.bashrc`, `.ssh/config`, `.config/git/config` and
   `.config/tmux/tmux.conf` also keep a copy beside them named `<file>.<pid>.<date>@<time>~`. Unmanaged git template hooks and

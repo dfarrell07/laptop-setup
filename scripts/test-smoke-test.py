@@ -26,6 +26,12 @@ def only_tools(bin_dir, *names):
     return bin_dir
 
 
+def resource_hard_allows(n):
+    import resource
+    hard = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
+    return hard == resource.RLIM_INFINITY or hard >= n
+
+
 class SmokeTests(unittest.TestCase):
     def test_native_power_baseline_does_not_require_tlp(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
@@ -946,6 +952,50 @@ exit 0
             self.assertEqual(run('defaults', 'echo 0', linux=False), 'scroll-direction PASS')
             self.assertIn('scroll-direction WARN natural scrolling is on', run('defaults', 'echo 1', linux=False))
             self.assertIn('scroll-direction WARN', run('defaults', 'exit 1', linux=False))  # never set: macOS default is natural
+
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'reads /proc/<pid>/limits')
+    def test_dbus_broker_nofile_check_reads_the_running_broker(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('# The user D-Bus broker exits on EMFILE')
+        end = source.index('# LUKS discard protection', start)
+        with tempfile.TemporaryDirectory() as directory:
+            home, bindir = Path(directory), Path(directory) / 'bin'
+            bindir.mkdir()
+            (home / 'unit').write_text('[Service]\n')
+            stub = bindir / 'systemctl'
+            stub.write_text('#!/bin/sh\ncat "$HOME/pid"\n')  # MainPID of the "broker"
+            stub.chmod(0o755)
+
+            def run(soft):
+                import resource
+                hard = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
+                broker = subprocess.Popen(['sleep', '30'], preexec_fn=lambda: resource.setrlimit(
+                    resource.RLIMIT_NOFILE, (min(soft, hard), hard)))
+                try:
+                    (home / 'pid').write_text(str(broker.pid))
+                    script = 'IS_LINUX=true\nrecord() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; }\n' + source[start:end]
+                    env = dict(os.environ, HOME=directory, PATH=f'{bindir}:{os.environ["PATH"]}',
+                               SMOKE_DBUS_BROKER_UNIT=str(home / 'unit'))
+                    return subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c', script], env=env,
+                                          capture_output=True, text=True).stdout.strip()
+                finally:
+                    broker.kill()
+                    broker.wait()
+
+            self.assertIn('dbus-broker-nofile WARN no open-file drop-in', run(65536))
+            dropin = home / '.config/systemd/user/dbus-broker.service.d'
+            dropin.mkdir(parents=True)
+            (dropin / '50-nofile.conf').write_text('[Service]\nLimitNOFILE=524288\n')
+            self.assertIn("open-file limit is 1024; the drop-in applies from its next start", run(1024))
+            if resource_hard_allows(65536):
+                self.assertEqual(run(65536), 'dbus-broker-nofile PASS')
+            (home / 'pid').write_text('0')  # no running broker (MainPID 0)
+            script = 'IS_LINUX=true\nrecord() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; }\n' + source[start:end]
+            env = dict(os.environ, HOME=directory, PATH=f'{bindir}:{os.environ["PATH"]}',
+                       SMOKE_DBUS_BROKER_UNIT=str(home / 'unit'))
+            out = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c', script], env=env,
+                                 capture_output=True, text=True).stdout.strip()
+            self.assertIn('open-file limit is unknown', out)
 
     @unittest.skipUnless(shutil.which('zsh'), 'zsh required')
     def test_remote_control_check_names_only_launchers_without_the_flag(self):
