@@ -17,6 +17,7 @@
 #   remove-key RECIPIENT drop a recipient and re-encrypt a NEW password (the old one stays in git history)
 #   pull                 fetch the shared vault into group_vars/all/vault.yml
 #   edit | view          edit (then commit and push) or view the shared vault
+#   acli-token           set vault_acli_api_token (asked for, never echoed), then commit and push
 #   status               what is set up here (no secrets)
 #
 # Environment: SECRETS_DIR (default ~/src/<dotfiles_github_user>/laptop-secrets), SECRETS_REMOTE (default its GitHub
@@ -568,6 +569,21 @@ cmd_signing_key() {
   [[ $(sha256sum "$S/vault.yml") != "$before" ]] || { ok "no change"; return 0; }
   publish_change "Vault: signing key"
 }
+# make acli-token: the Atlassian API token (asked for with echo off) into the shared vault, published like an edit.
+cmd_acli_token() {
+  cmd_pull
+  check_approved
+  local before py
+  before=$(sha256sum "$S/vault.yml")
+  py=$(command -v python3)
+  "$py" -I -c 'import ansible' 2>/dev/null || py=.venv/bin/python3
+  local rc=0
+  "$py" -I scripts/vault-set-acli-token.py "$S/vault.yml" || rc=$?
+  [[ $rc != 3 ]] || return 0  # already the vault's token
+  [[ $rc == 0 ]] || exit "$rc"
+  [[ $(sha256sum "$S/vault.yml") != "$before" ]] || { ok "no change"; return 0; }
+  publish_change "Vault: Atlassian token"
+}
 edit_undo() {
   warn "your edit is kept, encrypted, in $EDIT_KEEP: view it with .venv/bin/ansible-vault view --vault-password-file scripts/vault-pass.sh $EDIT_KEEP and redo it with make vault-edit"
 }
@@ -609,8 +625,9 @@ case ${1:-} in
   pull) cmd_pull ;;
   edit) cmd_edit ;;
   signing-key) shift; cmd_signing_key "${1:?usage: vault-shared.sh signing-key KEY}" ;;
+  acli-token) cmd_acli_token ;;
   view) cmd_view ;;
   status) cmd_status ;;
   active) active ;;
-  *) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

@@ -333,6 +333,53 @@ class SmokeTests(unittest.TestCase):
             (home / '.ssh/id_ed25519_sk_signing.pub').unlink()
             self.assertEqual(run(), 'dotfile-gitconfig PASS')
 
+    def test_acli_auth_is_not_applicable_only_without_a_vault_token(self):
+        """The marker acli.yml writes whenever the vault holds a token decides n/a vs WARN; a failed login WARNs."""
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('# Jira through acli')
+        end = source.index('unset _acli_site\n', start)
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            bin_dir = only_tools(home / 'bin', 'grep')
+            acli = home / 'bin/acli'
+
+            def stub(name, body):
+                (home / 'bin' / name).write_text('#!/bin/sh\n' + body + '\n')
+                (home / 'bin' / name).chmod(0o755)
+            stub('busctl', 'echo "b false"')  # Linux: the login keyring is unlocked
+            stub('security', 'exit 0')  # macOS: the login Keychain is unlocked
+
+            def run(profile='work', site='redhat.atlassian.net', linux='true'):
+                return subprocess.run([BASH, '-eu', '-o', 'pipefail', '-c',
+                    'record() { printf "%s %s\\n" "$1" "$2"; };\n' + source[start:end]],
+                    env={'HOME': str(home), 'PATH': str(bin_dir), 'profile': profile, '_acli_site': site,
+                         'CONTAINER': '', '_timeout_bin': '', 'IS_LINUX': linux},
+                    capture_output=True, text=True).stdout.strip()
+            self.assertEqual(run(), 'acli-auth PASS')  # no token ever, no acli: a work machine without Jira
+            self.assertEqual(run(profile='personal'), 'acli-auth PASS')
+            self.assertEqual(run(site=''), 'acli-auth PASS')
+            marker = home / '.config/laptop-setup/acli-token-configured'
+            marker.parent.mkdir(parents=True)
+            marker.write_text('x\n')
+            self.assertEqual(run(), 'acli-auth WARN')  # a token in the vault but no acli
+            acli.write_text('#!/bin/sh\necho "unauthorized" >&2; exit 1\n')
+            acli.chmod(0o755)
+            self.assertEqual(run(), 'acli-auth WARN')  # a token, no digest, logged out: the failure shows
+            self.assertEqual(run(linux='false'), 'acli-auth WARN')
+            self.assertEqual(run(profile='personal'), 'acli-auth WARN')  # a personal opt-in is checked too
+            stub('busctl', 'echo "b true"')  # an SSH session: the keyring is locked, so status cannot tell
+            self.assertEqual(run(), 'acli-auth SKIP')
+            stub('security', 'exit 152')  # macOS over SSH: SecKeychainCopySettings fails on a locked Keychain
+            self.assertEqual(run(linux='false'), 'acli-auth SKIP')
+            (home / 'bin/busctl').unlink()  # an unknown probe result falls through to the status call
+            self.assertEqual(run(), 'acli-auth WARN')
+            stub('security', 'exit 127')
+            self.assertEqual(run(linux='false'), 'acli-auth WARN')
+            stub('busctl', 'echo "b false"')
+            stub('security', 'exit 0')
+            acli.write_text('#!/bin/sh\necho "Site: redhat.atlassian.net"\n')
+            self.assertEqual(run(), 'acli-auth PASS')
+
     def test_cross_session_inbound_check_fails_for_any_managed_dir_without_accept(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
         parse = source[source.index('_claude_extra_dirs=$(awk'):source.index('unset _cfg\n')]

@@ -1,9 +1,25 @@
 ---
 # acli login from the vault (docs: roles/claude/defaults/main.yml, acli_*). The token goes only over stdin, never on a
 # command line or in output (no_log). An acli already logged in to acli_site with the same token is left alone.
+# This file is included only when the vault holds a token. A marker (no secret) records that, so the acli-auth smoke
+# check WARNs when Jira is still logged out (expired token, locked keyring, failed login) and is not applicable on
+# work machines that never had a token.
+- name: Create the laptop-setup state directory for acli
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.config/laptop-setup"
+    state: directory
+    mode: "0700"
+
+- name: Mark that the vault holds an acli token
+  ansible.builtin.copy:
+    content: "the vault holds an acli token; make claude removes this once vault_acli_api_token or acli_site is empty\n"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/laptop-setup/acli-token-configured"
+    mode: "0600"
+
+# The packages role puts acli in ~/.local/bin on macOS, which make's PATH may lack.
 - name: Check that acli is installed
   ansible.builtin.command:
-    argv: [sh, -c, 'command -v acli']
+    argv: [sh, -c, 'command -v acli || { [ -x "$HOME/.local/bin/acli" ] && echo "$HOME/.local/bin/acli"; }']
   register: _acli_path
   changed_when: false
   failed_when: false
@@ -15,6 +31,24 @@
       WARNING: vault_acli_api_token and acli_site are set but acli is not installed (make packages), so Jira was not
       logged in.
   when: _acli_path.rc != 0
+
+# Every acli call runs under a timeout so a blocked keyring cannot hang the play. macOS has no timeout of its own:
+# Homebrew coreutils provides gtimeout, and plain timeout only with its gnubin directory on PATH.
+- name: Find a timeout command for acli
+  ansible.builtin.command:
+    argv: [sh, -c, 'command -v timeout || command -v gtimeout']
+  register: _acli_timeout
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: _acli_path.rc == 0
+
+- name: Warn that there is no timeout command for acli
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: acli was not checked or logged in: neither timeout nor gtimeout is installed (macOS: make packages
+      installs coreutils).
+  when: _acli_path.rc == 0 and (_acli_timeout.stdout | default('') | trim) == ''
 
 # Linux: acli keeps the token in the Secret Service keyring; with no session bus or a locked login collection (an
 # SSH session) any acli auth call can block, so nothing runs then.
@@ -28,29 +62,43 @@
   check_mode: false
   when: _acli_path.rc == 0 and is_linux
 
+# macOS: acli keeps it in the login Keychain, which is usually locked in an SSH-only session; an acli call there can
+# fail or wait on an unlock prompt. show-keychain-info fails fast on a locked keychain over SSH (no UI to ask); the
+# timeout covers a desktop unlock prompt.
+- name: Check the login Keychain is unlocked
+  ansible.builtin.command:
+    argv: ["{{ _acli_timeout.stdout | trim }}", "10", security, show-keychain-info]
+  register: _acli_keychain
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: _acli_path.rc == 0 and is_macos and (_acli_timeout.stdout | default('') | trim) != ''
+
 - name: Decide whether the keyring allows an acli login
   ansible.builtin.set_fact:
     _acli_keyring_ok: >-
-      {{ not is_linux or ((_acli_keyring.rc | default(1)) == 0
-         and (_acli_keyring.stdout | default('') | trim) == 'b false') }}
+      {{ ((_acli_keyring.rc | default(1)) == 0 and (_acli_keyring.stdout | default('') | trim) == 'b false')
+         if is_linux else ((_acli_keychain.rc | default(1)) == 0) }}
 
 - name: Warn that the keyring is not available for acli
   ansible.builtin.debug:
     msg: >-
       WARNING: acli was not checked or logged in: it stores the token in the login keyring, which is not reachable or
-      is locked here (an SSH session, or no desktop login). Run make claude from a desktop session.
-  when: _acli_path.rc == 0 and not _acli_keyring_ok | bool
+      is locked here (an SSH session, or no desktop login). Run make acli-login from a desktop session.
+  when: _acli_path.rc == 0 and not _acli_keyring_ok | bool and (_acli_timeout.stdout | default('') | trim) != ''
 
 - name: Log acli in to each product
-  when: _acli_path.rc == 0 and _acli_keyring_ok | bool
+  when: _acli_path.rc == 0 and _acli_keyring_ok | bool and _acli_timeout_bin != ''
   vars:
+    _acli_timeout_bin: "{{ _acli_timeout.stdout | default('') | trim }}"
+    _acli_bin: "{{ _acli_path.stdout | trim }}"
     # A digest of the token (never the token) shows when the vault holds a new one, so a rotation logs in again.
     _acli_digest_file: "{{ ansible_facts['user_dir'] }}/.config/laptop-setup/acli-token.sha256"
     _acli_digest: "{{ acli_api_token | hash('sha256') }}"
   block:
     - name: Read acli login state
       ansible.builtin.command:
-        argv: [timeout, "20", acli, "{{ item }}", auth, status]
+        argv: ["{{ _acli_timeout_bin }}", "20", "{{ _acli_bin }}", "{{ item }}", auth, status]
       loop: "{{ acli_products }}"
       register: _acli_status
       no_log: true
@@ -77,11 +125,13 @@
     - name: Report acli login not simulated in check mode
       ansible.builtin.debug:
         msg: "CHECK MODE: acli would log in to {{ _acli_need | join(', ') }} at {{ acli_site }}; not simulated."
+      changed_when: true  # make plan counts the login an apply would do
       when: ansible_check_mode and _acli_need | length > 0
 
     - name: Run acli auth login with the vault token
       ansible.builtin.command:
-        argv: [timeout, "60", acli, "{{ item }}", auth, login, --site, "{{ acli_site }}", --email, "{{ acli_email }}", --token]
+        argv: ["{{ _acli_timeout_bin }}", "60", "{{ _acli_bin }}", "{{ item }}", auth, login, --site, "{{ acli_site }}",
+               --email, "{{ acli_email }}", --token]
         stdin: "{{ acli_api_token }}"
         stdin_add_newline: false
       loop: "{{ _acli_need }}"
@@ -95,17 +145,10 @@
       ansible.builtin.debug:
         msg: >-
           WARNING: acli could not log in to {{ item.item }} (output hidden): check acli_site and acli_email in
-          config.yml and the token (Atlassian tokens expire within a year: make vault-edit, then make claude).
+          config.yml and the token (Atlassian tokens expire within a year: make acli-token).
       loop: "{{ _acli_login.results | default([]) | selectattr('rc', 'defined') | rejectattr('rc', 'equalto', 0) | list }}"
       loop_control:
         label: "{{ item.item }}"
-
-    - name: Create the laptop-setup state directory
-      ansible.builtin.file:
-        path: "{{ _acli_digest_file | dirname }}"
-        state: directory
-        mode: "0700"
-      when: not ansible_check_mode
 
     - name: Record the digest of the token logged in with
       ansible.builtin.copy:

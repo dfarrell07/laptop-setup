@@ -200,8 +200,9 @@ open until you are done. To undo:
   legacy `settings.local.json` are only in the `make backup` directory if you ran it before the chunk. Uninstall Codex with
   `npm uninstall -g @openai/codex` (from `~/.npm-global`), delete the seeded `config.toml` and managed `AGENTS.md` in `~/.codex` and `~/.codex-personal` (keep the directories: they
   also hold the Codex login and history), `~/.gemini*/GEMINI.md`, `~/.local/bin/agy` if the chunk installed it, `~/.gemini-per2` if the
-  chunk created it (keep `~/.gemini`: it holds the login), `~/.config/claude/` and `~/.config/user-tmpfiles.d/claude-privacy.conf`. If
-  `claude_queue_enabled` was on: `systemctl --user disable --now claude-queue.timer`, delete
+  chunk created it (keep `~/.gemini`: it holds the login), `~/.config/claude/` and `~/.config/user-tmpfiles.d/claude-privacy.conf`. Jira:
+  `acli jira auth logout` and delete `~/.config/laptop-setup/acli-token.sha256` and `acli-token-configured` there. If `claude_queue_enabled` was on:
+  `systemctl --user disable --now claude-queue.timer`, delete
   `~/.config/systemd/user/claude-queue.{service,timer}` and `~/.local/bin/claude-queue-poller.sh`, `systemctl --user daemon-reload`, and
   `sudo rm /etc/logrotate.d/claude-queue-poller`. If `agent_getty_pairs` was set: `systemctl --user stop 'agent-getty@*'` and
   `systemctl --user disable agent-getty@<pair>` per pair (macOS: `launchctl bootout
