@@ -21,6 +21,10 @@ if not ANSIBLE.exists():
 VARS_FILES = ['default.config.yml', 'group_vars/all/vars.yml'] + [
     f'roles/{role}/defaults/main.yml' for role in ('system', 'dotfiles', 'desktop', 'containers')]
 
+# The macOS bar's disk list, as roles/desktop/tasks/macos_bar.yml computes it
+MACOS_BAR_DISKS = next(t for t in yaml.safe_load((ROOT / 'roles/desktop/tasks/macos_bar.yml').read_text())
+                       if t['name'] == 'Deploy the SketchyBar bar (macOS)')['vars']['_desktop_macos_bar_disks']
+
 # name -> (template, extra vars)
 CASES = {
     'ssh_seeded': ('roles/dotfiles/templates/ssh_config.j2', {
@@ -46,6 +50,19 @@ CASES = {
     'i3': ('roles/desktop/templates/i3.config.j2', {}),
     'i3status': ('roles/desktop/templates/i3status.conf.j2', {}),
     'bar_status': ('roles/desktop/templates/i3status-bar.sh.j2', {}),
+    # macOS SketchyBar (desktop_macos_bar): a second VPN that is not installed, and / as the one disk
+    'sketchybarrc': ('roles/desktop/templates/sketchybarrc.j2', {
+        '_desktop_macos_bar_disks': MACOS_BAR_DISKS, 'desktop_i3status_disks': ['/', '/tmp', '/Volumes/My Disk'],
+        'desktop_i3status_vpns_extra': [{'name': 'Mullvad', 'command': ['mullvad-missing', 'status'], 'connected': '^Connected'}]}),
+    'sketchybar_status': ('roles/desktop/templates/sketchybar-status.sh.j2', {
+        '_desktop_macos_bar_disks': MACOS_BAR_DISKS, 'desktop_i3status_disks': ['/', '/tmp', '/Volumes/My Disk'],
+        'desktop_i3status_vpns_extra': [{'name': 'Mullvad', 'command': ['mullvad-missing', 'status'], 'connected': '^Connected'}]}),
+    'sketchybar_workspaces': ('roles/desktop/templates/sketchybar-workspaces.sh.j2', {}),
+    # AeroSpace with the bar on, before and after the packages chunk built SketchyBar
+    'aerospace_bar': ('roles/desktop/templates/aerospace.toml.j2', {
+        'desktop_environment': 'aerospace', '_desktop_sketchybar_bin': {'stat': {'executable': True}}}),
+    'aerospace_bar_unbuilt': ('roles/desktop/templates/aerospace.toml.j2', {
+        'desktop_environment': 'aerospace', '_desktop_sketchybar_bin': {'stat': {'exists': False}}}),
     'audit': ('roles/system/templates/auditd-system.rules.j2', {}),
     'sshd_macos': ('roles/desktop/templates/sshd-macos.conf.j2', {}),
     # what the play keeps on a Mac whose OpenSSH predates ML-KEM
@@ -452,6 +469,178 @@ class RenderedConfigTests(unittest.TestCase):
             self.assertIn('"full_text":"CTR 2"', update)
             # pts/0 and pts/3: a second agent process on a terminal is the same session
             self.assertIn('"full_text":"AI 2"', update)
+
+    def run_sketchybar_script(self, name, stubs, env=None):
+        """Run a rendered SketchyBar script with stub commands first on PATH; returns {item: {key: value}} from the
+        stub sketchybar's --set arguments."""
+        stub_dir = Path(stubs['__dir'])
+        for command, body in stubs.items():
+            if command != '__dir':
+                (stub_dir / command).write_text('#!/bin/sh\n' + body + '\n')
+                (stub_dir / command).chmod(0o755)
+        out = stub_dir / 'sketchybar.args'
+        (stub_dir / 'sketchybar').write_text(f'#!/bin/sh\nfor a in "$@"; do printf "%s\\n" "$a"; done > {out}\n')
+        (stub_dir / 'sketchybar').chmod(0o755)
+        script = stub_dir / name
+        script.write_text(self.read(name))
+        result = subprocess.run(['bash', str(script)], capture_output=True, text=True, timeout=30,
+                                env=dict(os.environ, PATH=f'{stub_dir}:/usr/bin:/bin', HOME=str(stub_dir),
+                                         SKETCHYBAR=str(stub_dir / 'sketchybar'), **(env or {})))
+        self.assertEqual(result.stderr, '')
+        items, current = {}, None
+        args = out.read_text().splitlines()
+        for i, arg in enumerate(args):
+            if arg == '--set':
+                current = items.setdefault(args[i + 1], {})
+            elif current is not None and '=' in arg:
+                key, value = arg.split('=', 1)
+                current[key] = value
+        return items
+
+    def test_sketchybar_status_shows_the_i3status_fields_from_macos_tools(self):
+        with tempfile.TemporaryDirectory() as name:
+            stubs = {'__dir': name,
+                     'iostat': 'printf "      cpu    load average\\n us sy id   1m   5m   15m\\n'
+                               '  5  5 90  1.0 1.0 1.0\\n 50 40 10  1.0 1.0 1.0\\n"',
+                     'sysctl': 'case "$2" in vm.loadavg) echo "{ 9.50 2.00 3.00 }";; hw.memsize) echo 17179869184;;'
+                               ' kern.memorystatus_vm_pressure_level) echo 4;; esac',
+                     'vm_stat': 'printf "Mach Virtual Memory Statistics: (page size of 16384 bytes)\\n'
+                                'Pages wired down:  100000.\\nPages purgeable: 0.\\nAnonymous pages: 300000.\\n'
+                                'Pages occupied by compressor: 100000.\\n"',
+                     'df': 'printf "Filesystem 1024-blocks Used Available Capacity Mounted on\\n"; case "$2" in'
+                           ' "/Volumes/My Disk") printf "/dev/e 1000000 950000 50000 95%% /Volumes/My Disk\\n";;'
+                           ' *) printf "/dev/d 1000000 500000 500000 50%% /\\n";; esac',
+                     'pmset': 'printf "Now drawing from \'AC Power\'\\n -InternalBattery-0 (id=1)\\t85%%; charging; 1:30 remaining present: true\\n"',
+                     'osascript': 'echo "40 true"',
+                     'ps': 'printf "ttys001 /opt/bin/claude\\n?? /opt/bin/codex\\nttys001 claude\\nttys002 codex\\nttys003 zsh\\n"',
+                     'podman': '[ "$1" = ps ] && printf "a1\\nb2\\n"',
+                     'tailscale': 'echo \'"BackendState": "Running"\'',
+                     'scutil': 'echo \'* (Connected)   ABC PPP --> L2TP "Work VPN" [PPP:L2TP]\'',
+                     'route': 'echo "  interface: en0"',
+                     'ipconfig': 'echo 10.0.0.5',
+                     'networksetup': 'printf "Hardware Port: Wi-Fi\\nDevice: en0\\n"',
+                     'netstat': 'printf "Name Mtu Network Address Ipkts Ierrs Ibytes Opkts Oerrs Obytes Coll\\n'
+                                'en0 1500 <Link#4> aa:bb 1 0 $RX 1 0 2048 0\\n"'}
+            first = self.run_sketchybar_script('sketchybar_status', stubs, {'RX': '1000'})
+            red = '0xff' + yaml.safe_load((ROOT / 'roles/desktop/defaults/main.yml').read_text())[
+                'desktop_alacritty_color_normal_red'].lstrip('#').lower()
+            labels = {item: v.get('label') for item, v in first.items()}
+            self.assertEqual(labels['cpu'], 'CPU 90%')
+            self.assertEqual(first['cpu']['label.color'], red)  # above 80%
+            self.assertEqual(labels['load'], 'LOAD 9.50 2.00 3.00')
+            self.assertEqual(first['load']['label.color'], red)  # 1 min load above the CPU count
+            self.assertEqual(labels['ram'], 'RAM 7.6/16.0')  # (300000 + 100000 + 100000) pages of 16 KiB
+            self.assertEqual((labels['pressure'], first['pressure']['label.color']), ('PRESSURE critical', red))
+            self.assertEqual((labels['disk.0'], first['disk.0']['label.color']), ('/ 488.3M', first['ram']['label.color']))
+            self.assertEqual(first['disk.1'], {'drawing': 'off'})  # /tmp is not a mount point on macOS
+            self.assertEqual((labels['disk.2'], first['disk.2']['label.color']), ('/Volumes/My Disk 48.8M', red))  # 5% free
+            self.assertEqual(labels['bat'], 'BAT ⚡85% 1:30')
+            self.assertEqual(labels['vol'], 'VOL muted')
+            self.assertEqual(labels['ctr'], 'CTR 2')
+            self.assertEqual(labels['ai'], 'AI 2')  # ttys001 counted once, ?? (no terminal) and zsh not at all
+            self.assertEqual(labels['vpn.0'], 'Tailscale up')
+            self.assertEqual(labels['vpn.1'], 'Mullvad missing')
+            self.assertEqual(labels['vpn.nc'], 'VPN Work VPN')
+            self.assertEqual(labels['net'], 'WIFI 10.0.0.5')  # no rate before a previous sample
+            self.assertRegex(labels['time'], r'^\w{3} \d\d \w{3} \d\d:\d\d$')
+            self.assertRegex(labels['tz.0'], r'^IN \w{3} \d\d:\d\d$')
+            time.sleep(1.1)
+            second = self.run_sketchybar_script('sketchybar_status', stubs, {'RX': str(1000 + 3 * 2**20)})
+            self.assertRegex(second['net']['label'], r'^WIFI 10\.0\.0\.5 ↓[0-9.]+M ↑0K$')
+            # No battery, no podman machine, no network: those fields hide
+            stubs.update({'pmset': 'echo "Now drawing from \'AC Power\'"', 'podman': 'exit 125', 'route': 'exit 1',
+                          'ipconfig': 'exit 1'})
+            for cache in Path(name, '.cache/sketchybar').iterdir():
+                cache.unlink()
+            third = self.run_sketchybar_script('sketchybar_status', stubs, {'RX': '0'})
+            for item in ('bat', 'ctr', 'net'):
+                self.assertEqual(third[item], {'drawing': 'off'}, item)
+
+    def test_sketchybar_status_edge_cases(self):
+        quiet = {c: 'exit 1' for c in ('iostat', 'sysctl', 'vm_stat', 'df', 'pmset', 'osascript', 'ps', 'podman', 'scutil',
+                                       'route', 'ipconfig', 'networksetup', 'netstat')}
+        with tempfile.TemporaryDirectory() as name:
+            # A volume key: only VOL, without the slow full run
+            items = self.run_sketchybar_script('sketchybar_status', {'__dir': name, **quiet, 'osascript': 'echo "55 false"',
+                                                                     'iostat': 'sleep 5'}, {'SENDER': 'volume_change'})
+            self.assertEqual(items, {'vol': {'label': 'VOL 55%', 'label.color': items['vol']['label.color'], 'drawing': 'on'}})
+        with tempfile.TemporaryDirectory() as name:
+            # A hung VPN CLI that ignores SIGALRM (as Go programs do), started by a wrapper that leaves a child holding
+            # the output pipe, is killed with its children after 2 s and counts as down. A podman killed by a signal
+            # is a failure: no CTR field, not "CTR 0".
+            start = time.monotonic()
+            items = self.run_sketchybar_script('sketchybar_status', {
+                '__dir': name, **quiet, 'podman': 'kill -SEGV $$',
+                'tailscale': 'sleep 20 &\nexec perl -e \'$SIG{ALRM} = "IGNORE"; sleep 20\''})
+            self.assertLess(time.monotonic() - start, 10)
+            self.assertEqual(items['vpn.0']['label'], 'Tailscale down')
+            self.assertEqual(items['ctr'], {'drawing': 'off'})
+        with tempfile.TemporaryDirectory() as name:
+            # A VPN tunnel holds the default route: the Wi-Fi link shows, its counters read without an Address column
+            stubs = {'__dir': name, **quiet, 'route': 'echo "  interface: utun4"',
+                     'ipconfig': '[ "$2" = en0 ] && echo 10.0.0.5',
+                     'networksetup': 'printf "Hardware Port: Wi-Fi\\nDevice: en0\\n"',
+                     'netstat': 'printf "Name Mtu Network Address Ipkts Ierrs Ibytes Opkts Oerrs Obytes Coll\\n'
+                                'en0 1500 <Link#4> 1 0 $RX 1 0 2048 0\\n"',
+                     'pmset': 'printf " -InternalBattery-0 (id=1)\\t100%%; charged; 0:00 remaining present: true\\n"'}
+            items = self.run_sketchybar_script('sketchybar_status', stubs, {'RX': '1000'})
+            self.assertEqual(items['net']['label'], 'WIFI 10.0.0.5')
+            self.assertEqual(items['bat']['label'], 'BAT 100%')  # full: no time left, as on Linux
+            time.sleep(1.1)
+            stubs['pmset'] = 'printf " -InternalBattery-0 (id=1)\\t80%%; AC attached; not charging present: true\\n"'
+            items = self.run_sketchybar_script('sketchybar_status', stubs, {'RX': str(1000 + 2**20)})
+            self.assertRegex(items['net']['label'], r'^WIFI 10\.0\.0\.5 ↓(1\.0M|512K) ↑0K$')  # 1 MiB over 1 or 2 whole s
+            self.assertEqual(items['bat']['label'], 'BAT 80%')  # held below full: not charging, no ⚡
+
+    def test_sketchybar_workspaces_follow_aerospace_like_i3bar_buttons(self):
+        defaults = yaml.safe_load((ROOT / 'roles/desktop/defaults/main.yml').read_text())
+        color = {k: '0xff' + defaults[f'desktop_bar_{k}'].lstrip('#').lower()
+                 for k in ('focused_ws_bg', 'active_ws_bg', 'inactive_ws_bg')}
+        with tempfile.TemporaryDirectory() as name:
+            stubs = {'__dir': name, 'aerospace': 'case "$*" in "list-workspaces --focused") echo 2;;'
+                     ' "list-workspaces --all") printf "1\\n2\\n3\\nS\\n";;'
+                     ' "list-workspaces --monitor all --visible") printf "2\\n3\\n";;'
+                     ' "list-modes --current") echo "$MODE";; esac'}
+            items = self.run_sketchybar_script('sketchybar_workspaces', stubs,
+                                               {'AEROSPACE': str(Path(name) / 'aerospace'), 'MODE': 'resize'})
+            self.assertEqual(items['ws.2']['background.color'], color['focused_ws_bg'])
+            self.assertEqual(items['ws.3']['background.color'], color['active_ws_bg'])  # shown on another monitor
+            for ws in ('ws.1', 'ws.S'):
+                self.assertEqual(items[ws]['background.color'], color['inactive_ws_bg'])
+            self.assertEqual(items['ws.4'], {'drawing': 'off'})  # no windows, not shown: gone, as in i3
+            self.assertEqual(items['mode'], {'drawing': 'on', 'label': 'resize'})
+            # A stale FOCUSED_WORKSPACE from an older event never wins over the live query; main mode hides
+            items = self.run_sketchybar_script('sketchybar_workspaces', stubs, {
+                'AEROSPACE': str(Path(name) / 'aerospace'), 'MODE': 'main', 'FOCUSED_WORKSPACE': 'S'})
+            self.assertEqual(items['ws.2']['background.color'], color['focused_ws_bg'])
+            self.assertEqual(items['ws.S']['background.color'], color['inactive_ws_bg'])
+            self.assertEqual(items['mode'], {'drawing': 'off'})
+
+    def test_aerospace_keeps_room_for_the_bar_only_once_it_is_built(self):
+        import tomllib
+        built, unbuilt = (tomllib.loads(self.read(n)) for n in ('aerospace_bar', 'aerospace_bar_unbuilt'))
+        self.assertEqual(built['gaps']['outer']['top'], 30)
+        self.assertRegex(built['on-mode-changed'][0], r'^exec-and-forget /\S+/\.local/bin/sketchybar --trigger aerospace_mode_change$')
+        self.assertEqual(built['exec-on-workspace-change'][1:], ['--trigger', 'aerospace_workspace_change'])
+        self.assertEqual(unbuilt['gaps']['outer']['top'], 0)  # no empty strip while the menu bar still shows
+        self.assertNotIn('exec-on-workspace-change', unbuilt)
+
+    def test_sketchybarrc_adds_status_fields_in_the_i3status_order(self):
+        with tempfile.TemporaryDirectory() as name:
+            log = Path(name) / 'calls'
+            rc = re.sub(r'^sketchybar=.*$', f'sketchybar={name}/sketchybar', self.read('sketchybarrc'), flags=re.M)
+            (Path(name) / 'sketchybar').write_text(f'#!/bin/sh\necho "$*" >> {log}\n')
+            (Path(name) / 'sketchybar').chmod(0o755)
+            (Path(name) / 'rc').write_text(rc)
+            result = subprocess.run(['bash', str(Path(name) / 'rc')], capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            right = re.findall(r'--add item (\S+) right', log.read_text())
+            # added right to left, so reversed they read left to right as on Linux
+            self.assertEqual(right[::-1], ['status', 'cpu', 'load', 'ram', 'pressure', 'disk.0', 'disk.1', 'disk.2',
+                                           'bat', 'vol', 'time',
+                                           'tz.0', 'tz.1', 'ctr', 'ai', 'vpn.0', 'vpn.1', 'vpn.nc', 'net'])
+            self.assertEqual(re.findall(r'--add item (ws\.\S+) left', log.read_text()),
+                             [f'ws.{w}' for w in [*range(1, 11), 'S']])
 
     def test_sway_lock_and_idle_policy(self):
         sway = self.read('sway')

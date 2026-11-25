@@ -1,0 +1,73 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Re-runs replace hand edits: change roles/desktop/templates/sketchybarrc.j2 or its desktop_* variables instead.
+# SketchyBar: the sway/i3 bar (sway.config.j2 bar block, i3status-bar.sh.j2) in place of the macOS menu bar, which
+# auto-hides (desktop_macos_bar). Left: AeroSpace workspaces as i3bar buttons (only those that exist: shown or with
+# windows; click to switch) and the binding mode. Right: the i3status fields in the Linux order, kept current by
+# plugins/status.sh. Colors are the desktop_bar_* palette.
+{% macro sb(hex) %}0xff{{ (hex | regex_replace('[^0-9a-fA-F]', ''))[-6:] | lower }}{% endmacro %}
+{% set _font = desktop_wm_font_family | regex_replace('[^A-Za-z0-9 ]', '') %}
+set -u
+sketchybar={{ ansible_facts['user_dir'] }}/.local/bin/sketchybar
+plugins={{ ansible_facts['user_dir'] }}/.config/sketchybar/plugins
+
+# topmost=window: above app windows, below the menu bar, which still slides in over the bar at the top edge. With
+# topmost off the bar sits at the backstop level under every window, and SketchyBar 2.24 offsets it by the menu bar's
+# height whenever the window server's own autohide flag is off, which the _HIHideMenuBar default alone leaves as it was
+"$sketchybar" --bar position=top height={{ desktop_macos_bar_height | int }} color={{ sb(desktop_bar_bg) }} \
+  display=all topmost=window sticky=on padding_left=4 padding_right=4 shadow=off
+
+"$sketchybar" --default updates=when_shown icon.drawing=off \
+  label.font="{{ _font }}:Book:{{ desktop_macos_bar_font_size | float }}" label.color={{ sb(desktop_bar_fg) }} \
+  label.padding_left=6 label.padding_right=6 padding_left=0 padding_right=0 \
+  background.height={{ (desktop_macos_bar_height | int) - 6 }} background.corner_radius=0
+
+# AeroSpace triggers these (aerospace.toml.j2: exec-on-workspace-change, on-focus-changed, on-mode-changed)
+"$sketchybar" --add event aerospace_workspace_change --add event aerospace_mode_change
+
+# Workspaces: the ones aerospace.toml.j2 binds (alt-1..alt-0, alt-minus), in order
+{% for ws in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'S'] %}
+"$sketchybar" --add item ws.{{ ws }} left --set ws.{{ ws }} label={{ ws }} drawing=off \
+  click_script="{{ ansible_facts['user_dir'] }}/.local/bin/aerospace workspace {{ ws }}"
+{% endfor %}
+# Binding mode (i3bar binding_mode): shown while AeroSpace is in a mode other than main
+"$sketchybar" --add item mode left --set mode drawing=off label.color={{ sb(desktop_bar_binding_mode_text) }} \
+  background.color={{ sb(desktop_bar_binding_mode_bg) }} padding_left=4
+"$sketchybar" --add item workspaces left --set workspaces drawing=off updates=on script="$plugins/workspaces.sh" \
+  --subscribe workspaces aerospace_workspace_change aerospace_mode_change front_app_switched space_windows_change \
+  display_change system_woke
+
+# Status fields, added right to left so they read in the i3status order: CPU LOAD RAM [PRESSURE] disks [BAT] VOL
+# time team-clocks [CTR] AI VPNs [NET]. A field in brackets shows only when it has something to say. The │ before
+# each field after CPU is the i3bar separator.
+_status=(
+  net
+{% if desktop_i3status_vpn | bool %}
+  vpn.nc
+{% endif %}
+{% for v in (desktop_i3status_vpns if desktop_i3status_vpn | bool else []) | reverse %}
+  vpn.{{ loop.revindex0 }}
+{% endfor %}
+  ai ctr
+{% for z in desktop_i3status_timezones | reverse %}
+  tz.{{ loop.revindex0 }}
+{% endfor %}
+  time vol bat
+{% for d in _desktop_macos_bar_disks | reverse %}
+  disk.{{ loop.revindex0 }}
+{% endfor %}
+  pressure ram load cpu
+)
+for item in "${_status[@]}"; do
+  "$sketchybar" --add item "$item" right --set "$item" icon.drawing=on icon="│" icon.color={{ sb(desktop_bar_separator) }} \
+    icon.font="{{ _font }}:Book:{{ desktop_macos_bar_font_size | float }}" icon.padding_left=0 icon.padding_right=0
+done
+"$sketchybar" --set cpu icon.drawing=off
+# Optional fields start hidden; status.sh shows them
+"$sketchybar" --set pressure drawing=off --set bat drawing=off --set ctr drawing=off --set net drawing=off{% if desktop_i3status_vpn | bool %} --set vpn.nc drawing=off{% endif %}{% for d in _desktop_macos_bar_disks %} --set disk.{{ loop.index0 }} drawing=off{% endfor %}
+
+# One driver updates every field in a single call: every 5 s, as i3status, and at once on volume and power changes
+"$sketchybar" --add item status right --set status drawing=off updates=on update_freq=5 script="$plugins/status.sh" \
+  --subscribe status volume_change power_source_change system_woke
+
+"$sketchybar" --update

@@ -307,6 +307,23 @@ desktop_macos_dock_autohide: true  # tiling-WM layout: the Dock stays out of the
 desktop_macos_screenshot_dir: "{{ ansible_facts['user_dir'] }}/Pictures"  # Linux grim writes here too
 
 desktop_macos_tiling_wm: "{{ desktop_environment == 'aerospace' }}"
+# The sway/i3 bar on macOS: SketchyBar (packages_macos_source_builds) takes the menu bar's place at the top with the
+# AeroSpace workspaces and binding mode on the left and the i3status fields on the right (the desktop_bar_* colors and
+# the desktop_i3status_* timezones, disks and VPNs), and the macOS menu bar auto-hides: it slides in while the pointer
+# is at the top edge. A launchd job runs the bar. Turning it off stops and removes the job and shows the menu bar again.
+# The bar sits above windows and below the menu bar, so clicks on it can reveal the menu bar instead (macOS 27 keeps an
+# invisible menu bar strip there: FelixKratz/SketchyBar#852); it is for reading, keyboard first, like i3bar.
+desktop_macos_bar: "{{ desktop_environment | default('') == 'aerospace' }}"  # mirror; authoritative in group_vars/all/vars.yml
+# The menu bar hides and AeroSpace keeps room for the bar only once the packages chunk has built SketchyBar: until
+# then the Mac keeps its menu bar and no empty strip
+_desktop_macos_bar_on: "{{ desktop_macos_bar | bool and _desktop_sketchybar_bin.stat.executable | default(false) }}"
+desktop_macos_bar_height: 30  # the menu bar's height on a non-notched display (macOS 27); AeroSpace keeps it free
+desktop_macos_bar_font_size: 13.0  # macOS points render smaller than Linux ones (desktop_wm_font_size 8)
+# Focused-window border like sway/i3's (JankyBorders): the focused workspace color, the others in the active one
+desktop_macos_borders: "{{ desktop_environment | default('') == 'aerospace' }}"  # mirror; authoritative in group_vars/all/vars.yml
+desktop_macos_border_width: 4.0
+# launchd labels <prefix>.sketchybar and <prefix>.borders
+desktop_macos_agent_prefix: com.laptop-setup  # mirror; authoritative in group_vars/all/vars.yml
 desktop_macos_defaults:
   - domain: NSGlobalDomain
     key: KeyRepeat

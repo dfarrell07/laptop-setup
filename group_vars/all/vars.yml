@@ -46,6 +46,12 @@ is_dnf5: false
 is_apt: false
 fapolicyd_enforcing: false
 fapolicyd_installed: false
+# macOS bar (SketchyBar) and focus border (JankyBorders), on with AeroSpace: the desktop role runs them from
+# LaunchAgents labelled <desktop_macos_agent_prefix>.<name>; the packages role builds each only when it is on.
+# Mirrored in roles/desktop and roles/packages defaults (check-vars-sync).
+desktop_macos_bar: "{{ desktop_environment | default('') == 'aerospace' }}"
+desktop_macos_borders: "{{ desktop_environment | default('') == 'aerospace' }}"
+desktop_macos_agent_prefix: com.laptop-setup
 internal_ca_present: false
 csb_ca_cert_paths:
   - /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem

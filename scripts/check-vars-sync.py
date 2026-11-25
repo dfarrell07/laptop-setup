@@ -53,6 +53,19 @@ CROSS_ROLE_MIRROR_KEYS = {
         REPO_ROOT / "roles/distrobox/defaults/main.yml",
         REPO_ROOT / "roles/packages/defaults/main.yml",
     ],
+    # The macOS bar and borders: the desktop role runs them, the packages role builds them only when on
+    "desktop_macos_bar": [
+        REPO_ROOT / "roles/desktop/defaults/main.yml",
+        REPO_ROOT / "roles/packages/defaults/main.yml",
+    ],
+    "desktop_macos_borders": [
+        REPO_ROOT / "roles/desktop/defaults/main.yml",
+        REPO_ROOT / "roles/packages/defaults/main.yml",
+    ],
+    "desktop_macos_agent_prefix": [
+        REPO_ROOT / "roles/desktop/defaults/main.yml",
+        REPO_ROOT / "roles/packages/defaults/main.yml",
+    ],
     "install_virtualization": [
         REPO_ROOT / "roles/packages/defaults/main.yml",
         REPO_ROOT / "roles/system/defaults/main.yml",

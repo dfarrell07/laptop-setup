@@ -39,7 +39,9 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   `agent_getty_pairs` (default off) keeps remote-control daemons running from login: anyone holding the owner's claude.ai or
   ChatGPT session can then start a session in `agent_getty_dir` with nobody at the console (docs/agent-getty.md)
 - **Supply chain** — `.npmrc ignore-scripts=true`, vendored and verified Ansible collections, SHA256-verified
-  binary downloads, oh-my-zsh pinned to a commit, Go module checksum verification (see "Go Module Supply Chain")
+  binary downloads, oh-my-zsh pinned to a commit, Go module checksum verification (see "Go Module Supply Chain").
+  macOS tools without release binaries (SketchyBar, JankyBorders: `packages_macos_source_builds`) are built as the
+  user from their GitHub tag tarball, SHA256-verified before extraction; no Homebrew tap, no network during the build
 - **CI supply chain** — actionlint, zizmor and gitleaks run as SHA256-verified binary downloads (no third-party node actions); all GitHub
   Actions are SHA-pinned; OSSF Scorecard runs weekly
 - **Privilege escalation** — `become_exe = /usr/bin/sudo` in `ansible.cfg` prevents PATH-based sudo trojans

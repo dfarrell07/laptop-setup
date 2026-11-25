@@ -134,6 +134,28 @@
         that: verify_aerospace.stat.exists
         fail_msg: "AeroSpace config not deployed"
 
+    # Built from pinned source by the packages role (packages_macos_source_builds)
+    - name: Check SketchyBar and JankyBorders run at the pinned versions
+      ansible.builtin.command:
+        argv: ["{{ ansible_user_dir }}/.local/bin/{{ item }}", --version]
+      loop: [sketchybar, borders]
+      register: verify_source_builds
+      changed_when: false
+      failed_when: >-
+        verify_source_builds.rc != 0 or not verify_source_builds.stdout.startswith(item ~ '-v')
+
+    - name: Verify the bar config and LaunchAgents are deployed (desktop_macos_bar, desktop_macos_borders)
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/{{ item }}"
+      loop:
+        - .config/sketchybar/sketchybarrc
+        - .config/sketchybar/plugins/status.sh
+        - .config/sketchybar/plugins/workspaces.sh
+        - Library/LaunchAgents/com.laptop-setup.sketchybar.plist
+        - Library/LaunchAgents/com.laptop-setup.borders.plist
+      register: verify_bar_files
+      failed_when: not verify_bar_files.stat.exists
+
     - name: Verify selected macOS terminal application is installed
       ansible.builtin.stat:
         path: "{{ desktop_macos_terminal_path }}"

@@ -165,6 +165,14 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   (both managed: a run replaces hand edits and keeps the old file beside it as `<file>.<pid>.<date>@<time>~`).
   With `desktop_environment: aerospace` the chunk also starts AeroSpace when it is not running (`aerospace-running`); quit
   it from its menu bar icon.
+- **macOS bar and borders** (`desktop_macos_bar`, `desktop_macos_borders`, on with AeroSpace): SketchyBar and JankyBorders
+  run from `~/Library/LaunchAgents/com.laptop-setup.{sketchybar,borders}.plist` (logs in `~/.local/state/log/`), and the
+  menu bar auto-hides (`_HIHideMenuBar`; it still slides in at the top edge). Undo: set both to `false` in `config.yml`
+  and run `make apply CHUNK=desktop NOSUDO=1`: it unloads and removes both jobs and shows the menu bar again. Without the
+  agent: `launchctl bootout gui/$(id -u)/com.laptop-setup.sketchybar` (and `.borders`), delete the plists, and choose
+  Never in System Settings > Menu Bar > Automatically hide and show the menu bar (or
+  `defaults write NSGlobalDomain _HIHideMenuBar -bool false` and log out). Left behind: `~/.local/bin/{sketchybar,borders}`,
+  `~/.config/sketchybar`, `~/.cache/sketchybar`.
 
 ### macOS remote access
 

@@ -1,0 +1,127 @@
+---
+# roles/packages/tasks/install_macos_source_build.yml
+# Build one macOS tool from its pinned GitHub source tarball and install it to ~/.local/bin, as the user (no sudo).
+# Included once per packages_macos_source_builds entry (loop_var _src_build). SketchyBar and JankyBorders ship no
+# release binaries: the author's FelixKratz/formulae tap builds these same tarballs with make. Building them here
+# from our own SHA256 pin, as AeroSpace is downloaded, keeps a tap compromise from changing both the URL and the hash.
+# Needs the Command Line Tools (bootstrap installs them: xcode-select --install).
+
+- name: Validate the source build entry - {{ _src_build.name }}
+  ansible.builtin.assert:
+    that:
+      - _src_build.name is match('^[a-z][a-z0-9_-]*$')
+      - _src_build.repo is match('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')
+      - _src_build.version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+      - _src_build.sha256 is match('^[0-9a-f]{64}$')
+    fail_msg: >-
+      packages_macos_source_builds entry {{ _src_build.name | default('?') }} needs name, repo (owner/name), version
+      (X.Y.Z) and the tarball's sha256 (64 lowercase hex).
+
+- name: Version check - {{ _src_build.name }}
+  ansible.builtin.command:
+    argv: ["{{ ansible_facts['user_dir'] }}/.local/bin/{{ _src_build.name }}", --version]
+  register: _src_build_version
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe
+
+# Check mode creates no build directory, so make plan reports the build instead of running it
+- name: Report a pending build - {{ _src_build.name }}
+  ansible.builtin.debug:
+    msg: "CHECK MODE: {{ _src_build.name }} {{ _src_build.version }} would be downloaded and built"
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - (_src_build_version.stdout | default('') | trim) != _src_build.name ~ '-v' ~ _src_build.version
+
+- name: Build from source - {{ _src_build.name ~ ' ' ~ _src_build.version }}
+  # both tools print <name>-v<version>
+  when:
+    - not ansible_check_mode
+    - (_src_build_version.stdout | default('') | trim) != _src_build.name ~ '-v' ~ _src_build.version
+  block:
+    - name: Create secure build directory (TOCTOU guard) - {{ _src_build.name }}
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: "{{ _src_build.name }}_"
+      register: _src_build_tmpdir
+
+    - name: Download source tarball (SHA256-verified) - {{ _src_build.name }}
+      ansible.builtin.get_url:
+        url: https://github.com/{{ _src_build.repo }}/archive/refs/tags/v{{ _src_build.version }}.tar.gz
+        dest: "{{ _src_build_tmpdir.path }}/src.tar.gz"
+        checksum: "sha256:{{ _src_build.sha256 }}"
+        mode: "0600"
+        timeout: 60
+      register: _src_build_download
+      retries: 3
+      delay: 5
+      until: _src_build_download is succeeded
+
+    - name: Extract source tarball - {{ _src_build.name }}
+      ansible.builtin.unarchive:
+        src: "{{ _src_build_tmpdir.path }}/src.tar.gz"
+        dest: "{{ _src_build_tmpdir.path }}"
+        remote_src: true
+
+    # GitHub names the top directory <repo>-<version>; the Makefile writes bin/<name>. CFLAGS/LDFLAGS from the
+    # environment are cleared as the formula does: they break the universal build.
+    - name: Build with make - {{ _src_build.name }}  # noqa: no-changed-when
+      ansible.builtin.command:
+        argv: [/usr/bin/make, -C, "{{ _src_build_tmpdir.path }}/{{ _src_build.repo | basename }}-{{ _src_build.version }}"]
+      environment:
+        CFLAGS: ""
+        LDFLAGS: ""
+        CXXFLAGS: ""
+
+    # Ad-hoc signature, as the formula applies: Apple Silicon refuses to run an unsigned binary
+    - name: Sign the binary ad hoc - {{ _src_build.name }}  # noqa: no-changed-when
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/codesign
+          - --force
+          - -s
+          - "-"
+          - "{{ _src_build_tmpdir.path }}/{{ _src_build.repo | basename }}-{{ _src_build.version }}/bin/{{ _src_build.name }}"
+
+    - name: Ensure ~/.local/bin exists - {{ _src_build.name }}
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.local/bin"
+        state: directory
+        mode: "0755"
+
+    - name: Install to ~/.local/bin - {{ _src_build.name }}
+      ansible.builtin.copy:
+        src: "{{ _src_build_tmpdir.path }}/{{ _src_build.repo | basename }}-{{ _src_build.version }}/bin/{{ _src_build.name }}"
+        dest: "{{ ansible_facts['user_dir'] }}/.local/bin/{{ _src_build.name }}"
+        mode: "0755"
+        remote_src: true
+
+    # A running bar or border keeps the old binary until it restarts: restart the desktop role's LaunchAgent for it
+    # (roles/desktop/tasks/macos_agent.yml, label <desktop_macos_agent_prefix>.<name>) when it is loaded
+    - name: Restart the running LaunchAgent on the new binary - {{ _src_build.name }}  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        argv:  # desktop_macos_agent_prefix: group_vars/all/vars.yml, shared with the desktop role
+          - /bin/launchctl
+          - kickstart
+          - -k
+          - "gui/{{ ansible_facts['user_uid'] }}/{{ desktop_macos_agent_prefix }}.{{ _src_build.name }}"
+      register: _src_build_restart
+      changed_when: _src_build_restart.rc == 0
+      failed_when: false  # not loaded (first install, no login session): it starts on the new binary
+
+  rescue:
+    - name: Fail the play after a source build failure - {{ _src_build.name }}
+      ansible.builtin.fail:
+        msg: >-
+          PACKAGE INSTALL FAILED: {{ _src_build.name }} {{ _src_build.version }} from
+          https://github.com/{{ _src_build.repo }} in role packages:
+          {{ ansible_failed_result.msg | default('unknown error') | truncate(300) }}.
+          Check network access and the Command Line Tools (xcode-select --install), then re-run make apply CHUNK=packages.
+
+  always:
+    - name: Remove the build directory - {{ _src_build.name }}
+      ansible.builtin.file:
+        path: "{{ _src_build_tmpdir.path }}"
+        state: absent
+      when: _src_build_tmpdir.path is defined
