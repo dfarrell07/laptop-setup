@@ -852,17 +852,19 @@ class SmokeTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which('zsh'), 'zsh required')
     def test_remote_control_check_names_only_launchers_without_the_flag(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
-        start = source.index('# Remote Control: plain claude starts with it')
+        start = source.index("# Remote Control: the owner's personal homes")
         end = source.index('unset _csi_dirs', start)
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
             (home / '.zshrc').write_text('\n'.join([
+                'echo "Restored session: Tue Nov 24"',  # macOS Terminal's /etc/zshrc_Apple_Terminal prints this
                 'good() { claude --remote-control --dangerously-skip-permissions "$@"; }',
                 'bad() { claude --dangerously-skip-permissions "$@"; }',
                 'bad2() { command claude "$@"; }',
                 'claude() { command claude "$@"; }',  # the instance guard passes everything through
                 'note() { echo "run make claude first"; }', '']))
-            script = ('record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; }\n_csi_dirs=()\n' + source[start:end])
+            script = ('record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; }\n_csi_dirs=()\n'
+                      '_claude_home=; _claude_home2=; _claude_home2_off=${HOME2_OFF:-false}\n' + source[start:end])
             out = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c', script], env=dict(os.environ, HOME=directory),
                                  capture_output=True, text=True).stdout.strip()
             self.assertTrue(out.startswith('claude-remote-control WARN'), out)
@@ -870,10 +872,27 @@ class SmokeTests(unittest.TestCase):
             self.assertIn('shell function bad2 starts', out)
             for fine in ('good', 'claude', 'note'):
                 self.assertNotIn(f'function {fine} ', out)
+            self.assertNotIn('Restored session', out)
             (home / '.zshrc').write_text('good() { claude --remote-control "$@"; }\n')
             out = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c', script], env=dict(os.environ, HOME=directory),
                                  capture_output=True, text=True).stdout.strip()
             self.assertEqual(out, 'claude-remote-control PASS')
+            (home / '.claude').mkdir()
+            (home / '.claude/settings.json').write_text('{"remoteControlAtStartup": false}')  # the owner's choice
+            out = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c', script], env=dict(os.environ, HOME=directory),
+                                 capture_output=True, text=True).stdout.strip()
+            self.assertEqual(out, 'claude-remote-control PASS')
+            (home / '.claude/settings.json').write_text('{}')
+            (home / '.claude/settings.json').write_text('{"remoteControlAtStartup": true}')
+            (home / '.claude-per2').mkdir()
+            (home / '.claude-per2/settings.json').write_text('{}')  # a leftover home on a machine without personal2
+            off = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c', script],
+                                 env=dict(os.environ, HOME=directory, HOME2_OFF='true'), capture_output=True, text=True)
+            self.assertEqual(off.stdout.strip(), 'claude-remote-control PASS', off.stderr)
+            (home / '.claude/settings.json').write_text('{}')
+            out = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c', script], env=dict(os.environ, HOME=directory),
+                                 capture_output=True, text=True).stdout.strip()
+            self.assertIn('.claude: remoteControlAtStartup not set', out)
 
     def test_scripts_run_on_macos_bash_3(self):
         """macOS /bin/bash is 3.2: no ${var,,}/${var^^} case conversion, declare -A or mapfile."""

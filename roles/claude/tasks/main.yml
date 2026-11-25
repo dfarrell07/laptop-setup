@@ -289,15 +289,22 @@
       {{ [ansible_facts.get('python', {}).get('executable', 'python3'), '-I', '-c',
           lookup('ansible.builtin.file', role_path ~ '/files/merge-claude-settings.py'),
           item ~ '/settings.json', '--remove-legacy', item ~ '/settings.local.json', '--defaults',
-          claude_personal_plugin_settings
-          | combine(claude_work_plugin_settings if item == claude_work_config_dir else {}, recursive=true)
-          | to_json, '--retire', claude_retired_deny | to_json]
+          _claude_settings_seed | to_json, '--retire', claude_retired_deny | to_json]
          + (['--check'] if ansible_check_mode else []) }}
     stdin: "{{ lookup('ansible.builtin.template', 'settings-policy.json.j2') }}"
   register: _claude_settings_merge
   changed_when: _claude_settings_merge.stdout | trim == 'changed'
   check_mode: false
   loop: "{{ _claude_instances }}"
+  vars:
+    # Set only where absent, so a user's choice (a disabled plugin, Remote Control turned off in /config) stays.
+    # Remote Control is seeded in the owner's personal homes only: not the Vertex work home, where it stays off, and
+    # not extra homes, another person's login whose claude.ai account would drive sessions as this Unix user.
+    _claude_settings_seed: >-
+      {{ claude_personal_plugin_settings
+         | combine(claude_work_plugin_settings if item == claude_work_config_dir else {}, recursive=true)
+         | combine({'remoteControlAtStartup': claude_remote_control_at_startup | bool}
+                   if item in [claude_default_config_dir, claude_personal2_config_dir] else {}) }}
   loop_control:
     label: "{{ item | basename }}"
 

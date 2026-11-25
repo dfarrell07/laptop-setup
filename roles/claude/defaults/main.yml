@@ -78,8 +78,9 @@ claude_default_mode: bypassPermissions
 # Messages from your other Claude sessions (SendMessage): accept delivers them whatever either session's permission
 # mode, hold parks them for your review, refuse opts out. Any session on this account can then steer this one.
 claude_cross_session_inbound: accept
-# remoteControlAtStartup in every personal home, so plain `claude` starts with Remote Control like the launchers.
-# Not in the work home: Remote Control needs a claude.ai subscription and refuses the Vertex backend.
+# remoteControlAtStartup seeded (set only when absent; turning it off in /config sticks) in ~/.claude and
+# ~/.claude-per2, so plain `claude` starts with Remote Control like the launchers. Not in the work home (under Vertex
+# Claude starts normally and Remote Control stays off) nor in claude_extra_config_dirs (another person's login).
 claude_remote_control_at_startup: true
 # A repository's committed .claude/settings.json defaultMode outranks claude_default_mode for sessions started there
 # without a flag. When true, every run writes claude_default_mode into the git-ignored .claude/settings.local.json
