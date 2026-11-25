@@ -14,16 +14,13 @@
 # Keep comments on their own lines; trailing comments are stripped but avoid them.
 # Claude works in a throwaway worktree of the clone; the poller itself fetches, commits
 # (without hooks, then scans with gitleaks), pushes from the clone and opens the PR.
-# So do NOT grant Claude any git command that writes: no Bash(git commit *) (its hooks
-# run code from the tree, and -F <file> reads files the deny rules hide), git add,
-# push, fetch, checkout, or Bash(git *).
 #
-# REPO_ALLOWED_TOOLS controls what Claude Code is permitted to call.
-# Use a restrictive allow-list; omit Bash entirely for read-only review tasks. Keep
-# Read and Edit (which covers Write) to ./** (the worktree): bare, they reach any file
-# not denied.
-# Grant git diff/log only in exact forms (`git diff --output=<file>` writes anywhere), and never pair Edit or Write
-# with a build tool (Bash(make *), npm, pytest...): the agent can edit what that tool runs, which is code execution.
+# REPO_ALLOWED_TOOLS controls what Claude Code may call; the default is Read(./**),Edit(./**).
+# The poller runs an issue only when every entry is Read, Edit, Write or NotebookEdit under
+# ./ (the worktree; bare, they reach any file not denied), Grep, Glob, or, in a list with
+# no Edit or Write, Bash with one exact command (no wildcard, quote, backslash, $ or
+# backtick, and no git). Beside Edit, any command can run what the agent wrote: a
+# Makefile, a script, even a submodule's config that git status reads.
 #
 # Task queue repo: {{ claude_queue_repo if claude_queue_repo else '<set claude_queue_repo in config.yml>' }}
 # GitHub user:     {{ dotfiles_github_user }}
@@ -32,10 +29,10 @@
 #
 # REPO_PATH[laptop-setup]="{{ ansible_facts['user_dir'] }}/laptop-setup"
 # REPO_REMOTE[laptop-setup]="{{ dotfiles_github_user }}/laptop-setup"
-# REPO_ALLOWED_TOOLS[laptop-setup]="Read(./**),Edit(./**),Bash(git diff),Bash(git diff --stat)"
+# REPO_ALLOWED_TOOLS[laptop-setup]="Read(./**),Edit(./**)"
 # REPO_DEFAULT_BRANCH[laptop-setup]="main"
 #
 # REPO_PATH[my-project]="{{ ansible_facts['user_dir'] }}/repos/my-project"
 # REPO_REMOTE[my-project]="{{ dotfiles_github_user }}/my-project"
-# REPO_ALLOWED_TOOLS[my-project]="Read(./**),Edit(./**),Bash(git diff)"
+# REPO_ALLOWED_TOOLS[my-project]="Read(./**) Bash(make lint)"
 # REPO_DEFAULT_BRANCH[my-project]="main"

@@ -14,9 +14,11 @@ import os
 import re
 import sys
 
-# <<EOF, <<-'EOF', <<"END-PY", <<\EOF; not the <<< of a here-string. The rest of the word, such as the \r of a
-# CRLF line, is part of the delimiter for bash, so a CRLF command's body ends at EOF\r.
-HEREDOC = re.compile(r'(?<!<)<<(?!<)(-?)[ \t]*(?:\'([^\']+)\'|"([^"]+)"|\\?([^ \t\n;&|<>()\'"]+))([^ \t\n;&|<>()\'"]*)')
+# <<EOF, <<-'EOF', <<"END-PY", <<\EOF, <<E"OF", <<$'EOF'; not the <<< of a here-string. The whole word is the delimiter
+# once its quoting is removed, the \r of a CRLF line included, so a CRLF command's body ends at EOF\r.
+WORD_PART = r'\$\'(?:[^\'\\]|\\.)*\'|\'[^\']*\'|"(?:[^"\\]|\\.)*"|\\.|[^ \t\n;&|<>()\'"\\]'
+HEREDOC = re.compile(rf'(?<!<)<<(?!<)(-?)[ \t]*((?:{WORD_PART})+)')
+DOUBLE_QUOTED = re.compile(r'(?:[^"\\]|\\.)*')  # the rest of a double-quoted string, from just inside its opening quote
 SEGMENT = re.compile(r'&&|\|\||;|\|&|(?<!>)\|')  # not the | of >|
 ENV = re.compile(r'[A-Za-z_][A-Za-z0-9_]*=\S*$')
 PREFIX = {'!', 'then', 'do', 'else', 'command', 'time', 'exec', 'env'}
@@ -90,8 +92,20 @@ def writes_file(segment, original):
 
 
 def end_word(m):
-    """The word that ends this heredoc's body."""
-    return (m.group(2) or m.group(3) or m.group(4)) + m.group(5)
+    """The word that ends this heredoc's body: bash's quote removal ($'...' escapes beyond \\x are rare in a delimiter)."""
+    out = []
+    for part in re.findall(WORD_PART, m.group(2)):
+        if part.startswith("$'"):
+            out.append(re.sub(r'\\(.)', r'\1', part[2:-1]))
+        elif part[0] == "'":
+            out.append(part[1:-1])
+        elif part[0] == '"':
+            out.append(re.sub(r'\\([$`"\\])', r'\1', part[1:-1]))  # in "...", \ escapes only these
+        elif part[0] == '\\':
+            out.append(part[1:])
+        else:
+            out.append(part)
+    return ''.join(out)
 
 
 def in_arithmetic(text):
@@ -117,7 +131,7 @@ def in_arithmetic(text):
 
 def heredocs(line, shown):
     """The << operators in a line, not the shift in $((1<<2)). Parentheses count outside quotes and comments; for a <<
-    inside double quotes, where $((...)) still expands, from the opening quote."""
+    inside double quotes, where $((...)) still expands, within that string (so each string is scanned once)."""
     unquoted, quoted = in_arithmetic(shown), {}
     found = []
     for m in HEREDOC.finditer(line):
@@ -126,8 +140,8 @@ def heredocs(line, shown):
         else:
             q = line.rfind('"', 0, m.start()) + 1
             if q not in quoted:
-                quoted[q] = in_arithmetic(line[q:])
-            shift = quoted[q][m.start() - q]
+                quoted[q] = in_arithmetic(DOUBLE_QUOTED.match(line, q).group(0))
+            shift = m.start() - q < len(quoted[q]) and quoted[q][m.start() - q]
         if not shift:
             found.append(m)
     return found
@@ -142,9 +156,10 @@ def file_heredoc(command):
                 pending.pop(0)
             continue
         shown, quote = mask(line, quote)
-        ops = [m for m in heredocs(line, shown) if shown[m.start()] == '<']  # outside quotes and comments
+        found = heredocs(line, shown)
+        ops = [m for m in found if shown[m.start()] == '<']  # outside quotes and comments
         # "$(cat <<'EOF' ...)" (a commit message): skip that body too, though the heredoc only feeds the substitution
-        pending.extend((end_word(m), m.group(1) == '-') for m in heredocs(line, shown)
+        pending.extend((end_word(m), m.group(1) == '-') for m in found
                        if shown[m.start()] == '_' and '$(' in line[line.rfind('"', 0, m.start()):m.start()])
         if not ops:
             continue

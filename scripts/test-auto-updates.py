@@ -131,15 +131,20 @@ class AutoUpdateTests(unittest.TestCase):
                          'packages_user_updates_calendar': 'daily', 'packages_user_updates_container': 'fedora-dev',
                          'packages_user_updates_pipx_skip': ['yamllint', 'ansible-lint'],
                          'packages_user_updates_npm': ['@openai/codex']}
-            run_play(home, tasks, variables)
+            first = run_play(home, tasks, variables)
+            self.assertNotIn('would be bootstrapped', first)  # the check-mode report stays out of a real run
             bootstrap = f'bootstrap gui/501 {name}/Library/LaunchAgents/com.laptop-setup.user-update.plist'
             self.assertEqual(log.read_text().splitlines()[-3:], [bootstrap] * 3)  # retried until it loaded
             log.unlink()
             again = run_play(home, tasks, variables)
             self.assertNotIn('bootstrap', log.read_text())  # loaded and unchanged: left alone
             self.assertRegex(again, r'changed=0 ')
-            (home / 'loaded').unlink()  # booted out by hand: the plan reports the load
-            self.assertRegex(run_play(home, tasks, variables, '--check'), r'changed=1 ')
+            (home / 'loaded').unlink()  # booted out by hand: the plan reports the load, and only looks
+            log.unlink()
+            plan = run_play(home, tasks, variables, '--check')
+            self.assertRegex(plan, r'changed=1 ')
+            self.assertIn('would be bootstrapped', plan)
+            self.assertEqual({l.split()[0] for l in log.read_text().splitlines()}, {'print'})
             (home / 'loaded').touch()
             run_play(home, tasks, {**variables, 'packages_user_updates_npm': ['@openai/codex', 'other']})
             self.assertEqual([l.split()[0] for l in log.read_text().splitlines()][-2:], ['bootout', 'bootstrap'])
@@ -173,6 +178,29 @@ class AutoUpdateTests(unittest.TestCase):
                 'LAPTOP_UPDATE_PATH': '/opt/homebrew/bin:/usr/bin:/bin', 'LAPTOP_UPDATE_NPM': '@openai/codex other',
                 'LAPTOP_UPDATE_PIPX_SKIP': 'yamllint ansible-lint'})
             self.assertTrue((home / '.local/state/log').is_dir())
+
+    def test_launchd_job_waits_for_a_graphical_login(self):
+        tasks = yaml.safe_load((ROOT / 'roles/common/tasks/launchd-agent.yml').read_text())
+        with tempfile.TemporaryDirectory() as name:
+            home = Path(name)
+            log = home / 'launchctl.log'
+            # gui/501 exists only when the file gui does; the job is loaded once bootstrapped
+            stub(home, 'launchctl', f'echo "$*" >> {log}\ncase "$1 $2" in\n'
+                 f'  "print gui/501") [ -f {home}/gui ] ;;\n'
+                 f'  "print gui/501/job") [ -f {home}/loaded ] ;;\n'
+                 f'  "bootstrap gui/501") touch {home}/loaded ;;\n'
+                 '  *) exit 1 ;;\nesac\n')
+            variables = {'ansible_facts': {'user_uid': '501'}, '_launchd_agent_launchctl': str(home / 'launchctl'),
+                         '_launchd_agent_label': 'job', '_launchd_agent_plist': f'{name}/job.plist',
+                         '_launchd_agent_changed': False}
+            ssh = run_play(home, tasks, variables)  # over SSH alone: left for launchd to load at the next login
+            self.assertIn('No graphical login: job loads at the next one', ssh)
+            self.assertRegex(ssh, r'changed=0 ')
+            self.assertEqual(log.read_text().splitlines(), ['print gui/501'])
+            (home / 'gui').touch()  # with a graphical login it loads there
+            run_play(home, tasks, variables)
+            self.assertEqual(log.read_text().splitlines()[-1], f'bootstrap gui/501 {name}/job.plist')
+            self.assertRegex(run_play(home, tasks, variables), r'changed=0 ')
 
     def run_updater(self, home, npm_rc=0, container_exists=True, outdated_fails=False, container='fedora-dev'):
         bin_dir = home / '.local/bin'

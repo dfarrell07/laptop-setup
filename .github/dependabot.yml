@@ -1,7 +1,7 @@
 ---
 # Note: Dependabot does not support the Ansible Galaxy package ecosystem.
 # Galaxy collection drift is tracked separately by .github/workflows/galaxy-drift.yml.
-# Version updates wait 14 days after a release (cooldown), the same age as any version pinned by hand; security
+# Version updates wait 14 days after a release (cooldown), time for a bad release to be caught and pulled; security
 # updates do not wait.
 version: 2
 updates:
@@ -19,6 +19,8 @@ updates:
         patterns:
           - "*"
 
+  # pip PRs change only requirements-test.txt; CI's lock drift check fails until `make pip-lock` regenerates
+  # requirements-test.lock on the PR branch, which is what CI and `make pip-sync` install.
   - package-ecosystem: "pip"
     cooldown:
       default-days: 14
