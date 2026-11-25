@@ -71,78 +71,129 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 _cfg="$SCRIPT_DIR/../config.yml"
 # Fresh checkouts have no machine-specific config; use role defaults.
 [[ -f "$_cfg" ]] || _cfg=/dev/null
+# config.yml readers. Ansible loads config.yml as YAML (of duplicate keys the last wins) and gates on `| bool`; these
+# read top-level keys the same way when the value is a plain or quoted scalar, or a flow ([a, b], also over several
+# lines) or block (- a) list of them. A UTF-8 BOM, CRLF endings, comments and a tag such as !unsafe are handled.
+# Anchors, aliases, block scalars (| or >) and flow mappings are not: keys read here must hold plain scalars or lists.
+# POSIX awk and bash 3.2 only (BSD awk on macOS; Molecule runs this script alone, with no PyYAML).
+#   _cfg_has KEY           status 0 when the key is present
+#   _cfg_value KEY         the scalar, unquoted (empty when null or absent)
+#   _cfg_bool KEY DEFAULT  true or false as `| bool` reads it (true, yes, on or 1, any case); DEFAULT when absent
+#   _cfg_list KEY          the list, one item per line (a scalar is a list of one)
+_cfg_read() { # mode key
+  LC_ALL=C awk -v mode="$1" -v k="$2:" -v bom=$'\357\273\277' '
+    function ltrim(s) { sub(/^[ \t]+/, "", s); return s }
+    # The scalar at the start of s (after any tag); R gets the rest of s. A plain scalar ends at " #", and in a flow
+    # list (fl) at "," or "]". Quoted scalars take the escapes \" and \\ (double) or a doubled quote (single).
+    function scalar(s, fl,   q, c, i, out) {
+      s = ltrim(s); if (s ~ /^![^ \t]*[ \t]/) sub(/^![^ \t]*[ \t]+/, "", s)
+      q = substr(s, 1, 1); out = ""
+      if (q == "\"" || q == "\047") {
+        for (i = 2; i <= length(s); i++) {
+          c = substr(s, i, 1)
+          if (c == q && q == "\047" && substr(s, i + 1, 1) == q) { out = out q; i++; continue }
+          if (c == q) { R = substr(s, i + 1); return out }
+          if (c == "\\" && q == "\"") { i++; c = substr(s, i, 1) }
+          out = out c
+        }
+        R = ""; return out
+      }
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (c == "#" && (i == 1 || substr(s, i - 1, 1) ~ /[ \t]/)) break
+        if (fl && (c == "," || c == "]")) break
+        out = out c
+      }
+      R = substr(s, i); sub(/[ \t]+$/, "", out)
+      if (out ~ /^(~|null|Null|NULL)$/) out = ""
+      return out
+    }
+    function emit(s) { if (s != "") print s }
+    NR == 1 && substr($0, 1, 3) == bom { $0 = substr($0, 4) }
+    { sub(/\r$/, ""); L[NR] = $0 }
+    index($0, k) == 1 && (length($0) == length(k) || substr($0, length(k) + 1, 1) ~ /[ \t]/) { at = NR }
+    END {
+      if (!at) exit 1
+      if (mode == "has") exit 0
+      s = substr(L[at], length(k) + 1)
+      if (mode == "value") { print scalar(s, 0); exit 0 }
+      if (mode == "bool") { s = tolower(scalar(s, 0))
+        if (s == "true" || s == "yes" || s == "on" || s == "1") print "true"; else print "false"; exit 0 }
+      i = at; s = ltrim(s); sub(/^![^ \t]*$/, "", s); sub(/^![^ \t]*[ \t]+/, "", s) # a tag (!unsafe) before a list
+      if (s == "" || s ~ /^#/) { # the list starts on a later line: "- item" lines or an indented flow list
+        for (i = at + 1; i <= NR; i++) { s = ltrim(L[i]); if (s != "" && s !~ /^#/) break }
+        if (i > NR) exit 0
+        if (s ~ /^-([ \t]|$)/) {
+          for (; i <= NR; i++) { s = ltrim(L[i]); if (s == "" || s ~ /^#/) continue
+            if (s !~ /^-([ \t]|$)/) break
+            emit(scalar(substr(s, 2), 0)) }
+          exit 0
+        }
+        if (L[i] !~ /^[ \t]/) exit 0 # the next key: null
+      }
+      if (s !~ /^\[/) { emit(scalar(s, 0)); exit 0 }
+      s = substr(s, 2)
+      while (1) {
+        s = ltrim(s)
+        if (s == "" || s ~ /^#/) { if (++i > NR) break; s = L[i]; continue }
+        c = substr(s, 1, 1)
+        if (c == "]") break
+        if (c == ",") { s = substr(s, 2); continue }
+        emit(scalar(s, 1)); s = (R == s) ? substr(s, 2) : R
+      }
+    }' "$_cfg" 2>/dev/null
+}
+_cfg_has() { _cfg_read has "$1"; }
+_cfg_value() { _cfg_read value "$1" || true; }
+_cfg_bool() { _cfg_read bool "$1" || echo "$2"; }
+_cfg_list() { _cfg_read list "$1" || true; }
 profile="work"
-grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && profile="personal"
+[[ "$(_cfg_value profile)" == personal ]] && profile="personal"
 [[ -z "$PROFILE_OVERRIDE" ]] || profile="$PROFILE_OVERRIDE"
 _codex_enabled=true
-grep -qiE '^(codex_enabled|packages_install_binaries):[[:space:]]*(false|no|off)([[:space:]]|$)|^codex_install_method:[[:space:]]*["'"'"']?skip["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _codex_enabled=false
-_init_on_free=true
-grep -qiE '^system_init_on_free:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _init_on_free=false
-_tlp_enabled=false
-grep -qiE '^system_tlp_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _tlp_enabled=true
-_bpfman_enabled=false
-grep -qiE '^packages_bpfman_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _bpfman_enabled=true
-_containers_environment_d_enabled=false
-grep -qiE '^containers_environment_d_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _containers_environment_d_enabled=true
-_notes_enabled=false
-grep -qiE '^notes_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _notes_enabled=true
-_disable_bluetooth=true
-grep -qiE '^system_disable_bluetooth:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _disable_bluetooth=false
-_mask_nfs=true
-grep -qiE '^system_mask_nfs_server:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_nfs=false
-_luks_discards=false
-grep -qiE '^system_luks_discards_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _luks_discards=true
-_macos_always_on=false
-# first number in the value, ignoring a trailing comment; base 10 even with a leading 0
-_cfg_num() { awk -F: -v k="$1" '$1 == k {sub(/#.*/, "", $2); if (match($2, /[0-9]+/)) print substr($2, RSTART, RLENGTH)}' "$_cfg" 2>/dev/null || true; }
+[[ $(_cfg_bool codex_enabled true) == false || $(_cfg_bool packages_install_binaries true) == false
+   || $(_cfg_value codex_install_method) == skip ]] && _codex_enabled=false
+_init_on_free=$(_cfg_bool system_init_on_free true)
+_tlp_enabled=$(_cfg_bool system_tlp_enabled false)
+_bpfman_enabled=$(_cfg_bool packages_bpfman_enabled false)
+_containers_environment_d_enabled=$(_cfg_bool containers_environment_d_enabled false)
+_notes_enabled=$(_cfg_bool notes_enabled false)
+_disable_bluetooth=$(_cfg_bool system_disable_bluetooth true)
+_mask_nfs=$(_cfg_bool system_mask_nfs_server true)
+_luks_discards=$(_cfg_bool system_luks_discards_enabled false)
+# first number in the value; base 10 even with a leading 0
+_cfg_num() { _cfg_value "$1" | awk 'match($0, /[0-9]+/) {print substr($0, RSTART, RLENGTH)}' || true; }
 _idle_lock=$(_cfg_num desktop_wm_idle_lock_timeout)
 _idle_display=$(_cfg_num desktop_wm_idle_display_timeout)
 [[ "$_idle_lock" =~ ^[0-9]+$ ]] && _idle_lock=$((10#$_idle_lock)) || _idle_lock=3600
 [[ "$_idle_display" =~ ^[0-9]+$ ]] && _idle_display=$((10#$_idle_display)) || _idle_display=3900
-_macos_gnu_tools=true
-grep -qiE '^dotfiles_macos_gnu_tools:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_gnu_tools=false
-_podman_machine=true
-grep -qiE '^containers_macos_machine_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _podman_machine=false
-_docker_shim=true
-_launchd_gnu=true  # dotfiles_macos_launchd_gnu_tools: GUI apps get the GNU tools first too
-grep -qiE '^dotfiles_macos_launchd_gnu_tools:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _launchd_gnu=false
-grep -qiE '^containers_macos_docker_shim:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _docker_shim=false
-_macos_python=$(awk -F: '/^dotfiles_macos_python:/{sub(/#.*/, "", $2); gsub(/[[:space:]"'"'"']/, "", $2); print $2}' "$_cfg" 2>/dev/null || true)
+_macos_gnu_tools=$(_cfg_bool dotfiles_macos_gnu_tools true)
+_podman_machine=$(_cfg_bool containers_macos_machine_enabled true)
+_launchd_gnu=$(_cfg_bool dotfiles_macos_launchd_gnu_tools true)  # GUI apps get the GNU tools first too
+_docker_shim=$(_cfg_bool containers_macos_docker_shim true)
+_macos_python=$(_cfg_value dotfiles_macos_python)
 [[ "$_macos_python" =~ ^python@[0-9.]+$ ]] || _macos_python=python@3.14
-_podman_machine_name=$(awk -F: '/^containers_macos_machine_name:/{sub(/#.*/, "", $2); gsub(/[[:space:]"'"'"']/, "", $2); print $2}' "$_cfg" 2>/dev/null || true)
+_podman_machine_name=$(_cfg_value containers_macos_machine_name)
 [[ "$_podman_machine_name" =~ ^[A-Za-z0-9._-]+$ ]] || _podman_machine_name=podman-machine-default
-grep -qiE '^desktop_macos_always_on:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_always_on=true
-_claude_mode=$(sed -nE 's/^claude_default_mode:[[:space:]]*["'\'']?([A-Za-z]+)["'\'']?.*/\1/p' "$_cfg" 2>/dev/null | tail -1)
+_macos_always_on=$(_cfg_bool desktop_macos_always_on false)
+_claude_mode=$(_cfg_value claude_default_mode)
 _claude_mode=${_claude_mode:-bypassPermissions}
 # Remote Login follows desktop_macos_always_on and Screen Sharing is off, unless config.yml sets them
-_macos_remote_login=$_macos_always_on _macos_screen_sharing=false
-grep -qiE '^desktop_macos_remote_login:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_remote_login=true
-grep -qiE '^desktop_macos_remote_login:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_remote_login=false
-grep -qiE '^desktop_macos_screen_sharing:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_screen_sharing=true
-grep -qiE '^desktop_macos_screen_sharing:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _macos_screen_sharing=false
-_claude_sandbox=false
-grep -qiE '^claude_sandbox_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _claude_sandbox=true
-_mask_iscsi=true
-grep -qiE '^system_mask_iscsi:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_iscsi=false
-_usbguard_enabled=true
-grep -qiE '^system_install_usbguard:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _usbguard_enabled=false
-_disable_usb_storage=false
-grep -qiE '^system_disable_usb_storage:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _disable_usb_storage=true
-_containers_policy_enabled=true
-grep -qiE '^containers_policy_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _containers_policy_enabled=false
-_containers_enforce_fqin=true
-grep -qiE '^containers_enforce_fqin:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _containers_enforce_fqin=false
-_mask_abrt=true
-grep -qiE '^system_mask_abrt:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _mask_abrt=false
-_rpmfusion_free=true
-grep -qiE '^repo_rpmfusion_free:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _rpmfusion_free=false
-_aide_enabled=false
-grep -qiE '^system_aide_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _aide_enabled=true
-_devshm_noexec=true
-grep -qiE '^system_devshm_noexec:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _devshm_noexec=false
-_agent_fwd=$(awk -F': ' '/^system_ssh_allow_agent_forwarding:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
-case "$(printf %s "$_agent_fwd" | tr "[:upper:]" "[:lower:]")" in yes|true|on) _agent_fwd=yes ;; *) _agent_fwd=no ;; esac
-_cfg_ssh_port=$(awk -F': ' '/^ssh_port:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
+_macos_remote_login=$(_cfg_bool desktop_macos_remote_login "$_macos_always_on")
+_macos_screen_sharing=$(_cfg_bool desktop_macos_screen_sharing false)
+_claude_sandbox=$(_cfg_bool claude_sandbox_enabled false)
+_mask_iscsi=$(_cfg_bool system_mask_iscsi true)
+_usbguard_enabled=$(_cfg_bool system_install_usbguard true)
+_disable_usb_storage=$(_cfg_bool system_disable_usb_storage false)
+_containers_policy_enabled=$(_cfg_bool containers_policy_enabled true)
+_containers_enforce_fqin=$(_cfg_bool containers_enforce_fqin true)
+_mask_abrt=$(_cfg_bool system_mask_abrt true)
+_rpmfusion_free=$(_cfg_bool repo_rpmfusion_free true)
+_aide_enabled=$(_cfg_bool system_aide_enabled false)
+_devshm_noexec=$(_cfg_bool system_devshm_noexec true)
+_agent_fwd=no
+[[ $(_cfg_bool system_ssh_allow_agent_forwarding false) == true ]] && _agent_fwd=yes
+_cfg_ssh_port=$(_cfg_value ssh_port)
 [[ -z "$_cfg_ssh_port" ]] && _cfg_ssh_port="722"
 # Validate ssh_port matches decimal format to prevent regex injection in grep patterns
 if ! [[ "$_cfg_ssh_port" =~ ^[0-9]+$ ]]; then
@@ -150,95 +201,60 @@ if ! [[ "$_cfg_ssh_port" =~ ^[0-9]+$ ]]; then
   _cfg_ssh_port="722"
 fi
 # Read system_kernel_lockdown: key-present=use value (may be empty to opt out); key-absent=role default (integrity)
-if grep -qE '^system_kernel_lockdown:' "$_cfg" 2>/dev/null; then
-  _lockdown_intended=$(awk -F': ' '/^system_kernel_lockdown:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
+if _cfg_has system_kernel_lockdown; then
+  _lockdown_intended=$(_cfg_value system_kernel_lockdown)
 else
   _lockdown_intended="integrity"  # role default
 fi
 # Read desktop_sway_trackpoint_id if configured (for TrackPoint device validation)
-_trackpoint_id=$(awk -F': ' '/^desktop_sway_trackpoint_id:/{gsub(/^[[:space:]]*["'"'"']|["'"'"'][[:space:]]*$/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
-_desktop_terminal=$(awk -F': ' '/^desktop_terminal:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
+_trackpoint_id=$(_cfg_value desktop_sway_trackpoint_id)
+_desktop_terminal=$(_cfg_value desktop_terminal)
 [[ -n "$_desktop_terminal" ]] || _desktop_terminal="alacritty"  # role default on Linux
-_desktop_env=$(awk -F': ' '/^desktop_environment:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
-# macOS bar and border toggles, and whether their source builds ran (macos-sketchybar, macos-borders)
-_macos_cfg() { awk -F': ' -v k="$1" '$1 == k {gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null || true; }
-_macos_bar_cfg=$(_macos_cfg desktop_macos_bar)
-_macos_borders_cfg=$(_macos_cfg desktop_macos_borders)
-_install_binaries_cfg=$(_macos_cfg packages_install_binaries)
-unset -f _macos_cfg
+_desktop_env=$(_cfg_value desktop_environment)
 # Role defaults (roles/repos_dnf, roles/notes) apply when config.yml does not override these.
-_gcloud_min_version=$(awk -F': ' '/^repos_dnf_gcloud_min_version:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
+_gcloud_min_version=$(_cfg_value repos_dnf_gcloud_min_version)
 [[ "$_gcloud_min_version" =~ ^[0-9]+(\.[0-9]+)*$ ]] || _gcloud_min_version="500.0.0"
-_notes_repo_name=$(awk -F': ' '/^notes_repo_name:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
+_notes_repo_name=$(_cfg_value notes_repo_name)
 # Plain directory name only (no path separators or leading dot-dot) since it is used in $HOME paths
 [[ "$_notes_repo_name" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]*$ ]] || _notes_repo_name="notes"
 [[ -n "${HOME:-}" ]] || { echo "Error: HOME is not set" >&2; exit 2; }
 _notes_dir="$HOME/$_notes_repo_name"
 USER="${USER:-$(id -un)}"  # cron/env -i runs leave USER unset; later checks use it under set -u
-# Read before _cfg goes away: the work Codex home (value up to an inline comment, quotes and spaces trimmed) and the
-# user-updater opt-out.
-_codex_work=$(awk '/^codex_work_config_dir:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/[[:space:]]*#.*$/, "");
-  gsub(/^["\047]|["\047]$/, ""); sub(/[[:space:]]+$/, ""); print; exit}' "$_cfg" 2>/dev/null || true)
-_acli_site=$(awk '/^acli_site:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/[[:space:]]*#.*$/, "");
-  gsub(/^["\047]|["\047]$/, ""); sub(/[[:space:]]+$/, ""); print; exit}' "$_cfg" 2>/dev/null || true)
+# Read before _cfg goes away: the work Codex home and the user-updater opt-out.
+_codex_work=$(_cfg_value codex_work_config_dir)
+_acli_site=$(_cfg_value acli_site)
 # Not in config.yml: the claude role's default (roles/claude/defaults/main.yml acli_site), Red Hat's site on the work
 # profile and none on personal. Only an explicit acli_site: '' turns the check off.
-if ! grep -q '^acli_site:' "$_cfg" 2>/dev/null; then
+if ! _cfg_has acli_site; then
   if [[ "$profile" == "work" ]]; then _acli_site=redhat.atlassian.net; else _acli_site=""; fi
 fi
 # Personal agent homes for agent-cli-logins: config.yml overrides, defaults otherwise ("~" expanded there)
-_cfg_value() { awk -v k="$1" '$0 ~ "^" k ":" {sub(/^[^:]*:[[:space:]]*/, ""); sub(/[[:space:]]*#.*$/, "");
-  gsub(/^["\047]|["\047]$/, ""); sub(/[[:space:]]+$/, ""); print; exit}' "$_cfg" 2>/dev/null || true; }
 _claude_home=$(_cfg_value claude_default_config_dir)
 _claude_home2=$(_cfg_value claude_personal2_config_dir)
 _codex_personal=$(_cfg_value codex_personal_config_dir)
-# Whether config.yml's rollout_enable ('all' or absent, a flow list on one or several lines, or one "- name" per line)
-# enables a chunk.
+# Whether config.yml's rollout_enable ('all' or absent, or a list) enables a chunk.
 _chunk_enabled() {
-  [[ -f "$_cfg" ]] || return 0
-  [[ $(awk -v c="$1" '
-    function done(r) { print r; finished = 1; exit }
-    function strip(s) { sub(/[[:space:]]*#.*$/, "", s); return s }
-    function check(v) { gsub(/[]["\047[:space:]]/, "", v); if (v == "all") done("yes")
-      n = split(v, a, ","); for (i = 1; i <= n; i++) if (a[i] == c) done("yes"); done("no") }
-    flow { f = f "," strip($0); if (f ~ /\]/) check(f); next }
-    /^rollout_enable:/ { key = 1; v = $0; sub(/^[^:]*:[[:space:]]*/, "", v); v = strip(v)
-      if (v == "") { open = 1; next }
-      if (v ~ /^\[/ && v !~ /\]/) { flow = 1; f = v; next }
-      check(v) }
-    open && !list && /^[[:space:]]+\[/ { v = strip($0); if (v ~ /\]/) check(v); flow = 1; f = v; next }
-    open && /^[[:space:]]*-/ { list = 1; x = $0; sub(/^[[:space:]]*-[[:space:]]*/, "", x); x = strip(x)
-      gsub(/["\047[:space:]]/, "", x); if (x == c) done("yes"); next }
-    open && /^[^[:space:]#]/ { done("no") }
-    END { if (!finished) print (key ? "no" : "yes") }' "$_cfg" 2>/dev/null) != no ]]
+  _cfg_has rollout_enable || return 0
+  case $'\n'"$(_cfg_list rollout_enable)"$'\n' in *$'\n'all$'\n'* | *$'\n'"$1"$'\n'*) return 0 ;; esac
+  return 1
 }
 _chrome_chunk_on=true
 _chunk_enabled chrome || _chrome_chunk_on=false  # Chrome checks (desktop role)
 # Tailscale operator the packages role manages: the login user unless config.yml sets packages_tailscale_operator
 _ts_want=${SUDO_USER:-$USER}
-grep -q '^packages_tailscale_operator:' "$_cfg" 2>/dev/null && _ts_want=$(_cfg_value packages_tailscale_operator)
+_cfg_has packages_tailscale_operator && _ts_want=$(_cfg_value packages_tailscale_operator)
 _claude_home2_off=false
-grep -qiE '^claude_personal2_instance_enabled:[[:space:]]*["'"'"']?(false|no|off|n|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null \
-  && _claude_home2_off=true
-unset -f _cfg_value
+[[ $(_cfg_bool claude_personal2_instance_enabled true) == false ]] && _claude_home2_off=true
 _user_updates_off=false
-grep -qiE '^packages_user_updates_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _user_updates_off=true
-# claude_extra_config_dirs, a flow ([a, b]) or block (- a) list: one entry per line, comments, quotes and spaces trimmed
-_claude_extra_dirs=$(awk '
-  function trim(s) { sub(/[[:space:]]*#.*$/, "", s); gsub(/^[[:space:]"\047]+|[[:space:]"\047]+$/, "", s); return s }
-  /^claude_extra_config_dirs:/ { sub(/^[^:]*:/, ""); v = trim($0); block = (v == "")
-    if (!block) { gsub(/^\[|\]$/, "", v); n = split(v, parts, ","); for (i = 1; i <= n; i++) if (trim(parts[i]) != "") print trim(parts[i]) }
-    next }
-  block && /^[[:space:]]*-/ { sub(/^[[:space:]]*-/, ""); print trim($0); next }
-  block && /^[^[:space:]#]/ { block = 0 }' "$_cfg" 2>/dev/null || true)
-# drive_sync_accounts (docs/drive-sync.md), a flow or block list like claude_extra_config_dirs
-_drive_accounts=$(awk '
-  function trim(s) { sub(/[[:space:]]*#.*$/, "", s); gsub(/^[[:space:]"\047]+|[[:space:]"\047]+$/, "", s); return s }
-  /^drive_sync_accounts:/ { sub(/^[^:]*:/, ""); v = trim($0); block = (v == "")
-    if (!block) { gsub(/^\[|\]$/, "", v); n = split(v, parts, ","); for (i = 1; i <= n; i++) if (trim(parts[i]) != "") print trim(parts[i]) }
-    next }
-  block && /^[[:space:]]*-/ { sub(/^[[:space:]]*-/, ""); print trim($0); next }
-  block && /^[^[:space:]#]/ { block = 0 }' "$_cfg" 2>/dev/null || true)
+[[ $(_cfg_bool packages_user_updates_enabled true) == false ]] && _user_updates_off=true
+# claude_extra_config_dirs and drive_sync_accounts (docs/drive-sync.md): one entry per line
+_claude_extra_dirs=$(_cfg_list claude_extra_config_dirs)
+_drive_accounts=$(_cfg_list drive_sync_accounts)
+# macOS bar and focus border (desktop_macos_bar, desktop_macos_borders); packages_install_binaries: false skips their builds
+_macos_bar=$(_cfg_bool desktop_macos_bar true)
+_macos_borders=$(_cfg_bool desktop_macos_borders true)
+_install_binaries=$(_cfg_bool packages_install_binaries true)
+unset -f _cfg_read _cfg_has _cfg_value _cfg_bool _cfg_list _cfg_num _chunk_enabled
 unset _cfg
 # Check tools as the login shell finds them: make verify runs with make's PATH, which lacks the user bin
 # directories the dotfiles PATH puts first (the claude, codex and agy CLIs live there).
@@ -978,29 +994,30 @@ fi
 # manager, unless config.yml turns them off (desktop_macos_bar / desktop_macos_borders: false)
 if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   # Prints off, PASS, or FAIL (WARN in Molecule: a CI runner has no login session for LaunchAgents)
-  _macos_agent_state() { # process toggle_value (read from config.yml at the top)
+  _macos_agent_state() { # process on (the config toggle, read with the other config.yml values)
     # off by config, or never built (packages_install_binaries: false skips the source builds)
-    if [[ "$_desktop_env" != aerospace || "$2" =~ ^([Ff]alse|[Nn]o|0)$ || "$_install_binaries_cfg" =~ ^([Ff]alse|[Nn]o|0)$ ]]; then echo off
+    if [[ "$_desktop_env" != aerospace || "$2" != true || "$_install_binaries" != true ]]; then echo off
     elif pgrep -x "$1" &>/dev/null; then echo PASS
     elif [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then echo WARN
     else echo FAIL; fi
   }
   _fix="run: make apply CHUNK=packages, then make apply CHUNK=desktop NOSUDO=1"
-  _state=$(_macos_agent_state sketchybar "$_macos_bar_cfg")
+  _state=$(_macos_agent_state sketchybar "$_macos_bar")
   case $_state in
     off) record "macos-sketchybar" "PASS" "off (desktop_environment, desktop_macos_bar or packages_install_binaries)" ;;
     PASS) record "macos-sketchybar" "PASS" ;;
     *) record "macos-sketchybar" "$_state" "SketchyBar is not running — $_fix (log: ~/.local/state/log/sketchybar.log)" ;;
   esac
-  _state=$(_macos_agent_state borders "$_macos_borders_cfg")
+  _state=$(_macos_agent_state borders "$_macos_borders")
   case $_state in
     off) record "macos-borders" "PASS" "off (desktop_environment, desktop_macos_borders or packages_install_binaries)" ;;
     PASS) record "macos-borders" "PASS" ;;
     *) record "macos-borders" "$_state" "JankyBorders is not running — $_fix (log: ~/.local/state/log/borders.log)" ;;
   esac
   unset -f _macos_agent_state
-  unset _fix _state _macos_bar_cfg _macos_borders_cfg _install_binaries_cfg
+  unset _fix _state
 fi
+unset _macos_bar _macos_borders _install_binaries
 
 # macOS: containers run in the podman machine VM, which the containers chunk creates and starts at login
 if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then

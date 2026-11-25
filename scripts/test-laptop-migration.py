@@ -463,7 +463,7 @@ class MigrationTests(unittest.TestCase):
 
     def test_smoke_reads_config_values_before_dropping_the_config_path(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
-        start = source.index('_codex_work=$(awk')
+        start = source.index('_cfg_read() { # mode key')
         end = source.index('unset _cfg', start)
         with tempfile.TemporaryDirectory() as name:
             config = Path(name) / 'config.yml'

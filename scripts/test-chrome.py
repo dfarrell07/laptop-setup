@@ -484,6 +484,7 @@ class SmokeAloneTests(unittest.TestCase):
 
     def test_chunk_enabled_reads_rollout_enable(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        helpers = source[source.index('_cfg_read() { # mode key'):source.index('\nprofile="work"\n') + 1]
         start = source.index('_chunk_enabled() {')
         end = source.index('\n}\n', start) + 3
         cases = [(None, 'yes'), ('profile: work\n', 'yes'), ('rollout_enable: all\n', 'yes'),
@@ -503,7 +504,7 @@ class SmokeAloneTests(unittest.TestCase):
                 cfg = Path(tmp) / 'config.yml'
                 if config is not None:
                     cfg.write_text(config)
-                out = subprocess.run(['bash', '-c', f'_cfg={cfg}\n' + source[start:end]
+                out = subprocess.run(['bash', '-c', f'_cfg={cfg}\n' + helpers + source[start:end]
                                       + '\nif _chunk_enabled chrome; then echo yes; else echo no; fi'],
                                      capture_output=True, text=True).stdout.strip()
                 self.assertEqual(out, want)

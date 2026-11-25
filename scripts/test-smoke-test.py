@@ -383,7 +383,8 @@ class SmokeTests(unittest.TestCase):
 
     def test_cross_session_inbound_check_fails_for_any_managed_dir_without_accept(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
-        parse = source[source.index('_claude_extra_dirs=$(awk'):source.index('unset _cfg\n')]
+        parse = (source[source.index('_cfg_read() { # mode key'):source.index('\nprofile="work"\n') + 1]
+                 + '\n_claude_extra_dirs=$(_cfg_list claude_extra_config_dirs)\n')
         start = source.index('_csi_bad=()')
         end = source.index('unset _cd _csi_bad _csi_seen', start)
         with tempfile.TemporaryDirectory() as directory:
@@ -772,10 +773,9 @@ class SmokeTests(unittest.TestCase):
 
     def test_bar_and_borders_checks_only_when_on(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
-        # The toggles are read near the top, where config.yml is still known, then checked further down
-        read_start = source.index('_macos_cfg() {')
-        read_end = source.index('unset -f _macos_cfg', read_start)
-        start = source.index('  _macos_agent_state() { # process toggle_value')
+        helpers = source[source.index('_cfg_read() { # mode key'):source.index('\nprofile="work"\n') + 1]
+        reads = source[source.index('_macos_bar=$(_cfg_bool'):source.index('unset -f _cfg_read')]
+        start = source.index('  _macos_agent_state() { # process on')
         end = source.index('  unset -f _macos_agent_state', start)
         with tempfile.TemporaryDirectory() as directory:
             d = Path(directory)
@@ -792,12 +792,12 @@ class SmokeTests(unittest.TestCase):
                 with self.subTest(wm=wm, config=config, running=running, molecule=molecule):
                     cfg.write_text(config)
                     result = subprocess.run([BASH, '-eu', '-o', 'pipefail', '-c', 'record() { printf "%s %s\\n" "$1" "$2"; };'
-                                             f' _desktop_env={wm}; _cfg={cfg};\n' + source[read_start:read_end]
+                                             f' _desktop_env={wm}; _cfg={cfg};\n' + helpers + reads
                                              + 'unset _cfg\n' + source[start:end]],
                                             env=dict(os.environ, PATH=f'{directory}:/usr/bin:/bin', RUNNING=running,
                                                      MOLECULE_PROJECT_DIRECTORY=molecule),
                                             capture_output=True, text=True)
-                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual((result.returncode, result.stderr), (0, ''))
                     self.assertEqual(result.stdout.split('\n')[:2], [f'macos-sketchybar {expected[0]}',
                                                                       f'macos-borders {expected[1]}'])
 
@@ -1168,6 +1168,183 @@ exit 0
             text = (ROOT / 'scripts' / name).read_text()
             for pattern in (r'\$\{[A-Za-z_][A-Za-z0-9_]*(,,|\^\^)\}', r'\bdeclare -A\b', r'\b(mapfile|readarray)\b'):
                 self.assertIsNone(re.search(pattern, text), f'{name}: bash 4 construct {pattern}')
+
+
+class ConfigReaderTests(unittest.TestCase):
+    """smoke-test.sh reads config.yml in awk (no PyYAML on a bare host); it must read what Ansible reads: YAML, the last
+    of duplicate keys, and `| bool` (true, yes, on, 1 in any case; anything else is false)."""
+
+    KEYS = ('notes_enabled', 'system_install_usbguard', 'profile', 'claude_default_config_dir', 'acli_site',
+            'desktop_sway_trackpoint_id', 'claude_extra_config_dirs', 'drive_sync_accounts', 'rollout_enable')
+    CASES = [
+        '',
+        'notes_enabled: true\nsystem_install_usbguard: false\nprofile: personal\n',
+        'notes_enabled: "true"\nsystem_install_usbguard: \'no\'\n',
+        "notes_enabled: 'yes'\nsystem_install_usbguard: \"0\"\n",
+        'notes_enabled: 1\nsystem_install_usbguard: 0\n',
+        'notes_enabled: True\nsystem_install_usbguard: OFF\n',
+        'notes_enabled: On\nsystem_install_usbguard: N\n',
+        'notes_enabled: "YES"\nsystem_install_usbguard: "Off"\n',
+        'notes_enabled: y\nsystem_install_usbguard: t\n',  # neither is in `| bool`'s set: both false
+        'notes_enabled: 2\nsystem_install_usbguard: enabled\n',
+        'notes_enabled:\nsystem_install_usbguard: ~\n',  # null: `| bool` is false
+        'notes_enabled: true # on\nsystem_install_usbguard: false#x\n',
+        'notes_enabled: true\nnotes_enabled: false\nsystem_install_usbguard: false\nsystem_install_usbguard: true\n',
+        'notes_enabled: true\r\nprofile: personal\r\nacli_site: "x"\r\nclaude_extra_config_dirs: [/h/.claude-a, '
+        '/h/.claude-b]\r\n',
+        '﻿profile: personal\nnotes_enabled: true\n',
+        '﻿notes_enabled: true\r\n',
+        'notes_enabled_extra: true\nprofile_x: personal\nclaude_default_config_dir_old: /evil\n',
+        'outer:\n  notes_enabled: true\n  profile: personal\n',
+        'desc: |\n  notes_enabled: true\nprofile: work\n',
+        'profile: "personal"\n', 'profile: personal # me\n', "profile: !unsafe 'personal'\n",
+        "claude_default_config_dir: '/home/u/.claude x' # c\n",
+        'claude_default_config_dir: "/home/u/a #b"\n',
+        'claude_default_config_dir: /home/u/a#b # c\n',
+        "claude_default_config_dir: 'it''s'\n",
+        'claude_default_config_dir: "say \\"hi\\" \\\\ there"\n',
+        "claude_default_config_dir: '$(touch /tmp/pwn)`id`;x'\n",
+        'claude_default_config_dir: /a\nclaude_default_config_dir: /b\n',
+        'claude_default_config_dir: ~\nacli_site: null\n',
+        "claude_default_config_dir: ''\nacli_site:\n",
+        "desktop_sway_trackpoint_id: '2:10:TPPS/2_Elan_TrackPoint' # c\n",
+        'desktop_sway_trackpoint_id: "1:2:Name: with colon"\n',
+        'desktop_sway_trackpoint_id: 2:10:TPPS/2 Elan TrackPoint\n',
+        'claude_extra_config_dirs: ["/h/.claude-a", \'/h/.claude-b\'] # c\n',
+        'claude_extra_config_dirs: [/h/.claude-a,\n  /h/.claude-b]\n',
+        'claude_extra_config_dirs: [\n  /h/.claude-a,  # one\n  "/h/.claude, b",\n]\nother: [x]\n',
+        'claude_extra_config_dirs:\n  [/h/.claude-a]\nother:\n  - x\n',
+        'claude_extra_config_dirs:\n  - /h/.claude-a  # c\n  # - /h/.claude-x\n  - "/h/.claude-b"\nother: 1\n',
+        'claude_extra_config_dirs:\n- /h/.claude-a\nnext_key:\n  - /h/.claude-z\n',
+        'claude_extra_config_dirs:\n  - /h/.claude-a\n\n  - /h/.claude-b\n',
+        'claude_extra_config_dirs:\n  - /h/.claude-a\nfoo:\n  bar:\n  - /h/.claude-z\n',
+        'claude_extra_config_dirs: []\ndrive_sync_accounts:\n',
+        'claude_extra_config_dirs: ["$(id)", "a b", "*"]\n',
+        'claude_extra_config_dirs: [/a]\nclaude_extra_config_dirs:\n  - /b\n',
+        'drive_sync_accounts:\n  - me\n  - work # c\ndrive_sync_host: h1\n',
+        'drive_sync_accounts: [me,\n   work]\r\nprofile: personal\r\n',
+        'drive_sync_accounts:\n\n# accounts\n  - me\n',
+        'rollout_enable: all\n', "rollout_enable: 'all'  # every chunk\n",
+        "claude_extra_config_dirs: !unsafe ['/h/.claude-a', /h/.claude-b]\n",
+        'drive_sync_accounts: !unsafe  # tagged\n  - me\n  - work\n', "acli_site: !unsafe 'x # y'\n",
+        'rollout_enable: [packages, "chrome"]\n', 'rollout_enable:\n  - packages\n  - desktop\nother: [chrome]\n',
+    ]
+
+    @staticmethod
+    def ansible_bool(value):
+        """Ansible's own `bool` filter, without its deprecation warning for values outside its set."""
+        from unittest import mock
+        from ansible.plugins.filter import core
+        with mock.patch.object(core.display, 'deprecated'):
+            return core.to_bool(value)
+
+    class Loader(yaml.SafeLoader):
+        """PyYAML plus the tags Ansible reads: !unsafe on scalars and lists, !vault (not needed here)."""
+
+    Loader.add_constructor('!unsafe', lambda loader, node: loader.construct_sequence(node)
+                           if isinstance(node, yaml.SequenceNode) else loader.construct_scalar(node))
+    Loader.add_constructor('!vault', lambda loader, node: None)
+
+    def expected(self, data, key):
+        """(has, value, bool with default 'D', list) as Ansible would see config.yml[key]."""
+        if key not in data:
+            return 'no', '', 'D', []
+        value = data[key]
+        if value is None:
+            items = []
+        elif isinstance(value, list):
+            items = [str(v) for v in value if v not in (None, '')]
+        else:  # a scalar reads as a list of one; only strings are compared as text (YAML turns true into True)
+            items = ([value] if value != '' else []) if isinstance(value, str) else None
+        text = '' if value is None else value if isinstance(value, str) else None
+        return 'yes', text, 'true' if self.ansible_bool(value) else 'false', items
+
+    def test_readers_match_ansible_yaml_and_bool(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        helpers = source[source.index('_cfg_read() { # mode key'):source.index('\nprofile="work"\n') + 1]
+        probe = ('for k in ' + ' '.join(self.KEYS) + '; do _cfg_has "$k" && echo yes || echo no;'
+                 ' printf "%s\\n" "$(_cfg_value "$k")" "$(_cfg_bool "$k" D)"; printf "%s\\037" "$(_cfg_list "$k" | tr "\\n" "\\036")"; echo; done')
+
+        with tempfile.TemporaryDirectory() as directory:
+            cfg = Path(directory) / 'config.yml'
+            awk_dirs = [None]
+            gawk = shutil.which('gawk')
+            if gawk:  # also under POSIX awk rules: macOS has BSD awk, without gawk extensions
+                posix = Path(directory) / 'posix'
+                posix.mkdir()
+                (posix / 'awk').write_text(f'#!/bin/sh\nexec {gawk} --posix "$@"\n')
+                (posix / 'awk').chmod(0o755)
+                awk_dirs.append(posix)
+            for text in self.CASES:
+                cfg.write_bytes(text.encode())
+                data = yaml.load(text, Loader=self.Loader) or {}
+                for awk_dir in awk_dirs:
+                    path = os.environ['PATH'] if awk_dir is None else f'{awk_dir}:{os.environ["PATH"]}'
+                    result = subprocess.run([BASH, '-euo', 'pipefail', '-c', f'_cfg={shlex.quote(str(cfg))}\n'
+                                             + helpers + '\n' + probe], capture_output=True, text=True,
+                                            env=dict(os.environ, PATH=path))
+                    self.assertEqual((result.returncode, result.stderr), (0, ''), text)
+                    lines = result.stdout.split('\n')
+                    for i, key in enumerate(self.KEYS):
+                        has, value, boolean, items = lines[4 * i:4 * i + 4]
+                        want = self.expected(data, key)
+                        with self.subTest(config=text, key=key, awk=str(awk_dir)):
+                            self.assertEqual(has, want[0])
+                            if want[1] is not None:
+                                self.assertEqual(value, want[1])
+                            self.assertEqual(boolean, want[2])
+                            if want[3] is not None:
+                                self.assertEqual([i for i in items.rstrip('\037').split('\036') if i], want[3])
+
+    # _cfg_bool defaults that are not a literal true/false in the playbook, and why the shell default is right
+    NON_LITERAL_DEFAULTS = {
+        'desktop_macos_remote_login': 'follows desktop_macos_always_on; the shell passes that value',
+        'desktop_macos_bar': "true when desktop_environment is aerospace; the check is off for any other value",
+        'desktop_macos_borders': "true when desktop_environment is aerospace; the check is off for any other value",
+    }
+
+    def test_cfg_bool_defaults_match_the_playbook(self):
+        """Each `_cfg_bool KEY DEFAULT` DEFAULT is what Ansible uses when config.yml lacks KEY: default.config.yml,
+        group_vars/all or a role default (every copy must agree), so an inverted default fails here."""
+        import glob
+        import re
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        calls = re.findall(r'_cfg_bool (\S+) (\S+?)\)', source)
+        self.assertGreater(len(calls), 20)
+        defined = {}
+        files = (sorted(glob.glob(str(ROOT / 'roles/*/defaults/main.yml'))) + [str(ROOT / 'default.config.yml')]
+                 + sorted(f for f in glob.glob(str(ROOT / 'group_vars/all/*.yml')) if not f.endswith('vault.yml')))
+        for name in files:
+            for key, value in (yaml.load(Path(name).read_text(), Loader=self.Loader) or {}).items():
+                defined.setdefault(key, []).append((Path(name).relative_to(ROOT), value))
+        for key, default in calls:
+            with self.subTest(key=key, default=default):
+                self.assertIn(key, defined, 'no role default, group_vars or default.config.yml value')
+                if key in self.NON_LITERAL_DEFAULTS:  # listed: must really be non-literal, or it belongs in the table
+                    self.assertTrue(default.startswith('"$') or any('{{' in str(v) for _, v in defined[key]))
+                    continue
+                self.assertIn(default, ('true', 'false'))
+                for name, value in defined[key]:
+                    self.assertNotIn('{{', str(value), f'{name}: list {key} in NON_LITERAL_DEFAULTS with a reason')
+                    self.assertEqual(default, 'true' if self.ansible_bool(value) else 'false', f'{name}: {value!r}')
+
+    def test_chunk_enabled_reads_the_last_rollout_enable(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        helpers = source[source.index('_cfg_read() { # mode key'):source.index('\nprofile="work"\n') + 1]
+        start = source.index('_chunk_enabled() {')
+        body = source[start:source.index('\n}\n', start) + 3]
+        for config, want in [('rollout_enable: [chrome]\nrollout_enable: [desktop]\n', 'no'),
+                             ('rollout_enable: [desktop]\nrollout_enable: all\n', 'yes'),
+                             ('﻿rollout_enable: [desktop,\r\n  chrome]\r\n', 'yes'),
+                             ('rollout_enable: [chromebook]\n', 'no')]:
+            with self.subTest(config=config), tempfile.TemporaryDirectory() as tmp:
+                cfg = Path(tmp) / 'config.yml'
+                cfg.write_bytes(config.encode())
+                out = subprocess.run([BASH, '-c', f'_cfg={shlex.quote(str(cfg))}\n' + helpers + body
+                                      + 'if _chunk_enabled chrome; then echo yes; else echo no; fi'],
+                                     capture_output=True, text=True).stdout.strip()
+                self.assertEqual(out, want)
+
 
 if __name__ == '__main__':
     unittest.main()
