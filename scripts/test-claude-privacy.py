@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -106,6 +107,88 @@ class ClaudePrivacyTests(unittest.TestCase):
                 self.assertIs(sandbox['enableWeakerNestedSandbox'], expected, (in_container, tier))
                 self.assertEqual({k: v for k, v in sandbox.items() if k != 'enableWeakerNestedSandbox'},
                                  {'enabled': False, 'allowUnsandboxedCommands': False, 'failIfUnavailable': True})
+
+    # Files a Chrome profile holds (Linux and macOS): the secret stores, and the ones make chrome-bookmarks-*
+    # reads. A deny glob names a file or dir at any depth, and a denied dir covers everything in it.
+    CHROME_SECRETS = ['Default/Cookies', 'Default/Cookies-journal', 'Default/Network/Cookies', 'Default/Extension Cookies',
+                      'Default/Safe Browsing Cookies', 'Default/Login Data', 'Default/Login Data For Account',
+                      'Default/Login Data-journal', 'Default/Web Data', 'Default/Account Web Data', 'Default/History',
+                      'Default/Media History', 'Default/Sessions/Session_1', 'Default/Current Session', 'Default/Last Tabs',
+                      'Default/Local Storage/leveldb/000003.log', 'Default/Session Storage/MANIFEST-000001',
+                      'Default/IndexedDB/https_x_0.indexeddb.leveldb/000003.ldb', 'Default/Extension State/LOG',
+                      'Default/Local Extension Settings/abc/000003.log', 'Default/Sync Extension Settings/abc/x',
+                      'Default/Extension Rules/x', 'Default/Sync Data/LevelDB/000005.ldb',
+                      'Default/Trust Tokens', 'Default/Service Worker/CacheStorage/x', 'Default/File System/000/t',
+                      'Default/databases/Databases.db', 'Default/GCM Store/Encryption/LOG', 'Default/Shared Dictionary/db',
+                      'Default/Affiliation Database', 'Default/Top Sites', 'Default/Visited Links', 'Default/Shortcuts',
+                      'Default/Favicons', 'Default/Network Action Predictor', 'Profile 1/Cookies', 'Safe Browsing/x.pb',
+                      'Default/shared_proto_db/000003.log', 'Default/blob_storage/x', 'Default/WebStorage/QuotaManager',
+                      'Default/trusted_vault.pb', 'Default/DIPS', 'Default/Conversions', 'Default/InterestGroups',
+                      'Default/BrowsingTopicsSiteData', 'Default/PrivateAggregation',
+                      'Default/heavy_ad_intervention_opt_out.db', 'Default/Network Persistent State',
+                      'Default/TransportSecurity', 'Default/Reporting and NEL', 'Default/QuotaManager',
+                      'Crashpad/completed/x.dmp', 'Crash Reports/x.dmp',
+                      'Default/Policy/User Policy', 'Policy/Enrollment/CloudManagementEnrollmentToken']
+    CHROME_READABLE = ['Local State', 'Default/Bookmarks', 'Default/AccountBookmarks', 'Profile 1/Bookmarks',
+                       'Default/Bookmarks.bak', 'Default/Preferences', 'Default/Secure Preferences',
+                       'Default/Extensions/abc/1.0_0/manifest.json']
+
+    def test_chrome_profiles_deny_secret_stores_and_leave_bookmarks_readable(self):
+        import fnmatch
+        defaults = yaml.safe_load((ROOT / 'roles/claude/defaults/main.yml').read_text())
+        ansible = ROOT / '.venv/bin/ansible'
+        if not ansible.exists():
+            self.skipTest('no .venv ansible')
+        for system, data_dir, other in [
+                ('Darwin', '~/Library/Application Support/Google/Chrome', '~/.config/google-chrome'),
+                ('Darwin', '~/Library/Application Support/Chromium', '~/.config/chromium'),
+                ('Linux', '~/.config/google-chrome', '~/Library/Application Support/Google/Chrome'),
+                ('Linux', '~/.config/chromium', '~/Library/Application Support/Chromium')]:
+            with tempfile.TemporaryDirectory() as tmp:
+                vars_file = Path(tmp) / 'v.json'
+                vars_file.write_text(json.dumps({
+                    **defaults, 'system_is_container': False, 'needs_container_tier': 'host-only',
+                    'ansible_facts': {'user_dir': tmp, 'system': system}, '_claude_instances': [], 'item': tmp}))
+                out = Path(tmp) / 'o.json'
+                result = subprocess.run(
+                    [str(ansible), 'localhost', '-m', 'template', '-a',
+                     f'src={ROOT}/roles/claude/templates/settings-policy.json.j2 dest={out}',
+                     '-e', f'@{vars_file}', '-i', 'localhost,', '-c', 'local'],
+                    capture_output=True, text=True, timeout=120, cwd=tmp,
+                    env={**os.environ, 'ANSIBLE_LOCAL_TEMP': tmp, 'ANSIBLE_REMOTE_TEMP': tmp, 'HOME': tmp})
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                deny = json.loads(out.read_text())['permissions']['deny']
+            prefix = data_dir + '/**/'
+            globs = [d[len('Read(' + prefix):-1] for d in deny if d.startswith('Read(' + prefix)]
+            self.assertEqual(sorted(globs), sorted(defaults['claude_chromium_deny_globs']), system)
+            self.assertFalse([d for d in deny if d.startswith('Edit(' + prefix)], system)  # reads only
+            self.assertFalse([d for d in deny if d.startswith('Read(' + other)], system)  # only this OS's dirs
+            self.assertNotIn(f'Read({data_dir}/**)', deny)  # no wholesale read rule
+            self.assertIn(f'Edit({data_dir}/**)', deny)  # writes stay denied wholesale (NativeMessagingHosts)
+            if data_dir != '~/Library/Application Support/Chromium':  # the one dir earlier releases did not deny
+                self.assertIn(f'Read({data_dir}/**)', defaults['claude_retired_deny'])
+            self.assertNotIn(f'Edit({data_dir}/**)', defaults['claude_retired_deny'])
+
+            def denied(rel):
+                return any(fnmatch.fnmatchcase(part, glob) for part in rel.split('/') for glob in globs)
+            self.assertEqual([f for f in self.CHROME_SECRETS if not denied(f)], [], system)
+            self.assertEqual([f for f in self.CHROME_READABLE if denied(f)], [], system)
+
+    def test_retired_wholesale_chrome_rules_leave_existing_settings(self):
+        defaults = yaml.safe_load((ROOT / 'roles/claude/defaults/main.yml').read_text())
+        old = ['Read(~/Library/Application Support/Google/Chrome/**)', 'Edit(~/Library/Application Support/Google/Chrome/**)',
+               'Read(~/.config/google-chrome/**)', 'Read(~/.ssh/**)']
+        new = ['Read(~/Library/Application Support/Google/Chrome/**/*Cookies*)', 'Read(~/.ssh/**)',
+               'Edit(~/Library/Application Support/Google/Chrome/**)']
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Path(tmp) / 'settings.json'
+            settings.write_text(json.dumps({'permissions': {'deny': old}}))
+            result = subprocess.run(
+                [sys.executable, '-I', str(ROOT / 'roles/claude/files/merge-claude-settings.py'), str(settings),
+                 '--retire', json.dumps(defaults['claude_retired_deny'])],
+                input=json.dumps({'permissions': {'deny': new}}), capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(settings.read_text())['permissions']['deny'], new)
 
     def test_remote_control_is_seeded_only_in_the_owners_personal_homes(self):
         defaults = yaml.safe_load((ROOT / 'roles/claude/defaults/main.yml').read_text())

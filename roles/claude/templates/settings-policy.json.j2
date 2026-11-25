@@ -32,6 +32,12 @@
 {% set _ = deny_entries.append("Read(" + path + ")") %}
 {% set _ = deny_entries.append("Edit(" + path + ")") %}
 {% endfor %}
+{# a file or dir of that name at any depth; a matched dir covers everything in it #}
+{% for dir in claude_chromium_user_data_dirs %}
+{% for glob in claude_chromium_deny_globs %}
+{% set _ = deny_entries.append("Read(" + dir + "/**/" + glob + ")") %}
+{% endfor %}
+{% endfor %}
 {% for path in claude_deny_write_only %}
 {% set _ = deny_entries.append("Edit(" + path + ")") %}
 {% endfor %}
