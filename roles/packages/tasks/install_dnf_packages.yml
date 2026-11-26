@@ -29,6 +29,11 @@
              + (packages_aws_cli_fedora_work if profile == 'work' and ansible_distribution == 'Fedora' else [])
              + packages_extra_dnf }}
 
+    - name: Leave out packages RHEL 9 ships only in EPEL
+      ansible.builtin.set_fact:
+        _packages_dnf_all: "{{ _packages_dnf_all | reject('in', packages_dnf_epel_only_el9) | list }}"
+      when: ansible_facts['distribution_major_version'] | int < 10  # is_dnf: RHEL family; Fedora is far above 10
+
     - name: Apply dnf package list to host
       ansible.builtin.dnf:
         name: "{{ _packages_dnf_all }}"
@@ -54,39 +59,65 @@
       failed_when: _packages_dnf_container_result.rc != 0
       when: system_is_container
 
-    - name: Check packaged Go binary after suppressed RPM scriptlets
-      ansible.builtin.stat:
-        path: /usr/lib/golang/bin/go
-      register: _packages_go_target
-      when: system_is_container
+  rescue:
+    # One unavailable package fails the whole transaction, which would leave zsh, git and golang out too: on CSB
+    # (where the play continues) retry each package on its own and report only those that still fail. When the
+    # repositories themselves do not answer (network, metadata, policy), every retry would fail the same way: skip it.
+    - name: Check the dnf repositories answer (CSB)  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        argv: [dnf, -q, makecache]
+      register: _packages_dnf_repos
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      become: true
+      tags: [become]
+      when: csb_rhel
 
-    - name: Restore packaged Go alternatives after suppressed RPM scriptlets
-      # Match golang-bin's RPM post-install registration, including the gofmt slave.
+    - name: Retry each dnf package on its own on the host (CSB)
+      ansible.builtin.dnf:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ _packages_dnf_all | default([]) }}"
+      register: _packages_dnf_each_host
+      failed_when: false
+      become: true
+      tags: [become]
+      when: csb_rhel and not system_is_container and _packages_dnf_repos.rc | default(1) == 0
+
+    - name: Retry each dnf package on its own in the container (CSB)  # noqa: command-instead-of-module
       ansible.builtin.command:
         argv:
-          - alternatives
-          - --install
-          - /usr/bin/go
-          - go
-          - /usr/lib/golang/bin/go
-          - '90'
-          - --slave
-          - /usr/bin/gofmt
-          - gofmt
-          - /usr/lib/golang/bin/gofmt
-        creates: /etc/alternatives/go
+          - dnf
+          - install
+          - -y
+          - --setopt=tsflags=noscripts,notriggers
+          - "{{ item }}"
+      loop: "{{ _packages_dnf_all | default([]) }}"
+      register: _packages_dnf_each_container
+      changed_when: "_packages_dnf_each_container.rc == 0 and 'Nothing to do' not in _packages_dnf_each_container.stdout"
+      failed_when: false
       become: true
-      when:
-        - system_is_container
-        - _packages_go_target.stat.exists | default(false)
-        - _packages_go_target.stat.executable | default(false)
-  rescue:
+      when: csb_rhel and system_is_container and _packages_dnf_repos.rc | default(1) == 0
+
+    - name: List the dnf packages that still failed (CSB)
+      ansible.builtin.set_fact:
+        _packages_dnf_unavailable: >-
+          {{ ((_packages_dnf_each_host.results | default([])) + (_packages_dnf_each_container.results | default([])))
+             | selectattr('rc', 'defined') | rejectattr('rc', 'equalto', 0) | map(attribute='item') | list }}
+      when: csb_rhel
+
+    # After a retry that installed everything (a transient failure) there is nothing to report
     - name: Record dnf package install failure (CSB)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
       vars:
         _csb_role: packages
         _csb_task_name: "Install dnf packages"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_error: >-
+          {{ ('Not installable on their own: ' ~ (_packages_dnf_unavailable | join(', ')) ~ '. ')
+             if _packages_dnf_unavailable | default([]) | length > 0 else '' }}{{
+             'Repositories did not answer (dnf makecache failed). ' if _packages_dnf_repos.rc | default(1) != 0 else '' }}Transaction:
+          {{ ansible_failed_result.msg | default('unknown error') | truncate(200) }}
         _csb_action: "One or more dnf packages failed; see ticket body for package list and remediation details."
         _csb_ticket_summary: "Cannot install core dnf packages on CSB"
         _csb_ticket_body: >-
@@ -96,7 +127,9 @@
           packages_containers_kubectl (personal/non-x86_64/no-binaries), packages_networking, packages_networking_work,
           or packages_support_work could not be installed.
           This may be due to fapolicyd repo policy or a missing repository.
-      when: csb_rhel
+      when:
+        - csb_rhel
+        - _packages_dnf_repos.rc | default(1) != 0 or _packages_dnf_unavailable | default([]) | length > 0
     # The install is one transaction: on failure none of the core tools (golang, pipx, ...) exist,
     # and the later Go/pipx steps would skip quietly, so the run must not report success.
     - name: Fail when dnf package install failed (non-CSB)
@@ -109,6 +142,35 @@
           (make apply CHUNK=repos_dnf), or set repo_gh_cli / repo_tailscale to false in config.yml and
           list gh / tailscale in packages_extra_dnf if you still want them.
       when: not csb_rhel
+
+# After the install (and the CSB per-package retry): restore what golang-bin's suppressed scriptlets would register
+- name: Check packaged Go binary after suppressed RPM scriptlets
+  ansible.builtin.stat:
+    path: /usr/lib/golang/bin/go
+  register: _packages_go_target
+  when: is_dnf and system_is_container
+
+- name: Restore packaged Go alternatives after suppressed RPM scriptlets
+  # Match golang-bin's RPM post-install registration, including the gofmt slave.
+  ansible.builtin.command:
+    argv:
+      - alternatives
+      - --install
+      - /usr/bin/go
+      - go
+      - /usr/lib/golang/bin/go
+      - '90'
+      - --slave
+      - /usr/bin/gofmt
+      - gofmt
+      - /usr/lib/golang/bin/gofmt
+    creates: /etc/alternatives/go
+  become: true
+  when:
+    - is_dnf
+    - system_is_container
+    - _packages_go_target.stat.exists | default(false)
+    - _packages_go_target.stat.executable | default(false)
 
 # OVS/OVN units are masked by the system role (service_masking.yml); masking works before the
 # packages exist (it only writes the /dev/null symlink), so it is not repeated here.
