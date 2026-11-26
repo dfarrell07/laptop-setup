@@ -922,7 +922,17 @@ class RenderedConfigTests(unittest.TestCase):
         self.assertIn('<string>/usr/libexec/sshd-keygen-wrapper</string>', text)
         import plistlib
         # one root sshd per connection: cap them like Apple's ssh.plist, or a connection flood spawns without limit
-        self.assertEqual(plistlib.loads(text.encode())['inetdCompatibility'], {'Wait': False, 'Instances': 42})
+        job = plistlib.loads(text.encode())
+        self.assertEqual(job['inetdCompatibility'], {'Wait': False, 'Instances': 42})
+        # Apple's process keys, so sessions behave as under Remote Login (evicted iCloud files open, no pressured exit)
+        process_keys = {'POSIXSpawnType': 'Interactive', 'MaterializeDatalessFiles': True,
+                        'EnablePressuredExit': False, 'EnableTransactions': False}
+        self.assertEqual({key: job.get(key) for key in process_keys}, process_keys)
+        apple = Path('/System/Library/LaunchDaemons/ssh.plist')
+        if apple.exists():  # on a Mac, the same values as Apple's own, and no key Apple's job does not have
+            apple_job = plistlib.loads(apple.read_bytes())
+            self.assertEqual({key: apple_job.get(key) for key in process_keys}, process_keys)
+            self.assertEqual(set(job) - set(apple_job), set())
         if shutil.which('plutil'):
             result = subprocess.run(['plutil', '-lint', str(self.out / 'sshd_launchd')], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
