@@ -87,10 +87,10 @@ if [[ -z "$PROFILE" ]]; then
   PROFILE="work"  # default matches group_vars/all/vars.yml; overridden by the config.yml profile: line below
   # Apply config.yml profile override in both directions
   if [[ -f "$CONFIG_FILE" ]]; then
-    if grep -qE '^profile:[[:space:]]*["'"'"']?work["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then
+    if grep -qE '^profile:[[:space:]]*(!unsafe[[:space:]]+)?["'"'"']?work["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then
       PROFILE=work
       record "config_profile" "pass" "profile=work"
-    elif grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then
+    elif grep -qE '^profile:[[:space:]]*(!unsafe[[:space:]]+)?["'"'"']?personal["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then
       PROFILE=personal
       record "config_profile" "pass" "profile=personal"
     elif grep -qE '^profile:[[:space:]]*' "$CONFIG_FILE" 2>/dev/null; then
@@ -256,16 +256,16 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   record "config_yml" "fail" "config.yml missing — cp default.config.yml config.yml and replace every CHANGE_ME (Play 0 refuses to run until identity values are set)"
 elif ! grep -q '^desktop_environment:' "$CONFIG_FILE"; then
   record "config_yml" "fail" "config.yml exists but does not set desktop_environment; set 'desktop_environment: sway' (or i3/gnome)"
-elif ! grep -qE '^desktop_environment:[[:space:]]*["'"'"']?('"$([[ "$OS_FAMILY" == darwin ]] && echo aerospace || echo 'sway|i3|gnome')"')["'"'"']?([[:space:]]|$)' "$CONFIG_FILE"; then
+elif ! grep -qE '^desktop_environment:[[:space:]]*(!unsafe[[:space:]]+)?["'"'"']?('"$([[ "$OS_FAMILY" == darwin ]] && echo aerospace || echo 'sway|i3|gnome')"')["'"'"']?([[:space:]]|$)' "$CONFIG_FILE"; then
   record "config_yml" "fail" "desktop_environment must be $([[ "$OS_FAMILY" == darwin ]] && echo aerospace || echo 'sway, i3, or gnome') — got: $(grep '^desktop_environment:' "$CONFIG_FILE")"
 else
   record "config_yml" "pass" "desktop_environment is set"
   # HiDPI warning: Sway on a HiDPI display without scale set produces microscopic fonts.
   # No assertion can know the display resolution, but if sway is chosen and scale is absent/1.0
   # we remind the user to check. This is a WARN not a FAIL — non-HiDPI users are unaffected.
-  if grep -qE '^desktop_environment:[[:space:]]*["'"'"']?sway["'"'"']?' "$CONFIG_FILE"; then
-    if ! grep -qE '^desktop_sway_hidpi_scale:[[:space:]]*["'"'"']?[^[:space:]"'"'"'#1]' "$CONFIG_FILE" && \
-       ! grep -qE '^desktop_sway_hidpi_scale:[[:space:]]*["'"'"']?1\.[1-9]' "$CONFIG_FILE"; then
+  if grep -qE '^desktop_environment:[[:space:]]*(!unsafe[[:space:]]+)?["'"'"']?sway["'"'"']?' "$CONFIG_FILE"; then
+    if ! grep -qE '^desktop_sway_hidpi_scale:[[:space:]]*(!unsafe[[:space:]]+)?["'"'"']?[^[:space:]"'"'"'#1!]' "$CONFIG_FILE" && \
+       ! grep -qE '^desktop_sway_hidpi_scale:[[:space:]]*(!unsafe[[:space:]]+)?["'"'"']?1\.[1-9]' "$CONFIG_FILE"; then
       record "config_sway_hidpi" "warn" "desktop_sway_hidpi_scale not set above 1.0 — if this is a HiDPI display (e.g. ThinkPad P16v 2560x1600) add 'desktop_sway_hidpi_scale: \"1.5\"' to config.yml to avoid microscopic fonts"
     else
       record "config_sway_hidpi" "pass" "desktop_sway_hidpi_scale set to $(grep '^desktop_sway_hidpi_scale:' "$CONFIG_FILE" | cut -d: -f2- | sed 's/^[[:space:]]*//')"
@@ -420,7 +420,7 @@ if [[ -f "$CONFIG_FILE" ]]; then
   for _tpkey in desktop_sway_trackpoint_id desktop_i3_trackpoint_id; do
     grep -qE "^${_tpkey}:" "$CONFIG_FILE" 2>/dev/null || continue
     _tp_found=true
-    trackpoint_value=$(grep -m1 "^${_tpkey}:" "$CONFIG_FILE" | cut -d: -f2- | sed "s/^[[:space:]]*//;s/[[:space:]][[:space:]]*#.*$//;s/[[:space:]]*$//" | tr -d "'" | tr -d '"')
+    trackpoint_value=$(grep -m1 "^${_tpkey}:" "$CONFIG_FILE" | cut -d: -f2- | sed -E "s/^[[:space:]]*(!unsafe([[:space:]]+|$))?//;s/[[:space:]][[:space:]]*#.*$//;s/[[:space:]]*$//" | tr -d "'" | tr -d '"')
     if [[ "$_tpkey" == desktop_sway_trackpoint_id ]]; then _tp_bad='[^a-zA-Z0-9_./: -]'; _tp_set='alphanumeric, spaces, colons, hyphens, underscores, dots, slashes only'
     else _tp_bad='[^a-zA-Z0-9_./ -]'; _tp_set='alphanumeric, spaces, hyphens, underscores, dots, slashes only'; fi
     if [[ -z "$trackpoint_value" ]]; then
@@ -483,7 +483,7 @@ if [[ -f /proc/sys/kernel/yama/ptrace_scope ]]; then
   if [[ "$_live_ptrace" == "0" ]]; then
     _cfg_ptrace_zero=false
     if [[ -f "$CONFIG_FILE" ]]; then
-      grep -qE '^system_ptrace_scope:[[:space:]]*["'"'"']?0["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null \
+      grep -qE '^system_ptrace_scope:[[:space:]]*(!unsafe[[:space:]]+)?["'"'"']?0["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null \
         && _cfg_ptrace_zero=true
     fi
     if [[ "$_cfg_ptrace_zero" == true ]]; then
