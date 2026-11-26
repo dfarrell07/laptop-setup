@@ -175,10 +175,11 @@ claiming authenticated owner signatures.
 When `.gpg-enforcement` is `enabled`, `scripts/verify-collections.sh` fails if the signing key is missing. `SKIP_GPG_VERIFY=1` (CI and other
 non-production checks) permits a missing key but still fails on an invalid signature when the key is present.
 
-`scripts/verify-collections.sh` hashes the `.py` and `.so` files under `plugins/`, `module_utils/` and `roles/` and compares them with the
-vendored tarballs. Collections installed in `~/.ansible/collections` or `/usr/share/ansible/collections` are not verified. It also fails on
-any symlink (including a symlinked or broken `collections/` root) and on an `__init__.py` in the collections root, namespace or collection
-directories, and fails when a vendored collection is not installed or `collections/` has no `ansible_collections/` (an interrupted install).
+`scripts/verify-collections.sh` compares every installed collection entry, of any type, with the vendored tarballs (see Verification
+layers below). The collections path is `./collections` then `/usr/share/ansible/collections` (root-owned, not verified); the user-writable
+`~/.ansible/collections` is not searched. It also fails on a symlinked or broken `collections/` root, on anything but namespace and
+collection directories at the top levels, and when a vendored collection is not installed or `collections/` has no `ansible_collections/`
+(an interrupted install).
 
 To configure a real owner signature:
 
@@ -243,7 +244,19 @@ suspected compromise to the [Galaxy security team](https://galaxy.ansible.com/se
 
 1. **Pre-commit hook** blocks `collections-dist/*.tar.gz` changes without a `SHA256SUMS` update
 2. **`make bootstrap`** and **`make collections`** run `sha256sum -c SHA256SUMS` and `scripts/verify-collections-galaxy.sh` first
-3. **Runtime** `scripts/verify-collections.sh` re-verifies before every wrapped run (TOCTOU guard)
+3. **Runtime** `scripts/verify-collections.sh` re-verifies before every wrapped run: every entry of every installed
+   collection, whatever its type or extension (extensionless modules, `meta/runtime.yml`, roles), must be in its re-extracted
+   tarball with the same content, symlink target and type, and nothing else may sit in `ansible_collections/` or a namespace
+   directory. Ansible's `__pycache__/*.pyc` caches are removed first, since bytecode cannot be checked against its source
+   (the wrapper sets `PYTHONDONTWRITEBYTECODE=1` and clears every other `PYTHON*` variable, so `PYTHONPYCACHEPREFIX` cannot
+   move bytecode out of the checked tree). The same goes for `__pycache__` beside the repo's own plugins (`roles/*/*_plugins/`,
+   `library/`, `module_utils/` and their top-level forms): Ansible loads a planted `.pyc` there, so those caches are removed too, and
+   a symlinked one or one holding anything but bytecode is refused. Each tarball is hashed and extracted from one private copy,
+   and a group- or other-writable entry in the installed tree is refused (`make collections` installs with umask 022). The
+   wrapper also sets `PYTHONSAFEPATH=1`, and every Python call in tasks, scripts, hooks and the Makefile runs with `-I`, so a
+   planted `scripts/json.pyc` cannot shadow the standard library; `ANSIBLE_ROLES_PATH` is the repo's `roles/` only. It covers
+   tampering before the run, not a same-uid process changing files during it: callback plugins load before Play 0, and
+   modules are read when first used.
 4. **CI** `collections-integrity` runs the Galaxy and runtime checks; `collections-manifest` checks the Python manifest;
    `galaxy-recheck` and `upstream-collections-check` (`scripts/verify-vendor-tarball.sh`) compare against Galaxy and upstream release tags
 5. **Audit trail** — tarballs are committed to git, not ignored

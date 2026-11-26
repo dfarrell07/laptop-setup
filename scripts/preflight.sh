@@ -241,7 +241,7 @@ if [[ -f "$VAULT_FILE" ]]; then
   if head -1 "$VAULT_FILE" | grep -q '^\$ANSIBLE_VAULT'; then
     record "vault_encrypted" "pass" "vault.yml is encrypted"
   else
-    if python3 "$SCRIPT_DIR/verify-vault-stub.py" < "$VAULT_FILE"; then
+    if python3 -I "$SCRIPT_DIR/verify-vault-stub.py" < "$VAULT_FILE"; then
       record "vault_encrypted" "warn" "vault.yml is plaintext stub — vault_ssh_auth_key will be empty; 'make container' skips dev container provisioning. Run make setup-yubikeys if not done yet, then make ssh-keys and make vault-init (CLAUDE.md step 3)"
     else
       record "vault_encrypted" "warn" "vault.yml is plaintext and not the empty stub (values set or template changed) — encrypt it: make vault-init (after make setup-yubikeys and make ssh-keys)"

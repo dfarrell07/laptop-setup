@@ -122,7 +122,7 @@ while IFS= read -r -d '' f; do
   fi
   if ! printf '%s' "$_vault_content" | head -1 | grep -q '^\$ANSIBLE_VAULT'; then
     # Accept only the empty-value stub template, including empty strings and lists.
-    if printf '%s' "$_vault_content" | python3 "$_repo_root/scripts/verify-vault-stub.py"; then
+    if printf '%s' "$_vault_content" | python3 -I "$_repo_root/scripts/verify-vault-stub.py"; then
       echo "NOTE: $f is a plaintext stub (no real secrets) — OK" >&2
       continue
     fi
@@ -188,7 +188,7 @@ else
       echo "WARNING: could not read staged $f — skipping JSON validation" >&2
       continue
     fi
-    if ! printf '%s' "$_json_content" | python3 -m json.tool > /dev/null; then
+    if ! printf '%s' "$_json_content" | python3 -I -m json.tool > /dev/null; then
       echo "ERROR: $f is not valid JSON" >&2
       failed=1
     fi
@@ -200,7 +200,7 @@ else
   if git diff --cached --name-only -z --diff-filter=ACMR | grep -qz '^package-lock\.json$'; then
     if ! _pkglock_content=$(git show :package-lock.json 2>/dev/null); then
       echo "WARNING: could not read staged package-lock.json — skipping lockfile validation" >&2
-    elif ! printf '%s' "$_pkglock_content" | python3 -c "
+    elif ! printf '%s' "$_pkglock_content" | python3 -I -c "
 import json, sys
 try:
     lock = json.load(sys.stdin)

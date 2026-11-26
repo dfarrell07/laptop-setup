@@ -10,14 +10,11 @@
   gather_facts: false
 
   tasks:
-    # CRITICAL: Collection verification runs BEFORE any include_tasks/import_tasks/roles
-    # that would parse Python files from collections/. This prevents TOCTOU tampering
-    # where an attacker modifies collection files after Makefile verification but
-    # before ansible-playbook imports them. Running at task level (after Makefile verify)
-    # AND before any imports provides defense-in-depth against both direct ansible-playbook
-    # invocations (bypassing Makefile) and process boundary attacks (exec ensures same
-    # shell context between verify-collections.sh and ansible-playbook in CI/Makefile).
-    - name: SECURITY CRITICAL — Verify collection integrity before any imports
+    # Collection verification, again, as the first task: it catches tampering with collections/ made before the run
+    # and covers direct ansible-playbook invocations that skip the wrapper's check. It is not a guard against a same-uid
+    # process changing files during the run: callback plugins are imported before this play starts, and modules are
+    # read lazily when a task first uses them.
+    - name: SECURITY CRITICAL — Verify collection integrity at the start of the run
       ansible.builtin.command:
         cmd: scripts/verify-collections.sh
       changed_when: false
@@ -31,7 +28,7 @@
     - name: Capture real user identity for early checks
       ansible.builtin.set_fact:
         real_user_home: >-
-          {{ lookup('pipe', 'python3 -c "import pwd,os; print(pwd.getpwuid(os.getuid()).pw_dir)" 2>/dev/null') | default(lookup('env',
+          {{ lookup('pipe', 'python3 -I -c "import pwd,os; print(pwd.getpwuid(os.getuid()).pw_dir)" 2>/dev/null') | default(lookup('env',
           'HOME'), true) }}
         real_user_id: "{{ lookup('env', 'USER') }}"
       tags: [always]

@@ -27,6 +27,7 @@
   ansible.builtin.command:
     argv:
       - "{{ ansible_playbook_python }}"
+      - -I  # isolated: scripts/ (and a planted json.pyc there) is not on sys.path
       - "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | default(playbook_dir, true) }}/scripts/parse-config.py"
     stdin: "{{ _pf_config_yml_raw.content | b64decode }}"
     stdin_add_newline: false
@@ -92,6 +93,7 @@
   ansible.builtin.command:
     argv:
       - "{{ ansible_playbook_python }}"
+      - -I  # isolated: scripts/ (and a planted json.pyc there) is not on sys.path
       - "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | default(playbook_dir, true) }}/scripts/parse-config.py"
       - --policy
     stdin: "{{ _pf_config_yml_raw.content | b64decode }}"

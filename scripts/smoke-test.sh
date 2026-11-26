@@ -1515,10 +1515,10 @@ for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-per2"; do
   label="${d##*/}"
   if ! $_claude_sandbox; then
     # Off by policy (claude_sandbox_enabled: false): the file must say so, or Bash may break where bubblewrap fails.
-    if python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("sandbox",{}).get("enabled") is False else 1)' "$sec_file" 2>/dev/null; then
+    if python3 -I -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("sandbox",{}).get("enabled") is False else 1)' "$sec_file" 2>/dev/null; then
       record "sandbox-off($label)" "PASS"
     else record "sandbox-off($label)" "WARN" "sandbox.enabled is not false in $sec_file — run: make apply CHUNK=agents"; fi
-    if python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("enableAllProjectMcpServers") is False else 1)' "$sec_file" 2>/dev/null; then
+    if python3 -I -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("enableAllProjectMcpServers") is False else 1)' "$sec_file" 2>/dev/null; then
       record "mcp-disabled($label)" "PASS"
     else record "mcp-disabled($label)" "WARN" "enableAllProjectMcpServers not false"; fi
   elif command -v jq &>/dev/null; then
@@ -1535,7 +1535,7 @@ for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-per2"; do
       record "mcp-disabled($label)" "PASS"
     else record "mcp-disabled($label)" "WARN" "enableAllProjectMcpServers not false"; fi
   else
-    if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("sandbox",{}).get("enabled") is True else 1)' "$sec_file" 2>/dev/null; then
+    if python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("sandbox",{}).get("enabled") is True else 1)' "$sec_file" 2>/dev/null; then
       record "sandbox($label)" "PASS"
     else record "sandbox($label)" "FAIL" "not enabled in $sec_file — run: make claude"; fi
   fi
@@ -1550,7 +1550,7 @@ _mode_seen=false
 for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-per2"; do
   [[ -f "$d/settings.json" ]] || continue
   _mode_seen=true
-  _mode_got=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("permissions",{}).get("defaultMode") or "unset")' \
+  _mode_got=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1])).get("permissions",{}).get("defaultMode") or "unset")' \
     "$d/settings.json" 2>/dev/null || echo unreadable)
   [[ "$_mode_got" == "$_claude_mode" ]] || _mode_bad+=" ${d##*/}=$_mode_got"
 done
@@ -1570,7 +1570,7 @@ if [[ ! -f "$_pm_script" ]]; then
 elif _pm_out=$(python3 -I "$_pm_script" --check --mode "$_claude_mode" 2>&1); then
   record "claude-project-modes" "PASS"
 else
-  _pm_list=$(python3 -c 'import json,sys; print("; ".join(json.load(sys.stdin)["problems"]))' <<<"$_pm_out" 2>/dev/null || echo "$_pm_out")
+  _pm_list=$(python3 -I -c 'import json,sys; print("; ".join(json.load(sys.stdin)["problems"]))' <<<"$_pm_out" 2>/dev/null || echo "$_pm_out")
   record "claude-project-modes" "WARN" "$_pm_list — run: make apply CHUNK=agents (units: fix their generator)"
 fi
 unset _pm_script _pm_out _pm_list
@@ -1613,7 +1613,7 @@ done <<<"$_claude_extra_dirs"
 for _cd in "${_csi_dirs[@]}"; do
   [[ -d "$_cd" ]] || continue
   _csi_seen=$((_csi_seen + 1))
-  python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("crossSessionInbound") == "accept" else 1)' \
+  python3 -I -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("crossSessionInbound") == "accept" else 1)' \
     "$_cd/settings.json" 2>/dev/null || _csi_bad+=("${_cd##*/}")
 done
 if (( _csi_seen == 0 )); then
@@ -1635,7 +1635,7 @@ $_claude_home2_off || _rc_homes+=("${_claude_home2:-$HOME/.claude-per2}")
 for _cd in "${_rc_homes[@]}"; do
   _cd=${_cd/#\~/$HOME}
   [[ -d "$_cd" ]] || continue
-  python3 -c 'import json,sys; sys.exit(0 if "remoteControlAtStartup" in json.load(open(sys.argv[1])) else 1)' \
+  python3 -I -c 'import json,sys; sys.exit(0 if "remoteControlAtStartup" in json.load(open(sys.argv[1])) else 1)' \
     "$_cd/settings.json" 2>/dev/null || _rc_bad+=("${_cd##*/}: remoteControlAtStartup not set (make apply CHUNK=agents)")
 done
 if command -v zsh &>/dev/null && [[ -f "$HOME/.zshrc" ]]; then

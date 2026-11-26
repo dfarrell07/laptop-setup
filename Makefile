@@ -59,7 +59,7 @@ unexport PAGER MANPAGER SYSTEMD_PAGER GIT_PAGER GIT_DIR GIT_WORK_TREE GIT_INDEX_
 CONTAINER ?= fedora-dev
 
 define INSTALL_COLLECTIONS
-env -u ANSIBLE_GALAXY_SERVER_LIST -u ANSIBLE_GALAXY_TOKEN ANSIBLE_GALAXY_SERVER=https://galaxy.ansible.com/ \
+umask 022 && env -u ANSIBLE_GALAXY_SERVER_LIST -u ANSIBLE_GALAXY_TOKEN ANSIBLE_GALAXY_SERVER=https://galaxy.ansible.com/ \
 ansible-galaxy collection install -p ./collections \
 	collections-dist/ansible-posix-2.2.2.tar.gz \
 	collections-dist/community-general-13.5.0.tar.gz \
@@ -75,7 +75,7 @@ endef
 override VERIFY_AND_RUN := scripts/verify-ansible-args.sh
 
 # Prevent ANSIBLE_COLLECTIONS_PATH injection (CWE-426) — guard against untrusted collections search path. REQUIRED: block environment variable override.
-export ANSIBLE_COLLECTIONS_PATH := $(CURDIR)/collections:~/.ansible/collections:/usr/share/ansible/collections
+export ANSIBLE_COLLECTIONS_PATH := $(CURDIR)/collections:/usr/share/ansible/collections
 
 # display_ok_hosts is a callback plugin option not in the core config schema;
 # ansible-config validate rejects it in [defaults]. Use the env var instead.
@@ -193,7 +193,7 @@ backup-dry-run: guard-not-root
 # macOS: Xcode CLT + Homebrew required first: xcode-select --install && /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
 bootstrap-hooks: guard-not-root
-	python3 scripts/bootstrap-hooks.py
+	python3 -I scripts/bootstrap-hooks.py
 
 bootstrap: guard-not-root bootstrap-hooks
 	@# macOS: brew openssh links libfido2; system ssh (LibreSSL) lacks sk-ssh-ed25519/FIDO2 support
@@ -313,7 +313,7 @@ vendor-collections: guard-not-root
 	cd collections-dist && sha256sum *.tar.gz > SHA256SUMS
 	scripts/verify-collections-galaxy.sh
 	@echo "Regenerating Python manifest for supply chain verification..."
-	python3 scripts/gen-collection-manifest.py collections-dist collections-dist/PYTHON_MANIFEST.json
+	python3 -I scripts/gen-collection-manifest.py collections-dist collections-dist/PYTHON_MANIFEST.json
 	@echo ""
 	@echo "Tarballs downloaded, API-verified, and manifest generated."
 	@echo ""
@@ -335,12 +335,12 @@ github-ssh-keys: guard-not-root
 # LastPass -> Bitwarden: EXPORT=<decrypted LastPass CSV on tmpfs/RAM disk>; DRY_RUN=1 counts only. Prints counts only and
 # removes the export when it ends (docs/password-migration.md). Needs `bw` logged in and unlocked (BW_SESSION).
 pw-migrate: guard-not-root
-	@python3 scripts/pw-migrate.py
+	@python3 -I scripts/pw-migrate.py
 
 # With USBGuard running: allow blocked USB devices now and save their rules. Otherwise: only save
 # rules for connected devices no rule covers yet. Rules go to config.yml for the next `make apply CHUNK=sys_usbguard`.
 usb-add: guard-not-root
-	python3 scripts/usb-add.py
+	python3 -I scripts/usb-add.py
 
 # Accept the current filesystem as the AIDE baseline after expected changes (dnf upgrade,
 # new tools). aide --update exits 1-7 when it found changes; 8+ is an error.
@@ -413,10 +413,10 @@ codex: guard-not-root rollout-banner
 # --- Audit and testing ---
 
 workstation-audit: guard-not-root
-	python3 scripts/workstation-audit.py --output "$(HOME)/workstation-audit-$$(date +%Y%m%d-%H%M%S).json"
+	python3 -I scripts/workstation-audit.py --output "$(HOME)/workstation-audit-$$(date +%Y%m%d-%H%M%S).json"
 
 migration-inventory: guard-not-root
-	python3 scripts/migration-inventory.py --output "$(HOME)/migration-inventory-$$(date +%Y%m%d-%H%M%S).json"
+	python3 -I scripts/migration-inventory.py --output "$(HOME)/migration-inventory-$$(date +%Y%m%d-%H%M%S).json"
 
 # Per-profile bookmarks to import once into each Chrome profile (docs/chrome-bookmarks.md); never touches Chrome's files
 chrome-bookmarks: guard-not-root .venv
@@ -497,14 +497,14 @@ lint: .venv shellcheck markdownlint check-vars-sync
 	@if command -v zizmor >/dev/null 2>&1; then zizmor .github/; else echo "SKIP: zizmor not installed (run: make packages)"; fi
 
 check-vars-sync: .venv
-	$(VERIFY_AND_RUN) .venv/bin/python3 scripts/check-vars-sync.py
+	$(VERIFY_AND_RUN) .venv/bin/python3 -I scripts/check-vars-sync.py
 
 .venv: requirements-test.lock
 	@# Prefer python3.14: Homebrew python3 is 3.15, the lock has no cp315 wheels, ansible-core supports up to 3.14.
 	@# A venv already built on a newer Python is rebuilt; ensurepip is checked because Debian splits it out.
-	@if [ -x .venv/bin/python ] && ! .venv/bin/python -c 'import sys; sys.exit(sys.version_info[:2] > (3, 14))'; then \
+	@if [ -x .venv/bin/python ] && ! .venv/bin/python -I -c 'import sys; sys.exit(sys.version_info[:2] > (3, 14))'; then \
 		echo "Rebuilding .venv: it was built on a Python newer than 3.14"; rm -rf .venv; fi
-	@test -x .venv/bin/python || { py=python3; python3.14 -c 'import ensurepip' >/dev/null 2>&1 && py=python3.14; \
+	@test -x .venv/bin/python || { py=python3; python3.14 -I -c 'import ensurepip' >/dev/null 2>&1 && py=python3.14; \
 		$$py -m venv .venv || { rm -rf .venv; exit 1; }; }
 	@touch -t 197001010000 .venv  # stale until the final touch: a failed pip step is retried next run
 	.venv/bin/pip install --require-hashes -r requirements-test.lock
@@ -540,55 +540,55 @@ test: shellcheck test-scripts test-poller test-fedora test-rocky test-debian tes
 # Run the hook tests and scripts/test-*.py suites.
 TEST_SCRIPTS := \
 	'bash scripts/test-hooks-security.sh' \
-	'.venv/bin/python3 scripts/test-config-parser.py' \
-	'.venv/bin/python3 scripts/test-pre-push.py' \
-	'.venv/bin/python3 scripts/test-vault-stub.py' \
-	'.venv/bin/python3 scripts/test-workflow-guards.py' \
-	'.venv/bin/python3 scripts/test-pinned-git.py' \
-	'.venv/bin/python3 scripts/test-auto-updates.py' \
-	'.venv/bin/python3 scripts/test-pw-migrate.py' \
-	'.venv/bin/python3 scripts/test-hook-baselines.py' \
-	'.venv/bin/python3 scripts/test-commit-message.py' \
-	'.venv/bin/python3 scripts/test-bootstrap-hooks.py' \
-	'.venv/bin/python3 scripts/test-aerospace-terminal.py' \
-	'.venv/bin/python3 scripts/test-audit-policy.py' \
-	'.venv/bin/python3 scripts/test-brew-update.py' \
-	'.venv/bin/python3 scripts/test-chrony-template.py' \
-	'.venv/bin/python3 scripts/test-kernel-cmdline.py' \
-	'.venv/bin/python3 scripts/test-podman-distrobox.py' \
-	'.venv/bin/python3 scripts/test-ssh-known-hosts.py' \
-	'.venv/bin/python3 scripts/test-sshd-template.py' \
-	'.venv/bin/python3 scripts/test-sysctl-template.py' \
-	'.venv/bin/python3 scripts/test-rendered-configs.py' \
-	'.venv/bin/python3 scripts/test-module-args.py' \
-	'.venv/bin/python3 scripts/test-pam-faillock-debian.py' \
-	'.venv/bin/python3 scripts/test-critical-assertions.py' \
-	'.venv/bin/python3 scripts/test-csb-report.py' \
-	'.venv/bin/python3 scripts/test-claude-settings-merge.py' \
-	'.venv/bin/python3 scripts/test-claude-file-heredoc-guard.py' \
-	'.venv/bin/python3 scripts/test-claude-project-modes.py' \
-	'.venv/bin/python3 scripts/test-agent-trust.py' \
-	'.venv/bin/python3 scripts/test-git-repos.py' \
-	'.venv/bin/python3 scripts/test-agent-getty.py' \
-	'.venv/bin/python3 scripts/test-chrome-bookmarks.py' \
-	'.venv/bin/python3 scripts/test-chrome-bookmarks-export.py' \
-	'.venv/bin/python3 scripts/test-chrome-bookmarks-install.py' \
-	'.venv/bin/python3 scripts/test-smoke-test.py' \
-	'.venv/bin/python3 scripts/test-workstation-audit.py' \
-	'.venv/bin/python3 scripts/test-go-checksum.py' \
-	'.venv/bin/python3 scripts/test-drive-sync.py' \
-	'.venv/bin/python3 scripts/test-chrome.py' \
-	'.venv/bin/python3 scripts/test-pull.py' \
-	'.venv/bin/python3 scripts/test-laptop-migration.py' \
-	'.venv/bin/python3 scripts/test-claude-privacy.py' \
-	'.venv/bin/python3 scripts/test-ansible-input-guards.py' \
-	'.venv/bin/python3 scripts/test-usb-add.py' \
-	'.venv/bin/python3 scripts/test-vault-import.py' \
-	'.venv/bin/python3 scripts/test-vault-shared.py' \
-	'.venv/bin/python3 scripts/test-vault-signing-key.py' \
-	'.venv/bin/python3 scripts/test-vault-acli-token.py' \
-	'.venv/bin/python3 scripts/test-collection-source-verifier.py' \
-	'.venv/bin/python3 scripts/test-rollout.py' \
+	'.venv/bin/python3 -I scripts/test-config-parser.py' \
+	'.venv/bin/python3 -I scripts/test-pre-push.py' \
+	'.venv/bin/python3 -I scripts/test-vault-stub.py' \
+	'.venv/bin/python3 -I scripts/test-workflow-guards.py' \
+	'.venv/bin/python3 -I scripts/test-pinned-git.py' \
+	'.venv/bin/python3 -I scripts/test-auto-updates.py' \
+	'.venv/bin/python3 -I scripts/test-pw-migrate.py' \
+	'.venv/bin/python3 -I scripts/test-hook-baselines.py' \
+	'.venv/bin/python3 -I scripts/test-commit-message.py' \
+	'.venv/bin/python3 -I scripts/test-bootstrap-hooks.py' \
+	'.venv/bin/python3 -I scripts/test-aerospace-terminal.py' \
+	'.venv/bin/python3 -I scripts/test-audit-policy.py' \
+	'.venv/bin/python3 -I scripts/test-brew-update.py' \
+	'.venv/bin/python3 -I scripts/test-chrony-template.py' \
+	'.venv/bin/python3 -I scripts/test-kernel-cmdline.py' \
+	'.venv/bin/python3 -I scripts/test-podman-distrobox.py' \
+	'.venv/bin/python3 -I scripts/test-ssh-known-hosts.py' \
+	'.venv/bin/python3 -I scripts/test-sshd-template.py' \
+	'.venv/bin/python3 -I scripts/test-sysctl-template.py' \
+	'.venv/bin/python3 -I scripts/test-rendered-configs.py' \
+	'.venv/bin/python3 -I scripts/test-module-args.py' \
+	'.venv/bin/python3 -I scripts/test-pam-faillock-debian.py' \
+	'.venv/bin/python3 -I scripts/test-critical-assertions.py' \
+	'.venv/bin/python3 -I scripts/test-csb-report.py' \
+	'.venv/bin/python3 -I scripts/test-claude-settings-merge.py' \
+	'.venv/bin/python3 -I scripts/test-claude-file-heredoc-guard.py' \
+	'.venv/bin/python3 -I scripts/test-claude-project-modes.py' \
+	'.venv/bin/python3 -I scripts/test-agent-trust.py' \
+	'.venv/bin/python3 -I scripts/test-git-repos.py' \
+	'.venv/bin/python3 -I scripts/test-agent-getty.py' \
+	'.venv/bin/python3 -I scripts/test-chrome-bookmarks.py' \
+	'.venv/bin/python3 -I scripts/test-chrome-bookmarks-export.py' \
+	'.venv/bin/python3 -I scripts/test-chrome-bookmarks-install.py' \
+	'.venv/bin/python3 -I scripts/test-smoke-test.py' \
+	'.venv/bin/python3 -I scripts/test-workstation-audit.py' \
+	'.venv/bin/python3 -I scripts/test-go-checksum.py' \
+	'.venv/bin/python3 -I scripts/test-drive-sync.py' \
+	'.venv/bin/python3 -I scripts/test-chrome.py' \
+	'.venv/bin/python3 -I scripts/test-pull.py' \
+	'.venv/bin/python3 -I scripts/test-laptop-migration.py' \
+	'.venv/bin/python3 -I scripts/test-claude-privacy.py' \
+	'.venv/bin/python3 -I scripts/test-ansible-input-guards.py' \
+	'.venv/bin/python3 -I scripts/test-usb-add.py' \
+	'.venv/bin/python3 -I scripts/test-vault-import.py' \
+	'.venv/bin/python3 -I scripts/test-vault-shared.py' \
+	'.venv/bin/python3 -I scripts/test-vault-signing-key.py' \
+	'.venv/bin/python3 -I scripts/test-vault-acli-token.py' \
+	'.venv/bin/python3 -I scripts/test-collection-source-verifier.py' \
+	'.venv/bin/python3 -I scripts/test-rollout.py' \
 	'bash test-var-override.sh'
 
 # Suites run in parallel (one per CPU; JOBS=1 for serial order); each failure prints its full output. The
@@ -596,7 +596,7 @@ TEST_SCRIPTS := \
 TEST_SPLIT := test-laptop-migration.py test-workstation-audit.py test-ansible-input-guards.py
 
 test-scripts: .venv
-	.venv/bin/python3 scripts/run-tests.py $(addprefix --split ,$(TEST_SPLIT)) -- $(TEST_SCRIPTS)
+	.venv/bin/python3 -I scripts/run-tests.py $(addprefix --split ,$(TEST_SPLIT)) -- $(TEST_SCRIPTS)
 
 # Local pre-commit gate: lint, syntax-check, check-vars-sync and test-scripts side by side.
 gate: .venv
@@ -604,7 +604,7 @@ gate: .venv
 
 # Regression checks for the pinned secret scanner configuration.
 test-gitleaks:
-	python3 scripts/test-gitleaks-config.py
+	python3 -I scripts/test-gitleaks-config.py
 
 # Unit tests for roles/claude/files/claude-queue-poller.sh internal helpers.
 test-poller:
