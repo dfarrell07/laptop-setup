@@ -29,6 +29,22 @@
              | selectattr('key', 'in', ['tuned.service', 'tuned-ppd.service', 'power-profiles-daemon.service']) | list }}
         _system_power_previous_tlp_service: "{{ (ansible_facts.services | default({})).get('tlp.service', {}) }}"
 
+    # /etc/tlp.d is read by TLP, a shell program running as root: the profile values must be known names.
+    - name: SECURITY assert the TLP profile values are known names
+      ansible.builtin.assert:
+        that:
+          - system_tlp_platform_profile_ac in _system_tlp_platform_profiles
+          - system_tlp_platform_profile_bat in _system_tlp_platform_profiles
+          - system_tlp_cpu_energy_policy_ac in _system_tlp_energy_policies
+          - system_tlp_cpu_energy_policy_bat in _system_tlp_energy_policies
+        fail_msg: >-
+          system_tlp_platform_profile_* must be one of {{ _system_tlp_platform_profiles | join(', ') }} and
+          system_tlp_cpu_energy_policy_* one of {{ _system_tlp_energy_policies | join(', ') }}.
+      vars:
+        # PLATFORM_PROFILE_CHOICES and ENERGY_PERF_POLICIES in scripts/parse-config.py
+        _system_tlp_platform_profiles: [low-power, cool, quiet, balanced, balanced-performance, performance, custom]
+        _system_tlp_energy_policies: [default, performance, balance_performance, balance_power, power]
+
     - name: Inspect TLP configuration before replacing it
       ansible.builtin.stat:
         path: /etc/tlp.d/50-thinkpad.conf

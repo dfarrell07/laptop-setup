@@ -78,6 +78,36 @@
           register: notes_transcrypt_bin
           check_mode: false
 
+        # transcrypt receives the notes vault password (-p). On Linux the packages role installs it as root;
+        # macOS Homebrew is owned by the user by design, so there only the location is checked.
+        - name: Gather the transcrypt directory chain stat (Linux)
+          ansible.builtin.stat:
+            path: "{{ item }}"
+          loop: [/usr/local/bin, /usr/local, /usr, /]
+          register: _notes_transcrypt_dirs
+          check_mode: false
+          when: ansible_facts['os_family'] != 'Darwin'
+
+        - name: SECURITY assert transcrypt is the installed binary (it receives the notes vault password)
+          # NOTE: no tags, like the other point-of-use validators: survives --skip-tags always.
+          ansible.builtin.assert:
+            that:
+              - >-
+                notes_transcrypt_bin_path == ('/usr/local/bin/transcrypt' if ansible_facts['os_family'] != 'Darwin'
+                else dotfiles_homebrew_prefix | default('/opt/homebrew') ~ '/bin/transcrypt')
+              - >-
+                ansible_facts['os_family'] == 'Darwin' or not notes_transcrypt_bin.stat.exists
+                or (notes_transcrypt_bin.stat.uid == 0 and not notes_transcrypt_bin.stat.islnk
+                and not notes_transcrypt_bin.stat.wgrp and not notes_transcrypt_bin.stat.woth
+                and _notes_transcrypt_dirs.results | rejectattr('stat.uid', 'equalto', 0) | list | length == 0
+                and _notes_transcrypt_dirs.results | selectattr('stat.wgrp') | list | length == 0
+                and _notes_transcrypt_dirs.results | selectattr('stat.woth') | list | length == 0)
+            fail_msg: >-
+              SECURITY: transcrypt at {{ notes_transcrypt_bin_path }} is not the binary the packages role installs
+              (/usr/local/bin/transcrypt, owned by root and not group- or other-writable, in root-owned directories;
+              on macOS the Homebrew prefix's bin/transcrypt). It would receive the notes vault password. Remove any
+              notes_transcrypt_* override and run make packages.
+
         - name: Check transcrypt initialization status
           when:
             - notes_transcrypt_bin.stat.exists

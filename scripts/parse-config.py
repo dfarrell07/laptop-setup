@@ -38,6 +38,62 @@ DERIVED_FACTS = frozenset({
 })
 # The wrapper protects rollout_enable from -e only; config.yml is where it is set.
 CONFIG_SETTABLE_PROTECTED = frozenset({'rollout_enable'})
+# Executables and install locations the roles run from a fixed place (SECURITY.md, "Executable paths"):
+# config.yml cannot point them elsewhere. transcrypt receives the notes vault password, codex the Codex API key.
+FIXED_EXECUTABLE_KEYS = frozenset({
+    'notes_transcrypt_bin_path', 'notes_transcrypt_linux_bin_path', 'containers_podman_bin',
+    'containers_macos_machine_ensure_script', 'claude_bin_path', 'claude_queue_poller_path', 'codex_npm_prefix',
+    'antigravity_bin_dir',
+})
+# Executable locations config.yml may choose, from an allowlist: the Homebrew prefix (PATH of launch agents,
+# the git credential helper's gh) and the polkit agent sway/i3 start (it receives the user's password).
+HOMEBREW_PREFIXES = frozenset({'/opt/homebrew', '/usr/local'})
+# A system binary: /usr/bin/<name>, or any depth under /usr/libexec, /usr/lib or /usr/lib64 (Plasma 6's
+# /usr/libexec/kf6/polkit-kde-authentication-agent-1). No spaces (sway's exec takes a command line), no . or ..
+SYSTEM_BINARY = re.compile(r'/usr/(bin|libexec(/[A-Za-z0-9_.+-]+)*|lib(64)?(/[A-Za-z0-9_.+-]+)*)/[A-Za-z0-9_.+-]+')
+
+
+def _system_binary(value):
+    return bool(SYSTEM_BINARY.fullmatch(value)) and not set(value.split('/')) & {'.', '..'}
+
+
+LOCALE = re.compile(r'[A-Za-z]{2,3}(_[A-Z]{2})?(\.[A-Za-z0-9-]+)?(@[A-Za-z0-9]+)?|C|C\.UTF-8|C\.utf8|POSIX')
+PLATFORM_PROFILE_CHOICES = ('low-power', 'cool', 'quiet', 'balanced', 'balanced-performance', 'performance', 'custom')
+ENERGY_PERF_POLICIES = ('default', 'performance', 'balance_performance', 'balance_power', 'power')
+# acli logs in to acli_site with the vault's Atlassian token: an Atlassian Cloud site, or '' to turn it off.
+ATLASSIAN_SITE = re.compile(r'[a-z0-9][a-z0-9-]*\.atlassian\.net')
+ALLOWED_VALUES = {
+    'acli_site': lambda value: value == '' or bool(ATLASSIAN_SITE.fullmatch(value)),
+    # rendered unquoted into the macOS shell start files (zshenv, bashrc): a Homebrew formula name
+    'dotfiles_macos_python': lambda value: bool(re.fullmatch(r'[a-z0-9@.+-]+', value)),
+    # /etc/locale.conf (evaluated by /etc/profile.d/lang.sh in root login shells) and /etc/vconsole.conf
+    'system_locale': lambda value: bool(LOCALE.fullmatch(value)),
+    'system_keymap': lambda value: bool(re.fullmatch(r'[a-zA-Z0-9_-]+', value)),
+    # /etc/tlp.d, read by TLP as root (roles/system/tasks/power_management.yml has the same lists)
+    'system_tlp_platform_profile_ac': lambda value: value in PLATFORM_PROFILE_CHOICES,
+    'system_tlp_platform_profile_bat': lambda value: value in PLATFORM_PROFILE_CHOICES,
+    'system_tlp_cpu_energy_policy_ac': lambda value: value in ENERGY_PERF_POLICIES,
+    'system_tlp_cpu_energy_policy_bat': lambda value: value in ENERGY_PERF_POLICIES,
+}
+ALLOWED_EXECUTABLE_VALUES = {
+    'dotfiles_homebrew_prefix': lambda value: value in HOMEBREW_PREFIXES,
+    'desktop_sway_polkit_agent': _system_binary,
+    'desktop_i3_polkit_agent': _system_binary,
+}
+# Sysctls whose value the kernel runs as root or treats as a path (usermode helpers, the core dump pipe, binfmt
+# handlers) and the helpers' capability masks. A leading '-' only tells systemd-sysctl to ignore errors.
+# roles/system/tasks/main.yml refuses the same pattern at the point of use; a test keeps the two equal.
+SYSCTL_EXEC_KEYS = re.compile(
+    r'-?(kernel\.(modprobe|poweroff_cmd|reboot_cmd|core_pattern|hotplug|usermodehelper(\..*)?)|fs\.binfmt_misc(\..*)?)')
+SYSCTL_DICT_KEYS = frozenset({'system_sysctl_extra', 'system_sysctl_extra_additional'})
+# A well-formed sysctl key: dot-separated lowercase segments, none empty (systemd-sysctl and procps both reduce
+# kernel..modprobe or .kernel.modprobe to kernel.modprobe). The same pattern as the role's _sysctl_key_re.
+SYSCTL_KEY = re.compile(r'-?[a-z0-9_-]+(\.[a-z0-9_-]+)*')
+
+
+def sysctl_name(key):
+    """The sysctl a key writes: no leading '-', '/' as '.', repeated dots collapsed, no leading or trailing dot."""
+    return re.sub(r'\.+', '.', key.lstrip('-').replace('/', '.')).strip('.')
 # C0 controls (tab and newline included: no option takes them), DEL, C1 controls and the Unicode
 # line and paragraph separators. A NUL reaches files such as /etc/sysctl.d, where systemd treats it
 # as a line break.
@@ -160,6 +216,19 @@ def policy_violations(data, root=ROOT):
             found.append('%s: protected variable (_protected_keys in scripts/verify-ansible-args.sh)' % ascii(key))
         elif key in vault_mapped:
             found.append('%s: comes from the vault; set it in group_vars/all/vault.yml (make vault-edit)' % ascii(key))
+        elif key in FIXED_EXECUTABLE_KEYS:
+            found.append('%s: an executable the roles run from a fixed location' % ascii(key))
+        elif key in ALLOWED_EXECUTABLE_VALUES and not (
+                isinstance(data[key], str) and ALLOWED_EXECUTABLE_VALUES[key](data[key])):
+            found.append('%s: not an allowed executable location (SECURITY.md, "Executable paths")' % ascii(key))
+        elif key in ALLOWED_VALUES and not (isinstance(data[key], str) and ALLOWED_VALUES[key](data[key])):
+            found.append('%s: not an allowed value (see its default.config.yml comment and SECURITY.md)' % ascii(key))
+        elif key in SYSCTL_DICT_KEYS and isinstance(data[key], dict):
+            for name in map(str, data[key]):
+                if not SYSCTL_KEY.fullmatch(name):
+                    found.append('%s.%s: not a well-formed sysctl key' % (ascii(key), ascii(name)))
+                elif SYSCTL_EXEC_KEYS.fullmatch(sysctl_name(name)):
+                    found.append('%s.%s: a sysctl the kernel runs or reads as a path' % (ascii(key), ascii(name)))
     found += _control_chars(data, [])
     return found
 

@@ -7,6 +7,23 @@
     name: "{{ system_timezone }}"
   when: not system_is_container  # timedatectl uses D-Bus → systemd-timedated; crashes Debian 13 container PID 1
 
+# /etc/locale.conf and /etc/vconsole.conf are sourced by shells as root (Fedora's /etc/profile.d/lang.sh evals
+# locale.conf at every login shell, dracut sources vconsole.conf), so their values must be plain names.
+# scripts/parse-config.py refuses the same values in config.yml.
+- name: SECURITY assert system_locale and system_keymap are plain names (sourced by root shells)
+  # NOTE: no tags, like the other point-of-use validators: survives --skip-tags always.
+  ansible.builtin.assert:
+    that:
+      - system_locale is string
+      - system_locale is match('^([A-Za-z]{2,3}(_[A-Z]{2})?(\.[A-Za-z0-9-]+)?(@[A-Za-z0-9]+)?|C|C\.UTF-8|C\.utf8|POSIX)\Z')
+      - system_keymap is string
+      - system_keymap is match('^[a-zA-Z0-9_-]+\Z')
+    fail_msg: >-
+      SECURITY: system_locale must be a locale name such as en_US.UTF-8, de_DE.UTF-8@euro, C.UTF-8 or POSIX,
+      and system_keymap a keymap name such as us or de-latin1: /etc/profile.d/lang.sh evals /etc/locale.conf
+      in every login shell, root's included.
+  when: not system_is_container
+
 - name: Set system locale
   ansible.builtin.lineinfile:
     path: /etc/locale.conf
