@@ -17,12 +17,16 @@
       - "{{ ansible_facts.get('python', {}).get('executable', 'python3') }}"
       - -c
       - |
-        import os, sys
+        import os, sys, unicodedata
         home = os.path.realpath(sys.argv[1])
         paths = [os.path.realpath(path) for path in sys.argv[2:]]
+        # Inside the home exactly as resolved; separate also when names differ only in case or Unicode form:
+        # on APFS (the macOS default) ~/.codex and ~/.CODEX, or NFC and NFD café, are one directory. The fold follows
+        # this Python's Unicode tables, so characters newer than them (reachable only through a link) may slip past.
         inside = all(path != home and os.path.commonpath([home, path]) == home for path in paths)
+        folded = [unicodedata.normalize('NFC', unicodedata.normalize('NFD', path).casefold()) for path in paths]
         separate = all(os.path.commonpath([left, right]) not in [left, right]
-                       for index, left in enumerate(paths) for right in paths[index + 1:])
+                       for index, left in enumerate(folded) for right in folded[index + 1:])
         if not inside or not separate:
             sys.exit('Codex paths must resolve to separate, non-overlapping directories strictly within the user home.')
       - "{{ ansible_facts['user_dir'] }}"
