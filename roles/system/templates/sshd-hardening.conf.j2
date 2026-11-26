@@ -29,8 +29,9 @@ MaxSessions {{ system_ssh_max_sessions | int }}  # OpenSSH default is 10; explic
 LoginGraceTime 30
 
 X11Forwarding no  # compiled default no; overrides 50-redhat.conf which sets yes on Fedora/RHEL
-AllowAgentForwarding {{ system_ssh_allow_agent_forwarding | regex_replace('[\r\n].*', '') }}
-AllowTcpForwarding {{ system_ssh_allow_tcp_forwarding | regex_replace('[\r\n].*', '') }}
+{# an unquoted yes/no in config.yml is a YAML boolean: sshd takes the word, not True/False #}
+AllowAgentForwarding {{ ('yes' if system_ssh_allow_agent_forwarding is sameas true else 'no' if system_ssh_allow_agent_forwarding is sameas false else system_ssh_allow_agent_forwarding) | regex_replace('[\r\n].*', '') }}
+AllowTcpForwarding {{ ('yes' if system_ssh_allow_tcp_forwarding is sameas true else 'no' if system_ssh_allow_tcp_forwarding is sameas false else system_ssh_allow_tcp_forwarding) | regex_replace('[\r\n].*', '') }}
 # NOTE: AcceptEnv is cumulative in sshd — 50-redhat.conf AcceptEnv COLORTERM cannot be
 # overridden from this file regardless of drop-in order. COLORTERM forwarding is always active.
 

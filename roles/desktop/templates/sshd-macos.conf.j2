@@ -32,8 +32,9 @@ UnusedConnectionTimeout {{ desktop_macos_ssh_unused_connection_timeout | int }}
 TCPKeepAlive no
 
 X11Forwarding no
-AllowAgentForwarding {{ desktop_macos_ssh_allow_agent_forwarding | regex_replace('[\r\n].*', '') }}
-AllowTcpForwarding {{ desktop_macos_ssh_allow_tcp_forwarding | regex_replace('[\r\n].*', '') }}
+{# an unquoted yes/no in config.yml is a YAML boolean: sshd takes the word, not True/False #}
+AllowAgentForwarding {{ ('yes' if desktop_macos_ssh_allow_agent_forwarding is sameas true else 'no' if desktop_macos_ssh_allow_agent_forwarding is sameas false else desktop_macos_ssh_allow_agent_forwarding) | regex_replace('[\r\n].*', '') }}
+AllowTcpForwarding {{ ('yes' if desktop_macos_ssh_allow_tcp_forwarding is sameas true else 'no' if desktop_macos_ssh_allow_tcp_forwarding is sameas false else desktop_macos_ssh_allow_tcp_forwarding) | regex_replace('[\r\n].*', '') }}
 LogLevel VERBOSE
 
 HostKeyAlgorithms {{ _alg['HostKeyAlgorithms'] | map('regex_replace', '[\r\n].*', '') | join(',') }}

@@ -544,8 +544,9 @@
         - name: Assert system_resolved_llmnr and system_resolved_multicast_dns are valid enums
           ansible.builtin.assert:
             that:
-              - system_resolved_llmnr | default('no') | string | lower in ['yes', 'no', 'resolve']
-              - system_resolved_multicast_dns | default('no') | string | lower in ['yes', 'no', 'resolve']
+              # an unquoted yes/no is a YAML boolean, which 98-llmnr.conf writes as yes/no
+              - _pf_llmnr is boolean or _pf_llmnr | string | lower in ['yes', 'no', 'resolve']
+              - _pf_mdns is boolean or _pf_mdns | string | lower in ['yes', 'no', 'resolve']
             fail_msg: >-
               SECURITY: system_resolved_llmnr or system_resolved_multicast_dns in the play namespace
               has an invalid value (possibly set via -e flag, bypassing config.yml pre-flight
@@ -554,6 +555,9 @@
               yes, no, resolve. Current values:
               system_resolved_llmnr={{ system_resolved_llmnr | default('DEFAULT') }},
               system_resolved_multicast_dns={{ system_resolved_multicast_dns | default('DEFAULT') }}.
+          vars:
+            _pf_llmnr: "{{ system_resolved_llmnr | default('no') }}"
+            _pf_mdns: "{{ system_resolved_multicast_dns | default('no') }}"
 
     - name: Work identity and desktop_environment assertions
       block:
