@@ -539,9 +539,12 @@ def site_violations(directories=None):
     """.pth, sitecustomize.py and usercustomize.py files in .venv's site-packages that no installed distribution's
     RECORD lists with their hash: Python runs them at startup, so ansible-playbook would. Only a virtualenv is
     checked: the system site-packages is root-owned. This does not make .venv trustworthy (SECURITY.md)."""
-    if directories is None:  # the checkout's .venv (ansible-playbook's), and this interpreter's if it is a venv
+    if directories is None:  # the checkout's .venv, and this interpreter's if it is a venv inside the checkout
         directories = [str(path) for path in ROOT.glob('.venv/lib*/python3*/site-packages')]
-        if sys.prefix != sys.base_prefix:
+        # A venv outside the checkout is the user's own install, already trusted for ansible-playbook itself: on macOS
+        # make runs Homebrew's ansible, whose packages carry no RECORD, so each of its .pth files would be refused.
+        root = os.path.realpath(ROOT)
+        if sys.prefix != sys.base_prefix and os.path.commonpath([root, os.path.realpath(sys.prefix)]) == root:
             directories += _site_packages()
     found = []
     for directory in sorted({os.path.realpath(path) for path in directories if os.path.isdir(path)}):

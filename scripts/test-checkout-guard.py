@@ -7,10 +7,12 @@ import os
 from pathlib import Path
 import pty
 import shutil
+import site
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import yaml
 
@@ -261,6 +263,26 @@ class CheckoutTests(unittest.TestCase):
             self.assertEqual([line.split("'")[1].rsplit('/', 1)[-1] for line in found],
                              ['ok.pth', 'sitecustomize.py', 'zz.pth'])
         self.assertEqual(parser.site_violations(), [])  # this .venv as installed
+
+    def test_only_a_venv_inside_the_checkout_is_audited(self):
+        """macOS: make runs Homebrew's ansible, a venv outside the checkout whose packages carry no RECORD; its .pth
+        files (setuptools' distutils-precedence.pth) are not refused. The interpreter's venv inside the checkout is."""
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory).resolve()
+            # checkout-evil: a sibling whose name starts with the checkout's is outside it (whole path components)
+            for prefix in (base / 'brew/libexec', base / 'checkout/.wt-venv', base / 'checkout-evil/venv'):
+                site_dir = Path(site.getsitepackages([str(prefix)])[0])
+                site_dir.mkdir(parents=True)
+                (site_dir / 'distutils-precedence.pth').write_text('import os\n')
+            (base / 'linked-venv').symlink_to(base / 'checkout/.wt-venv')  # resolves inside the checkout
+            with mock.patch.object(parser, 'ROOT', base / 'checkout'), \
+                    mock.patch.object(sys, 'base_prefix', str(base / 'python')):
+                for outside in ('brew/libexec', 'checkout-evil/venv'):
+                    with self.subTest(prefix=outside), mock.patch.object(sys, 'prefix', str(base / outside)):
+                        self.assertEqual(parser.site_violations(), [])
+                for inside in ('checkout/.wt-venv', 'linked-venv'):
+                    with self.subTest(prefix=inside), mock.patch.object(sys, 'prefix', str(base / inside)):
+                        self.assertEqual(len(parser.site_violations()), 1)
 
     def test_ignored_files_are_refused_in_every_mode(self):
         for mode in ('provision', 'check'):
