@@ -656,6 +656,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 
 # Wider workstation audit additions:
 #   packages_extra_dnf: []             (roles/packages/defaults) — additive; e.g. [ccache, git-review, openssl-devel]
+#   packages_dnf_epel_only_el9: [pipx] (roles/packages/defaults) — left out of the dnf list on RHEL below 10 (EPEL-only
+#     there); with EPEL enabled set [] (pipx then installs, and yamllint/ansible-lint with it)
 #   packages_extra_apt: []             (roles/packages/defaults) — additive; e.g. [ccache, git-review, libssl-dev]
 #   packages_extra_brew: []            (roles/packages/defaults) — additive; e.g. [ccache, git-review]
 #   packages_extra_pipx: []            (roles/packages/defaults) — PyPI apps installed with pipx on every OS, e.g. [ruff, chirp];

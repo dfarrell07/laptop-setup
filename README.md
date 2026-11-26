@@ -2,7 +2,9 @@
 
 Ansible playbook that provisions a developer workstation: packages and pinned binaries, dotfiles, desktop,
 Claude Code and Codex, git repositories, containers, and optional system hardening. It targets Fedora (tested
-on 44), RHEL and its Corporate Standard Build (CSB), and macOS, with Debian as a secondary target.
+on 44), RHEL 9 and 10 and their Corporate Standard Build (CSB), and macOS, with Debian as a secondary target. On
+RHEL 9, pipx is left out (it ships only in EPEL there): yamllint and ansible-lint then appear in the CSB report on CSB
+machines and as a warning elsewhere.
 
 It is built to be adopted **one chunk at a time**: low-risk, high-value pieces first (packages, dotfiles,
 desktop, agents, repos), system hardening last and deliberately. `make all` applies every enabled chunk,

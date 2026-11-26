@@ -68,6 +68,8 @@
 - name: Check pipx is installed
   ansible.builtin.command: pipx --version
   changed_when: false
+  # RHEL 9 ships pipx only in EPEL: packages_dnf_epel_only_el9 leaves it out there
+  when: ansible_distribution == 'Fedora' or ansible_facts['distribution_major_version'] | int >= 10
 
 - name: Check direnv is installed
   ansible.builtin.command: direnv version

@@ -1172,7 +1172,7 @@ for tool in yamllint ansible-lint; do
       record "pipx-$tool" "FAIL" "$tool present but --version failed"
     fi
   else
-    record "pipx-$tool" "WARN" "$tool not installed (pipx install may have failed — run: make packages)"
+    record "pipx-$tool" "WARN" "$tool not installed (pipx install may have failed — run: make packages; RHEL 9: pipx needs EPEL)"
   fi
 done
 

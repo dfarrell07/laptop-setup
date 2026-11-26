@@ -530,6 +530,10 @@ packages_brew_work:
 
 # Add native packages without replacing the base lists. Empty on a new machine.
 packages_extra_dnf: []
+# Left out of the dnf list on RHEL/Rocky below 10, where they ship only in EPEL (not enabled here). pipx-managed
+# tools then report a CSB entry instead of installing.
+packages_dnf_epel_only_el9:
+  - pipx
 packages_extra_apt: []
 packages_extra_brew: []
 packages_extra_pipx: []  # PyPI names, optionally name==version; installed with pipx on every OS

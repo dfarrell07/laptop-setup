@@ -75,5 +75,8 @@
         msg: >-
           WARNING: pipx packages (yamllint/ansible-lint) not installed (optional tooling; continuing).
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
-          Re-run `make packages` when online.
+          {{ 'pipx is not packaged on RHEL 9 without EPEL: enable EPEL and add pipx to packages_extra_dnf (then set
+          packages_dnf_epel_only_el9: []), or run python3 -m pip install --user pipx, then re-run make packages.'
+             if _packages_pipx_probe.rc | default(0) != 0 and is_dnf and ansible_facts['distribution_major_version'] | int < 10
+             else 'Re-run `make packages` when online.' }}
       when: not csb_rhel
