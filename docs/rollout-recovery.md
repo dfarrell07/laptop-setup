@@ -156,7 +156,8 @@ password. A GRUB password (`system_grub_password_enabled`) blocks the edit.
   `dconf reset /org/gnome/`: it wipes every GNOME setting. Restore or delete `~/.config/sway/config`, `~/.config/swaylock/config`,
   `~/.config/i3/config`, `~/.config/i3status/config`, `~/.config/xdg-desktop-portal/sway-portals.conf`,
   `~/.config/gtk-3.0/settings.ini`, `~/.config/gtk-4.0/settings.ini`, `~/.config/alacritty/alacritty.toml` (in the `make backup`
-  directory) and `~/.config/environment.d/terminal.conf`; `sudo rm /etc/X11/xorg.conf.d/90-trackpoint.conf` where present.
+  directory; a Sway, swaylock or i3 config the run replaced is also beside it as `config.<timestamp>~`) and
+  `~/.config/environment.d/terminal.conf`; `sudo rm /etc/X11/xorg.conf.d/90-trackpoint.conf` where present.
   Packages: `sudo dnf history list`, `sudo dnf history info <id>` for the one transaction the desktop run installed, then
   `sudo dnf history undo <id>`. Never `dnf remove` dconf or gnome-keyring by name: GDM and gnome-session depend on them.
 - **macOS undo:** `defaults delete <domain> <key>` for each entry in `desktop_macos_defaults` (macOS defaults return), then

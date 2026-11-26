@@ -1981,5 +1981,27 @@ class YesNoOptionTests(unittest.TestCase):
                                  + [False] * len(extra))
 
 
+
+class WindowManagerConfigsManaged(unittest.TestCase):
+    """The i3, Sway and AeroSpace configs follow their settings on every run (hand edits kept as backups): a config
+    seeded once (force: false) keeps the values of its first run, so a later desktop_wm_idle_lock_timeout never applies."""
+
+    def test_window_manager_configs_are_rewritten_with_a_backup(self):
+        def tasks(items):
+            for item in items or []:
+                yield item
+                yield from tasks(item.get('block'))
+        found = {}
+        for task in tasks(yaml.safe_load((ROOT / 'roles/desktop/tasks/main.yml').read_text())):
+            module = task.get('ansible.builtin.template') or {}
+            if module.get('src') in ('i3.config.j2', 'sway.config.j2', 'aerospace.toml.j2'):
+                found[module['src']] = module
+        self.assertEqual(sorted(found), ['aerospace.toml.j2', 'i3.config.j2', 'sway.config.j2'])
+        for src, module in found.items():
+            with self.subTest(src=src):
+                self.assertNotEqual(module.get('force'), False)
+                self.assertIs(module.get('backup'), True)
+
+
 if __name__ == '__main__':
     unittest.main()

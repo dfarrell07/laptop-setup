@@ -19,7 +19,6 @@ desktop_sway_hidpi_scale: "1.0"  # ThinkPad P16v 2560x1600: set 1.5 in config.ym
 desktop_sway_cursor_theme: Adwaita  # cursor theme; propagated to seat config and XCURSOR_THEME for XWayland apps
 desktop_sway_cursor_size: "{{ (24 * desktop_sway_hidpi_scale | float) | int }}"  # cursor size in px; seat config + XCURSOR_SIZE
 desktop_sway_libva_driver: ''  # VA-API driver: radeonsi (AMD), iHD (Intel); empty string omits export for libva auto-detection
-# i3: idle/lock color apply only when ~/.config/i3/config is first seeded (delete it and re-run make apply CHUNK=desktop to re-seed)
 desktop_wm_idle_lock_timeout: 3600  # seconds idle before lock (owner choice, above CIS 1.8.4 900; i3 xautolock rounds to minutes)
 desktop_wm_idle_display_timeout: 3900  # seconds idle before display off; must exceed the lock timeout
 # macOS from the same two: the screen saver starts (and, with sysadminctl -screenLock immediate, locks) at the lock
