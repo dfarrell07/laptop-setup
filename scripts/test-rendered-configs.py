@@ -1534,6 +1534,64 @@ class MacTaskTests(unittest.TestCase):
                     copied = Path(directory) / 'dst/src.app/Contents/Frameworks/F.framework/Versions/Current'
                     self.assertTrue(copied.is_symlink(), where)
 
+    def test_aerospace_app_is_made_readable_after_each_copy(self):
+        """cp -R copies under the run's umask (077 from the dotfiles zshrc): each copy is followed by a chmod of the
+        same bundle, as the same user, run only when that copy ran. On a Mac, that cp then chmod under umask 077
+        leaves directories and executables 0755 and other files 0644, and the chmod follows no symlink."""
+        def lists(node):  # every task list (a file's, a block's), to find the one holding the copies
+            if isinstance(node, list):
+                yield node
+                for item in node:
+                    yield from lists(item)
+            elif isinstance(node, dict):
+                for value in node.values():
+                    yield from lists(value)
+        tasks = next(lst for lst in lists(yaml.safe_load((ROOT / 'roles/packages/tasks/install_brew.yml').read_text()))
+                     if any(isinstance(t, dict) and str(t.get('name', '')).startswith('Install AeroSpace.app to')
+                            for t in lst))
+        names = [t.get('name') for t in tasks]
+        pairs = 0
+        for index, task in enumerate(tasks):
+            argv = (task.get('ansible.builtin.command') or {}).get('argv') or []
+            if argv[:1] != ['/bin/cp']:
+                continue
+            chmod = tasks[index + 1]
+            self.assertEqual(chmod['ansible.builtin.command']['argv'],
+                             ['/bin/chmod', '-R', 'u+rwX,go+rX,go-w', '/Applications/AeroSpace.app'], names[index + 1])
+            self.assertEqual(argv[-1], '/Applications/')  # the copy lands where the chmod looks
+            self.assertEqual(bool(chmod.get('become')), bool(task.get('become')), names[index + 1])
+            self.assertEqual(chmod.get('tags'), task.get('tags'), names[index + 1])
+            self.assertEqual(chmod['when'], f"{task['register']} is changed", names[index + 1])
+            pairs += 1
+        self.assertEqual(pairs, 2)
+        if os.uname().sysname != 'Darwin':
+            return
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            macos = base / 'src/AeroSpace.app/Contents/MacOS'
+            macos.mkdir(parents=True)
+            (macos / 'AeroSpace').write_text('x\n')
+            (macos / 'AeroSpace').chmod(0o755)
+            (base / 'src/AeroSpace.app/Contents/Info.plist').write_text('<plist/>\n')
+            outside = base / 'outside'
+            outside.write_text('secret\n')
+            outside.chmod(0o600)
+            (base / 'src/AeroSpace.app/Contents/link').symlink_to(outside)
+            (base / 'Applications').mkdir()
+            copy = next(t for t in tasks if (t.get('ansible.builtin.command') or {}).get('argv', [''])[0] == '/bin/cp')
+            options = [a for a in copy['ansible.builtin.command']['argv'][1:] if a.startswith('-')]
+            chmod = tasks[tasks.index(copy) + 1]['ansible.builtin.command']['argv']
+            app = base / 'Applications/AeroSpace.app'
+            subprocess.run(['/bin/sh', '-c', 'umask 077 && "$@"', 'sh', '/bin/cp', *options,
+                            str(base / 'src/AeroSpace.app'), str(base / 'Applications')], check=True)
+            self.assertEqual(app.stat().st_mode & 0o777, 0o700)  # what the copy alone leaves
+            subprocess.run(['/bin/sh', '-c', 'umask 077 && "$@"', 'sh', *chmod[:-1], str(app)], check=True)
+            modes = {p.relative_to(app).as_posix(): p.lstat().st_mode & 0o777 for p in [app, *app.rglob('*')]
+                     if not p.is_symlink()}
+            self.assertEqual(modes, {'.': 0o755, 'Contents': 0o755, 'Contents/MacOS': 0o755,
+                                     'Contents/MacOS/AeroSpace': 0o755, 'Contents/Info.plist': 0o644})
+            self.assertEqual(outside.stat().st_mode & 0o777, 0o600)  # the link's target is untouched
+
     def test_stale_mosh_server_entries_are_removed(self):
         """Older Cellar paths of mosh-server go; the current one and other programs stay."""
         task = production_task('roles/desktop/tasks/main.yml', 'Remove stale mosh-server entries from the macOS firewall')
