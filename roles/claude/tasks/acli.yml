@@ -4,6 +4,16 @@
 # This file is included only when the vault holds a token. A marker (no secret) records that, so the acli-auth smoke
 # check WARNs when Jira is still logged out (expired token, locked keyring, failed login) and is not applicable on
 # work machines that never had a token.
+- name: SECURITY assert acli_site is an Atlassian Cloud site (acli sends the vault token there)
+  # NOTE: no tags of its own: the include applies [acli], and this must run before any login.
+  ansible.builtin.assert:
+    that:
+      - acli_site is string
+      - acli_site is match('^[a-z0-9][a-z0-9-]*\.atlassian\.net\Z')
+    fail_msg: >-
+      SECURITY: acli_site must be an Atlassian Cloud site such as redhat.atlassian.net (or '' to turn acli login
+      off): acli logs in there with the vault's API token.
+
 - name: Create the laptop-setup state directory for acli
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.config/laptop-setup"

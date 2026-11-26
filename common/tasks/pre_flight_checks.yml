@@ -468,6 +468,21 @@
     # NOTE: This block has no condition guard — assertions ALWAYS run to prevent bypass attacks
     - name: Validate gitconfig/ssh_config vars in play namespace (catch -e overrides)
       block:
+        # ~/.ssh/<basename> receives private keys from the vault: a basename with / or .. would write them elsewhere.
+        - name: Assert the SSH key basenames are plain file names (play namespace catch)
+          vars:
+            _pf_key_basenames:
+              - "{{ ssh_signing_key_basename | default('id_ed25519_sk_signing') }}"
+              - "{{ dotfiles_ssh_hardware_key_basename | default('id_ed25519_sk') }}"
+              - "{{ dotfiles_ssh_redhat_key_basename | default('id_rsa_redhat') }}"
+          ansible.builtin.assert:
+            that:
+              - _pf_key_basenames | map('string') | reject('match', '^[A-Za-z0-9_-][A-Za-z0-9._-]*\Z') | list | length == 0
+            fail_msg: >-
+              SECURITY: ssh_signing_key_basename, dotfiles_ssh_hardware_key_basename and dotfiles_ssh_redhat_key_basename
+              must be plain file names in ~/.ssh (letters, digits, . _ -, not starting with a dot): got
+              {{ _pf_key_basenames }}.
+
         - name: Assert identity vars are not CHANGE_ME placeholder (play namespace catch)
           ansible.builtin.assert:
             that:

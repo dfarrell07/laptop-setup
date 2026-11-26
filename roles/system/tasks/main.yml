@@ -11,15 +11,25 @@
     that:
       - "_sysctl_keys | reject('match', _sysctl_key_re) | list | length == 0"
       - "(_sysctl_values_invalid | length == 0)"
+      # normalized as systemd-sysctl and procps read it (sysctl_name() in scripts/parse-config.py)
+      - >-
+        _sysctl_keys | map('string') | map('regex_replace', '^-+', '') | map('replace', '/', '.')
+        | map('regex_replace', '\\.+', '.') | map('regex_replace', '^\\.|\\.$', '')
+        | select('match', _sysctl_exec_re) | list | length == 0
     fail_msg: >-
-      Invalid sysctl key or value format.
-      Sysctl keys must match [a-zA-Z0-9._-]+ only.
+      Invalid sysctl key or value format, or a sysctl the kernel runs or reads as a path
+      (kernel.modprobe, kernel.poweroff_cmd, kernel.core_pattern, kernel.hotplug, kernel.usermodehelper.*,
+      fs.binfmt_misc.*: a root usermode helper); scripts/parse-config.py refuses the same keys in config.yml.
+      Sysctl keys must be dot-separated lowercase segments (a-z 0-9 _ -), none empty, with an optional leading '-'.
       Sysctl values must be alphanumeric, dots, slashes, hyphens, underscores, pipes only (no other shell metacharacters).
       Found invalid keys: {{ _sysctl_keys | reject('match', _sysctl_key_re) | list }}
       Found invalid values: {{ _sysctl_values_invalid }}
   vars:
-    _sysctl_key_re: '^[a-zA-Z0-9._-]+\Z'
+    _sysctl_key_re: '^-?[a-z0-9_-]+(\.[a-z0-9_-]+)*\Z'  # SYSCTL_KEY in scripts/parse-config.py
     _sysctl_value_re: '^[a-zA-Z0-9._/|-]+( [a-zA-Z0-9._/|-]+)*\Z'  # multi-number values: '4 4 1 7'
+    # SYSCTL_EXEC_KEYS in scripts/parse-config.py; a leading '-' only makes systemd-sysctl ignore errors
+    # yamllint disable-line rule:line-length
+    _sysctl_exec_re: '^-?(kernel\.(modprobe|poweroff_cmd|reboot_cmd|core_pattern|hotplug|usermodehelper(\..*)?)|fs\.binfmt_misc(\..*)?)\Z'
     _sysctl_keys: "{{ (system_sysctl_extra.keys() | list) + (system_sysctl_extra_additional.keys() | list) }}"
     _sysctl_all_dicts: "{{ [system_sysctl_extra | default({}), system_sysctl_extra_additional | default({})] }}"
     # yamllint disable-line rule:line-length

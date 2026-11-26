@@ -50,6 +50,16 @@
       arbitrary commands. Allowed values: auto, local, go1.21, go1.21.0, etc.
   tags: [always]
 
+- name: Assert dotfiles_macos_python is a Homebrew formula name (shell injection guard)
+  ansible.builtin.assert:
+    that:
+      - dotfiles_macos_python is string
+      - dotfiles_macos_python is match('^[a-z0-9@.+-]+\Z')
+    fail_msg: >-
+      SECURITY: dotfiles_macos_python must be a Homebrew formula name such as python@3.14 (a-z, 0-9, @ . + -):
+      it is rendered unquoted into the PATH lines of zshenv and bashrc, so $(...) in it would run in every shell.
+  tags: [always]
+
 
 - name: Assert the Tailscale host names are host names (written into the mosh aliases in zshrc)
   ansible.builtin.assert:

@@ -122,9 +122,9 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     managing it (an operator already set stays: sudo tailscale set --operator=). An operator, and every process running as
 #     that user, can change any Tailscale setting
 #   acli_site: redhat.atlassian.net on work, '' on personal  (roles/claude/defaults) — Jira site acli logs in to with
-#     vault_acli_api_token (make acli-token stores it); '' turns the login and the acli-auth smoke check off. Set on a
-#     personal machine (or copied there with config.yml), it puts that work Atlassian token in the personal machine's
-#     keyring
+#     vault_acli_api_token (make acli-token stores it); only <name>.atlassian.net is accepted, and '' turns the login
+#     and the acli-auth smoke check off. Set on a personal machine (or copied there with config.yml), it puts that work
+#     Atlassian token in the personal machine's keyring
 #   drive_sync_accounts: []  (roles/drive_sync) — Google Drive sync of ~/drive/<account>/ (docs/drive-sync.md),
 #     e.g. [owner, partner]; drive_sync_host: '' — this machine's Drive folder, unique per machine (required then)
 #   packages_go_install: []               (roles/packages/defaults) — universal Go tools installed on all profiles;
@@ -133,7 +133,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     work-profile-only Go IDE/CI tools + OVN-K codegen + Submariner tools; entries need full module paths
 #     (go install MODULE@VERSION); pin versions match OVN-K update-codegen.sh (not go.mod —
 #     controller-tools is not a go.mod dep) — bump together when OVN-K upgrades k8s
-#   system_locale: en_US.UTF-8        (roles/system/defaults) — set system locale
+#   system_locale: en_US.UTF-8        (roles/system/defaults) — set system locale; a locale name (ll_CC.charset@modifier,
+#                                        C, C.UTF-8 or POSIX) only: /etc/profile.d/lang.sh evaluates /etc/locale.conf as root
 #   system_disable_printing: false     (roles/system/defaults) — set true to mask cups.socket/path,
 #                                        disable cups.service, and mask cups-browsed (CVE-2024-47176)
 #   system_disable_bluetooth: true     (roles/system/defaults) — true to blacklist BT modules (CIS RHEL 9 2.1.5);
@@ -160,6 +161,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   system_tlp_platform_profile_bat: balanced     (roles/system/defaults) — ACPI platform profile on battery
 #   system_tlp_cpu_energy_policy_ac: balance_performance  (roles/system/defaults) — CPU EPP on AC
 #   system_tlp_cpu_energy_policy_bat: balance_power       (roles/system/defaults) — CPU EPP on battery
+#                                        (profiles: low-power cool quiet balanced balanced-performance performance custom;
+#                                        EPP: default performance balance_performance balance_power power; others are refused)
 #   system_keymap: us                  (role default: us) — console keymap for /etc/vconsole.conf
 #   system_sysrq: 0                    (group_vars/all/vars.yml) — 0=disabled (CIS), 176=emergency recovery
 #   system_tmout: 0                    (group_vars/all/vars.yml) — session inactivity timeout seconds; 0=disabled; CIS wants <=900
@@ -187,6 +190,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   system_sysctl_extra_additional: {}   (roles/system/defaults) — safe per-machine append merged AFTER system_sysctl_extra;
 #                                        use this to add a single key without re-copying all work-profile defaults.
 #                                        Example: system_sysctl_extra_additional: {"vm.swappiness": 10}
+#                                        Sysctls the kernel runs or reads as a path (kernel.modprobe, kernel.poweroff_cmd,
+#                                        kernel.core_pattern, kernel.hotplug, kernel.usermodehelper.*, fs.binfmt_misc.*) are refused.
 #   system_firewall_icmp_types: [neighbour-solicitation, neighbour-advertisement]
 #                                        (roles/system/defaults) — base ICMP allow-list merged with
 #                                        system_firewall_icmp_extra_types; override the full list in config.yml to remove entries
@@ -366,6 +371,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #                                        override only if formula is wrong
 #   desktop_sway_cursor_theme: Adwaita (roles/desktop/defaults) — cursor theme name (propagated to seat config and XCURSOR_THEME)
 #   desktop_sway_libva_driver: ""       (roles/desktop/defaults) — VA-API driver; "" = auto-detect; radeonsi (AMD) or iHD (Intel)
+#   desktop_sway_polkit_agent, desktop_i3_polkit_agent (roles/desktop/defaults) — polkit agent the WM starts; only a
+#                                        system binary under /usr/bin, /usr/libexec or /usr/lib is accepted (it receives your password)
 #   desktop_sway_xwayland: ''           (roles/desktop/defaults) — '' = on (default); "disable" = pure-Wayland (breaks XWayland apps)
 #   desktop_wm_idle_lock_timeout: 3600  (roles/desktop/defaults) — idle seconds before lock; avoid 0 (Sway: at once; i3: 1 min)
 #   desktop_wm_idle_display_timeout: 3900  (roles/desktop/defaults) — seconds idle before display off
@@ -508,6 +515,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   dotfiles_ssh_work_hosts: []  — work-profile internal git SSH Host stanzas, e.g.
 #     [{host: git.example.internal, user: git}] (user defaults to login name); pair with ssh_work_keyscan_hosts.
 #   dotfiles_homebrew_prefix: per-arch   — macOS Homebrew prefix: /usr/local on x86_64, /opt/homebrew on arm64 (group_vars/all/vars.yml)
+#     only /opt/homebrew or /usr/local are accepted: it sets PATH for launch agents (SECURITY.md, Executable paths)
 #   ssh_work_keyscan_hosts: []  (roles/ssh/defaults) — work-profile internal git hosts to pre-seed in known_hosts;
 #     set in config.yml as dicts with optional fingerprint pinning, e.g.:
 #       [{host: gitlab.example.com, fingerprint: "SHA256:..."}, {host: code.example.com}]
@@ -599,7 +607,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   antigravity_verbosity: low                   (roles/antigravity/defaults) — seed-only
 #   antigravity_trusted_workspaces: []           (roles/antigravity/defaults) — seed-only; per-machine absolute paths
 #   codex_install_method: npm                    (roles/codex/defaults) — skip for config-only provisioning
-#   codex_npm_prefix: ~/.npm-global              (roles/codex/defaults) — the one install; must match ~/.npmrc prefix
+#   codex_npm_prefix: ~/.npm-global              (roles/codex/defaults) — the one install, fixed: config.yml cannot set it
 #   codex_work_model: gpt-6.1-sol                 (roles/codex/defaults) — seed-only
 #   codex_personal_model: gpt-6-luna              (roles/codex/defaults) — seed-only
 #   codex_work_reasoning_effort: medium           (roles/codex/defaults)

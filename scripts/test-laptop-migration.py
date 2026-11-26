@@ -207,7 +207,8 @@ class MigrationTests(unittest.TestCase):
                     variables['codex_work_config_dir'] = name + '/.'
                 else:
                     (directory / '.codex-personal').symlink_to(directory.parent)
-                with self.assertRaisesRegex(AssertionError, 'non-overlapping'):
+                # a path with . or .. segments or a trailing slash fails the normalization check first
+                with self.assertRaisesRegex(AssertionError, 'non-overlapping|normalized'):
                     run_play(directory, variables=variables, roles=['codex'])
                 self.assertFalse((directory / '.local').exists())
                 self.assertFalse((directory / '.codex').exists())

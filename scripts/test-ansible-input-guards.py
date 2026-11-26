@@ -268,11 +268,103 @@ class InputGuardTests(unittest.TestCase):
     def test_sysctl_format(self):
         task = guard('roles/system/tasks/main.yml', 'Validate sysctl key and value format')
         cases = [({'net.ipv4.icmp_echo_ignore_broadcasts': 1}, True), ({'vm.swappiness': 0}, True),
-                 ({'bad;key': 1}, False), ({'safe': '1\n'}, False), ({'safe': '1;bad'}, False)]
+                 ({'bad;key': 1}, False), ({'safe': '1\n'}, False), ({'safe': '1;bad'}, False),
+                 # the kernel runs these as root; a leading '-' only makes systemd-sysctl ignore errors
+                 ({'kernel.modprobe': '/home/user/.local/bin/x'}, False),
+                 ({'-kernel.poweroff_cmd': '/home/user/.local/bin/x'}, False),
+                 ({'kernel.hotplug': '/home/user/x'}, False), ({'kernel.usermodehelper.bset': '4294967295 31'}, False),
+                 ({'kernel.core_pattern': '/home/user/core'}, False), ({'kernel.modprobe_extra': 1}, True),
+                 # spellings systemd-sysctl or procps reduce to kernel.modprobe, and malformed keys
+                 ({'kernel..modprobe': '/home/user/x'}, False), ({'.kernel.modprobe': '/home/user/x'}, False),
+                 ({'kernel.modprobe.': '/home/user/x'}, False), ({'-.kernel.modprobe': '/home/user/x'}, False),
+                 ({'kernel..core_pattern': '/home/user/x'}, False), ({'fs..binfmt_misc.register': 'x'}, False),
+                 ({'Kernel.modprobe': '/home/user/x'}, False), ({'-vm.swappiness': 10}, True),
+                 ({'net.bridge.bridge-nf-call-iptables': 1}, True)]
         for extra, accepted in cases:
             with self.subTest(extra=extra):
                 self.check(task, {'system_is_container': False, 'csb_rhel': False,
                                   'system_sysctl_extra': extra, 'system_sysctl_extra_additional': {}}, accepted)
+
+    def test_sysctl_extra_additional_is_checked_too(self):
+        task = guard('roles/system/tasks/main.yml', 'Validate sysctl key and value format')
+        self.check(task, {'system_is_container': False, 'csb_rhel': False, 'system_sysctl_extra': {},
+                          'system_sysctl_extra_additional': {'kernel.modprobe': '/home/user/.local/bin/x'}}, False)
+
+    def test_acli_site_is_an_atlassian_cloud_site(self):
+        task = guard('roles/claude/tasks/acli.yml', 'SECURITY assert acli_site is an Atlassian Cloud site')
+        for site, accepted in [('redhat.atlassian.net', True), ('my-team.atlassian.net', True),
+                               ('evil.example', False), ('redhat.atlassian.net.evil.example', False),
+                               ('redhat.atlassian.net\n', False), ('https://redhat.atlassian.net', False)]:
+            with self.subTest(site=site):
+                self.check(task, {'acli_site': site}, accepted)
+
+    def test_macos_python_is_a_formula_name(self):
+        task = guard('roles/dotfiles/tasks/main.yml', 'Assert dotfiles_macos_python is a Homebrew formula name')
+        for value, accepted in [('python@3.14', True), ('python@3.14$(touch /tmp/x)', False), ('a b', False),
+                                ('python@3.14"', False), ('`id`', False)]:
+            with self.subTest(value=value):
+                self.check(task, {'dotfiles_macos_python': value}, accepted)
+
+    def test_ssh_key_basenames_are_plain_file_names(self):
+        task = guard('common/tasks/pre_flight_checks.yml', 'Assert the SSH key basenames are plain file names')
+        for name, accepted in [('id_ed25519_sk', True), ('id_rh_git', True), ('id.key-2', True),
+                               ('../authorized_keys', False), ('..', False), ('.hidden', False), ('sub/key', False),
+                               ('/etc/ssh/key', False)]:
+            for variable in ('ssh_signing_key_basename', 'dotfiles_ssh_hardware_key_basename',
+                             'dotfiles_ssh_redhat_key_basename'):
+                with self.subTest(variable=variable, name=name):
+                    self.check(task, {variable: name}, accepted)
+
+    def test_secret_directories_are_normalized_paths_in_home(self):
+        home = '/home/fixture'
+        codex = guard('roles/codex/tasks/main.yml', 'Validate Codex installation method and paths')
+        base = {'ansible_facts': {'user_dir': home}, 'codex_install_method': 'npm',
+                'codex_npm_prefix': home + '/.npm-global', 'codex_legacy_install_dir': home + '/.local/share/codex-cli',
+                'codex_work_config_dir': home + '/.codex', 'codex_personal_config_dir': home + '/.codex-personal'}
+        for value, accepted in [(home + '/.codex', True), (home + '/../other/.codex', False),
+                                (home + '/x/../.codex', False), (home + '/./.codex', False), (home + '//.codex', False)]:
+            with self.subTest(codex_work_config_dir=value):
+                self.check(codex, dict(base, codex_work_config_dir=value), accepted)
+        drive = guard('roles/drive_sync/tasks/main.yml', 'Validate drive sync settings')
+        base = {'ansible_facts': {'user_dir': home}, 'is_linux': True, 'drive_sync_accounts': [],
+                'drive_sync_host': 'fixture-host'}
+        for value, accepted in [(home + '/.config/rclone/drive-sync.conf', True),
+                                (home + '/../other/rclone.conf', False), ('/tmp/rclone.conf', False),
+                                (home + '/.config/./rclone.conf', False)]:
+            with self.subTest(drive_sync_config=value):
+                self.check(drive, dict(base, drive_sync_config=value), accepted)
+
+    def test_locale_and_keymap_are_plain_names(self):
+        """/etc/profile.d/lang.sh evaluates /etc/locale.conf in every login shell, root's included."""
+        task = guard('roles/system/tasks/timezone_locale.yml', 'SECURITY assert system_locale and system_keymap')
+        base = {'system_is_container': False, 'system_locale': 'en_US.UTF-8', 'system_keymap': 'us'}
+        cases = [({}, True), ({'system_locale': 'C.UTF-8'}, True), ({'system_locale': 'de_DE.UTF-8@euro'}, True),
+                 ({'system_locale': 'en_US.UTF-8; id -un > /tmp/x'}, False), ({'system_locale': 'en_US.UTF-8$(id)'}, False),
+                 ({'system_locale': 'en_US.UTF-8\n'}, False), ({'system_keymap': 'us; id'}, False)]
+        for override, accepted in cases:
+            with self.subTest(override=override):
+                self.check(task, dict(base, **override), accepted)
+
+    def test_injected_locale_never_runs_in_a_login_shell(self):
+        tasks = yaml.safe_load((ROOT / 'roles/system/tasks/timezone_locale.yml').read_text())
+        guard_tasks = [task for task in tasks if task.get('name', '').startswith('SECURITY assert system_locale')]
+        write = next(task for task in tasks if task.get('name') == 'Set system locale')
+        with tempfile.TemporaryDirectory() as directory:
+            conf, marker = Path(directory) / 'locale.conf', Path(directory) / 'ran'
+            write = dict(write, **{'ansible.builtin.lineinfile': dict(write['ansible.builtin.lineinfile'], path=str(conf))})
+            source = {'name': 'A login shell sources it', 'ansible.builtin.command': {'argv': ['sh', '-c', '. "$1"', 'sh', str(conf)]}}
+            self.check(guard_tasks + [write, source], {'system_is_container': False, 'system_keymap': 'us',
+                                                       'system_locale': 'en_US.UTF-8; touch ' + str(marker)}, False)
+            self.assertFalse(marker.exists())
+
+    def test_tlp_profiles_are_known_names(self):
+        task = guard('roles/system/tasks/power_management.yml', 'SECURITY assert the TLP profile values')
+        base = {'system_tlp_platform_profile_ac': 'performance', 'system_tlp_platform_profile_bat': 'balanced',
+                'system_tlp_cpu_energy_policy_ac': 'balance_performance', 'system_tlp_cpu_energy_policy_bat': 'balance_power'}
+        for override, accepted in [({}, True), ({'system_tlp_platform_profile_ac': 'performance; id'}, False),
+                                   ({'system_tlp_cpu_energy_policy_bat': 'power$(id)'}, False)]:
+            with self.subTest(override=override):
+                self.check(task, dict(base, **override), accepted)
 
     def test_config_ssh_port_is_a_plain_port_number(self):
         """A bool is an int to Python: true rendered Port 0 in sshd but True/tcp in firewalld."""
@@ -336,6 +428,54 @@ class InputGuardTests(unittest.TestCase):
         for override, accepted in cases:
             with self.subTest(override=override):
                 self.check(tasks, dict(good, **override), accepted)
+
+    def notes_tasks(self, *prefixes):
+        found = []
+
+        def walk(items):
+            for task in items or []:
+                if task.get('name', '').startswith(prefixes):
+                    found.append(task)
+                for key in ('block', 'rescue', 'always'):
+                    walk(task.get(key))
+        walk(yaml.safe_load((ROOT / 'roles/notes/tasks/main.yml').read_text()))
+        return found
+
+    def test_transcrypt_is_the_installed_root_owned_binary(self):
+        """transcrypt receives the notes vault password: only the packages role's binary may run."""
+        task = guard('roles/notes/tasks/main.yml', 'SECURITY assert transcrypt is the installed binary')
+        root_file = {'exists': True, 'uid': 0, 'islnk': False, 'wgrp': False, 'woth': False}
+        root_dirs = {'results': [{'stat': {'uid': 0, 'wgrp': False, 'woth': False}} for _ in range(4)]}
+        linux = {'ansible_facts': {'os_family': 'RedHat'}, 'notes_transcrypt_bin_path': '/usr/local/bin/transcrypt',
+                 'notes_transcrypt_bin': {'stat': root_file}, '_notes_transcrypt_dirs': root_dirs}
+        cases = [({}, True), ({'notes_transcrypt_bin': {'stat': {'exists': False}}}, True),
+                 ({'notes_transcrypt_bin_path': '/home/user/bin/transcrypt'}, False),
+                 ({'notes_transcrypt_bin': {'stat': dict(root_file, uid=1000)}}, False),
+                 ({'notes_transcrypt_bin': {'stat': dict(root_file, woth=True)}}, False),
+                 ({'notes_transcrypt_bin': {'stat': dict(root_file, wgrp=True)}}, False),
+                 ({'notes_transcrypt_bin': {'stat': dict(root_file, islnk=True)}}, False),
+                 ({'_notes_transcrypt_dirs': {'results': [{'stat': {'uid': 1000, 'wgrp': False, 'woth': False}}]}}, False),
+                 ({'_notes_transcrypt_dirs': {'results': [{'stat': {'uid': 0, 'wgrp': False, 'woth': True}}]}}, False),
+                 ({'ansible_facts': {'os_family': 'Darwin'}, 'dotfiles_homebrew_prefix': '/opt/homebrew',
+                   'notes_transcrypt_bin_path': '/opt/homebrew/bin/transcrypt'}, True),
+                 ({'ansible_facts': {'os_family': 'Darwin'}, 'dotfiles_homebrew_prefix': '/opt/homebrew',
+                   'notes_transcrypt_bin_path': '/tmp/transcrypt'}, False)]
+        for override, accepted in cases:
+            with self.subTest(override=override):
+                self.check(task, dict(linux, **override), accepted)
+
+    def test_fake_transcrypt_never_receives_the_password(self):
+        tasks = self.notes_tasks('Gather transcrypt binary stat', 'Gather the transcrypt directory chain',
+                                 'SECURITY assert transcrypt is the installed binary')
+        with tempfile.TemporaryDirectory() as directory:
+            fake, marker = Path(directory) / 'transcrypt', Path(directory) / 'ran'
+            fake.write_text('#!/bin/sh\ntouch ' + str(marker) + '\n')
+            fake.chmod(0o755)
+            run = {'name': 'Initialize transcrypt as the role does', 'ansible.builtin.command': {
+                'argv': ['{{ notes_transcrypt_bin_path }}', '-p', 'vault-password']}}
+            self.check(tasks + [run], {'notes_transcrypt_bin_path': str(fake), 'dotfiles_homebrew_prefix': '/opt/homebrew',
+                                       'ansible_facts': {'os_family': 'RedHat'}}, False)
+            self.assertFalse(marker.exists())
 
     def test_container_integer_limits(self):
         for variable in ['containers_pids_limit', 'containers_nofile_limit']:

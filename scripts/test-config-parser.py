@@ -463,6 +463,141 @@ GUARD_FILES = ['common/tasks/config_ssti_guard.yml', 'common/tasks/pre_flight_ch
                'roles/distrobox/tasks/validate-provision.yml']
 
 
+# config key -> (value written to config.yml, path a role would then run); FAKE is a user-writable directory
+EXECUTABLE_KEYS = {
+    'notes_transcrypt_bin_path': ('FAKE/transcrypt', 'FAKE/transcrypt'),
+    'notes_transcrypt_linux_bin_path': ('FAKE/transcrypt', 'FAKE/transcrypt'),
+    'containers_podman_bin': ('FAKE/podman', 'FAKE/podman'),
+    'containers_macos_machine_ensure_script': ('FAKE/ensure', 'FAKE/ensure'),
+    'claude_bin_path': ('FAKE/claude', 'FAKE/claude'),
+    'claude_queue_poller_path': ('FAKE/poller', 'FAKE/poller'),
+    'codex_npm_prefix': ('FAKE', 'FAKE/bin/codex'),
+    'antigravity_bin_dir': ('FAKE', 'FAKE/agy'),
+    'dotfiles_homebrew_prefix': ('FAKE', 'FAKE/bin/gh'),
+    'desktop_sway_polkit_agent': ('FAKE/polkit-agent', 'FAKE/polkit-agent'),
+    'desktop_i3_polkit_agent': ('FAKE/lxpolkit', 'FAKE/lxpolkit'),
+}
+
+
+class ExecutablePathTests(unittest.TestCase):
+    """config.yml cannot point a role at an executable of its choosing (SECURITY.md, "Executable paths")."""
+
+    def violations(self, key, value):
+        return parser.policy_violations({key: value})
+
+    def test_fixed_locations_are_refused(self):
+        for key in sorted(parser.FIXED_EXECUTABLE_KEYS):
+            with self.subTest(key=key):
+                self.assertTrue(self.violations(key, '/usr/local/bin/x'))
+
+    def test_allowlisted_locations(self):
+        cases = {
+            'dotfiles_homebrew_prefix': (['/opt/homebrew', '/usr/local'],
+                                         ['/opt/homebrew/', '/home/user/brew', '/usr/local/../tmp', '', 7]),
+            'desktop_sway_polkit_agent': (
+                ['/usr/libexec/lxqt-policykit-agent', '/usr/bin/lxqt-policykit-agent', '/usr/bin/lxpolkit',
+                 '/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1',
+                 '/usr/lib/x86_64-linux-gnu/libexec/polkit-kde-authentication-agent-1',
+                 '/usr/libexec/kf6/polkit-kde-authentication-agent-1', '/usr/libexec/soteria', '/usr/bin/cosmic-osd'],
+                ['/home/user/polkit-agent', '/usr/bin/../../home/user/polkit', '/usr/libexec/../../home/u/x',
+                 '/usr/lib/./polkit', 'lxpolkit', '/usr/bin/lxpolkit --debug', '/usr/bin/lxpolkit;id', '/tmp/polkit',
+                 '/usr/bin/sub/agent', '/usr/local/bin/polkit-agent']),
+            'acli_site': (['redhat.atlassian.net', 'my-team.atlassian.net', ''],
+                          ['evil.example', 'redhat.atlassian.net.evil.example', 'https://redhat.atlassian.net',
+                           'Redhat.atlassian.net', '-x.atlassian.net', 'atlassian.net', None]),
+            'dotfiles_macos_python': (['python@3.14', 'python@3.13', 'python'],
+                                      ['python@3.14$(id)', 'python 3', '../x', 'python@3.14"', '`id`', '']),
+            # /etc/locale.conf is evaluated by /etc/profile.d/lang.sh in root login shells
+            'system_locale': (['en_US.UTF-8', 'de_DE.UTF-8@euro', 'sr_RS@latin', 'en_US.utf8', 'en_US', 'ast_ES.UTF-8',
+                               'C', 'C.UTF-8', 'C.utf8', 'POSIX'],
+                              ['en_US.UTF-8; id -un > /tmp/x', 'en_US.UTF-8$(id)', 'en_US.UTF-8`id`', 'en_US.UTF-8"',
+                               "en_US.UTF-8'", 'en US', 'en_us.UTF-8', '', 'C;id', 7]),
+            'system_keymap': (['us', 'de-latin1', 'dvorak', 'en_US'], ['us; id', 'us$(id)', 'us x', '']),
+            'system_tlp_platform_profile_ac': (['performance', 'balanced', 'low-power'], ['performance; id', 'fast', '']),
+            'system_tlp_cpu_energy_policy_bat': (['balance_power', 'power', 'default'], ['power$(id)', 'eco']),
+        }
+        cases['desktop_i3_polkit_agent'] = cases['desktop_sway_polkit_agent']
+        for key, (allowed, refused) in cases.items():
+            for value in allowed:
+                with self.subTest(key=key, value=value):
+                    self.assertEqual(self.violations(key, value), [])
+            for value in refused:
+                with self.subTest(key=key, value=value):
+                    self.assertTrue(self.violations(key, value))
+        # the defaults the roles compute pass
+        self.assertEqual(self.violations('desktop_i3_polkit_agent', '/usr/bin/lxpolkit'), [])
+
+    def test_sysctls_the_kernel_runs_are_refused(self):
+        """kernel.modprobe and friends name a program the kernel runs as root on an unprivileged request."""
+        refused = ['kernel.modprobe', '-kernel.modprobe', 'kernel/modprobe', 'kernel.poweroff_cmd', 'kernel.reboot_cmd',
+                   'kernel.core_pattern', 'kernel.hotplug', 'kernel.usermodehelper.bset', 'kernel.usermodehelper.inheritable',
+                   'fs.binfmt_misc.register', 'fs.binfmt_misc.status']
+        for key in ('system_sysctl_extra', 'system_sysctl_extra_additional'):
+            for name in refused:
+                with self.subTest(key=key, name=name):
+                    self.assertTrue(self.violations(key, {name: '/home/user/.local/bin/x'}))
+            # other spellings systemd-sysctl or procps reduce to the same /proc/sys file, or malformed keys
+            for name in ['kernel..modprobe', '.kernel.modprobe', 'kernel.modprobe.', '-.kernel.modprobe',
+                         'kernel..core_pattern', 'fs..binfmt_misc.register', '--kernel.modprobe', 'kernel//modprobe',
+                         'Kernel.modprobe', 'kernel.modprobe ', 'kernel.*', '']:
+                with self.subTest(key=key, name=name):
+                    self.assertTrue(self.violations(key, {name: '/home/user/.local/bin/x'}))
+            for name in ['vm.swappiness', 'kernel.modprobe_extra', 'net.core.rmem_max', 'fs.inotify.max_user_watches',
+                         '-vm.swappiness', 'net.bridge.bridge-nf-call-iptables']:
+                with self.subTest(key=key, name=name):
+                    self.assertEqual(self.violations(key, {name: '1'}), [])
+
+    def test_sysctl_denylist_matches_the_role(self):
+        task = yaml.safe_load((ROOT / 'roles/system/tasks/main.yml').read_text())
+        validator = next(item for item in task if 'Validate sysctl key and value format' in item.get('name', ''))
+        self.assertEqual(validator['vars']['_sysctl_exec_re'], '^' + parser.SYSCTL_EXEC_KEYS.pattern + '\\Z')
+        self.assertEqual(validator['vars']['_sysctl_key_re'], '^' + parser.SYSCTL_KEY.pattern + '\\Z')
+
+    def test_sysctl_names_are_normalized_like_systemd_sysctl(self):
+        for key, name in [('kernel..modprobe', 'kernel.modprobe'), ('.kernel.modprobe.', 'kernel.modprobe'),
+                          ('-kernel/modprobe', 'kernel.modprobe'), ('--.fs..binfmt_misc..register.', 'fs.binfmt_misc.register')]:
+            with self.subTest(key=key):
+                self.assertEqual(parser.sysctl_name(key), name)
+
+    def test_tlp_lists_match_the_role(self):
+        tasks = yaml.safe_load((ROOT / 'roles/system/tasks/power_management.yml').read_text())
+        found = []
+
+        def walk(items):
+            for task in items or []:
+                if task.get('name', '').startswith('SECURITY assert the TLP profile values'):
+                    found.append(task)
+                for key in ('block', 'rescue', 'always'):
+                    walk(task.get(key))
+        walk(tasks)
+        self.assertEqual(len(found), 1)
+        self.assertEqual(tuple(found[0]['vars']['_system_tlp_platform_profiles']), parser.PLATFORM_PROFILE_CHOICES)
+        self.assertEqual(tuple(found[0]['vars']['_system_tlp_energy_policies']), parser.ENERGY_PERF_POLICIES)
+
+    def test_every_executable_key_is_covered(self):
+        self.assertEqual(set(EXECUTABLE_KEYS), set(parser.FIXED_EXECUTABLE_KEYS) | set(parser.ALLOWED_EXECUTABLE_VALUES))
+
+    def test_a_fake_binary_in_config_never_runs(self):
+        """Each key set to a user-writable fake binary is refused before anything can run it."""
+        for key, (value, executed) in sorted(EXECUTABLE_KEYS.items()):
+            self.assertTrue(executed.startswith(value))
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as directory:
+                fake = Path(directory) / 'fake'
+                marker = Path(directory) / 'ran'
+                target = Path(executed.replace('FAKE', str(fake)))
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text('#!/bin/sh\ntouch ' + str(marker) + '\n')
+                target.chmod(0o755)
+                project = Project(directory, config='%s: %s\n' % (key, json.dumps(value.replace('FAKE', str(fake)))))
+                result = project.run([{'hosts': 'localhost', 'gather_facts': False,
+                                       'vars': {'common_project_root': str(project.root)},
+                                       'tasks': project.load + [{'name': 'Run it as a role would', 'ansible.builtin.command': {
+                                           'argv': ['{{ %s }}' % key + executed[len(value):]]}}]}])
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn('Fail when config.yml sets keys or characters that change execution', result.stdout)
+                self.assertFalse(marker.exists())
+
+
 def guard_variables():
     """Every variable the guard files register, set_fact or define as task/block vars or loop vars."""
     names = set()

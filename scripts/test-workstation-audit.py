@@ -355,6 +355,10 @@ class PowerPolicyTests(unittest.TestCase):
                      'gather_facts': False, 'vars': {
                          'is_dnf': True, 'system_is_container': container, 'csb_rhel': csb,
                          'system_tlp_enabled': enabled, 'ansible_distribution': distribution,
+                         # the TLP profile values the role's validator reads (its defaults)
+                         **{key: value for key, value in yaml.safe_load(
+                             (ROOT / 'roles/system/defaults/main.yml').read_text()).items()
+                            if key.startswith(('system_tlp_platform_profile_', 'system_tlp_cpu_energy_policy_'))},
                          'ansible_distribution_major_version': version,
                          'fixture': {'tlp_exists': previous, 'config_exists': previous if managed is None else managed,
                                      'failure': failure, 'native_status': native_status or {}, 'native_running': native_running or [],

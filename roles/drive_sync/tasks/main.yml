@@ -12,11 +12,14 @@
       - drive_sync_accounts | unique | length == drive_sync_accounts | length
       - drive_sync_accounts | length == 0 or drive_sync_host is match('^[a-z0-9][a-z0-9-]{1,30}$')
       - drive_sync_accounts | length == 0 or drive_sync_host not in _generic_hosts
+      # rclone keeps the Drive tokens in drive_sync_config: a normalized path inside the home
+      - drive_sync_config is match('^' ~ (ansible_facts['user_dir'] | regex_escape) ~ '/[a-zA-Z0-9/._-]+\Z')
+      - drive_sync_config.split('/')[1:] | select('in', ['', '.', '..']) | list | length == 0
     fail_msg: >-
       drive_sync_accounts must be a list of distinct short names (a-z, 0-9, '-', starting with a letter). With any
       account, drive_sync_host must be set in config.yml to a name unique to this machine (a-z, 0-9, '-'), not a
       generic one such as {{ _generic_hosts | join(', ') }}: two machines pushing the same Drive folder delete each
-      other's files.
+      other's files. drive_sync_config must be a normalized path inside the home (no . or .. segments).
   when: is_linux  # macOS: slice 2
 
 - name: Set up Drive sync

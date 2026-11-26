@@ -224,6 +224,29 @@ while a copy of either file exists in `vars/`, `common/tasks/` or `common/tasks/
 first). The wrapper refuses every underscore-prefixed name in `-e`: the guard's and pre-flight's own variables (`_pf_*`) and the
 computed results assert tasks hold in `vars:`, which `-e` would otherwise outrank.
 
+**Executable paths.** `config.yml` cannot point a role at an executable of its choosing. Fixed locations are refused as keys:
+`notes_transcrypt_bin_path` and `notes_transcrypt_linux_bin_path` (transcrypt receives the notes vault password), `codex_npm_prefix`
+(Codex receives the Codex API key), `claude_bin_path`, `claude_queue_poller_path`, `containers_podman_bin`,
+`containers_macos_machine_ensure_script` and `antigravity_bin_dir`. Others take a value from an allowlist: `dotfiles_homebrew_prefix` is
+`/opt/homebrew` or `/usr/local` (it feeds launch agents' `PATH` and the git credential helper's `gh`); `desktop_sway_polkit_agent` /
+`desktop_i3_polkit_agent` must be a system binary, `/usr/bin/<name>` or any depth under `/usr/libexec`, `/usr/lib` or `/usr/lib64`, with
+no spaces and no `.` or `..` segments (the agent receives the user's password); `acli_site` must be an Atlassian Cloud site,
+`<name>.atlassian.net`, or empty (acli logs in there with the vault token); `dotfiles_macos_python` must be a Homebrew formula name (it
+is rendered unquoted into zshenv and bashrc). `system_sysctl_extra` and `system_sysctl_extra_additional` cannot set a sysctl the kernel
+runs or reads as a path (`kernel.modprobe`, `kernel.poweroff_cmd`, `kernel.reboot_cmd`, `kernel.core_pattern`, `kernel.hotplug`,
+`kernel.usermodehelper.*`, `fs.binfmt_misc.*`, in any spelling systemd-sysctl or procps reduce to them, and keys must be well-formed
+dot-separated lowercase segments): an unprivileged module request would run such a program as root. Values written to files a root shell
+sources are plain names: `system_locale` (into `/etc/locale.conf`, which Fedora's `/etc/profile.d/lang.sh` evaluates in every login
+shell) must be a locale name such as `en_US.UTF-8`, `C.UTF-8` or `POSIX`, `system_keymap` (`/etc/vconsole.conf`) a keymap name, and the
+TLP profile values (`/etc/tlp.d`) known names; `system_tmout` and the TLP charge thresholds are rendered through `| int`,
+`/etc/default/grub` gets only booleans and the allowlisted `system_kernel_lockdown`, and `/etc/login.defs` and `/etc/default/useradd`
+are parsed, not sourced. The SSH key basenames must be plain file names in `~/.ssh`, and `codex_*_config_dir` and `drive_sync_config`,
+which hold secrets, must be normalized paths inside the home. The roles repeat these checks where the values are used, so `-e` cannot
+skip them. At the point of use the notes role also requires transcrypt to be `/usr/local/bin/transcrypt`, owned by root, not group- or
+other-writable, in root-owned directories that are not group- or other-writable; on macOS, where Homebrew is owned by the user, it must
+be the Homebrew prefix's `bin/transcrypt`. User preferences that run as the user with no secret, such as `desktop_wm_browser` and
+`dotfiles_gh_editor`, stay free-form.
+
 Each role also re-validates its critical inputs at the start of `main.yml` (for example, `roles/claude/tasks/main.yml` constrains
 `claude_install_url` to `claude.ai` or `anthropic.com`), so a skipped `pre_tasks` does not reach the installer.
 
