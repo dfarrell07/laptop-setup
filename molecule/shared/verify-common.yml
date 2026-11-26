@@ -995,10 +995,13 @@
     - ansible_system == 'Linux'
 
 - name: Check 98-llmnr.conf for LLMNR setting
-  ansible.builtin.command: grep 'LLMNR={{ system_resolved_llmnr | default("no") }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
+  ansible.builtin.command: grep 'LLMNR={{ _verify_llmnr }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
   changed_when: false
   failed_when: false
   register: verify_llmnr_setting
+  vars:
+    _raw: "{{ system_resolved_llmnr | default('no') }}"  # a YAML boolean is written as yes/no
+    _verify_llmnr: "{{ ('yes' if _raw is sameas true else 'no' if _raw is sameas false else _raw) | lower }}"
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
@@ -1008,8 +1011,11 @@
   ansible.builtin.assert:
     that: verify_llmnr_setting.rc == 0
     fail_msg: >-
-      98-llmnr.conf missing LLMNR={{ system_resolved_llmnr | default("no") }} — dns_over_tls.yml LLMNR regression — found: {{
+      98-llmnr.conf missing LLMNR={{ _verify_llmnr }} — dns_over_tls.yml LLMNR regression — found: {{
       verify_llmnr_setting.stdout | default("(empty)") }}
+  vars:
+    _raw: "{{ system_resolved_llmnr | default('no') }}"  # a YAML boolean is written as yes/no
+    _verify_llmnr: "{{ ('yes' if _raw is sameas true else 'no' if _raw is sameas false else _raw) | lower }}"
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
@@ -1018,10 +1024,13 @@
 - name: Check 98-llmnr.conf MulticastDNS setting
   ansible.builtin.command: grep -qF '{{ item }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
   loop:
-    - "MulticastDNS={{ system_resolved_multicast_dns | default('no') }}"
+    - "MulticastDNS={{ _verify_mdns }}"
   changed_when: false
   failed_when: false
   register: verify_mdns_setting
+  vars:
+    _raw: "{{ system_resolved_multicast_dns | default('no') }}"  # a YAML boolean is written as yes/no
+    _verify_mdns: "{{ ('yes' if _raw is sameas true else 'no' if _raw is sameas false else _raw) | lower }}"
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'
@@ -1412,9 +1421,11 @@
     - "SystemKeepFree={{ system_journald_keep_free | default('1G') }}"
     - "RateLimitIntervalSec={{ system_journald_rate_interval | default('30s') }}"
     - "RateLimitBurst={{ system_journald_rate_burst | default(10000) }}"
-    - "Compress={{ system_journald_compress | default('yes') }}"
+    - "Compress={{ 'yes' if _raw is sameas true else 'no' if _raw is sameas false else _raw }}"
   loop_control:
     label: "{{ item | split(' ') | first }}"
+  vars:
+    _raw: "{{ system_journald_compress | default('yes') }}"  # a YAML boolean is written as yes/no
   when:
     - not (system_is_container | default(false))
     - ansible_system == 'Linux'

@@ -112,20 +112,24 @@
       ansible.builtin.command:  # noqa: command-instead-of-module
         cmd: >-
           grep -qxF
-          'AllowAgentForwarding {{ system_ssh_allow_agent_forwarding | default("no") }}'
+          'AllowAgentForwarding {{ 'yes' if _raw is sameas true else 'no' if _raw is sameas false else _raw }}'
           /etc/ssh/sshd_config.d/00-hardening.conf
       changed_when: false
       become: true
+      vars:
+        _raw: "{{ system_ssh_allow_agent_forwarding | default('no') }}"  # a YAML boolean is written as yes/no
       when:
         - verify_sshd_dropin is not skipped
         - verify_sshd_dropin.stat.exists
 
     - name: Check AllowTcpForwarding matches system_ssh_allow_tcp_forwarding (shared)
       ansible.builtin.command: >-
-        grep -qxF 'AllowTcpForwarding {{ system_ssh_allow_tcp_forwarding | default("local") }}'
+        grep -qxF 'AllowTcpForwarding {{ 'yes' if _raw is sameas true else 'no' if _raw is sameas false else _raw }}'
         /etc/ssh/sshd_config.d/00-hardening.conf
       changed_when: false
       become: true
+      vars:
+        _raw: "{{ system_ssh_allow_tcp_forwarding | default('local') }}"  # a YAML boolean is written as yes/no
       when:
         - verify_sshd_dropin is not skipped
         - verify_sshd_dropin.stat.exists

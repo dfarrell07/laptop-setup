@@ -674,6 +674,20 @@
     _not_cidr: "{{ desktop_macos_ssh_allow_from | map('string') | reject('regex', _cidr, match_type='fullmatch') | list }}"
   when: is_macos and desktop_macos_remote_login | bool
 
+# An unquoted yes/no is a YAML boolean, which sshd-macos.conf.j2 writes as yes/no
+- name: Check the sshd forwarding settings are sshd words (macOS)
+  ansible.builtin.assert:
+    that:
+      - desktop_macos_ssh_allow_agent_forwarding is boolean or desktop_macos_ssh_allow_agent_forwarding in ['yes', 'no']
+      - desktop_macos_ssh_allow_tcp_forwarding is boolean
+        or desktop_macos_ssh_allow_tcp_forwarding in ['yes', 'no', 'all', 'local', 'remote']
+    fail_msg: >-
+      AllowAgentForwarding takes yes or no, and AllowTcpForwarding yes, no, all, local or remote; got
+      {{ desktop_macos_ssh_allow_agent_forwarding }} and {{ desktop_macos_ssh_allow_tcp_forwarding }}
+      (desktop_macos_ssh_allow_*_forwarding, which default to system_ssh_allow_*_forwarding)
+    quiet: true
+  when: is_macos and desktop_macos_remote_login | bool
+
 - name: Apply the sshd login policy and start sshd (macOS)
   when:
     - is_macos and desktop_macos_remote_login | bool

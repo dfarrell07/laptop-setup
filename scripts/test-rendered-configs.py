@@ -1774,5 +1774,139 @@ class MacTaskTests(unittest.TestCase):
                     entry['become'] = True
         self.assertIn('killall', bare(scan_root_commands(site)[0]))  # the desktop role's non-root tasks
 
+
+def find_task(tasks, name):
+    """The task called name in a task list, looking inside blocks."""
+    for task in tasks:
+        if task.get('name') == name:
+            return task
+        for key in ('block', 'rescue', 'always'):
+            found = find_task(task.get(key) or [], name)
+            if found:
+                return found
+    return None
+
+
+class YesNoOptionTests(unittest.TestCase):
+    """An unquoted yes/no/true/false/on/off in config.yml is a YAML boolean. Options that take yes/no words must be
+    written as the word (not Python's True/False), and their asserts must take booleans and refuse other words."""
+
+    # Unquoted, as config.yml has them (YAML 1.1: all booleans), then quoted strings
+    CASES = """cases:
+  - {id: u_yes, value: yes, want: 'yes'}
+  - {id: u_no, value: no, want: 'no'}
+  - {id: u_true, value: true, want: 'yes'}
+  - {id: u_false, value: false, want: 'no'}
+  - {id: u_on, value: on, want: 'yes'}
+  - {id: u_off, value: off, want: 'no'}
+  - {id: u_cap, value: No, want: 'no'}
+  - {id: q_yes, value: 'yes', want: 'yes'}
+  - {id: q_no, value: "no", want: 'no'}
+"""
+    # option: (file, render via, {var: line prefix}, extra quoted words it takes as (value, written as),
+    #          asserting task (file, name))
+    OPTIONS = {
+        'llmnr': ('roles/system/tasks/dns_over_tls.yml', 'copy', {
+            'system_resolved_llmnr': 'LLMNR=', 'system_resolved_multicast_dns': 'MulticastDNS='},
+            [('resolve', 'resolve'), ('Resolve', 'resolve'), ('YES', 'yes')],  # resolved takes lowercase resolve only
+            ('common/tasks/pre_flight_checks.yml',
+             'Assert system_resolved_llmnr and system_resolved_multicast_dns are valid enums')),
+        'coredump': ('roles/system/templates/coredump.conf.j2', 'template', {'system_coredump_compress': 'Compress='},
+                     [], ('roles/system/tasks/coredumps.yml', 'Assert system_coredump_compress is a boolean')),
+        'journald': ('roles/system/templates/journald-99-hardening.conf.j2', 'template',
+                     {'system_journald_compress': 'Compress='},
+                     [('8K', '8K'), ('512', '512'), ('8B', '8B'), ('1.5M', '1.5M'), ('TRUE', 'TRUE')],
+                     ('roles/system/tasks/journald.yml', 'Assert system_journald_compress is a boolean or a size')),
+        'sshd_agent': ('roles/system/templates/sshd-hardening.conf.j2', 'template',
+                       {'system_ssh_allow_agent_forwarding': 'AllowAgentForwarding '}, [],
+                       ('roles/system/tasks/sshd.yml', 'Assert system_ssh_allow_agent_forwarding is a recognised sshd value')),
+        'sshd_tcp': ('roles/system/templates/sshd-hardening.conf.j2', 'template',
+                     {'system_ssh_allow_tcp_forwarding': 'AllowTcpForwarding '}, [('local', 'local')],
+                     ('roles/system/tasks/sshd.yml', 'Assert system_ssh_allow_tcp_forwarding is a recognised sshd value')),
+        'macos_sshd': ('roles/desktop/templates/sshd-macos.conf.j2', 'template', {
+            'desktop_macos_ssh_allow_agent_forwarding': 'AllowAgentForwarding ',
+            'desktop_macos_ssh_allow_tcp_forwarding': 'AllowTcpForwarding '}, [],
+            ('roles/desktop/tasks/main.yml', 'Check the sshd forwarding settings are sshd words (macOS)')),
+        # the macOS settings default to the Linux ones: a boolean set there reaches the Mac's drop-in
+        'macos_inherit': ('roles/desktop/templates/sshd-macos.conf.j2', 'template', {
+            'system_ssh_allow_agent_forwarding': 'AllowAgentForwarding ',
+            'system_ssh_allow_tcp_forwarding': 'AllowTcpForwarding '}, [], None),
+        # sway's focus_follows_mouse takes yes, no or always; '' (the default) leaves it out
+        'sway_focus': ('roles/desktop/templates/sway.config.j2', 'template',
+                       {'desktop_sway_focus_follows_mouse': 'focus_follows_mouse '}, [('always', 'always')], None),
+    }
+    BAD = ['maybe', 'True ', 'yes no']  # words none of these options take
+    REFUSED = {'journald': ['8k']}  # systemd ignores a lowercase size suffix
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        out = cls.out = Path(cls.tmp.name)
+        cases = yaml.safe_load(cls.CASES)['cases']
+        (out / 'cases.yml').write_text(cls.CASES)
+        tasks = []
+        for option, (src, kind, variables, extra, check) in cls.OPTIONS.items():
+            items = '{{ cases + %s }}' % ([{'id': f'q_{w}', 'value': w, 'want': want} for w, want in extra])
+            item_vars = {var: '{{ item.value }}' for var in variables}
+            if kind == 'copy':
+                task = dict(find_task(yaml.safe_load((ROOT / src).read_text()), 'Disable LLMNR and mDNS via resolved drop-in'))
+                for key in ('notify', 'when'):
+                    task.pop(key, None)
+                task['ansible.builtin.copy'] = dict(task['ansible.builtin.copy'], dest=f'{out}/{option}-{{{{ item.id }}}}')
+            else:
+                task = {'ansible.builtin.template': {'src': str(ROOT / src), 'dest': f'{out}/{option}-{{{{ item.id }}}}',
+                                                     'mode': '0600'}}
+            # a failed render leaves its file out, which fails that option's test only
+            tasks.append(dict(task, name=f'render {option}', vars=item_vars, loop=items, ignore_errors=True))
+            if check:
+                path, name = check
+                found = find_task(yaml.safe_load((ROOT / path).read_text()), name)
+                if found is None:  # no assert for this option: record that, the test fails on it
+                    (out / f'{option}-asserts.json').write_text('null')
+                    continue
+                assert_task = {k: v for k, v in found.items() if k not in ('when', 'name')}
+                assert_task['vars'] = dict(assert_task.get('vars') or {}, **item_vars)
+                bad = '{{ cases + %s }}' % ([{'id': 'bad', 'value': w} for w in cls.BAD + cls.REFUSED.get(option, [])]
+                                            + [{'id': 'extra', 'value': w} for w, _ in extra])
+                tasks += [dict(assert_task, name=f'assert {option}', loop=bad, ignore_errors=True, register='_checked'),
+                          {'name': f'record {option}', 'ansible.builtin.copy': {
+                              'dest': f'{out}/{option}-asserts.json', 'mode': '0600',
+                              'content': "{{ _checked.results | map(attribute='failed') | list | to_json }}"}}]
+        play = [{'hosts': 'localhost', 'gather_facts': True, 'gather_subset': ['min'],
+                 'vars_files': [str(ROOT / p) for p in VARS_FILES] + [str(out / 'cases.yml')],
+                 'vars': BASE, 'tasks': tasks}]
+        (out / 'play.yml').write_text(yaml.safe_dump(play))
+        result = subprocess.run(
+            [str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(out / 'play.yml')], cwd=ROOT,
+            env=dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
+            capture_output=True, text=True, timeout=180)
+        if result.returncode:
+            raise AssertionError(result.stdout[-3000:] + result.stderr)
+        cls.cases = cases
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_options_are_written_as_yes_or_no(self):
+        for option, (_, _, variables, extra, _) in self.OPTIONS.items():
+            for case in self.cases + [{'id': f'q_{w}', 'want': want} for w, want in extra]:
+                rendered = self.out / f'{option}-{case["id"]}'
+                lines = rendered.read_text().splitlines() if rendered.exists() else ['(render failed)']
+                for prefix in variables.values():
+                    with self.subTest(option=option, case=case['id'], line=prefix):
+                        self.assertIn(prefix + case['want'], lines)
+
+    def test_asserts_take_booleans_and_refuse_other_words(self):
+        for option, (_, _, _, extra, check) in self.OPTIONS.items():
+            if not check:
+                continue
+            with self.subTest(option=option):
+                failed = json.loads((self.out / f'{option}-asserts.json').read_text())
+                self.assertIsNotNone(failed, f'no assert called {check[1]!r} in {check[0]}')
+                self.assertEqual(failed, [False] * len(self.cases) + [True] * len(self.BAD + self.REFUSED.get(option, []))
+                                 + [False] * len(extra))
+
+
 if __name__ == '__main__':
     unittest.main()

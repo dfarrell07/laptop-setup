@@ -28,13 +28,17 @@
     - is_dnf or is_apt
     - not csb_rhel
 
+# An unquoted yes/no in config.yml is a YAML boolean: write the word systemd documents, not True/False, and in
+# lowercase (pre-flight takes any case; resolved reads "resolve" only in lowercase)
 - name: Disable LLMNR and mDNS via resolved drop-in
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
       [Resolve]
-      LLMNR={{ system_resolved_llmnr }}
-      MulticastDNS={{ system_resolved_multicast_dns }}
+      LLMNR={{ ('yes' if system_resolved_llmnr is sameas true
+                else 'no' if system_resolved_llmnr is sameas false else system_resolved_llmnr) | lower }}
+      MulticastDNS={{ ('yes' if system_resolved_multicast_dns is sameas true
+                       else 'no' if system_resolved_multicast_dns is sameas false else system_resolved_multicast_dns) | lower }}
     dest: /etc/systemd/resolved.conf.d/98-llmnr.conf
     mode: "0644"
   notify: Restart systemd-resolved

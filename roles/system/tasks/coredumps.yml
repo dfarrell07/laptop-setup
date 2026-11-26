@@ -16,6 +16,17 @@
 - name: Configure coredumps (skip in containers)
   when: not system_is_container and not csb_rhel
   block:
+    # Compress= takes a boolean (coredump.conf(5)); an unquoted yes/no is a YAML boolean
+    - name: Assert system_coredump_compress is a boolean
+      ansible.builtin.assert:
+        that: >-
+          system_coredump_compress is boolean
+          or system_coredump_compress | string | lower in ['yes', 'no', 'true', 'false', 'on', 'off', '1', '0']
+        fail_msg: >-
+          system_coredump_compress='{{ system_coredump_compress }}' is not a valid Compress= value.
+          Accepted: yes or no (or another systemd boolean word).
+        quiet: true
+
     - name: Deploy coredump.conf drop-in (storage/process-size-max)
       ansible.builtin.template:
         src: coredump.conf.j2

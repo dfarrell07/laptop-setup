@@ -138,8 +138,10 @@ gaps inner {{ desktop_sway_gaps_inner | int }}
 {% if desktop_sway_gaps_outer != 0 %}
 gaps outer {{ desktop_sway_gaps_outer | int }}
 {% endif %}
-{% if desktop_sway_focus_follows_mouse | length > 0 %}
-focus_follows_mouse {{ desktop_sway_focus_follows_mouse | regex_replace('[^a-z]', '') }}
+{# an unquoted yes/no in config.yml is a YAML boolean: write the word, not True/False #}
+{% set _ffm = ('yes' if desktop_sway_focus_follows_mouse is sameas true else 'no' if desktop_sway_focus_follows_mouse is sameas false else desktop_sway_focus_follows_mouse) | string %}
+{% if _ffm | length > 0 %}
+focus_follows_mouse {{ _ffm | regex_replace('[^a-z]', '') }}
 {% endif %}
 
 # Input

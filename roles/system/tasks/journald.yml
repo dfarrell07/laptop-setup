@@ -39,6 +39,20 @@
       when: csb_rhel
       notify: Restart systemd-journald
 
+    # Compress= takes a boolean or a size threshold (journald.conf(5)); an unquoted yes/no is a YAML boolean
+    - name: Assert system_journald_compress is a boolean or a size
+      ansible.builtin.assert:
+        that: >-
+          system_journald_compress is boolean
+          or system_journald_compress | string | lower in ['yes', 'no', 'true', 'false', 'on', 'off', '1', '0']
+          or system_journald_compress | string is match('^[0-9]+(\\.[0-9]+)?[BKMGTPE]?$')
+        fail_msg: >-
+          system_journald_compress='{{ system_journald_compress }}' is not a valid journald Compress= value.
+          Accepted: yes, no (or another systemd boolean word), or a size threshold such as 512, 8K or 1.5M
+          (suffixes B, K, M, G, T, P, E in capitals: systemd ignores 8k).
+        quiet: true
+      when: not csb_rhel
+
     - name: Deploy journald hardening config
       ansible.builtin.template:
         src: journald-99-hardening.conf.j2

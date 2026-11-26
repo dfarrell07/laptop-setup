@@ -43,7 +43,8 @@
     - name: Assert system_ssh_allow_tcp_forwarding is a recognised sshd value
       ansible.builtin.assert:
         that:
-          - system_ssh_allow_tcp_forwarding in ['yes', 'no', 'all', 'local', 'remote']
+          # an unquoted yes/no is a YAML boolean, which the template writes as yes/no
+          - system_ssh_allow_tcp_forwarding is boolean or system_ssh_allow_tcp_forwarding in ['yes', 'no', 'all', 'local', 'remote']
         fail_msg: >-
           system_ssh_allow_tcp_forwarding='{{ system_ssh_allow_tcp_forwarding }}' is not a
           valid AllowTcpForwarding value. Accepted: yes, no, all, local, remote.
@@ -51,7 +52,7 @@
     - name: Assert system_ssh_allow_agent_forwarding is a recognised sshd value
       ansible.builtin.assert:
         that:
-          - system_ssh_allow_agent_forwarding in ['yes', 'no']
+          - system_ssh_allow_agent_forwarding is boolean or system_ssh_allow_agent_forwarding in ['yes', 'no']
         fail_msg: >-
           system_ssh_allow_agent_forwarding='{{ system_ssh_allow_agent_forwarding }}' is not
           a valid AllowAgentForwarding value. Accepted: yes, no.

@@ -6,4 +6,5 @@ MaxRetentionSec={{ system_journald_max_retention | regex_replace('[\r\n\x00].*',
 SystemKeepFree={{ system_journald_keep_free | regex_replace('[\r\n\x00].*', '') }}
 RateLimitIntervalSec={{ system_journald_rate_interval | regex_replace('[\r\n\x00].*', '') }}
 RateLimitBurst={{ system_journald_rate_burst | int }}
-Compress={{ system_journald_compress | regex_replace('[\r\n\x00].*', '') }}
+{# an unquoted yes/no in config.yml is a YAML boolean: write the word systemd documents, not True/False #}
+Compress={{ ('yes' if system_journald_compress is sameas true else 'no' if system_journald_compress is sameas false else system_journald_compress) | regex_replace('[\r\n\x00].*', '') }}

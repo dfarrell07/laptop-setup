@@ -3,6 +3,7 @@
 Storage={{ system_coredump_storage | regex_replace('[\r\n\x00].*', '') }}
 ProcessSizeMax={{ system_coredump_process_size_max | regex_replace('[\r\n\x00].*', '') }}
 ExternalSizeMax={{ system_coredump_process_size_max | regex_replace('[\r\n\x00].*', '') }}
-Compress={{ system_coredump_compress | regex_replace('[\r\n\x00].*', '') }}
+{# an unquoted yes/no in config.yml is a YAML boolean: write the word systemd documents, not True/False #}
+Compress={{ ('yes' if system_coredump_compress is sameas true else 'no' if system_coredump_compress is sameas false else system_coredump_compress) | regex_replace('[\r\n\x00].*', '') }}
 MaxUse={{ system_coredump_max_use | regex_replace('[\r\n\x00].*', '') }}
 KeepFree={{ system_coredump_keep_free | regex_replace('[\r\n\x00].*', '') }}
