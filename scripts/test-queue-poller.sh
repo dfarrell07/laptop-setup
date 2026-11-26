@@ -508,6 +508,23 @@ set -e
 assert_eq           "empty allowlist: exit 1"         "1"           "$_empty_exit"
 assert_contains     "empty allowlist: refusal logged" "refusing to run" "$_empty_out"
 
+# --- Bash older than 4: the version guard refuses before any bash 4 syntax runs ---
+_guard_line=$(grep -n 'BASH_VERSINFO\[0\] < 4' "$POLLER" | head -1 | cut -d: -f1 || true)
+_declare_line=$(grep -n '^declare -A' "$POLLER" | head -1 | cut -d: -f1 || true)
+assert_eq "bash guard: before the first declare -A" "yes" \
+  "$([[ -n "$_guard_line" && -n "$_declare_line" && "$_guard_line" -lt "$_declare_line" ]] && echo yes || echo no)"
+# A real bash 3 where there is one (macOS /bin/bash); Linux has none, so only the order above is checked there
+if [[ -x /bin/bash ]] && [[ "$(/bin/bash -c 'echo ${BASH_VERSINFO[0]}')" -lt 4 ]]; then
+  set +e
+  _old_home=$(mktemp -d)
+  _old_out=$(CLAUDE_QUEUE_REPO="test/q" HOME="$_old_home" /bin/bash "$POLLER" 2>&1)
+  _old_exit=$?
+  rm -rf "$_old_home"
+  set -e
+  assert_eq       "bash 3: exit 1"                "1"                             "$_old_exit"
+  assert_contains "bash 3: refusal names the need" "needs bash 4 or later, found 3." "$_old_out"
+fi
+
 # --- is_allowed_actor (extracted from the poller) ---
 eval "$(sed -n '/^is_allowed_actor() {/,/^}/p' "$POLLER")"
 ALLOWED_AUTHORS="Alice, bob-1 ,,a.c"
