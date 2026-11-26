@@ -18,7 +18,36 @@ repo_tailscale: true
 repos_dnf_google_chrome_repo: "https://dl.google.com/linux/chrome/rpm/stable/x86_64"
 
 # Pinned fingerprints below are read from this tracked file at the point of use (role_path lookup); a different value
-# of the variable from config.yml, group_vars or -e stops the run. Change them here by PR.
+# of the variable from config.yml, group_vars or -e stops the run. Change them here by PR. Each is a key's primary
+# fingerprint; every primary key in the vendor's key file must be listed (files/import-pinned-key.sh), and the checked
+# file is written to /etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-<repo> for the repo's file:// gpgkey.
+# Checked 2026-11-25: each vendor key file below was downloaded, its fingerprints read with gpg --show-keys and passed
+# through import-pinned-key.sh (gpg and rpm agree). Subkeys are not pinned: a vendor may add or rotate signing subkeys
+# under the same primary key without a change here.
+
+# GitHub CLI (gh-cli repo, non-Fedora hosts): both primary keys in https://cli.github.com/packages/githubcli-archive-keyring.asc,
+# as listed in https://github.com/cli/cli/blob/trunk/docs/install_linux.md. 2C61...6059 expired 2026-09-05 but is still
+# in GitHub's file and signed older packages; 7F38...1325 is the current key.
+repos_dnf_gh_cli_gpg_fingerprints:
+  - "2C6106201985B60E6C7AC87323F3D4EA75716059"
+  - "7F38BBB59D064DBCB3D84D725612B36462313325"
+# Google Chrome: https://dl.google.com/linux/linux_signing_key.pub, fingerprint listed at
+# https://www.google.com/linuxrepositories/. Since 2023 packages are signed with periodically rotated subkeys of this
+# primary key; a new subkey arrives in a refreshed key file with the same primary fingerprint, which the key import
+# fetches on every run and re-imports when it changed (no edit here).
+repos_dnf_google_chrome_gpg_fingerprints:
+  - "EB4C1BFD4F042F6DDDCCEC917721F63BD38B4796"
+# Google Cloud CLI: the key files named in https://docs.cloud.google.com/sdk/docs/install-sdk (el9:
+# https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg, el10: .../rpm-package-key-v10.gpg). Google publishes no
+# fingerprints for them; these were read from those files over HTTPS.
+repos_dnf_gcloud_gpg_fingerprints:
+  el9: ["3749E1BA95A86CE054546ED2F09C394C3E1BA8D5"]
+  el10: ["C5F744A098136F40C370E8493156C631B64936F9"]
+# Mullvad: https://repository.mullvad.net/rpm/mullvad-keyring.asc, the code signing key listed at
+# https://mullvad.net/en/help/verifying-signatures.
+repos_dnf_mullvad_gpg_fingerprints:
+  - "A1198702FC3E0A09A9AE5B75D5A1D4F266DE8DDF"
+
 # RPM Fusion GPG key fingerprints — pinned to detect MITM on initial key fetch.
 # Primary fingerprints of the upstream 2020 certificates published at
 # https://download1.rpmfusion.org/{free,nonfree}/fedora/RPM-GPG-KEY-rpmfusion-{free,nonfree}-fedora-2020

@@ -32,7 +32,8 @@ TEST_TIMEOUT = max(120, int(os.environ.get('LAPTOP_SETUP_TEST_TIMEOUT', '0')))
 REPOS_DNF = ROOT / 'roles/repos_dnf'
 STANDALONE = ROOT / 'roles/packages/tasks/install_standalone_binaries.yml'
 KEY_DIR = '/etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-'  # the fixed key files: redhat-internal, tailscale
-REDHAT_REPO_FILE = '/etc/yum.repos.d/redhat-internal.repo'
+REPOS_DIR = '/etc/yum.repos.d/'
+CHROME_DEFAULTS = '/etc/default/google-chrome'
 STUBBED = ('ansible.builtin.yum_repository', 'ansible.builtin.dnf', 'community.general.dnf_versionlock',
            'ansible.builtin.package_facts')
 
@@ -47,9 +48,24 @@ cp "$TEST_SERVED_KEY" "$out"
     'rpm': """#!/bin/sh
 case " $* " in *" --dbpath "*) exec @RPM@ "$@" ;; esac
 case "$1" in
-  --import) echo "$2" >> "$TEST_LOG_DIR/rpm-import"; exit 0 ;;
+  --import)
+    echo "$2" >> "$TEST_LOG_DIR/rpm-import"
+    cp "$2" "$TEST_LOG_DIR/imported-$(wc -l < "$TEST_LOG_DIR/rpm-import")"
+    exit 0 ;;
+  --version) echo "RPM version ${TEST_RPM_VERSION:-6.0.2}"; exit 0 ;;
+  -e) echo "$2" >> "$TEST_LOG_DIR/rpm-erase"; exit 0 ;;
 esac
-exit 1  # rpm -q: nothing installed, no gpg-pubkey imported
+# TEST_IMPORTED: the keyring's gpg-pubkey versions (rpm 6: full fingerprints, older rpm: 8-hex key IDs)
+case " $* " in *" gpg-pubkey "*) if [ -n "${TEST_IMPORTED:-}" ]; then
+  for v in $TEST_IMPORTED; do case "$*" in *RELEASE*) echo "$v-5f000000" ;; *) echo "$v" ;; esac; done; exit 0
+fi ;; esac
+case " $* " in *" google-cloud-cli "*) printf '600.0.0'; exit 0 ;; esac  # installed above the version floor
+exit 1  # rpm -q: nothing else installed, no gpg-pubkey imported
+""",
+    # minimal images have no cmp (diffutils): the key check must not depend on it
+    'cmp': """#!/bin/sh
+echo "cmp: command not found" >&2
+exit 127
 """,
     'dnf': """#!/bin/sh
 [ "$1 $2" = "versionlock list" ] && printf '%s\\n' "${TEST_VERSIONLOCK:-}"
@@ -74,12 +90,14 @@ def tasks_named(path, *names):
 
 
 class Harness(unittest.TestCase):
+    LINUX_ONLY = True  # the dnf tasks and the key check (rpm in a scratch rpmdb); a class that needs neither clears it
+
     @classmethod
     def setUpClass(cls):
-        if platform.system() == 'Darwin':
+        if cls.LINUX_ONLY and platform.system() == 'Darwin':
             raise unittest.SkipTest('repos_dnf and the dnf acli install are Linux-only')
-        if not GPG or not RPM:
-            raise unittest.SkipTest('needs gpg and rpm (the key check imports into a scratch rpmdb)')
+        if not GPG or (cls.LINUX_ONLY and not RPM):
+            raise unittest.SkipTest('needs gpg' + (' and rpm (the key check imports into a scratch rpmdb)' if cls.LINUX_ONLY else ''))
         cls.tmp = Path(tempfile.mkdtemp(prefix='test-repos-dnf-'))
         cls.addClassCleanup(shutil.rmtree, cls.tmp, ignore_errors=True)
         cls.gnupg = cls.tmp / 'gnupg'
@@ -103,17 +121,24 @@ class Harness(unittest.TestCase):
         cls.key['A+Bsecret'].write_text(cls.key['A'].read_text() + secret)
         cls.key['A.bin'] = cls.tmp / 'A.bin'
         cls.key['A.bin'].write_bytes(gpg(cls.gnupg, '--export', cls.fpr['A']))
+        # A with a new signing subkey (a rotation under the same primary key, as Google does)
+        gpg(cls.gnupg, '--pinentry-mode', 'loopback', '--passphrase', '', '--quick-add-key', cls.fpr['A'], 'ed25519', 'sign')
+        cls.key['A-rotated'] = cls.tmp / 'A-rotated.asc'
+        cls.key['A-rotated'].write_bytes(gpg(cls.gnupg, '--armor', '--export', cls.fpr['A']))
         cls.shims = cls.tmp / 'bin'
         cls.shims.mkdir()
         for name, body in SHIMS.items():
-            (cls.shims / name).write_text(body.replace('@RPM@', RPM).replace('@GPG@', GPG))
+            (cls.shims / name).write_text(body.replace('@RPM@', RPM or 'false').replace('@GPG@', GPG))
             (cls.shims / name).chmod(0o755)
 
     def setUp(self):
         self.run_dir = Path(tempfile.mkdtemp(dir=self.tmp))
         self.log = self.run_dir / 'modules.jsonl'
         self.key_dest = self.run_dir / 'key-redhat-internal'
-        self.redhat_repo_file = self.run_dir / 'redhat-internal.repo'
+        self.repos_dir = self.run_dir / 'repos.d'
+        self.repos_dir.mkdir()
+        self.redhat_repo_file = self.repos_dir / 'redhat-internal.repo'
+        self.chrome_defaults = self.run_dir / 'default-google-chrome'
 
     def stub(self, node, overrides):
         """Swap package-manager modules for a log line, drop become, point the get_url download at the fixture."""
@@ -121,6 +146,9 @@ class Harness(unittest.TestCase):
             return [self.stub(item, overrides) for item in node]
         task = dict(node)
         task.pop('become', None)
+        for module in ('ansible.builtin.lineinfile', 'ansible.builtin.copy', 'ansible.builtin.file'):
+            if isinstance(task.get(module), dict):  # not root here: files stay the test user's
+                task[module] = {k: v for k, v in task[module].items() if k not in ('owner', 'group')}
         for key in ('block', 'rescue', 'always'):
             if key in task:
                 task[key] = self.stub(task[key], overrides)
@@ -149,7 +177,7 @@ class Harness(unittest.TestCase):
         # package_facts is stubbed: the cleanup tasks read an empty package list instead
         text = yaml.safe_dump(self.stub(tasks, overrides or {}), allow_unicode=True, width=1000)
         text = text.replace('ansible_facts.packages', '_test_packages').replace(KEY_DIR, f'{self.run_dir}/key-')
-        text = text.replace(REDHAT_REPO_FILE, str(self.redhat_repo_file))
+        text = text.replace(REPOS_DIR, f'{self.repos_dir}/').replace(CHROME_DEFAULTS, str(self.chrome_defaults))
         (role_dir / 'tasks/main.yml').write_text(text)
         (role_dir / 'defaults/main.yml').write_text(yaml.safe_dump(
             dict({'_test_packages': {}, 'common_project_root': str(ROOT)}, **defaults), width=1000))
@@ -186,6 +214,14 @@ class Harness(unittest.TestCase):
     def calls(self, module=None):
         lines = self.log.read_text().splitlines() if self.log.exists() else []
         return [call['args'] for call in map(json.loads, lines) if module is None or call['module'] == module]
+
+    def imported_keys(self):
+        """The bytes of each key file handed to the system rpm --import, in order."""
+        return [(self.run_dir / f'imported-{n}').read_bytes() for n in range(1, len(self.imports()) + 1)]
+
+    def erased(self):
+        path = self.run_dir / 'rpm-erase'
+        return path.read_text().splitlines() if path.exists() else []
 
     def imports(self):
         path = self.run_dir / 'rpm-import'
@@ -250,7 +286,7 @@ class RedHatInternalRepoTests(Harness):
                                                            'repos_dnf_redhat_gpg_fingerprint': self.fpr['A']})
         self.assertEqual(result.returncode, 0, result.output)
         self.assertFalse(marker.exists(), 'a config.yml value ran as a shell command')
-        self.assertEqual(self.imports(), [str(self.key_dest)])
+        self.assertEqual(self.imported_keys(), [self.key_dest.read_bytes()])
         [repo] = self.calls('ansible.builtin.yum_repository')
         self.assertEqual(repo['gpgkey'], f'file://{self.key_dest}')
 
@@ -291,7 +327,7 @@ class RedHatInternalRepoTests(Harness):
     def test_pinned_key_gives_a_signed_repo_limited_to_named_packages(self):
         result = self.redhat([self.fpr['A']], 'A', config={'repos_dnf_redhat_gpg_fingerprint': self.fpr['A']})
         self.assertEqual(result.returncode, 0, result.output)
-        self.assertEqual(self.imports(), [str(self.key_dest)])
+        self.assertEqual(self.imported_keys(), [self.key_dest.read_bytes()])
         self.assertEqual(self.key_dest.read_bytes(), self.key['A'].read_bytes())
         [repo] = self.calls('ansible.builtin.yum_repository')
         self.assertIs(repo['gpgcheck'], True)
@@ -331,11 +367,49 @@ class PublicRepoTests(Harness):
     BASE = {'is_fedora': True, 'csb_detected': False, 'csb_rhel': False, 'repo_tailscale': True,
             'repo_rpmfusion_free': True}
 
-    def run_block(self, name, served, config):
+    def run_block(self, name, served, config, env=None):
         defaults = dict(self.BASE, repos_dnf_tailscale_gpg_fingerprint=self.fpr['A'],
                         repos_dnf_rpmfusion_gpg_fingerprint=self.fpr['A'])
         return self.play('repos_dnf', tasks_named(REPOS_DNF / 'tasks/main.yml', name), defaults, config=config,
-                         served_key=self.key[served], facts=True)
+                         served_key=self.key[served] if served else self.run_dir / 'offline', facts=True, env=env)
+
+    def test_rotated_subkey_in_a_refetched_key_is_reimported(self):
+        """The key file is fetched every run: a new subkey under the pinned primary key reaches the keyring.
+
+        rpm 6 merges it on import; older rpm keeps the installed copy, so that copy (exactly the pinned primary) is
+        removed first."""
+        short = self.fpr['A'][-8:].lower()
+        for version, installed, erased in [('6.0.2', self.fpr['A'].lower(), []),
+                                           ('4.19.1', f'{short} deadbeef', [f'gpg-pubkey-{short}-5f000000']),
+                                           ('4.16.1', f'deadbeef {short}', [f'gpg-pubkey-{short}-5f000000'])]:
+            with self.subTest(rpm=version):
+                self.setUp()
+                key_file = self.run_dir / 'key-tailscale'
+                key_file.write_bytes(self.key['A'].read_bytes())
+                result = self.run_block('Add Tailscale repo', 'A-rotated', {},
+                                        env={'TEST_IMPORTED': installed, 'TEST_RPM_VERSION': version})
+                self.assertEqual(result.returncode, 0, result.output)
+                self.assertEqual(self.erased(), erased)
+                self.assertEqual(self.imported_keys(), [self.key['A-rotated'].read_bytes()])
+                self.assertEqual(key_file.read_bytes(), self.key['A-rotated'].read_bytes())
+
+    def test_unchanged_key_is_not_reimported_without_cmp(self):
+        key_file = self.run_dir / 'key-tailscale'
+        key_file.write_bytes(self.key['A'].read_bytes())
+        result = self.run_block('Add Tailscale repo', 'A', {}, env={'TEST_IMPORTED': self.fpr['A'].lower()})
+        self.assertEqual(result.returncode, 0, result.output)
+        self.assertEqual(self.imports(), [])
+        self.assertEqual(self.erased(), [])
+
+    def test_offline_rerun_keeps_the_checked_key(self):
+        key_file = self.run_dir / 'key-tailscale'
+        key_file.write_bytes(self.key['A'].read_bytes())
+        result = self.run_block('Add Tailscale repo', None, {}, env={'TEST_IMPORTED': self.fpr['A'].lower()})
+        self.assertEqual(result.returncode, 0, result.output)
+        self.assertEqual(key_file.read_bytes(), self.key['A'].read_bytes())
+        self.assertEqual(self.imports(), [])
+        [repo] = self.calls('ansible.builtin.yum_repository')
+        self.assertEqual(repo['gpgkey'], f'file://{key_file}')
 
     def test_tailscale_path_from_config_cannot_add_a_second_url(self):
         result = self.run_block('Add Tailscale repo', 'A', {'_ts_path': 'fedora/repo.gpg?,https://evil.example/x'})
@@ -343,6 +417,21 @@ class PublicRepoTests(Harness):
         [repo] = self.calls('ansible.builtin.yum_repository')
         self.assertEqual(repo['baseurl'], 'https://pkgs.tailscale.com/stable/fedora/$basearch')
         self.assertEqual(repo['gpgkey'], f'file://{self.run_dir}/key-tailscale')
+
+    def test_tailscale_repo_file_without_the_pinned_shape_is_removed_before_an_abort(self):
+        repo_file = self.repos_dir / 'tailscale-stable.repo'
+        repo_file.write_text('[tailscale-stable]\nbaseurl = https://pkgs.tailscale.com/stable/fedora/$basearch\ngpgcheck = 1\n'
+                             'gpgkey = https://pkgs.tailscale.com/stable/fedora/repo.gpg\n')
+        result = self.run_block('Add Tailscale repo', 'B', {})
+        self.assertEqual(result.returncode, 2, result.output)
+        self.assertEqual(self.calls('ansible.builtin.yum_repository'), [{'name': 'tailscale-stable', 'state': 'absent'}])
+        self.setUp()  # the shape this role writes is kept
+        (self.repos_dir / 'tailscale-stable.repo').write_text(
+            f'[tailscale-stable]\ngpgcheck = 1\ngpgkey = file://{self.run_dir}/key-tailscale\nincludepkgs = tailscale\n')
+        result = self.run_block('Add Tailscale repo', 'A', {})
+        self.assertEqual(result.returncode, 0, result.output)
+        [repo] = self.calls('ansible.builtin.yum_repository')
+        self.assertEqual(repo['includepkgs'], ['tailscale'])
 
     def test_tailscale_pin_override_from_config_refused(self):
         result = self.run_block('Add Tailscale repo', 'B', {'repos_dnf_tailscale_gpg_fingerprint': self.fpr['B']})
@@ -358,10 +447,137 @@ class PublicRepoTests(Harness):
         result = self.run_block('Add Tailscale repo', 'A', {})
         self.assertEqual(result.returncode, 0, result.output)
         key_file = self.run_dir / 'key-tailscale'
-        self.assertEqual(self.imports(), [str(key_file)])
+        self.assertEqual(self.imported_keys(), [key_file.read_bytes()])
         self.assertEqual(key_file.read_bytes(), self.key['A'].read_bytes())
         [repo] = self.calls('ansible.builtin.yum_repository')
         self.assertEqual(repo['gpgkey'], f'file://{key_file}')
+
+
+class VendorRepoKeyTests(Harness):
+    """gh-cli, google-chrome, google-cloud-cli and mullvad: pinned key, checked bytes in a local file, includepkgs."""
+    REPOS = {
+        # block name: (repo file name, pin variable, enabling defaults, expected includepkgs)
+        'Add GitHub CLI repo': ('gh-cli', 'repos_dnf_gh_cli_gpg_fingerprints',
+                                {'repo_gh_cli': True, 'is_fedora': False}, ['gh']),
+        'Add Google Chrome repo': ('google-chrome', 'repos_dnf_google_chrome_gpg_fingerprints',
+                                   {'repo_google_chrome': True}, ['google-chrome-*']),
+        'Add Google Cloud SDK repo': ('google-cloud-cli', 'repos_dnf_gcloud_gpg_fingerprints',
+                                      {'repo_google_cloud_sdk': True}, ['google-cloud-cli*']),
+        'Add Mullvad VPN repo': ('mullvad', 'repos_dnf_mullvad_gpg_fingerprints',
+                                 {'repo_mullvad': True, 'profile': 'personal'}, ['mullvad-vpn']),
+    }
+
+    def pins(self, var, fpr):
+        return {'el9': [fpr], 'el10': [fpr]} if var == 'repos_dnf_gcloud_gpg_fingerprints' else [fpr]
+
+    def run_repo(self, block, served, config=None):
+        name, var, enable, _ = self.REPOS[block]
+        defaults = dict({'is_fedora': True, 'csb_detected': False, 'csb_rhel': False, 'profile': 'work',
+                         'repos_dnf_google_chrome_repo': 'https://dl.google.com/linux/chrome/rpm/stable/x86_64',
+                         'repos_dnf_gcloud_min_version': '500.0.0', var: self.pins(var, self.fpr['A'])}, **enable)
+        return self.play('repos_dnf', tasks_named(REPOS_DNF / 'tasks/main.yml', block), defaults, config=config or {},
+                         served_key=self.key[served], facts=True)
+
+    def test_repo_trusts_only_the_checked_key_file_and_its_vendor_packages(self):
+        if platform.machine() != 'x86_64':
+            self.skipTest('the Chrome and Cloud SDK repos are x86_64 only')
+        for block, (name, _, _, includepkgs) in self.REPOS.items():
+            with self.subTest(repo=name):
+                self.setUp()
+                result = self.run_repo(block, 'A')
+                self.assertEqual(result.returncode, 0, result.output)
+                key_file = self.run_dir / f'key-{name}'
+                self.assertEqual(self.imported_keys(), [key_file.read_bytes()])
+                self.assertEqual(key_file.read_bytes(), self.key['A'].read_bytes())
+                [repo] = self.calls('ansible.builtin.yum_repository')
+                self.assertEqual(repo['gpgkey'], f'file://{key_file}')
+                self.assertEqual(repo['includepkgs'], includepkgs)
+                self.assertIs(repo['gpgcheck'], True)
+
+    def test_chrome_package_scripts_cannot_rewrite_the_repo_file(self):
+        """Chrome's postinst writes repo_add_once="true" only when the defaults file is missing, then rewrites the repo."""
+        if platform.machine() != 'x86_64':
+            self.skipTest('the Chrome repo is x86_64 only')
+        for existing in (None, 'repo_add_once="true"\ninstall_device_trust_key_management_command=true\n'):
+            with self.subTest(existing=existing):
+                self.setUp()
+                if existing:
+                    self.chrome_defaults.write_text(existing)
+                result = self.run_repo('Add Google Chrome repo', 'A')
+                self.assertEqual(result.returncode, 0, result.output)
+                text = self.chrome_defaults.read_text()
+                self.assertIn('repo_add_once="false"', text.splitlines())
+                self.assertNotIn('repo_add_once="true"', text)
+                if existing:
+                    self.assertIn('install_device_trust_key_management_command=true', text)
+                # the postinst logic of google-chrome-stable (DEFAULTS_FILE handling), run against the result
+                repo = self.run_dir / 'google-chrome.repo'
+                repo.write_text('gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-google-chrome\n')
+                postinst = ('DEFAULTS_FILE="$1"; [ -e "$DEFAULTS_FILE" ] || echo \'repo_add_once="true"\' > "$DEFAULTS_FILE"; '
+                            '. "$DEFAULTS_FILE"; if [ "$repo_add_once" = "true" ]; then '
+                            'echo "gpgkey=https://dl.google.com/linux/linux_signing_key.pub" > "$2"; fi')
+                subprocess.run(['sh', '-c', postinst, 'postinst', str(self.chrome_defaults), str(repo)], check=True)
+                self.assertNotIn('https://', repo.read_text())
+
+    def test_repo_file_without_the_pinned_shape_is_removed_before_an_abort(self):
+        """An older repo file (https gpgkey, no includepkgs) goes even when the unpinned key then stops the run."""
+        if platform.machine() != 'x86_64':
+            self.skipTest('the Chrome and Cloud SDK repos are x86_64 only')
+        for block, (name, _, _, _) in self.REPOS.items():
+            with self.subTest(repo=name):
+                self.setUp()
+                (self.repos_dir / f'{name}.repo').write_text(
+                    f'[{name}]\nbaseurl = https://example.invalid/\ngpgcheck = 1\ngpgkey = https://example.invalid/key.asc\n')
+                result = self.run_repo(block, 'B')
+                self.assertEqual(result.returncode, 2, result.output)
+                self.assertEqual(self.calls('ansible.builtin.yum_repository'), [{'name': name, 'state': 'absent'}])
+                self.setUp()
+                (self.repos_dir / f'{name}.repo').write_text(
+                    f'[{name}]\ngpgcheck = 1\ngpgkey = file://{self.run_dir}/key-{name}\nincludepkgs = x\n')
+                result = self.run_repo(block, 'A')
+                self.assertEqual(result.returncode, 0, result.output)
+                self.assertNotIn({'name': name, 'state': 'absent'}, self.calls('ansible.builtin.yum_repository'))
+
+    def test_chrome_repo_url_must_be_plain_https(self):
+        if platform.machine() != 'x86_64':
+            self.skipTest('the Chrome repo is x86_64 only')
+        for url in ('http://dl.google.com/linux/chrome/rpm/stable/x86_64', 'ftp://mirror.example/chrome',
+                    'https://dl.google.com/x,https://evil.example/y'):
+            with self.subTest(url=url):
+                self.setUp()
+                self.assert_refused(self.run_repo('Add Google Chrome repo', 'A', config={'repos_dnf_google_chrome_repo': url}),
+                                    'plain https:// URL')
+
+    def test_unpinned_key_refused(self):
+        if platform.machine() != 'x86_64':
+            self.skipTest('the Chrome and Cloud SDK repos are x86_64 only')
+        for block, (name, _, _, _) in self.REPOS.items():
+            with self.subTest(repo=name):
+                self.setUp()
+                self.assert_refused(self.run_repo(block, 'B'), f'[{self.fpr["B"]}]')
+
+    def test_pin_override_from_config_refused(self):
+        if platform.machine() != 'x86_64':
+            self.skipTest('the Chrome and Cloud SDK repos are x86_64 only')
+        for block, (name, var, _, _) in self.REPOS.items():
+            with self.subTest(repo=name):
+                self.setUp()
+                self.assert_refused(self.run_repo(block, 'B', config={var: self.pins(var, self.fpr['B'])}),
+                                    'must not be overridden')
+
+
+class MacAcliTests(Harness):
+    """The macOS acli install: no dnf or rpm involved, so this runs on the Mac too (rpm is stubbed)."""
+    LINUX_ONLY = False
+
+    def test_macos_acli_path_from_config_refused(self):
+        # _acli_have keeps the old code away from the download, so nothing is fetched or written either way
+        config = {'_acli_bin': str(self.run_dir / 'evil'), '_acli_have': '999'}
+        defaults = {'packages_install_binaries': True, 'is_macos': True, 'packages_acli_version': '1.3.40-stable'}
+        result = self.play('packages', tasks_named(STANDALONE, 'Install acli (Atlassian CLI) from its pinned tarball (macOS)'),
+                           defaults, config=config, overrides={'url': f'file://{self.run_dir}/absent'}, facts=True)
+        self.assertEqual(result.returncode, 2, result.output)
+        self.assertIn('_acli_bin and _acli_arch are internal', result.output)
 
 
 class AcliTests(Harness):
@@ -398,15 +614,6 @@ class AcliTests(Harness):
         removed = {repo['name'] for repo in self.calls('ansible.builtin.yum_repository') if repo.get('state') == 'absent'}
         self.assertNotIn('fedora', removed)
         self.assertIn('tailscale-stable', removed)
-
-    def test_macos_acli_path_from_config_refused(self):
-        # _acli_have keeps the old code away from the download, so nothing is fetched or written either way
-        config = {'_acli_bin': str(self.run_dir / 'evil'), '_acli_have': '999'}
-        defaults = {'packages_install_binaries': True, 'is_macos': True, 'packages_acli_version': '1.3.40-stable'}
-        result = self.play('packages', tasks_named(STANDALONE, 'Install acli (Atlassian CLI) from its pinned tarball (macOS)'),
-                           defaults, config=config, overrides={'url': f'file://{self.run_dir}/absent'}, facts=True)
-        self.assertEqual(result.returncode, 2, result.output)
-        self.assertIn('_acli_bin and _acli_arch are internal', result.output)
 
     def acli(self, served, pinned):
         if platform.machine() != 'x86_64':
