@@ -17,6 +17,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 ANSIBLE = ROOT / '.venv/bin/ansible-playbook'
+SKETCHYBAR_BASH = '/bin/bash'  # the SketchyBar scripts' shebang: bash 3.2 on macOS, so these tests run what the bar runs
 if not ANSIBLE.exists():
     ANSIBLE = Path(shutil.which('ansible-playbook'))
 VARS_FILES = ['default.config.yml', 'group_vars/all/vars.yml'] + [
@@ -485,7 +486,7 @@ class RenderedConfigTests(unittest.TestCase):
         (stub_dir / 'sketchybar').chmod(0o755)
         script = stub_dir / name
         script.write_text(self.read(name))
-        result = subprocess.run(['bash', str(script)], capture_output=True, text=True, timeout=30,
+        result = subprocess.run([SKETCHYBAR_BASH, str(script)], capture_output=True, text=True, timeout=30,
                                 env={**os.environ, 'PATH': f'{stub_dir}:/usr/bin:/bin', 'HOME': str(stub_dir),
                                      'SKETCHYBAR': str(stub_dir / 'sketchybar'), **(env or {})})
         if stderr:
@@ -659,7 +660,7 @@ class RenderedConfigTests(unittest.TestCase):
             (stub_dir / 'sketchybar').chmod(0o755)
             script = stub_dir / 'status.sh'
             script.write_text(self.read('sketchybar_status'))
-            process = subprocess.Popen(['bash', str(script)], start_new_session=True, stderr=subprocess.DEVNULL,
+            process = subprocess.Popen([SKETCHYBAR_BASH, str(script)], start_new_session=True, stderr=subprocess.DEVNULL,
                                        env=dict(os.environ, PATH=f'{stub_dir}:/usr/bin:/bin', HOME=name,
                                                 SKETCHYBAR=str(stub_dir / 'sketchybar')))
             deadline = time.monotonic() + 10
