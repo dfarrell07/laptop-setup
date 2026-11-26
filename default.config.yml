@@ -328,7 +328,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   system_pass_max_days: 365             (group_vars/all/vars.yml) — login.defs PASS_MAX_DAYS; max password age in days
 #   system_pass_min_days: 1               (group_vars/all/vars.yml) — login.defs PASS_MIN_DAYS; minimum days between changes
 #   system_pass_warn_age: 7               (group_vars/all/vars.yml) — login.defs PASS_WARN_AGE; days warning before expiry
-#   system_umask: "027"                   (group_vars/all/vars.yml) — login.defs UMASK; set 022 to allow group reads
+#   system_umask: "027"                   (group_vars/all/vars.yml) — login.defs UMASK; set "022" to allow group
+#                                           reads (quoted: a bare 022 is the octal number 18, which pre-flight refuses)
 #   system_inactive_days: 30              (group_vars/all/vars.yml) — days inactive before account lock (/etc/default/useradd INACTIVE
 #                                           and chage -I for the existing user); CIS 5.5.1.5
 #   system_gid0_allowed_accounts: [root, sync, shutdown, halt, operator]  (roles/system/defaults) — accounts exempt from
