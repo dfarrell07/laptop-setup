@@ -1401,6 +1401,33 @@ class ConfigReaderTests(unittest.TestCase):
                                                                    if key in keys], {key: default}),
                                              f'{name}: {key}: {default!r}')
 
+    def test_yes_no_options_read_as_the_templates_write_them(self):
+        """98-llmnr.conf and the sshd drop-in write a boolean (an unquoted yes/no/on/off in config.yml) as yes or no,
+        and LLMNR/MulticastDNS in lowercase; smoke must expect the same words, and the role default when absent."""
+        keys = {'system_resolved_llmnr': ('_llmnr_exp', ['yes', 'no', 'resolve']),
+                'system_resolved_multicast_dns': ('_mdns_exp', ['yes', 'no', 'resolve']),
+                'system_ssh_allow_agent_forwarding': ('_agent_fwd', ['yes', 'no'])}
+        words = {'true': 'yes', 'yes': 'yes', 'on': 'yes', '1': 'yes', 'false': 'no', 'no': 'no', 'off': 'no', '0': 'no'}
+
+        def expected(value, allowed):
+            if value is None:
+                return 'no'  # absent: the role default
+            if isinstance(value, bool):
+                return 'yes' if value else 'no'
+            word = words.get(str(value).lower(), str(value).lower())
+            return word if word in allowed else 'no'
+
+        show = ''.join(f'printf "%s\\n" "${var}"; ' for var, _ in keys.values())
+        with tempfile.TemporaryDirectory() as directory:
+            for spelling in (None, 'yes', 'no', 'True', 'FALSE', 'On', 'off', '1', '0', '"YES"', "'No'", "'on'",
+                             'resolve', "'Resolve'", 'RESOLVE  # c', "!unsafe 'resolve'", 'maybe', '"True "'):
+                text = None if spelling is None else ''.join(f'{key}: {spelling}\n' for key in keys)
+                data = yaml.load(text or '', Loader=self.Loader) or {}
+                got = self.run_block(directory, text, self.BLOCK + show).split('\n')
+                for i, (key, (var, allowed)) in enumerate(keys.items()):
+                    with self.subTest(spelling=spelling, key=key):
+                        self.assertEqual(got[i], expected(data.get(key), allowed))
+
 
 if __name__ == '__main__':
     unittest.main()
