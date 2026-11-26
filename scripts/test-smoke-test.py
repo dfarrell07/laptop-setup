@@ -383,7 +383,7 @@ class SmokeTests(unittest.TestCase):
 
     def test_cross_session_inbound_check_fails_for_any_managed_dir_without_accept(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
-        parse = source[source.index('_claude_extra_dirs=$(awk'):source.index('unset _cfg\n')]
+        parse = source[source.index('_cfg_read() { # mode key'):source.index('\nprofile="work"\n') + 1] + '_claude_extra_dirs=$(_cfg_list claude_extra_config_dirs)\n'
         start = source.index('_csi_bad=()')
         end = source.index('unset _cd _csi_bad _csi_seen', start)
         with tempfile.TemporaryDirectory() as directory:
@@ -1218,6 +1218,189 @@ exit 0
             text = (ROOT / 'scripts' / name).read_text()
             for pattern in (r'\$\{[A-Za-z_][A-Za-z0-9_]*(,,|\^\^)\}', r'\bdeclare -A\b', r'\b(mapfile|readarray)\b'):
                 self.assertIsNone(re.search(pattern, text), f'{name}: bash 4 construct {pattern}')
+
+
+class ConfigReaderTests(unittest.TestCase):
+    """The config.yml readers at the top of smoke-test.sh (the cleaned copy, _cfg_value, _cfg_list and the on/off
+    toggles) read what Ansible reads: YAML, the last of a duplicated key, and Ansible's own `bool` filter."""
+
+    SOURCE = (ROOT / 'scripts/smoke-test.sh').read_text()
+    BLOCK = SOURCE[SOURCE.index('# Fresh checkouts have no machine-specific config'):
+                   SOURCE.index('unset _cfg_tmp\n') + len('unset _cfg_tmp\n')]
+    READERS = SOURCE[SOURCE.index('# Fresh checkouts have no machine-specific config'):
+                     SOURCE.index('\nprofile="work"\n') + 1]
+    BASH = '/bin/bash' if Path('/bin/bash').exists() else BASH  # macOS: bash 3.2
+    # grep -qiE '^key:...(true|yes|on|1)...' "$_cfg" ... && _var=value, the toggle readers
+    TOGGLE = re.compile(r"""grep -qiE '\^\(?([a-z0-9_|]+)\)?:\[\[:space:\]\]\*\["'"'"'\]\?\("""
+                        r"""((?:true\|yes\|on\|1)|(?:false\|no\|off(?:\|n)?\|0))\)[^\n]*?(?:\\\n\s*)?&& (_\w+)=(true|false)""")
+    # playbook defaults that are not a literal, and why the shell default is right
+    NON_LITERAL_DEFAULTS = {
+        'desktop_macos_remote_login': 'follows desktop_macos_always_on, which the shell starts from as well',
+    }
+
+    class Loader(yaml.SafeLoader):
+        """PyYAML plus the tags Ansible reads: !unsafe on scalars and lists, !vault."""
+
+    Loader.add_constructor('!unsafe', lambda loader, node: loader.construct_sequence(node)
+                           if isinstance(node, yaml.SequenceNode) else loader.construct_scalar(node))
+    Loader.add_constructor('!vault', lambda loader, node: None)
+
+    @staticmethod
+    def ansible_bool(value):
+        """Ansible's own `bool` filter, without its deprecation warning for values outside its set."""
+        from unittest import mock
+        from ansible.plugins.filter import core
+        with mock.patch.object(core.display, 'deprecated'):
+            return core.to_bool(value)
+
+    def toggles(self):
+        """{var: [(keys, fires_on_true, value)]} for each toggle reader; every grep -qiE on "$_cfg" must parse."""
+        found = self.TOGGLE.findall(self.SOURCE)
+        self.assertEqual(len(found), len(re.findall(r'grep -qiE .*"\$_cfg"', self.SOURCE)))
+        result = {}
+        for keys, spellings, var, value in found:
+            result.setdefault(var, []).append((keys.split('|'), spellings.startswith('true'), value))
+        return result
+
+    def expected(self, lines, data):
+        """The shell value Ansible's reading of data implies: a reader fires when `bool` of any of its keys is on its
+        side; when none fires the variable keeps its start value, the opposite of what the reader sets."""
+        for keys, on_true, value in lines:
+            if any(key in data and self.ansible_bool(data[key]) == on_true for key in keys):
+                return value
+        return 'false' if lines[0][2] == 'true' else 'true'
+
+    def run_block(self, directory, text, script, awk=None):
+        d = Path(directory)
+        (d / 'scripts').mkdir(exist_ok=True)
+        (d / 'tmp').mkdir(exist_ok=True)
+        if text is None:
+            (d / 'config.yml').unlink(missing_ok=True)
+        else:
+            (d / 'config.yml').write_bytes(text.encode())
+        path = os.environ['PATH'] if awk is None else f'{awk}:{os.environ["PATH"]}'
+        result = subprocess.run([self.BASH, '-euo', 'pipefail', '-c', f'PROFILE_OVERRIDE=; SCRIPT_DIR={d}/scripts\n'
+                                 + script], env=dict(os.environ, HOME=directory, TMPDIR=str(d / 'tmp'), PATH=path),
+                                capture_output=True, text=True)
+        self.assertEqual((result.returncode, result.stderr), (0, ''), text)
+        self.assertEqual(list((d / 'tmp').iterdir()), [])
+        return result.stdout
+
+    KEYS = ('profile', 'claude_default_config_dir', 'acli_site', 'system_kernel_lockdown', 'desktop_sway_trackpoint_id',
+            'claude_extra_config_dirs', 'drive_sync_accounts', 'rollout_enable')
+    CASES = [
+        '',
+        'profile: personal\nclaude_default_config_dir: ~/.claude\n',
+        'profile: "personal"  # me\n', "profile: !unsafe 'personal'\n",
+        'profile: personal\r\nacli_site: "x"\r\nclaude_extra_config_dirs: [/h/.claude-a, /h/.claude-b]\r\n',
+        '﻿profile: personal\nacli_site: x\n',
+        'profile_x: personal\nclaude_default_config_dir_old: /evil\n',
+        'outer:\n  profile: personal\n',
+        'desc: |\n  profile: personal\nacli_site: x\n',
+        "claude_default_config_dir: '/home/u/.claude x' # c\n",
+        'claude_default_config_dir: "/home/u/a #b"\n',
+        'claude_default_config_dir: /home/u/a#b # c\n',
+        "claude_default_config_dir: 'it''s'\n",
+        'claude_default_config_dir: "say \\"hi\\" \\\\ there"\n',
+        "claude_default_config_dir: '$(touch /tmp/pwn)`id`;x'\n",
+        'claude_default_config_dir: /a\nclaude_default_config_dir: /b\n',
+        'claude_default_config_dir: /a\nother: 1\nclaude_default_config_dir: /b\nclaude_extra_config_dirs:\n  - /x\n'
+        'claude_extra_config_dirs: [/y]\n',
+        'claude_default_config_dir: ~\nacli_site: null\nsystem_kernel_lockdown: ~\n',
+        "claude_default_config_dir: ''\nacli_site:\nsystem_kernel_lockdown: ''\n",
+        'system_kernel_lockdown: "confidentiality"  # c\n',
+        "desktop_sway_trackpoint_id: '2:10:TPPS/2_Elan_TrackPoint' # c\n",
+        'desktop_sway_trackpoint_id: "1:2:Name: with colon"\n',
+        'desktop_sway_trackpoint_id: 2:10:TPPS/2 Elan TrackPoint\n',
+        'claude_extra_config_dirs: ["/h/.claude-a", \'/h/.claude-b\'] # c\n',
+        'claude_extra_config_dirs: [/h/.claude-a,\n  /h/.claude-b]\n',
+        'claude_extra_config_dirs: [\n  /h/.claude-a,  # one\n  "/h/.claude, b",\n]\nother: [x]\n',
+        'claude_extra_config_dirs:\n  [/h/.claude-a]\nother:\n  - x\n',
+        'claude_extra_config_dirs:\n  - /h/.claude-a  # c\n  # - /h/.claude-x\n  - "/h/.claude-b"\nother: 1\n',
+        'claude_extra_config_dirs:\n- /h/.claude-a\nnext_key:\n  - /h/.claude-z\n',
+        'claude_extra_config_dirs:\n  - /h/.claude-a\n\n  - /h/.claude-b\n',
+        'claude_extra_config_dirs:\n  - /h/.claude-a\nfoo:\n  bar:\n  - /h/.claude-z\n',
+        'claude_extra_config_dirs: []\ndrive_sync_accounts:\n',
+        'claude_extra_config_dirs: ["$(id)", "a b", "*"]\n',
+        "claude_extra_config_dirs: !unsafe ['/h/.claude-a', /h/.claude-b]\n",
+        'drive_sync_accounts: !unsafe  # tagged\n  - me\n  - work\n',
+        'drive_sync_accounts:\n  - me\n  - work # c\ndrive_sync_host: h1\n',
+        'drive_sync_accounts: [me,\n   work]\r\nprofile: personal\r\n',
+        'drive_sync_accounts:\n\n# accounts\n  - me\n',
+        'rollout_enable: all\n', "rollout_enable: 'all'  # every chunk\n",
+        'rollout_enable: [packages, "chrome"]\n', 'rollout_enable:\n  - packages\n  - desktop\nother: [chrome]\n',
+    ]
+
+    def test_value_and_list_readers_match_yaml(self):
+        probe = ('for k in ' + ' '.join(self.KEYS) + '; do printf "%s\\n" "$(_cfg_value "$k")";'
+                 ' printf "%s\\037\\n" "$(_cfg_list "$k" | tr "\\n" "\\036")"; done')
+        with tempfile.TemporaryDirectory() as directory:
+            awks = [None]
+            if shutil.which('gawk'):  # also under POSIX awk rules: macOS has BSD awk, without gawk extensions
+                posix = Path(directory) / 'posix'
+                posix.mkdir()
+                (posix / 'awk').write_text(f'#!/bin/sh\nexec {shutil.which("gawk")} --posix "$@"\n')
+                (posix / 'awk').chmod(0o755)
+                awks.append(posix)
+            for text in self.CASES:
+                data = yaml.load(text, Loader=self.Loader) or {}
+                for awk in awks:
+                    lines = self.run_block(directory, text, self.READERS + probe, awk).split('\n')
+                    for i, key in enumerate(self.KEYS):
+                        value, items = lines[2 * i:2 * i + 2]
+                        want = data.get(key)
+                        with self.subTest(config=text, key=key, awk=str(awk)):
+                            if want is None or isinstance(want, str):
+                                self.assertEqual(value, want or '')
+                            if want is None or isinstance(want, (str, list)):
+                                want = [want] if isinstance(want, str) else want or []
+                                self.assertEqual([i for i in items.rstrip('\037').split('\036') if i],
+                                                 [str(v) for v in want if v not in (None, '')])
+
+    def test_toggles_match_the_bool_filter(self):
+        toggles = self.toggles()
+        keys = sorted({key for lines in toggles.values() for keys, _, _ in lines for key in keys})
+        show = ''.join(f'printf "%s\\n" "${var}"; ' for var in toggles)
+        with tempfile.TemporaryDirectory() as directory:
+            for spelling in ('true', 'True', 'TRUE', 'yes', 'Yes', 'ON', 'on', '1', '"true"', "'yes'", '"On"', "'1'",
+                             'true  # c', 'false', 'False', 'NO', 'no', 'Off', '0', '"false"', "'no'", '"0"',
+                             "!unsafe 'off'", 'off # c'):
+                text = ''.join(f'{key}: {spelling}\n' for key in keys)
+                data = yaml.load(text, Loader=self.Loader)
+                other = 'off' if self.ansible_bool(data[keys[0]]) else 'on'
+                for config in (text, ''.join(f'{key}: {other}\n' for key in keys) + text):  # the last key wins
+                    got = self.run_block(directory, config, self.BLOCK + show).split('\n')
+                    for i, (var, lines) in enumerate(toggles.items()):
+                        with self.subTest(config=config, var=var):
+                            self.assertEqual(got[i], self.expected(lines, data))
+
+    def test_toggle_defaults_match_the_playbook(self):
+        """With no config.yml each toggle reads as the playbook's default would: default.config.yml, group_vars/all
+        and role defaults (every copy must agree), so an inverted shell default fails here."""
+        import glob
+        defined = {}
+        files = (sorted(glob.glob(str(ROOT / 'roles/*/defaults/main.yml'))) + [str(ROOT / 'default.config.yml')]
+                 + sorted(f for f in glob.glob(str(ROOT / 'group_vars/all/*.yml')) if not f.endswith('vault.yml')))
+        for name in files:
+            for key, value in (yaml.load(Path(name).read_text(), Loader=self.Loader) or {}).items():
+                defined.setdefault(key, []).append((Path(name).relative_to(ROOT), value))
+        toggles = self.toggles()
+        with tempfile.TemporaryDirectory() as directory:
+            got = self.run_block(directory, None, self.BLOCK + ''.join(f'printf "%s\\n" "${v}"; ' for v in toggles))
+        for (var, lines), value in zip(toggles.items(), got.split('\n')):
+            for keys, _, _ in lines:
+                for key in keys:
+                    with self.subTest(var=var, key=key):
+                        self.assertIn(key, defined, 'no role default, group_vars or default.config.yml value')
+                        if key in self.NON_LITERAL_DEFAULTS:  # must really be non-literal, or it belongs in the check
+                            self.assertTrue(all('{{' in str(v) for _, v in defined[key]))
+                            continue
+                        for name, default in defined[key]:
+                            self.assertNotIn('{{', str(default), f'{name}: list {key} in NON_LITERAL_DEFAULTS')
+                            self.assertEqual(value, self.expected([(keys, on, v) for keys, on, v in lines
+                                                                   if key in keys], {key: default}),
+                                             f'{name}: {key}: {default!r}')
+
 
 if __name__ == '__main__':
     unittest.main()

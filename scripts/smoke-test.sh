@@ -68,18 +68,95 @@ record() { # name status [detail]
 # Detect profile from config.yml so work-only checks are correctly gated.
 # 'profile' is an Ansible variable never exported to the shell; read it here.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# Fresh checkouts have no machine-specific config; use role defaults. The readers below get a copy without CR line
-# endings or a value's !unsafe tag (for Ansible such a value is a plain string), removed where _cfg is unset.
+# Fresh checkouts have no machine-specific config; use role defaults. The readers below get a copy without a UTF-8 BOM,
+# CR line endings or a value's !unsafe tag (for Ansible such a value is a plain string), and with only the last of a
+# duplicated top-level key (Ansible keeps the last), removed where _cfg is unset.
 _cfg=/dev/null _cfg_tmp=
 if [[ -f "$SCRIPT_DIR/../config.yml" ]]; then
   if _cfg_tmp=$(mktemp "${TMPDIR:-/tmp}/smoke-cfg.XXXXXX" 2>/dev/null); then
     trap 'rm -f "$_cfg_tmp"' EXIT
-    sed -E $'s/\r$//; s/^([A-Za-z0-9_]+:)[[:space:]]+!unsafe([[:space:]]+|$)/\\1 /' "$SCRIPT_DIR/../config.yml" >"$_cfg_tmp" 2>/dev/null
+    # A top-level key's block is its line and the lines up to the next key; only each key's last block is kept
+    LC_ALL=C awk -v bom=$'\357\273\277' '
+      NR == 1 && substr($0, 1, 3) == bom { $0 = substr($0, 4) }
+      { sub(/\r$/, "") }
+      match($0, /^[A-Za-z0-9_]+:/) && (length($0) == RLENGTH || substr($0, RLENGTH + 1, 1) ~ /[ \t]/) {
+        key = substr($0, 1, RLENGTH - 1); v = substr($0, RLENGTH + 1)
+        if (v ~ /^[ \t]+!unsafe$/) v = " "; else sub(/^[ \t]+!unsafe[ \t]+/, " ", v)
+        $0 = key ":" v; n++; last[key] = n; owner[n] = key }
+      { text[n + 0] = text[n + 0] $0 "\n" }
+      END { for (i = 0; i <= n; i++) if (i == 0 || last[owner[i]] == i) printf "%s", text[i] }' \
+      "$SCRIPT_DIR/../config.yml" >"$_cfg_tmp" 2>/dev/null
     _cfg=$_cfg_tmp
   else
     _cfg_tmp='' _cfg="$SCRIPT_DIR/../config.yml"  # no temporary file: the file as it is
   fi
 fi
+# Readers for config.yml values that are not on/off toggles, on top-level keys (the last of a duplicate key wins):
+#   _cfg_value KEY  the scalar, unquoted as YAML does ('' for null or absent; "#" inside quotes is kept)
+#   _cfg_list KEY   a flow ([a, b], also over several lines) or block (- a) list, one item per line
+# Values must be plain or quoted scalars or lists of them: anchors, aliases, block scalars (| >) and flow mappings are
+# not read. POSIX awk and bash 3.2 only (BSD awk on macOS; Molecule runs this script alone, with no PyYAML).
+_cfg_read() { # mode key
+  LC_ALL=C awk -v mode="$1" -v k="$2:" '
+    function ltrim(s) { sub(/^[ \t]+/, "", s); return s }
+    # The scalar at the start of s (after any tag); R gets the rest of s. A plain scalar ends at " #", and in a flow
+    # list (fl) at "," or "]". Quoted scalars take the escapes \" and \\ (double) or a doubled quote (single).
+    function scalar(s, fl,   q, c, i, out) {
+      s = ltrim(s); if (s ~ /^![^ \t]*[ \t]/) sub(/^![^ \t]*[ \t]+/, "", s)
+      q = substr(s, 1, 1); out = ""
+      if (q == "\"" || q == "\047") {
+        for (i = 2; i <= length(s); i++) {
+          c = substr(s, i, 1)
+          if (c == q && q == "\047" && substr(s, i + 1, 1) == q) { out = out q; i++; continue }
+          if (c == q) { R = substr(s, i + 1); return out }
+          if (c == "\\" && q == "\"") { i++; c = substr(s, i, 1) }
+          out = out c
+        }
+        R = ""; return out
+      }
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (c == "#" && (i == 1 || substr(s, i - 1, 1) ~ /[ \t]/)) break
+        if (fl && (c == "," || c == "]")) break
+        out = out c
+      }
+      R = substr(s, i); sub(/[ \t]+$/, "", out)
+      if (out ~ /^(~|null|Null|NULL)$/) out = ""
+      return out
+    }
+    function emit(s) { if (s != "") print s }
+    { L[NR] = $0 }
+    index($0, k) == 1 && (length($0) == length(k) || substr($0, length(k) + 1, 1) ~ /[ \t]/) { at = NR }
+    END {
+      if (!at) exit 1
+      s = substr(L[at], length(k) + 1)
+      if (mode == "value") { print scalar(s, 0); exit 0 }
+      i = at; s = ltrim(s); sub(/^![^ \t]*$/, "", s); sub(/^![^ \t]*[ \t]+/, "", s) # a tag (!unsafe) before a list
+      if (s == "" || s ~ /^#/) { # the list starts on a later line: "- item" lines or an indented flow list
+        for (i = at + 1; i <= NR; i++) { s = ltrim(L[i]); if (s != "" && s !~ /^#/) break }
+        if (i > NR) exit 0
+        if (s ~ /^-([ \t]|$)/) {
+          for (; i <= NR; i++) { s = ltrim(L[i]); if (s == "" || s ~ /^#/) continue
+            if (s !~ /^-([ \t]|$)/) break
+            emit(scalar(substr(s, 2), 0)) }
+          exit 0
+        }
+        if (L[i] !~ /^[ \t]/) exit 0 # the next key: null
+      }
+      if (s !~ /^\[/) { emit(scalar(s, 0)); exit 0 }
+      s = substr(s, 2)
+      while (1) {
+        s = ltrim(s)
+        if (s == "" || s ~ /^#/) { if (++i > NR) break; s = L[i]; continue }
+        c = substr(s, 1, 1)
+        if (c == "]") break
+        if (c == ",") { s = substr(s, 2); continue }
+        emit(scalar(s, 1)); s = (R == s) ? substr(s, 2) : R
+      }
+    }' "$_cfg" 2>/dev/null
+}
+_cfg_value() { _cfg_read value "$1" || true; }
+_cfg_list() { _cfg_read list "$1" || true; }
 profile="work"
 grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && profile="personal"
 [[ -z "$PROFILE_OVERRIDE" ]] || profile="$PROFILE_OVERRIDE"
@@ -160,12 +237,12 @@ if ! [[ "$_cfg_ssh_port" =~ ^[0-9]+$ ]]; then
 fi
 # Read system_kernel_lockdown: key-present=use value (may be empty to opt out); key-absent=role default (integrity)
 if grep -qE '^system_kernel_lockdown:' "$_cfg" 2>/dev/null; then
-  _lockdown_intended=$(awk -F': ' '/^system_kernel_lockdown:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
+  _lockdown_intended=$(_cfg_value system_kernel_lockdown)
 else
   _lockdown_intended="integrity"  # role default
 fi
 # Read desktop_sway_trackpoint_id if configured (for TrackPoint device validation)
-_trackpoint_id=$(awk -F': ' '/^desktop_sway_trackpoint_id:/{sub(/#.*$/, "", $2); gsub(/^[[:space:]]*["'"'"']|["'"'"'][[:space:]]*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
+_trackpoint_id=$(_cfg_value desktop_sway_trackpoint_id)
 _desktop_terminal=$(awk -F': ' '/^desktop_terminal:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
 [[ -n "$_desktop_terminal" ]] || _desktop_terminal="alacritty"  # role default on Linux
 _desktop_env=$(awk -F': ' '/^desktop_environment:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
@@ -196,30 +273,14 @@ if ! grep -q '^acli_site:' "$_cfg" 2>/dev/null; then
   if [[ "$profile" == "work" ]]; then _acli_site=redhat.atlassian.net; else _acli_site=""; fi
 fi
 # Personal agent homes for agent-cli-logins: config.yml overrides, defaults otherwise ("~" expanded there)
-_cfg_value() { awk -v k="$1" '$0 ~ "^" k ":" {sub(/^[^:]*:[[:space:]]*/, ""); sub(/[[:space:]]*#.*$/, "");
-  sub(/[[:space:]]+$/, ""); gsub(/^["\047]|["\047]$/, ""); print; exit}' "$_cfg" 2>/dev/null || true; }
 _claude_home=$(_cfg_value claude_default_config_dir)
 _claude_home2=$(_cfg_value claude_personal2_config_dir)
 _codex_personal=$(_cfg_value codex_personal_config_dir)
-# Whether config.yml's rollout_enable ('all' or absent, a flow list on one or several lines, or one "- name" per line)
-# enables a chunk.
+# Whether config.yml's rollout_enable ('all' or absent, or a list) enables a chunk.
 _chunk_enabled() {
-  [[ -f "$_cfg" ]] || return 0
-  [[ $(awk -v c="$1" '
-    function done(r) { print r; finished = 1; exit }
-    function strip(s) { sub(/[[:space:]]*#.*$/, "", s); return s }
-    function check(v) { gsub(/[]["\047[:space:]]/, "", v); if (v == "all") done("yes")
-      n = split(v, a, ","); for (i = 1; i <= n; i++) if (a[i] == c) done("yes"); done("no") }
-    flow { f = f "," strip($0); if (f ~ /\]/) check(f); next }
-    /^rollout_enable:/ { key = 1; v = $0; sub(/^[^:]*:[[:space:]]*/, "", v); v = strip(v)
-      if (v == "") { open = 1; next }
-      if (v ~ /^\[/ && v !~ /\]/) { flow = 1; f = v; next }
-      check(v) }
-    open && !list && /^[[:space:]]+\[/ { v = strip($0); if (v ~ /\]/) check(v); flow = 1; f = v; next }
-    open && /^[[:space:]]*-/ { list = 1; x = $0; sub(/^[[:space:]]*-[[:space:]]*/, "", x); x = strip(x)
-      gsub(/["\047[:space:]]/, "", x); if (x == c) done("yes"); next }
-    open && /^[^[:space:]#]/ { done("no") }
-    END { if (!finished) print (key ? "no" : "yes") }' "$_cfg" 2>/dev/null) != no ]]
+  grep -q '^rollout_enable:' "$_cfg" 2>/dev/null || return 0
+  case $'\n'"$(_cfg_list rollout_enable)"$'\n' in *$'\n'all$'\n'* | *$'\n'"$1"$'\n'*) return 0 ;; esac
+  return 1
 }
 _chrome_chunk_on=true
 _chunk_enabled chrome || _chrome_chunk_on=false  # Chrome checks (desktop role)
@@ -229,25 +290,18 @@ grep -q '^packages_tailscale_operator:' "$_cfg" 2>/dev/null && _ts_want=$(_cfg_v
 _claude_home2_off=false
 grep -qiE '^claude_personal2_instance_enabled:[[:space:]]*["'"'"']?(false|no|off|n|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null \
   && _claude_home2_off=true
-unset -f _cfg_value
 _user_updates_off=false
 grep -qiE '^packages_user_updates_enabled:[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _user_updates_off=true
-# claude_extra_config_dirs, a flow ([a, b]) or block (- a) list: one entry per line, comments, quotes and spaces trimmed
-_claude_extra_dirs=$(awk '
-  function trim(s) { sub(/[[:space:]]*#.*$/, "", s); gsub(/^[[:space:]"\047]+|[[:space:]"\047]+$/, "", s); return s }
-  /^claude_extra_config_dirs:/ { sub(/^[^:]*:/, ""); v = trim($0); block = (v == "")
-    if (!block) { gsub(/^\[|\]$/, "", v); n = split(v, parts, ","); for (i = 1; i <= n; i++) if (trim(parts[i]) != "") print trim(parts[i]) }
-    next }
-  block && /^[[:space:]]*-/ { sub(/^[[:space:]]*-/, ""); print trim($0); next }
-  block && /^[^[:space:]#]/ { block = 0 }' "$_cfg" 2>/dev/null || true)
-# drive_sync_accounts (docs/drive-sync.md), a flow or block list like claude_extra_config_dirs
-_drive_accounts=$(awk '
-  function trim(s) { sub(/[[:space:]]*#.*$/, "", s); gsub(/^[[:space:]"\047]+|[[:space:]"\047]+$/, "", s); return s }
-  /^drive_sync_accounts:/ { sub(/^[^:]*:/, ""); v = trim($0); block = (v == "")
-    if (!block) { gsub(/^\[|\]$/, "", v); n = split(v, parts, ","); for (i = 1; i <= n; i++) if (trim(parts[i]) != "") print trim(parts[i]) }
-    next }
-  block && /^[[:space:]]*-/ { sub(/^[[:space:]]*-/, ""); print trim($0); next }
-  block && /^[^[:space:]#]/ { block = 0 }' "$_cfg" 2>/dev/null || true)
+# claude_extra_config_dirs and drive_sync_accounts (docs/drive-sync.md): one entry per line
+_claude_extra_dirs=$(_cfg_list claude_extra_config_dirs)
+_drive_accounts=$(_cfg_list drive_sync_accounts)
+# Read here for checks further down: the distrobox name, umask, console keymap, LLMNR and mDNS settings
+_dbx_name=$(_cfg_value container_name)
+_system_umask=$(_cfg_value system_umask)
+_system_keymap=$(_cfg_value system_keymap)
+_llmnr_exp=$(_cfg_value system_resolved_llmnr)
+_mdns_exp=$(_cfg_value system_resolved_multicast_dns)
+unset -f _cfg_read _cfg_value _cfg_list _chunk_enabled
 unset _cfg
 [[ -z "$_cfg_tmp" ]] || { rm -f "$_cfg_tmp"; trap - EXIT; }  # the cleaned copy of config.yml
 unset _cfg_tmp
@@ -1735,7 +1789,6 @@ if $IS_LINUX && [[ -z "$CONTAINER" ]]; then
   else record "login-shell-zsh" "WARN" "login shell is ${_login_shell:-unknown}, not zsh (login_shell chunk not applied)"; fi
   unset _login_shell
   if command -v podman >/dev/null 2>&1; then
-    _dbx_name=$(awk -F': ' '/^container_name:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$SCRIPT_DIR/../config.yml" 2>/dev/null || true)
     [[ "$_dbx_name" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || _dbx_name="fedora-dev"
     _dbx_state=$(podman inspect --format '{{.State.Status}}' "$_dbx_name" 2>/dev/null || true)
     if ! podman container exists "$_dbx_name" 2>/dev/null; then
@@ -2946,7 +2999,6 @@ EOF
     else record "no-open-ports" "WARN" "$listeners"; fi
   fi
 
-  _system_umask=$(awk -F': ' '/^system_umask:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$SCRIPT_DIR/../config.yml" 2>/dev/null || true)
   _system_umask="${_system_umask:-027}"
   # Validate: system_umask must contain only octal digits (0-7) to prevent regex injection in grep -F
   if ! [[ "$_system_umask" =~ ^[0-7]+$ ]]; then
@@ -2954,7 +3006,6 @@ EOF
     _system_umask="027"
   fi
 
-  _system_keymap=$(awk -F': ' '/^system_keymap:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$SCRIPT_DIR/../config.yml" 2>/dev/null || true)
   _system_keymap="${_system_keymap:-us}"
   # Validate: system_keymap must contain only alphanumeric characters, hyphens, and underscores
   if ! [[ "$_system_keymap" =~ ^[a-zA-Z0-9_-]+$ ]]; then
@@ -3268,8 +3319,6 @@ fi
 # resolved.conf.d/98-llmnr.conf content check — file-gated; silently skips on macOS or where system role was not run
 if [[ -f /etc/systemd/resolved.conf.d/98-llmnr.conf ]]; then
   # expected values follow system_resolved_llmnr / system_resolved_multicast_dns (role default 'no')
-  _llmnr_exp=$(awk -F': ' '/^system_resolved_llmnr:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$SCRIPT_DIR/../config.yml" 2>/dev/null || true)
-  _mdns_exp=$(awk -F': ' '/^system_resolved_multicast_dns:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$SCRIPT_DIR/../config.yml" 2>/dev/null || true)
   [[ "$_llmnr_exp" =~ ^(no|yes|resolve)$ ]] || _llmnr_exp=no
   [[ "$_mdns_exp" =~ ^(no|yes|resolve)$ ]] || _mdns_exp=no
   if grep -qxF "LLMNR=$_llmnr_exp" /etc/systemd/resolved.conf.d/98-llmnr.conf && \
