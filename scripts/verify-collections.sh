@@ -6,7 +6,8 @@
 # Checks:
 #   1. Source tarballs (collections-dist/) match recorded hashes (SHA256SUMS)
 #   2. Extracted collection dirs are consistent with their tarballs
-#   3. All Python files (plugins/, module_utils/, roles/) match baseline manifest
+#   3. Every installed entry (any file type, symlink, special file) matches its tarball; runtime Python matches the
+#      committed baseline manifest
 #
 # Usage: verify-collections.sh
 set -euo pipefail
@@ -14,9 +15,11 @@ set -euo pipefail
 # Verification layers:
 #   1. SHA256SUMS.asc: GPG signature check when repository policy enables it
 #   2. SHA256SUMS: tarball integrity (fatal on mismatch)
-#   3. Installed tree (once collections/ exists): .py/.so files match tarballs + PYTHON_MANIFEST.json;
-#      any symlink or collection-root __init__.py is fatal, and so is a vendored collection that is not
-#      installed or a collections/ without ansible_collections/ (an interrupted install)
+#   3. Installed tree (once collections/ exists): every entry of every collection, whatever its type or extension,
+#      must be in its re-extracted tarball with the same content (files), target (symlinks) and type; runtime .py/.so
+#      also match PYTHON_MANIFEST.json. Anything else in ansible_collections/ or a namespace directory, a symlink in
+#      plugins/, module_utils/ or roles/, a vendored collection that is not installed, or a collections/ without
+#      ansible_collections/ (an interrupted install) is fatal. Ansible's __pycache__/*.pyc caches are removed first.
 # Usage: called by verify-ansible-args.sh (the Makefile's VERIFY_AND_RUN wrapper)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -111,8 +114,17 @@ trap 'rm -rf "$_tmpdir"' EXIT
 for tarball in "${REPO_DIR}/collections-dist/"*.tar.gz; do
   [[ -f "$tarball" ]] || continue
   # Exact filename comparison (not a regex), so '.' or '+' in a name cannot mis-match
-  if ! TARBALL_NAME="$(basename "$tarball")" awk 'BEGIN { n = ENVIRON["TARBALL_NAME"] } { f = $2; sub(/^\*/, "", f); if (f == n && length($1) == 64) found = 1 } END { exit !found }' "${REPO_DIR}/collections-dist/SHA256SUMS"; then
+  _want=$(TARBALL_NAME="$(basename "$tarball")" awk 'BEGIN { n = ENVIRON["TARBALL_NAME"] } { f = $2; sub(/^\*/, "", f); if (f == n && length($1) == 64) h = $1 } END { print h }' "${REPO_DIR}/collections-dist/SHA256SUMS")
+  if [[ -z "$_want" ]]; then
     echo "ERROR: $(basename "$tarball") is not listed in SHA256SUMS — remove it or add a verified entry" >&2
+    exit 1
+  fi
+  # Hash and extract the same bytes: a private copy, so the tarball cannot be swapped between the check and tar
+  _copy="$_tmpdir/archive.tar.gz"
+  cp "$tarball" "$_copy"
+  _got=$("${_checksum[@]}" "$_copy" | awk '{ print $1 }')
+  if [[ "$_got" != "$_want" ]]; then
+    echo "ERROR: $(basename "$tarball") changed while it was being verified (SHA256 $_got, expected $_want)" >&2
     exit 1
   fi
   base="$(basename "$tarball" .tar.gz)"
@@ -120,10 +132,11 @@ for tarball in "${REPO_DIR}/collections-dist/"*.tar.gz; do
   _ns="${_parts[0]}"
   _col="${_parts[1]}"
   mkdir -p "$_tmpdir/$_ns/$_col"
-  if ! tar -xzf "$tarball" -C "$_tmpdir/$_ns/$_col"; then
+  if ! tar -xzf "$_copy" -C "$_tmpdir/$_ns/$_col"; then
     echo "ERROR: tar extraction failed for $tarball (possible path traversal or corrupt archive)" >&2
     exit 1
   fi
+  rm -f "$_copy"
 done
 
 _extracted="${REPO_DIR}/collections"
@@ -135,172 +148,265 @@ if [[ ! -d "$_extracted/ansible_collections" ]] && { [[ -e "$_extracted/ansible_
   echo "FATAL: ${_extracted}/ansible_collections exists but is not a directory (broken link or file) — possible tampering" >&2
   exit 1
 fi
-if [[ -d "$_extracted/ansible_collections" ]]; then
-  # Step 2a: Comprehensive content verification for all collections
-  # Compare extracted Python files against fresh extraction from verified tarballs
-  # and validate against PYTHON_MANIFEST.json
-  python3 -I - "$_extracted/ansible_collections" "$_tmpdir" "$REPO_DIR/collections-dist/PYTHON_MANIFEST.json" << 'PYEOF'
-import sys
+# Step 2a: one program for both trees. Every installed collection entry is compared with a fresh extraction of its
+# verified tarball (and runtime Python with PYTHON_MANIFEST.json); bytecode caches beside the repo's own plugins are
+# removed (Ansible would load a planted .pyc from there unchecked).
+# read, not $(cat <<...): bash 3.2 (macOS) misparses quotes inside a heredoc in a command substitution
+IFS= read -r -d '' _verifier_py << 'PYEOF' || true
 import hashlib
 import json
+import os
+import re
+import stat
+import sys
 from pathlib import Path
 
-def compute_file_hash(filepath):
-    """Compute SHA256 hash of a file."""
-    sha256 = hashlib.sha256()
-    with open(filepath, 'rb') as f:
-        for chunk in iter(lambda: f.read(4096), b''):
-            sha256.update(chunk)
-    return sha256.hexdigest()
+# Every entry of every installed collection must be in its verified tarball (re-extracted fresh above), whatever its
+# type or extension: Ansible loads extensionless modules, meta/runtime.yml redirects and collection roles too.
+RUNTIME_DIRS = ('plugins', 'module_utils', 'roles')
+HINT = "       Expected after pulling a collections-dist change; otherwise investigate. Then re-run: make collections"
 
-def extract_python_files(collection_dir):
-    """Extract all .py and .so files from plugins, module_utils, roles.
 
-    Note: .pyc files are not validated (known gap: a sourceless .pyc would be loaded unchecked).
-    .so files included for C extension modules (security-critical).
-    """
-    python_files = {}
-    if collection_dir.is_symlink():
-        print(f"FATAL: symlink detected in vendored collection — possible tampering: {collection_dir}", file=sys.stderr)
-        sys.exit(1)
-    for subdir in ['plugins', 'module_utils', 'roles']:
-        base = collection_dir / subdir
-        if base.is_symlink():
-            print(f"FATAL: symlink detected in vendored collection — possible tampering: {base}", file=sys.stderr)
-            sys.exit(1)
-        if not base.exists():
-            continue
-        for pyfile in base.rglob('*'):
-            # Any symlink (including a directory link hiding .py files) is tampering
-            if pyfile.is_symlink():
-                print(f"FATAL: symlink detected in vendored collection — possible tampering: {pyfile}", file=sys.stderr)
-                sys.exit(1)
-            # Only .py and .so files
-            if pyfile.suffix not in ('.py', '.so'):
-                continue
-            if pyfile.is_file():
-                rel_path = str(pyfile.relative_to(collection_dir))
-                python_files[rel_path] = compute_file_hash(pyfile)
-    return python_files
-
-def load_manifest(manifest_path):
-    """Load PYTHON_MANIFEST.json and return a dict keyed by tarball name."""
-    if not Path(manifest_path).exists():
-        return {}
-    with open(manifest_path, 'r') as f:
-        return json.load(f)
-
-extracted_root = Path(sys.argv[1])  # $REPO_DIR/collections/ansible_collections
-tmpdir = Path(sys.argv[2])           # tmpdir with extracted tarballs
-manifest_path = sys.argv[3]          # PYTHON_MANIFEST.json path
-
-manifest_data = load_manifest(manifest_path)
-
-# Map collections from ansible_collections hierarchy to flat tmpdir hierarchy
-# extracted_root: ansible_collections/ansible/posix/
-# tmpdir: plugins/, module_utils/, etc. (flat)
-if extracted_root.is_symlink():
-    print(f"FATAL: symlink detected in vendored collection — possible tampering: {extracted_root}", file=sys.stderr)
+def fail(message, paths=(), hint=HINT):
+    print(f"ERROR: {message}", file=sys.stderr)
+    paths = sorted(paths)
+    for path in paths[:10]:
+        print(f"  {path}", file=sys.stderr)
+    if len(paths) > 10:
+        print(f"  ... and {len(paths) - 10} more", file=sys.stderr)
+    if hint:
+        print(hint, file=sys.stderr)
     sys.exit(1)
-def reject_package_marker(directory):
-    # Ansible imports a collection root __init__.py; tarballs never ship one
-    if (directory / '__init__.py').exists() or (directory / '__init__.py').is_symlink():
-        print(f"FATAL: unexpected __init__.py in vendored collection root — possible tampering: {directory}", file=sys.stderr)
-        sys.exit(1)
 
-reject_package_marker(extracted_root)
-for namespace_dir in extracted_root.glob('*/'):
-    if namespace_dir.is_symlink():
-        print(f"FATAL: symlink detected in vendored collection — possible tampering: {namespace_dir}", file=sys.stderr)
-        sys.exit(1)
-    if not namespace_dir.is_dir():
-        continue
-    reject_package_marker(namespace_dir)
-    for collection_dir in namespace_dir.glob('*/'):
-        if not collection_dir.is_dir():
+
+def fail_entries(base, message, rels, hint=HINT):
+    """fail(), unless some of the entries are gone by now: then the tree changed while it was being checked."""
+    vanished = [rel for rel in rels if not os.path.lexists(os.path.join(base, rel))]
+    if vanished:
+        fail(f"{base}: entries changed during the check (concurrent Ansible run?):", vanished,
+             hint="       Re-run once no other Ansible run is active; if this persists, investigate.")
+    fail(message, rels, hint)
+
+
+def sha256(path):
+    digest = hashlib.sha256()
+    with open(path, 'rb') as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def scan(root):
+    """Every entry below root, by relative path: ('file', sha256), ('link', target), ('dir',) or ('special', type)."""
+    entries = {}
+    for dirpath, dirnames, filenames in os.walk(root):  # does not descend into symlinked directories
+        for name in dirnames + filenames:
+            path = os.path.join(dirpath, name)
+            rel = os.path.relpath(path, root)
+            try:
+                mode = os.lstat(path).st_mode
+                if stat.S_ISLNK(mode):
+                    entries[rel] = ('link', os.readlink(path))
+                elif stat.S_ISDIR(mode):
+                    entries[rel] = ('dir',)
+                elif stat.S_ISREG(mode):
+                    entries[rel] = ('file', sha256(path))
+                else:
+                    entries[rel] = ('special', stat.S_IFMT(mode))
+            except FileNotFoundError:  # removed while scanning (a concurrent run's bytecode cache): nothing to verify
+                continue
+    return entries
+
+
+# A compiled file, or Python's temporary name for one before it renames it into place (name.pyc.<number>)
+BYTECODE = re.compile(r'\.pyc(\.[0-9]+)?\Z')
+
+
+def is_bytecode_cache(rel, entry, fresh_entries):
+    """Ansible writes __pycache__/*.pyc next to controller plugins on every run: a __pycache__ directory the tarball
+    does not ship, or a regular .pyc file directly in one."""
+    parts = rel.split(os.sep)
+    if parts[-1] == '__pycache__' and entry[0] == 'dir':
+        return True
+    return (len(parts) > 1 and parts[-2] == '__pycache__' and BYTECODE.search(rel) and entry[0] == 'file'
+            and os.path.dirname(rel) not in fresh_entries)
+
+
+def purge_bytecode(collection_dir, caches):
+    """Bytecode cannot be checked against its source (a crafted .pyc whose header matches the source loads instead of
+    it), so remove the caches; Ansible writes them again. False if a cache directory holds anything but .pyc files."""
+    for rel in caches:
+        path = os.path.join(collection_dir, rel)
+        if not os.path.isdir(path) or os.path.islink(path):
             continue
-        reject_package_marker(collection_dir)
-        collection_name = f"{namespace_dir.name}/{collection_dir.name}"
-        extracted_files = extract_python_files(collection_dir)
+        for _ in range(3):  # a concurrent run may write a new .pyc meanwhile; still there after three tries: fail
+            try:
+                children = [os.path.join(path, child) for child in os.listdir(path)]
+            except FileNotFoundError:
+                break
+            if not all(BYTECODE.search(child) and os.path.isfile(child) and not os.path.islink(child)
+                       for child in children):
+                return False
+            for child in children:
+                try:
+                    os.unlink(child)
+                except FileNotFoundError:
+                    pass
+            try:
+                os.rmdir(path)
+                break
+            except FileNotFoundError:
+                break
+            except OSError:
+                continue
+        else:
+            return False
+    return True
 
-        # Tarballs extract to tmpdir without namespace/name hierarchy
-        # So we check against tmpdir (which contains all extracted content)
-        fresh_path = tmpdir / namespace_dir.name / collection_dir.name
-        if not fresh_path.exists():
-            # If ansible_collections/ exists, all legitimate collections have tmpdir entries.
-            # An absent fresh_path means an unrecognized directory was injected on disk.
-            print(f"ERROR: {collection_name}: directory exists on disk but has no corresponding verified tarball entry — possible unauthorized collection injection", file=sys.stderr)
-            print("       Expected after pulling a collections-dist change; otherwise investigate. Then re-run: make collections", file=sys.stderr)
-            sys.exit(1)
 
-        fresh_files = extract_python_files(fresh_path)
+def runtime_python(entries):
+    return {rel: entry[1] for rel, entry in entries.items()
+            if entry[0] == 'file' and rel.split(os.sep, 1)[0] in RUNTIME_DIRS and rel.endswith(('.py', '.so'))}
 
-        # Compare: extracted (installed on disk) vs fresh (from tarball re-extraction)
-        extracted_keys = set(extracted_files.keys())
-        fresh_keys = set(fresh_files.keys())
 
-        # Tarball replacement detection: files in tarball NOT on disk
-        # (tarball was swapped for one with extra files)
-        tarball_extra = fresh_keys - extracted_keys
-        if tarball_extra:
-            print(f"ERROR: {collection_name}: tarball contains files not in installed collection:", file=sys.stderr)
-            for f in sorted(tarball_extra)[:10]:
-                print(f"  + {f}", file=sys.stderr)
-            if len(tarball_extra) > 10:
-                print(f"  ... and {len(tarball_extra) - 10} more", file=sys.stderr)
-            print("       Expected after pulling a collections-dist change; otherwise a tarball may have been replaced. Then re-run: make collections", file=sys.stderr)
-            sys.exit(1)
+def verify_collections(extracted_root, tmpdir, manifest_path):
+    """extracted_root: $REPO_DIR/collections/ansible_collections; tmpdir: verified tarballs extracted to
+    tmpdir/<namespace>/<collection>; manifest_path: PYTHON_MANIFEST.json, the committed runtime Python baseline."""
+    manifest_data = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
 
-        # TOCTOU disk tampering: files on disk NOT in tarball
-        # (files injected into installed collection directory after extraction)
-        disk_extra = extracted_keys - fresh_keys
-        if disk_extra:
-            print(f"ERROR: {collection_name}: installed collection has files not in verified tarball:", file=sys.stderr)
-            for f in sorted(disk_extra)[:10]:
-                print(f"  + {f}", file=sys.stderr)
-            if len(disk_extra) > 10:
-                print(f"  ... and {len(disk_extra) - 10} more", file=sys.stderr)
-            print("       Possible TOCTOU disk tampering (file injected after extraction).", file=sys.stderr)
-            print("       Expected after pulling a collections-dist change; otherwise investigate. Then re-run: make collections", file=sys.stderr)
-            sys.exit(1)
+    if extracted_root.is_symlink():
+        fail(f"symlink detected in vendored collections — possible tampering: {extracted_root}", hint=None)
 
-        # Check for modified files
-        modified = []
-        for fpath in extracted_keys & fresh_keys:
-            if extracted_files[fpath] != fresh_files[fpath]:
-                modified.append(fpath)
+    bytecode_removed = 0
+    for top in [extracted_root] + [p for p in extracted_root.iterdir() if p.is_dir() and not p.is_symlink()]:
+        if top.lstat().st_mode & 0o022:
+            fail(f"{top} is group- or other-writable (chmod go-w it, or re-run make collections)")
+    for namespace_dir in sorted(extracted_root.iterdir()):
+        # Only namespace directories here, and only collection directories in them: a file at either level (a package
+        # __init__.py, a planted plugin) is not part of any collection
+        if namespace_dir.is_symlink() or not namespace_dir.is_dir():
+            fail(f"unexpected entry in {extracted_root} (only namespace directories belong there): {namespace_dir.name}"
+                 + (" (macOS Finder metadata: delete it)" if namespace_dir.name == '.DS_Store' else ""))
+        for collection_dir in sorted(namespace_dir.iterdir()):
+            collection_name = f"{namespace_dir.name}/{collection_dir.name}"
+            if collection_dir.is_symlink() or not collection_dir.is_dir():
+                fail(f"unexpected entry in {namespace_dir} (only collection directories belong there): {collection_dir.name}"
+                     + (" (macOS Finder metadata: delete it)" if collection_dir.name == '.DS_Store' else ""))
+            fresh_path = tmpdir / namespace_dir.name / collection_dir.name
+            if not fresh_path.is_dir():
+                fail(f"{collection_name}: directory exists on disk but has no corresponding verified tarball entry — "
+                     "possible unauthorized collection injection")
 
-        if modified:
-            print(f"ERROR: {collection_name}: extracted Python content differs from verified tarballs:", file=sys.stderr)
-            for f in sorted(modified)[:10]:
-                print(f"  ~ {f}", file=sys.stderr)
-            if len(modified) > 10:
-                print(f"  ... and {len(modified) - 10} more", file=sys.stderr)
-            print("       Expected after pulling a collections-dist change; otherwise possible TOCTOU tampering. Then re-run: make collections", file=sys.stderr)
-            sys.exit(1)
+            fresh = scan(fresh_path)
+            installed = scan(collection_dir)
+            # Content matches, but a group- or other-writable entry would let another account change it later
+            writable = [rel for rel in [''] + list(installed)
+                        if installed.get(rel, ('dir',))[0] != 'link'
+                        and os.path.lexists(os.path.join(collection_dir, rel))
+                        and os.lstat(os.path.join(collection_dir, rel)).st_mode & 0o022]
+            if writable:
+                fail(f"{collection_name}: group- or other-writable entries in the installed collection (chmod go-w them, or "
+                     "re-run make collections):", [rel or '.' for rel in writable])
+            caches = [rel for rel, entry in installed.items()
+                      if rel not in fresh and is_bytecode_cache(rel, entry, fresh)]
+            if caches:
+                if not purge_bytecode(collection_dir, caches):
+                    fail(f"{collection_name}: a __pycache__ directory holds more than .pyc files — possible tampering",
+                         [rel for rel in installed if '__pycache__' in rel.split(os.sep) and rel not in caches])
+                bytecode_removed += sum(1 for rel in caches if BYTECODE.search(rel))
+                installed = {rel: entry for rel, entry in installed.items() if rel not in caches}
 
-        # Compare every runtime path and content hash to the committed baseline.
-        # This also catches coordinated archive+disk changes and native .so injection.
-        with (fresh_path / 'MANIFEST.json').open() as metadata_file:
-            metadata = json.load(metadata_file)['collection_info']
-        manifest_key = f"{namespace_dir.name}-{collection_dir.name}-{metadata['version']}.tar"
-        baseline = manifest_data.get(manifest_key, {}).get('runtime_files')
-        if not isinstance(baseline, dict) or baseline != fresh_files:
-            print(f"ERROR: {collection_name}: runtime paths or hashes differ from the committed Python manifest", file=sys.stderr)
-            print("       Regenerate the manifest only after verifying the archives against upstream sources.", file=sys.stderr)
-            sys.exit(1)
+            links = [rel for rel, entry in {**fresh, **installed}.items()
+                     if entry[0] == 'link' and rel.split(os.sep, 1)[0] in RUNTIME_DIRS]
+            if links:
+                fail(f"{collection_name}: symlink in plugins/, module_utils/ or roles/ — possible tampering", links)
+            extra = set(installed) - set(fresh)
+            if extra:
+                finder = [rel for rel in extra if os.path.basename(rel) == '.DS_Store']
+                fail(f"{collection_name}: installed collection has entries not in its verified tarball "
+                     "(any file type, symlink or special file):", extra,
+                     hint=("       macOS Finder metadata: delete the .DS_Store files listed (find collections -name .DS_Store "
+                           "-delete), then re-run.\n" if finder else "") + HINT)
+            missing = set(fresh) - set(installed)
+            if missing:
+                fail_entries(fresh_path, f"{collection_name}: verified tarball has entries missing from the installed "
+                         "collection:", missing)
+            changed = [rel for rel in installed if installed[rel] != fresh[rel]]
+            if changed:
+                fail(f"{collection_name}: installed entries differ from the verified tarball (content, link target or type):",
+                     changed)
 
-for fresh_namespace in sorted(p for p in tmpdir.glob('*/') if p.is_dir()):
-    for fresh_collection in sorted(p for p in fresh_namespace.glob('*/') if p.is_dir()):
-        if not (extracted_root / fresh_namespace.name / fresh_collection.name).is_dir():
-            print(f"ERROR: {fresh_namespace.name}/{fresh_collection.name} is vendored but not installed under collections/ "
-                  "(interrupted install?); Ansible would load an unverified copy from another collections path", file=sys.stderr)
-            print("       Re-run: make collections", file=sys.stderr)
-            sys.exit(1)
+            # The committed baseline of runtime Python paths and hashes also catches a coordinated archive and install change
+            with (fresh_path / 'MANIFEST.json').open() as metadata_file:
+                metadata = json.load(metadata_file)['collection_info']
+            manifest_key = f"{namespace_dir.name}-{collection_dir.name}-{metadata['version']}.tar"
+            baseline = manifest_data.get(manifest_key, {}).get('runtime_files')
+            if not isinstance(baseline, dict) or baseline != runtime_python(fresh):
+                fail(f"{collection_name}: runtime paths or hashes differ from the committed Python manifest",
+                     hint="       Regenerate the manifest only after verifying the archives against upstream sources.")
 
-print("✓ All collection Python files match verified tarballs")
+    for fresh_namespace in sorted(p for p in tmpdir.glob('*/') if p.is_dir()):
+        for fresh_collection in sorted(p for p in fresh_namespace.glob('*/') if p.is_dir()):
+            if not (extracted_root / fresh_namespace.name / fresh_collection.name).is_dir():
+                fail(f"{fresh_namespace.name}/{fresh_collection.name} is vendored but not installed under collections/ "
+                     "(interrupted install?); Ansible would load an unverified copy from another collections path",
+                     hint="       Re-run: make collections")
+    return bytecode_removed
+
+
+def purge_plugin_bytecode(directory):
+    """The repo's own plugin, library and module_utils directories (git-tracked sources): Ansible loads a .pyc from
+    their __pycache__ when its header matches the source, so remove every such cache, as for the collections. A
+    symlinked plugin or __pycache__ directory, or a cache holding anything but bytecode, is refused."""
+    if not os.path.lexists(directory):  # library/ and module_utils/ are listed whether or not they exist
+        return 0
+    if os.path.islink(directory):
+        fail(f"symlinked plugin directory — possible tampering: {directory}", hint=None)
+    caches = []
+    for dirpath, dirnames, _ in os.walk(directory):
+        for name in dirnames:
+            path = os.path.join(dirpath, name)
+            if name == '__pycache__':
+                if os.path.islink(path):
+                    fail(f"symlinked __pycache__ directory — possible tampering: {path}", hint=None)
+                caches.append(os.path.relpath(path, directory))
+    removed = 0
+    for rel in caches:
+        try:
+            removed += sum(1 for child in os.listdir(os.path.join(directory, rel)) if BYTECODE.search(child))
+        except FileNotFoundError:
+            continue
+    if caches and not purge_bytecode(directory, caches):
+        fail_entries(directory, "a __pycache__ directory beside the repo's plugins holds more than bytecode — possible "
+                     "tampering", caches)
+    return removed
+
+
+extracted_arg, tmpdir_arg, manifest_arg, *plugin_dirs = sys.argv[1:]
+bytecode_removed = 0
+for plugin_dir in plugin_dirs:
+    bytecode_removed += purge_plugin_bytecode(plugin_dir)
+if extracted_arg:
+    bytecode_removed += verify_collections(Path(extracted_arg), Path(tmpdir_arg), Path(manifest_arg))
+
+if bytecode_removed:
+    print(f"INFO: removed {bytecode_removed} cached .pyc files (bytecode cannot be verified)")
+if extracted_arg:
+    print("✓ All collection files match verified tarballs (every file type, symlinks included)")
 PYEOF
+shopt -s nullglob
+_plugin_dirs=("$REPO_DIR"/roles/*/*_plugins "$REPO_DIR"/roles/*/library "$REPO_DIR"/roles/*/module_utils
+              "$REPO_DIR"/*_plugins "$REPO_DIR"/library "$REPO_DIR"/module_utils)
+shopt -u nullglob
+if [[ -d "$_extracted/ansible_collections" ]]; then
+  python3 -I -c "$_verifier_py" "$_extracted/ansible_collections" "$_tmpdir" "$REPO_DIR/collections-dist/PYTHON_MANIFEST.json" \
+    ${_plugin_dirs[@]+"${_plugin_dirs[@]}"}
 
+else
+  python3 -I -c "$_verifier_py" "" "" "" ${_plugin_dirs[@]+"${_plugin_dirs[@]}"}
+fi
+if [[ -d "$_extracted/ansible_collections" ]]; then
+  :
 elif [[ -d "$_extracted" ]]; then
   # A fresh clone has no collections/ (gitignored); an empty one is an interrupted install, and Ansible would
   # silently load unverified copies from ~/.ansible or system paths.

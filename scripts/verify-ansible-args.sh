@@ -18,7 +18,7 @@ fi
 #   2. Arg scanner — rejects --start-at-task, --vault-password-file, --vault-id, --skip-tags always, and extra-vars that are @file or name a protected key (generic scan; this script)
 #   3. site.yml Play 0 has tags: [always] with pre-flight checks (Ansible layer)
 #   5. Each role's tasks/main.yml has a tags: [always] defense-in-depth assertion (role layer)
-#   6. ENV sanitization — pins/clears 90+ vars: ANSIBLE_*, LD_*, PYTHON*, GIT_*, Go, Sigstore, socket/temp (env-injection layer)
+#   6. ENV sanitization — pins/clears 90+ vars: every ANSIBLE_* and PYTHON*, LD_*, GIT_*, Go, Sigstore, socket/temp (env-injection layer)
 #   7. HOME hijack check — validates HOME matches /etc/passwd before any path operations
 #   8. verify-collections.sh — supply-chain integrity check before exec
 
@@ -328,8 +328,10 @@ unset _v _keep_ok_hosts _keep_result_format
 export ANSIBLE_CONFIG="${_repo_root}/ansible.cfg"
 export ANSIBLE_VAULT_PASSWORD_FILE="${_repo_root}/scripts/vault-pass.sh"
 export ANSIBLE_VAULT_ID_MATCH=False  # prevent ANSIBLE_VAULT_ID_MATCH=true lockout: default encryption (ansible-vault encrypt) uses @default label; if an attacker sets ID_MATCH=true and label mismatches, all vault-sourced vars (SSH keys, authorized_keys, registry tokens) fail to decrypt — post-reboot host becomes SSH-inaccessible on port 722
-export ANSIBLE_COLLECTIONS_PATH="${_repo_root}/collections:${HOME}/.ansible/collections:/usr/share/ansible/collections"
-export ANSIBLE_ROLES_PATH="${_repo_root}/roles:${HOME}/.ansible/roles:/etc/ansible/roles"
+# No ~/.ansible/collections: every FQCN used resolves to the four vendored collections, and a user-writable path
+# would only be a place to plant one that verify-collections.sh never sees.
+export ANSIBLE_COLLECTIONS_PATH="${_repo_root}/collections:/usr/share/ansible/collections"
+export ANSIBLE_ROLES_PATH="${_repo_root}/roles"  # every role is in the repo; no user-writable ~/.ansible/roles (as ansible.cfg)
 export ANSIBLE_INVENTORY="${_repo_root}/inventory"  # pin inventory; host_var inject bypasses ANSIBLE_PYTHON_INTERPRETER unset
 export ANSIBLE_ACTION_PLUGINS="${_repo_root}/action_plugins"
 export ANSIBLE_STRATEGY_PLUGINS="${_repo_root}/strategy_plugins"
@@ -342,7 +344,17 @@ export ANSIBLE_FILTER_PLUGINS=/dev/null  # no local filter plugins; prevent shad
 export ANSIBLE_CONNECTION_PLUGINS=/dev/null  # prevent ANSIBLE_CONNECTION_PLUGINS=/tmp/evil hijacking: PluginLoader searches user paths before builtins; malicious local.py intercepts all localhost task execution (all 13 roles, including become:true plays)
 export ANSIBLE_BECOME_PLUGINS=/dev/null      # prevent ANSIBLE_BECOME_PLUGINS=/tmp/evil loading a malicious sudo.py; ANSIBLE_BECOME_EXE pin alone does NOT protect — the plugin is a Python class loaded before build_become_command() runs; a malicious class ignores get_option('become_exe') entirely and constructs any root command string; plugin code also runs in the Ansible user-context process, giving arbitrary pre-become code execution
 export ANSIBLE_TERMINAL_PLUGINS=/dev/null    # defence-in-depth; terminal plugins process connection output; unguarded path allows attacker hook into output stream
-unset PYTHONPATH          # attacker-set PYTHONPATH can shadow ansible.* modules at import time
+# SECURITY: clear EVERY exported PYTHON* variable, as for ANSIBLE_* above; no allowlist. PYTHONPYCACHEPREFIX makes
+# Python load bytecode from <prefix>/<source path>/, outside the collections tree verify-collections.sh checks, and
+# PYTHONPATH, PYTHONHOME, PYTHONSTARTUP, PYTHONWARNINGS and the rest change what or how it imports. Then pin the two
+# that harden it: no user site-packages, and no bytecode caches written into the verified collections.
+for _v in "${!PYTHON@}"; do
+    unset "$_v"
+done
+unset _v
+# PYTHONSAFEPATH: a backstop for a call without -I, which would put the script directory (scripts/, where a planted
+# json.pyc would shadow the stdlib) first on sys.path.
+export PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONSAFEPATH=1
 unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT LD_DEBUG LD_DEBUG_OUTPUT LD_ORIGIN_PATH GLIBC_TUNABLES MALLOC_CONF  # linker injection — .so hijacks user-context ansible-playbook before sudo strips it from become; GLIBC_TUNABLES/MALLOC_CONF inherited by SUID sudo (CVE-2023-4911 class)
 unset NODE_TLS_REJECT_UNAUTHORIZED NODE_EXTRA_CA_CERTS npm_config_registry npm_config_cache npm_config_prefix SSH_SK_PROVIDER GIT_ASKPASS GIT_PROXY_COMMAND PIP_FIND_LINKS PIPX_HOME GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS GIT_CONFIG_SYSTEM  # tool-control vars (SSH FIDO provider, git askpass/proxy/config injection, pip/pipx sources, node TLS)
 while IFS= read -r _gv; do unset "$_gv"; done < <(compgen -e | grep -E '^GIT_CONFIG_(KEY|VALUE)_')
@@ -350,7 +362,6 @@ unset _gv
 unset NODE_OPTIONS NODE_PATH NPM_CONFIG_REGISTRY NPM_CONFIG_CACHE NPM_CONFIG_PREFIX  # Node/npm injection — NODE_OPTIONS=--require /tmp/evil.js loads into any npm/node child process (e.g. npx commitlint, future node tooling); NPM_CONFIG_REGISTRY/CACHE/PREFIX redirect package fetches or writes to attacker-controlled paths; defense-in-depth for ansible-playbook child processes (Makefile unexport is the load-bearing fix)
 unset TMPDIR TEMP TMP  # TMPDIR redirection attack: attacker sets TMPDIR=/tmp/evil; Python tempfile.gettempdir() checks TMPDIR first, so Ansible AnsiballZ module staging writes .py files into attacker-controlled dir; inotifywait race replaces module between write and sudo exec, achieving root code execution
 export ANSIBLE_KEEP_REMOTE_FILES=0  # AnsiballZ secret retention: attacker pre-sets ANSIBLE_KEEP_REMOTE_FILES=1 before the user runs make all; Ansible then leaves AnsiballZ module zips in /tmp (mode 0600, provisioning user) after the play completes; the zips contain full task argument JSON including vault-decrypted content= values for SSH private keys, registry token stdin= args, and transcrypt password argv= args; no_log: true suppresses Ansible output but does not strip secrets from the AnsiballZ payload; pinning to 0 (Ansible default: do not keep) overrides any caller-inherited value before ansible-playbook is exec'd
-unset PYTHONHOME PYTHONSTARTUP PYTHONINSPECT && export PYTHONNOUSERSITE=1  # Python runtime injection — PYTHONHOME replaces stdlib entirely; PYTHONNOUSERSITE=1 disables ~/.local site-packages (PYTHONUSERSITE is a no-op variable; PYTHONNOUSERSITE is the real CPython control); PYTHONSTARTUP low-risk for non-interactive but cleared for defence-in-depth; PYTHONINSPECT=1 (equiv -i) causes CPython to enter interactive REPL after ansible-playbook exits, hanging provisioning terminal/CI
 unset PIP_BREAK_SYSTEM_PACKAGES PIP_INDEX_URL PIP_EXTRA_INDEX_URL PIP_CERT PIP_CONFIG_FILE PIP_REQUIRE_VIRTUALENV PIP_TRUSTED_HOST  # pip env-var sanitization — PIP_BREAK_SYSTEM_PACKAGES=1 bypasses PEP 668 externally-managed protection; if any task invokes system pip under become:true an attacker-preset value overwrites system Python packages enabling root-accessible code injection; PIP_INDEX_URL/PIP_EXTRA_INDEX_URL redirect package fetches to attacker-controlled index (dependency confusion); PIP_CERT/PIP_CONFIG_FILE inject attacker-controlled TLS trust or pip config; PIP_REQUIRE_VIRTUALENV=1 could block legitimate pip use in provisioning tasks; PIP_TRUSTED_HOST disables TLS certificate verification for a named host independently of PIP_INDEX_URL — attacker pre-sets PIP_TRUSTED_HOST=pypi.org so that after PIP_INDEX_URL is unset pip falls back to https://pypi.org/simple/ with cert verification suppressed, enabling rogue-AP/DNS-poisoning MITM of pipx installs (yamllint, ansible-lint, transitive deps) without needing a redirect
 export ANSIBLE_INVENTORY_PLUGINS=/dev/null  # /dev/null retains compiled-in defaults only; prevents malicious inventory plugin from injecting host vars (e.g. ansible_python_interpreter) that bypass interpreter controls
 export ANSIBLE_VARS_PLUGINS=/dev/null  # block vars plugin path hijacking — vars plugins run before any play task at higher precedence than group_vars; a malicious plugin can override claude_install_url, dotfiles_repo_url, or any config toggle before pre_flight_checks.yml executes, bypassing SSTI guards entirely
@@ -508,7 +519,7 @@ if [[ "$(basename "${args[0]}")" == ansible-playbook ]]; then
         if [[ "$(basename "$_a")" == site.yml ]]; then
             _py="${_repo_root}/.venv/bin/python3"
             [[ -x "$_py" ]] || _py=python3
-            _skip=$("$_py" "${_repo_root}/scripts/rollout.py" skip-tags) || exit 2
+            _skip=$("$_py" -I "${_repo_root}/scripts/rollout.py" skip-tags) || exit 2
             [[ -z "$_skip" ]] || args+=(--skip-tags "$_skip")
             break
         fi

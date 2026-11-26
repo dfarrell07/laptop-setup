@@ -404,5 +404,44 @@ class WrapperBashTests(unittest.TestCase):
             self.assertIn('needs bash 4 or later', out.stderr)
 
 
+class IsolatedPythonTests(unittest.TestCase):
+    """A sourceless scripts/json.pyc would shadow the stdlib json for any Python run without -I from scripts/."""
+
+    def test_planted_json_bytecode_does_not_run_in_the_config_guard(self):
+        import py_compile
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'scripts').mkdir()
+            shutil.copy2(ROOT / 'scripts/parse-config.py', root / 'scripts/parse-config.py')
+            # the --policy step reads the wrapper's protected-key list
+            shutil.copy2(ROOT / 'scripts/verify-ansible-args.sh', root / 'scripts/verify-ansible-args.sh')
+            # and the vault_* mappings in the tracked group_vars (fails closed without any)
+            (root / 'group_vars/all').mkdir(parents=True)
+            for name in ('vars.yml', 'rollout.yml'):
+                if (ROOT / 'group_vars/all' / name).exists():
+                    shutil.copy2(ROOT / 'group_vars/all' / name, root / 'group_vars/all' / name)
+            marker = root / 'PLANTED'
+            evil = root / 'evil_json.py'
+            evil.write_text(f"open({str(marker)!r}, 'w').write('planted')\n"
+                            "def dumps(*args, **kwargs):\n    return '{}'\n")
+            py_compile.compile(str(evil), cfile=str(root / 'scripts/json.pyc'), doraise=True)
+            (root / 'config.yml').write_text('profile: work\n')
+            (root / 'play.yml').write_text(yaml.safe_dump([{
+                'hosts': 'localhost', 'gather_facts': False,
+                'tasks': [{'ansible.builtin.include_tasks': str(ROOT / 'common/tasks/config_ssti_guard.yml')},
+                          {'ansible.builtin.assert': {'that': "_pf_config_raw.profile == 'work'"}}]}]))
+            env = dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh'))
+            env.pop('MOLECULE_PROJECT_DIRECTORY', None)
+            result = subprocess.run([str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(root / 'play.yml')], cwd=root,
+                                    env=env, capture_output=True, text=True, timeout=TEST_TIMEOUT)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertFalse(marker.exists(), 'parse-config.py imported the planted scripts/json.pyc')
+
+    def test_wrapper_sets_safe_path(self):
+        source = (ROOT / 'scripts/verify-ansible-args.sh').read_text()
+        self.assertRegex(source, r'(?m)^export PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONSAFEPATH=1$')
+        self.assertIn('"$_py" -I "${_repo_root}/scripts/rollout.py"', source)
+
+
 if __name__ == '__main__':
     unittest.main()

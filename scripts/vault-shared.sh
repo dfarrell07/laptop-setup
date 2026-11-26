@@ -143,7 +143,7 @@ no_rollback() {
   git -C "$S" merge-base --is-ancestor "$last" "$1" 2>/dev/null ||
     die "GitHub's laptop-secrets no longer contains $last, the last commit this machine accepted: its history was rewritten (a rollback could bring back a removed key). Find out why before using it; to accept it anyway: rm $LAST_SEEN"
 }
-new_password() { python3 -c 'import secrets; print(secrets.token_urlsafe(48))'; }
+new_password() { python3 -I -c 'import secrets; print(secrets.token_urlsafe(48))'; }
 
 # Trust comes from commit signatures, not from age: age does not say who encrypted a file, so anyone who can push
 # could seal a password of their own choosing to your keys. Every commit must carry a signature by one of the owner's

@@ -12,7 +12,7 @@ _test_exported_collection_path:
 MAKE
 actual=$(ANSIBLE_COLLECTIONS_PATH=/evil/collections make -f Makefile -f "$probe_dir/probe.mk" \
   _test_exported_collection_path | sed -n '\|/collections:|p')
-expected="${repo_root}/collections:~/.ansible/collections:/usr/share/ansible/collections"
+expected="${repo_root}/collections:/usr/share/ansible/collections"  # no user-writable ~/.ansible/collections
 [[ "$actual" == "$expected" ]] || { echo 'FAIL: Makefile did not pin collection paths' >&2; exit 1; }
 
 for flag in '--start-at-task=unsafe' '--skip-tags=always'; do
@@ -115,10 +115,17 @@ assert os.environ['ANSIBLE_BECOME_PLUGINS'] == '/dev/null'
 assert os.environ['ANSIBLE_LOOKUP_PLUGINS'] == '/dev/null'
 assert os.environ['ANSIBLE_COLLECTIONS_PATH'].split(':')[0] == str(root / 'collections')
 assert 'PYTHONPATH' not in os.environ
+# every PYTHON* variable is cleared (PYTHONPYCACHEPREFIX would move bytecode out of the verified tree); two are pinned
+assert {k: v for k, v in os.environ.items() if k.startswith('PYTHON')} == {
+    'PYTHONNOUSERSITE': '1', 'PYTHONDONTWRITEBYTECODE': '1', 'PYTHONSAFEPATH': '1'}, sorted(k for k in os.environ if k.startswith('PYTHON'))
+assert os.environ['ANSIBLE_COLLECTIONS_PATH'] == str(root / 'collections') + ':/usr/share/ansible/collections'
+assert os.environ['ANSIBLE_ROLES_PATH'] == str(root / 'roles')  # no user-writable ~/.ansible/roles
+assert os.environ['PYTHONSAFEPATH'] == '1'
 PY
 probe_python=python3
 [[ ! -x .venv/bin/python3 ]] || probe_python=.venv/bin/python3
 ANSIBLE_BECOME_PLUGINS=/evil/plugins ANSIBLE_LOOKUP_PLUGINS=/evil/plugins \
-  ANSIBLE_COLLECTIONS_PATH=/evil/collections PYTHONPATH=/evil/python \
+  ANSIBLE_COLLECTIONS_PATH=/evil/collections ANSIBLE_ROLES_PATH=/evil/roles PYTHONPATH=/evil/python \
+  PYTHONPYCACHEPREFIX=/evil/pycache PYTHONWARNINGS=error PYTHONSAFEPATH=1 PYTHONUNKNOWN=1 \
   scripts/verify-ansible-args.sh "$probe_python" "$probe_file"
 echo 'Environment and argument guards passed.'

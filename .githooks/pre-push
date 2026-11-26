@@ -51,7 +51,7 @@ check_vault_blob() {
   first_line=$(git show "$sha:$f" | head -1)
   if ! grep -q '^\$ANSIBLE_VAULT' <<< "$first_line"; then
     # Accept only the restricted empty-value stub template; all real values need encryption.
-    if git show "$sha:$f" | python3 "$_repo_root/scripts/verify-vault-stub.py"; then
+    if git show "$sha:$f" | python3 -I "$_repo_root/scripts/verify-vault-stub.py"; then
       echo "NOTE: $label is a plaintext stub (vault_placeholder marker + empty values) — OK" >&2
       return 0
     fi

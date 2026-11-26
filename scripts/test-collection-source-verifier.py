@@ -11,8 +11,10 @@ import sys
 import tarfile
 import tempfile
 import unittest
+import unittest.mock
 
 ROOT = Path(__file__).resolve().parent.parent
+os.umask(0o022)  # fixtures are created as make collections installs them; a group-writable tree is refused
 SOURCE = (ROOT / 'scripts/verify-vendor-tarball.sh').read_text()
 COMPARISON = SOURCE.split("<<'PYEOF'", 1)[1].split('\n', 1)[1].split('\nPYEOF', 1)[0]
 BASELINE_SOURCE = (ROOT / 'scripts/verify-collections.sh').read_text()
@@ -291,6 +293,258 @@ class CommittedBaselineTests(unittest.TestCase):
 
     def test_installed_only_python_file_fails(self):
         self.check(disk_only=True)
+
+
+class FullTreeTests(unittest.TestCase):
+    """Every installed entry must be in its verified tarball, whatever its type or extension."""
+
+    def tree(self, base, runtime=True):
+        collection = base / 'fixture/collection'
+        (collection / 'plugins/modules').mkdir(parents=True)
+        (collection / NAME).write_bytes(SAFE)
+        (collection / 'meta').mkdir()
+        if runtime:
+            (collection / 'meta/runtime.yml').write_text('requires_ansible: ">=2.16"\n')
+        (collection / 'tests').mkdir()
+        (collection / 'tests/target.sh').write_text('echo test\n')
+        (collection / 'tests/alias.sh').symlink_to('target.sh')
+        (collection / 'MANIFEST.json').write_text(json.dumps({'collection_info': {'version': '1.0.0'}}))
+        return collection
+
+    def run_check(self, plant=None, runtime=True):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.tree(root / 'fresh', runtime)
+            installed = self.tree(root / 'installed', runtime)
+            if plant:
+                plant(installed)
+            manifest = root / 'manifest.json'
+            manifest.write_text(json.dumps({
+                'fixture-collection-1.0.0.tar': {'runtime_files': {NAME: hashlib.sha256(SAFE).hexdigest()}}}))
+            result = subprocess.run([sys.executable, '-I', '-c', BASELINE_COMPARISON,
+                                     str(root / 'installed'), str(root / 'fresh'), str(manifest)],
+                                    capture_output=True, text=True)
+            self.assertNotIn('Traceback', result.stderr)
+            return result, installed
+
+    def assert_rejected(self, plant, path, runtime=True):
+        result, _ = self.run_check(plant, runtime)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn(path, result.stderr)
+
+    def test_identical_tree_with_tarball_symlinks_passes(self):
+        result, _ = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_planted_extensionless_module_fails(self):
+        def plant(collection):
+            module = collection / 'plugins/modules/fixture'
+            module.write_text('#!/bin/sh\necho pwned\n')
+            module.chmod(0o755)
+        self.assert_rejected(plant, 'plugins/modules/fixture')
+
+    def test_planted_runtime_redirect_fails(self):
+        """A collection that ships no meta/runtime.yml gets one redirecting its module elsewhere."""
+        def plant(collection):
+            (collection / 'meta/runtime.yml').write_text(
+                'plugin_routing:\n  modules:\n    fixture:\n      redirect: evil.collection.fixture\n')
+        self.assert_rejected(plant, 'meta/runtime.yml', runtime=False)
+
+    def test_missing_tarball_file_fails(self):
+        self.assert_rejected(lambda collection: (collection / 'meta/runtime.yml').unlink(), 'meta/runtime.yml')
+
+    def test_modified_yml_fails(self):
+        def plant(collection):
+            (collection / 'meta/runtime.yml').write_text(
+                'plugin_routing:\n  modules:\n    fixture:\n      redirect: evil.collection.fixture\n')
+        self.assert_rejected(plant, 'meta/runtime.yml')
+
+    def test_extra_symlink_fails(self):
+        self.assert_rejected(lambda collection: (collection / 'tests/extra.sh').symlink_to('/bin/sh'), 'tests/extra.sh')
+
+    def test_retargeted_tarball_symlink_fails(self):
+        def plant(collection):
+            (collection / 'tests/alias.sh').unlink()
+            (collection / 'tests/alias.sh').symlink_to('/bin/sh')
+        self.assert_rejected(plant, 'tests/alias.sh')
+
+    def test_special_file_fails(self):
+        self.assert_rejected(lambda collection: os.mkfifo(collection / 'tests/pipe'), 'tests/pipe')
+
+    def test_file_beside_collections_fails(self):
+        self.assert_rejected(lambda collection: (collection.parent / 'evil.py').write_text('import os\n'), 'evil.py')
+
+    def test_bytecode_caches_are_removed_and_other_cache_content_fails(self):
+        def plant(collection):
+            cache = collection / 'plugins/modules/__pycache__'
+            cache.mkdir()
+            (cache / 'fixture.cpython-314.pyc').write_bytes(b'bytecode')
+        result, installed = self.run_check(plant)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((installed / 'plugins/modules/__pycache__').exists())
+
+        def plant_other(collection):
+            cache = collection / 'plugins/modules/__pycache__'
+            cache.mkdir()
+            (cache / 'fixture.py').write_text('import os\n')
+        self.assert_rejected(plant_other, '__pycache__')
+
+    def test_bytecode_temp_files_count_as_cache(self):
+        """Python writes name.pyc.<number> and renames it into place; a run caught mid-write leaves one behind."""
+        def plant(collection):
+            cache = collection / 'plugins/modules/__pycache__'
+            cache.mkdir()
+            (cache / 'fixture.cpython-314.pyc.140234').write_bytes(b'bytecode')
+        result, installed = self.run_check(plant)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((installed / 'plugins/modules/__pycache__').exists())
+
+    @unittest.skipIf(os.geteuid() == 0, 'root removes the cache regardless of directory permissions')
+    def test_cache_that_cannot_be_removed_fails_closed(self):
+        def plant(collection):
+            cache = collection / 'plugins/modules/__pycache__'
+            cache.mkdir()
+            (cache / 'fixture.cpython-314.pyc').write_bytes(b'bytecode')
+            (collection / 'plugins/modules').chmod(0o555)  # the cache directory cannot be removed (TemporaryDirectory
+            # restores permissions when it cleans up)
+        result, _ = self.run_check(plant)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('__pycache__', result.stderr)
+
+    def test_finder_metadata_is_refused_with_a_delete_hint(self):
+        def plant(collection):
+            (collection / 'plugins/.DS_Store').write_bytes(b'\x00\x00\x00\x01Bud1')
+        result, _ = self.run_check(plant)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn('delete the .DS_Store files', result.stderr)
+
+    def test_group_writable_entry_fails(self):
+        self.assert_rejected(lambda collection: (collection / NAME).chmod(0o664), NAME)
+
+    def test_tarball_swapped_after_the_hash_check_is_not_extracted(self):
+        """tar sees the verified private copy; a swap of collections-dist/ during the check changes nothing."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'scripts').mkdir()
+            shutil.copy2(ROOT / 'scripts/gpg-policy.sh', root / 'scripts/gpg-policy.sh')
+            (root / '.gpg-enforcement').write_text('disabled\n')
+            shutil.copytree(ROOT / 'collections-dist', root / 'collections-dist')
+            (root / 'scripts/verify-collections.sh').write_text(BASELINE_SOURCE)
+            shims = root / 'shims'
+            shims.mkdir()
+            # the first tar call swaps the tarball being extracted (ansible.posix, first in order) for junk
+            (shims / 'tar').write_text('#!/bin/sh\n[ -e "$SWAP_DIR/.swapped" ] || '
+                                       '{ for t in "$SWAP_DIR"/ansible-posix-*.tar.gz; do printf junk > "$t"; done; '
+                                       ': > "$SWAP_DIR/.swapped"; }\n'
+                                       f'exec {shutil.which("tar")} "$@"\n')
+            (shims / 'tar').chmod(0o755)
+            result = subprocess.run(['/bin/bash', str(root / 'scripts/verify-collections.sh')], capture_output=True,
+                                    text=True, env=dict(os.environ, PATH=f"{shims}:{os.environ['PATH']}",
+                                                        SWAP_DIR=str(root / 'collections-dist')))
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_real_tarballs_reject_a_planted_extensionless_module(self):
+        """End to end on the vendored tarballs: install them as ansible-galaxy does, then plant ansible.posix's 'at'."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'scripts').mkdir()
+            shutil.copy2(ROOT / 'scripts/gpg-policy.sh', root / 'scripts/gpg-policy.sh')
+            (root / '.gpg-enforcement').write_text('disabled\n')
+            shutil.copytree(ROOT / 'collections-dist', root / 'collections-dist')
+            verifier = root / 'scripts/verify-collections.sh'
+            verifier.write_text(BASELINE_SOURCE)
+            for tarball in sorted((root / 'collections-dist').glob('*.tar.gz')):
+                namespace, name = tarball.name.split('-')[:2]
+                target = root / 'collections/ansible_collections' / namespace / name
+                target.mkdir(parents=True)
+                with tarfile.open(tarball) as archive:
+                    archive.extractall(target, filter='tar')
+            clean = subprocess.run(['/bin/bash', str(verifier)], capture_output=True, text=True)
+            self.assertEqual(clean.returncode, 0, clean.stdout + clean.stderr)
+            module = root / 'collections/ansible_collections/ansible/posix/plugins/modules/at'
+            module.write_text('#!/bin/sh\necho pwned\n')
+            module.chmod(0o755)
+            planted = subprocess.run(['/bin/bash', str(verifier)], capture_output=True, text=True)
+            self.assertEqual(planted.returncode, 1, planted.stdout + planted.stderr)
+            self.assertIn('plugins/modules/at', planted.stderr)
+
+
+class RepoPluginBytecodeTests(unittest.TestCase):
+    """Bytecode beside the repo's own role plugins is removed before the run: Ansible would load a planted one."""
+    FILTER = 'def fixture(value):\n    return value\n\n\nclass FilterModule:\n    def filters(self):\n        return {"fixture": fixture}\n'
+
+    def layout(self, root):
+        (root / 'scripts').mkdir()
+        shutil.copy2(ROOT / 'scripts/gpg-policy.sh', root / 'scripts/gpg-policy.sh')
+        (root / '.gpg-enforcement').write_text('disabled\n')
+        shutil.copytree(ROOT / 'collections-dist', root / 'collections-dist')
+        (root / 'scripts/verify-collections.sh').write_text(BASELINE_SOURCE)
+        plugins = root / 'roles/fixture/filter_plugins'
+        plugins.mkdir(parents=True)
+        (plugins / 'fixture.py').write_text(self.FILTER)
+        (root / 'roles/fixture/tasks').mkdir()
+        (root / 'roles/fixture/tasks/main.yml').write_text('- ansible.builtin.debug:\n    msg: "{{ 1 | fixture }}"\n')
+        return plugins
+
+    def plant(self, source, marker):
+        """Unchecked-hash bytecode (loaded whatever the source says) that also writes a marker."""
+        import importlib.util
+        import py_compile
+        with tempfile.TemporaryDirectory() as directory:
+            payload = Path(directory) / source.name
+            payload.write_text(source.read_text() + f"\nopen({str(marker)!r}, 'w').write('planted')\n")
+            cache = Path(importlib.util.cache_from_source(str(source)))
+            py_compile.compile(str(payload), cfile=str(cache), dfile=str(source), doraise=True,
+                               invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH)
+        return cache
+
+    def test_planted_filter_bytecode_is_removed_before_ansible_loads_it(self):
+        ansible = ROOT / '.venv/bin/ansible-playbook'
+        if not ansible.exists():
+            self.skipTest('needs the repo .venv')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            plugins = self.layout(root)
+            marker = root / 'PLANTED'
+            cache = self.plant(plugins / 'fixture.py', marker)
+            verify = subprocess.run(['/bin/bash', str(root / 'scripts/verify-collections.sh')], capture_output=True, text=True)
+            self.assertEqual(verify.returncode, 0, verify.stdout + verify.stderr)
+            self.assertFalse(cache.parent.exists(), 'the planted __pycache__ is still there')
+            (root / 'play.yml').write_text('- hosts: localhost\n  gather_facts: false\n  roles: [fixture]\n')
+            run = subprocess.run([str(ansible), '-i', 'localhost,', '-c', 'local', str(root / 'play.yml')], cwd=root,
+                                 env=dict(os.environ, ANSIBLE_ROLES_PATH=str(root / 'roles'), PYTHONDONTWRITEBYTECODE='1',
+                                          ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh')),
+                                 capture_output=True, text=True)
+            self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+            self.assertFalse(marker.exists(), 'Ansible loaded the planted bytecode')
+
+    def test_symlinked_or_mixed_cache_beside_plugins_is_refused(self):
+        for kind in ('symlink', 'mixed'):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                plugins = self.layout(root)
+                if kind == 'symlink':
+                    (plugins / '__pycache__').symlink_to(root)
+                else:
+                    (plugins / '__pycache__').mkdir()
+                    (plugins / '__pycache__/evil.py').write_text('import os\n')
+                verify = subprocess.run(['/bin/bash', str(root / 'scripts/verify-collections.sh')], capture_output=True,
+                                        text=True)
+                self.assertEqual(verify.returncode, 1, verify.stdout + verify.stderr)
+                self.assertIn('__pycache__', verify.stderr)
+
+    def test_concurrent_change_gets_its_own_message(self):
+        """An entry that is gone by the time it would be reported was changed during the check, not planted."""
+        namespace = {}
+        exec(BASELINE_COMPARISON.split('def sha256(path):', 1)[0].replace('import sys', 'import sys', 1), namespace)
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(SystemExit), unittest.mock.patch('sys.stderr', new_callable=io.StringIO) as stderr:
+                namespace['fail_entries'](directory, 'tampering', ['vanished.cpython-314.pyc'])
+            self.assertIn('changed during the check (concurrent Ansible run?)', stderr.getvalue())
+            Path(directory, 'present').write_text('x')
+            with self.assertRaises(SystemExit), unittest.mock.patch('sys.stderr', new_callable=io.StringIO) as stderr:
+                namespace['fail_entries'](directory, 'tampering', ['present'])
+            self.assertIn('tampering', stderr.getvalue())
 
 
 if __name__ == '__main__':
