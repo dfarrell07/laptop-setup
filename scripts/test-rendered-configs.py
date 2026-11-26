@@ -164,6 +164,34 @@ class RenderedConfigTests(unittest.TestCase):
     def read(self, name):
         return (self.out / name).read_text()
 
+    def test_wm_configs_end_by_including_the_users_config_local(self):
+        """Hand edits live in config.local, which the managed config includes last so they can add to it."""
+        for wm in ('i3', 'sway'):
+            with self.subTest(wm=wm):
+                lines = [line for line in self.read(wm).splitlines() if line.strip()]
+                self.assertEqual(lines[-1], f'include ~/.config/{wm}/config.local')
+                self.assertEqual(sum(line.startswith('include ') for line in lines), 1)
+
+    @unittest.skipUnless(shutil.which('i3'), 'i3 not installed')
+    def test_rendered_i3_config_validates_with_and_without_config_local(self):
+        """Runs where i3 is installed (developer hosts; the CI runner has none and skips it)."""
+        with tempfile.TemporaryDirectory() as home:
+            env = dict(os.environ, HOME=home)
+            config = Path(home) / 'config'
+            config.write_text(self.read('i3'))
+            for local in (None, 'bindsym Mod4+F12 exec true\n', 'not a command\n'):
+                with self.subTest(local=local):
+                    path = Path(home) / '.config/i3/config.local'
+                    path.unlink(missing_ok=True)
+                    if local is not None:
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        path.write_text(local)
+                    result = subprocess.run(['i3', '-C', '-c', str(config)], env=env, capture_output=True, text=True,
+                                            timeout=30)
+                    # A bad config.local must fail: proof the include is read, not silently skipped
+                    self.assertEqual(result.returncode, 1 if local == 'not a command\n' else 0,
+                                     result.stdout + result.stderr)
+
     def test_ssh_config_block_order_and_strict_checking(self):
         for name in ('ssh_seeded', 'ssh_unseeded'):
             text = self.read(name)

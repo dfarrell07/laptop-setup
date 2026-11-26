@@ -195,3 +195,8 @@ input "{{ desktop_sway_trackpoint_id | regex_replace('[^a-zA-Z0-9 ./:_-]', '') }
 
 # Status bar
 {% include '_bar_colors.j2' %}
+
+# Hand edits go in ~/.config/sway/config.local, which laptop-setup never creates or changes (a missing file is
+# ignored). This file is rewritten when its template changes; the previous one is kept as config.<timestamp>~.
+# A binding redefined there replaces the one above (unbindsym removes one).
+include ~/.config/sway/config.local
