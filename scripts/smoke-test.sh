@@ -157,6 +157,14 @@ _cfg_read() { # mode key
 }
 _cfg_value() { _cfg_read value "$1" || true; }
 _cfg_list() { _cfg_read list "$1" || true; }
+# A yes/no option as the templates write it (an unquoted yes or no is a YAML boolean there): a boolean word in any
+# case is yes or no, anything else is lowercased; DEFAULT when the key is absent
+_cfg_yes_no() { # KEY DEFAULT
+  local v
+  v=$(_cfg_read value "$1") || { printf '%s\n' "$2"; return 0; }
+  v=$(printf '%s' "$v" | tr '[:upper:]' '[:lower:]')
+  case $v in true|yes|on|1) echo yes ;; false|no|off|0) echo no ;; *) printf '%s\n' "$v" ;; esac
+}
 profile="work"
 grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && profile="personal"
 [[ -z "$PROFILE_OVERRIDE" ]] || profile="$PROFILE_OVERRIDE"
@@ -226,8 +234,8 @@ _aide_enabled=false
 grep -qiE '^system_aide_enabled:[[:space:]]*["'"'"']?(true|yes|on|1)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _aide_enabled=true
 _devshm_noexec=true
 grep -qiE '^system_devshm_noexec:[[:space:]]*["'"'"']?(false|no|off|0)["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && _devshm_noexec=false
-_agent_fwd=$(awk -F': ' '/^system_ssh_allow_agent_forwarding:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
-case "$(printf %s "$_agent_fwd" | tr "[:upper:]" "[:lower:]")" in yes|true|on|1) _agent_fwd=yes ;; *) _agent_fwd=no ;; esac
+_agent_fwd=$(_cfg_yes_no system_ssh_allow_agent_forwarding no)
+[[ "$_agent_fwd" == yes ]] || _agent_fwd=no
 _cfg_ssh_port=$(awk -F': ' '/^ssh_port:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
 [[ -z "$_cfg_ssh_port" ]] && _cfg_ssh_port="722"
 # Validate ssh_port matches decimal format to prevent regex injection in grep patterns
@@ -299,9 +307,12 @@ _drive_accounts=$(_cfg_list drive_sync_accounts)
 _dbx_name=$(_cfg_value container_name)
 _system_umask=$(_cfg_value system_umask)
 _system_keymap=$(_cfg_value system_keymap)
-_llmnr_exp=$(_cfg_value system_resolved_llmnr)
-_mdns_exp=$(_cfg_value system_resolved_multicast_dns)
-unset -f _cfg_read _cfg_value _cfg_list _chunk_enabled
+# (role default 'no'; 98-llmnr.conf has them in lowercase)
+_llmnr_exp=$(_cfg_yes_no system_resolved_llmnr no)
+_mdns_exp=$(_cfg_yes_no system_resolved_multicast_dns no)
+[[ "$_llmnr_exp" =~ ^(no|yes|resolve)$ ]] || _llmnr_exp=no
+[[ "$_mdns_exp" =~ ^(no|yes|resolve)$ ]] || _mdns_exp=no
+unset -f _cfg_read _cfg_value _cfg_list _cfg_yes_no _chunk_enabled
 unset _cfg
 [[ -z "$_cfg_tmp" ]] || { rm -f "$_cfg_tmp"; trap - EXIT; }  # the cleaned copy of config.yml
 unset _cfg_tmp
@@ -3318,9 +3329,7 @@ fi
 
 # resolved.conf.d/98-llmnr.conf content check — file-gated; silently skips on macOS or where system role was not run
 if [[ -f /etc/systemd/resolved.conf.d/98-llmnr.conf ]]; then
-  # expected values follow system_resolved_llmnr / system_resolved_multicast_dns (role default 'no')
-  [[ "$_llmnr_exp" =~ ^(no|yes|resolve)$ ]] || _llmnr_exp=no
-  [[ "$_mdns_exp" =~ ^(no|yes|resolve)$ ]] || _mdns_exp=no
+  # expected values follow system_resolved_llmnr / system_resolved_multicast_dns, read at the top
   if grep -qxF "LLMNR=$_llmnr_exp" /etc/systemd/resolved.conf.d/98-llmnr.conf && \
      grep -qxF "MulticastDNS=$_mdns_exp" /etc/systemd/resolved.conf.d/98-llmnr.conf; then
     record "llmnr-disabled" "PASS"
