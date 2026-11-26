@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 unset BASH_ENV  # SECURITY: prevent BASH_ENV=/tmp/evil.sh sourcing before sanitization runs
+# SECURITY: bash 3.2 (macOS /bin/bash) joins "${arr[@]:N}" into one word when IFS does not start with a
+# space, which would hide arguments from the scans below. Fail closed rather than scan wrongly.
+if [ -z "${BASH_VERSINFO:-}" ] || [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+    echo "verify-ansible-args: needs bash 4 or later, found ${BASH_VERSION:-unknown} (macOS: brew install bash)" >&2
+    exit 1
+fi
 # SECURITY: Reject --start-at-task flag and other dangerous ansible-playbook flags
 # to prevent bypassing pre-flight validation checks.
 #
@@ -43,7 +49,10 @@ args=("$@")
 _run_log_name=""
 if [[ ${#args[@]} -gt 0 && "${args[0]}" == --run-log=* ]]; then
     _run_log_name="${args[0]#--run-log=}"
-    args=("${args[@]:1}")
+    _tail_args=()  # an index loop, not "${args[@]:1}" (bash 3.2 joins slices under this IFS)
+    for ((_i = 1; _i < ${#args[@]}; _i++)); do _tail_args+=("${args[_i]}"); done
+    args=("${_tail_args[@]+"${_tail_args[@]}"}")
+    unset _tail_args _i
     if [[ ! "$_run_log_name" =~ ^[a-z][a-z0-9-]{0,31}$ ]]; then
         echo "ERROR: --run-log name must match ^[a-z][a-z0-9-]{0,31}\$" >&2
         exit 1
