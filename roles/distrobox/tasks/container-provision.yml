@@ -203,6 +203,7 @@
         state: directory
         prefix: ansible_subctl_
       register: _container_subctl_tmpdir
+      changed_when: false  # scratch space for this run, removed below: not a change to the container
 
     - name: Compile subctl main package with release version metadata
       ansible.builtin.command:
@@ -255,6 +256,7 @@
       ansible.builtin.file:
         path: "{{ _container_subctl_tmpdir.path }}"
         state: absent
+      changed_when: false  # the scratch directory created above
       when: _container_subctl_tmpdir.path is defined
 
 - name: Report go install failures
