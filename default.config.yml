@@ -76,6 +76,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   system_auditd_num_logs: 5          (group_vars/all/vars.yml) — rotated files to keep; total = max_log_file *
 #                                        num_logs (40 MB default). Same CSB caveat as system_auditd_max_log_file.
 #   system_aide_check_calendar: 'daily'  (roles/system/defaults) — OnCalendar for aide-check.timer
+#   system_aide_monitoring_etc_paths: [/etc/ssh/sshd_config.d, ...]  (roles/system/defaults) — /etc paths AIDE watches;
+#                                        a list in config.yml replaces the default (plain paths only)
 #   system_usbguard_extra_rules: []    (roles/system/defaults) — append per-machine USB rules
 #   system_usbguard_whitelist: [...]  (roles/system/defaults) — base USB allow-rules (YubiKey,
 #                                        root hubs, hardwired ports); REPLACES the entire base list
@@ -166,6 +168,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   system_keymap: us                  (role default: us) — console keymap for /etc/vconsole.conf
 #   system_sysrq: 0                    (group_vars/all/vars.yml) — 0=disabled (CIS), 176=emergency recovery
 #   system_tmout: 0                    (group_vars/all/vars.yml) — session inactivity timeout seconds; 0=disabled; CIS wants <=900
+#   system_sudo_timestamp_timeout: 15  (roles/system/defaults) — sudo credential cache in minutes, 0-60 (0: ask every time)
 #   system_faillock_deny: 5            (group_vars/all/vars.yml) — failed logins before lockout (CIS); lower for shared machines
 #   system_faillock_unlock_time: 900   (group_vars/all/vars.yml) — seconds until auto-unlock (CIS); 0=permanent until admin reset
 #   system_faillock_even_deny_root: false (group_vars/all/vars.yml) — lock root on failed logins; set true on shared/multi-user machines
@@ -235,6 +238,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #                                        system_grub_password_hash in config.yml
 #   system_ptrace_scope: 1             (group_vars/all/vars.yml) — CIS-compliant default (parent-only YAMA);
 #                                        set 0 in config.yml for unrestricted ptrace (dev workstation default)
+#   system_selinux_policy: targeted    (roles/system/defaults) — targeted or strict (pre-flight refuses minimum)
 #   system_perf_event_paranoid: 2      (roles/system/defaults) — CIS-compliant (>=2) and Fedora 44 default;
 #                                        value 3 requires CAP_SYS_ADMIN for all perf operations, breaking
 #                                        perf stat/top/record for non-root users; set 3 in config.yml for
@@ -253,6 +257,10 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #                                        set false if UDF media (optical discs, UDF-formatted drives) is needed
 #   system_ssh_max_sessions: 10        (roles/system/defaults) — max concurrent SSH sessions per connection
 #                                        (VS Code Remote needs >=10); also the Mac's sshd (desktop role)
+#   ssh_port: 722                      (group_vars/all/vars.yml) — sshd and SSH client port; e.g. 2222 (1-65535, never 22)
+#   system_ssh_client_alive_interval: 300  (roles/system/defaults) — seconds between keepalive probes; 0 disables
+#   system_ssh_client_alive_count_max: 2  (roles/system/defaults) — unanswered keepalive probes before disconnect
+#   system_ssh_rekey_limit: '1G 1h'    (roles/system/defaults) — RekeyLimit as data [time] (e.g. '512M 30m'), or default / none
 #   system_ssh_allow_tcp_forwarding: "local" (roles/system/defaults) — 'local' for VS Code port panel/ssh -L,
 #                                            'remote' for ssh -R, 'yes' for both; also the Mac's sshd (desktop role)
 #   system_ssh_unused_connection_timeout: 3600 (roles/system/defaults) — seconds before idle connection with no open channels is
@@ -277,6 +285,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     No domain-allowlist check is performed. config.yml integrity is the sole guard against
 #     NTS server substitution. With system_chrony_authselectmode: require, a rogue NTS entry
 #     fully controls the clock. Only list hostnames you explicitly trust.
+#   system_chrony_nts_servers_confirmed: false  (pre-flight only) — must be true whenever system_chrony_nts_servers
+#                                        is set in config.yml; pre-flight refuses the list otherwise
 #   system_chrony_fallback_pool: 2.<distro>.pool.ntp.org  (roles/system/defaults; per distro) — plain NTP fallback when NTS unreachable
 #                                        SECURITY: this pool is unauthenticated (no NTS); an attacker-controlled
 #                                        value silently redirects time sync on networks where NTS (TCP 4460) is
@@ -289,6 +299,11 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #                                        failure as a chrony error rather than silent fallback to unauthenticated NTP.
 #                                        Set 'prefer' on restricted networks where TCP 4460 is blocked; also set
 #                                        system_chrony_authselectmode_prefer_confirmed: true to acknowledge the trade-off.
+#   system_chrony_logdir: /var/log/chrony  (roles/system/defaults) — chrony log directory (plain path: letters, digits, / . _ -)
+#   system_chrony_ntsdumpdir: /var/lib/chrony  (roles/system/defaults) — NTS cookie directory (plain path)
+#   system_chrony_driftfile: /var/lib/chrony/drift  (roles/system/defaults) — Debian default /var/lib/chrony/chrony.drift (plain path)
+#   system_chrony_leapseclist: /usr/share/zoneinfo/leap-seconds.list  (roles/system/defaults) — plain path
+#   system_chrony_leapsecmode: slew      (roles/system/defaults) — 'step' steps the clock at a leap second instead
 #   system_tmp_noexec: false           (roles/system/defaults) — noexec on /tmp disabled by default; set true for CIS 1.1.2.x compliance
 #                                        (breaks pip, cargo, rustup, npm native addons that exec from /tmp; nosuid/nodev preserved)
 #   system_home_nosuid_force: false    (roles/system/defaults) — set true on RHEL CSB machines where /home is a known local
