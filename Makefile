@@ -603,6 +603,14 @@ test-scripts: .venv
 gate: .venv
 	$(MAKE) --no-print-directory -j4 --output-sync=target lint syntax-check test-scripts
 
+# --output-sync needs GNU make 4: say so while the Makefile is read, before anything runs (with -j or -k too), not
+# "unrecognized option" after the venv is built. macOS ships make 3.81; the dotfiles chunk puts Homebrew's first on PATH.
+ifneq ($(filter gate,$(MAKECMDGOALS)),)
+ifneq ($(filter 0.% 1.% 2.% 3.%,$(MAKE_VERSION)),)
+$(error make gate needs GNU make 4 or later, this is $(MAKE_VERSION). macOS: brew install make and run gmake gate, or make apply CHUNK=dotfiles NOSUDO=1 to put it first on PATH)
+endif
+endif
+
 # Regression checks for the pinned secret scanner configuration.
 test-gitleaks:
 	python3 -I scripts/test-gitleaks-config.py
