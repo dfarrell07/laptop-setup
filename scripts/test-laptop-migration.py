@@ -177,12 +177,23 @@ class MigrationTests(unittest.TestCase):
             self.assertFalse((directory / '.local').exists())
 
     def test_codex_rejects_resolved_path_overlap_before_writes(self):
-        for case in ['slash', 'dot', 'symlink', 'nested-install', 'nested-account', 'home', 'outside']:
+        for case in ['slash', 'dot', 'symlink', 'nested-install', 'nested-account', 'home', 'outside', 'case-only',
+                     'unicode-form', 'unicode-case', 'case-outside']:
             with self.subTest(case=case), tempfile.TemporaryDirectory() as name:
                 directory = Path(name)
                 variables = {'ansible_facts': {'user_dir': name}, 'packages_install_binaries': False}
                 personal = name + '/.codex'
-                if case == 'slash':
+                if case == 'case-only':  # one directory on case-insensitive APFS, refused on every OS
+                    variables['codex_personal_config_dir'] = name + '/.CODEX'
+                elif case == 'unicode-form':  # links to the NFC and NFD spellings of one name: one directory on APFS
+                    (directory / '.codex').symlink_to(directory / 'café')
+                    (directory / '.codex-personal').symlink_to(directory / 'café')
+                elif case == 'unicode-case':  # folding needs the decomposed form: capital iota with marks is U+0390
+                    (directory / '.codex').symlink_to(directory / 'Ϊ́')
+                    (directory / '.codex-personal').symlink_to(directory / 'ΐ')
+                elif case == 'case-outside':  # "inside the home" stays exact: another spelling of it is not trusted
+                    (directory / '.codex-personal').symlink_to(name.swapcase() + '/x')
+                elif case == 'slash':
                     variables['codex_personal_config_dir'] = personal + '/'
                 elif case == 'dot':
                     variables['codex_personal_config_dir'] = name + '/./.codex'
