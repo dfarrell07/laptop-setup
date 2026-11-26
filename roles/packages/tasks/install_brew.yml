@@ -194,20 +194,39 @@
           # Versions/Current link and break the bundle's code signature
           ansible.builtin.command:
             argv: [/bin/cp, -R, "{{ _aerospace_tmpdir.path }}/AeroSpace-v{{ packages_aerospace_version }}/AeroSpace.app", /Applications/]
+          register: _aerospace_install_user
           changed_when: true
           when:
             - not _aerospace_app_after.stat.exists
             - _aerospace_paths.results[0].stat.writeable | default(false)
 
+        # cp -R creates the copy under the run's umask (077 from the dotfiles zshrc), so the bundle would be 0700: the
+        # sudo copy root-owned and unopenable by the user. Directories and executables 0755, other files 0644; chmod -R
+        # follows no symlink.
+        - name: Make the user's AeroSpace.app readable and runnable by every user  # noqa: command-instead-of-module no-handler
+          ansible.builtin.command:
+            argv: [/bin/chmod, -R, "u+rwX,go+rX,go-w", /Applications/AeroSpace.app]
+          changed_when: true
+          when: _aerospace_install_user is changed
+
         - name: Install AeroSpace.app to /Applications with sudo  # noqa: command-instead-of-module
           ansible.builtin.command:
             argv: [/bin/cp, -R, "{{ _aerospace_tmpdir.path }}/AeroSpace-v{{ packages_aerospace_version }}/AeroSpace.app", /Applications/]
+          register: _aerospace_install_root
           become: true
           tags: [become]
           changed_when: true
           when:
             - not _aerospace_app_after.stat.exists
             - not (_aerospace_paths.results[0].stat.writeable | default(false))
+
+        - name: Make the sudo-installed AeroSpace.app readable and runnable by every user  # noqa: command-instead-of-module no-handler
+          ansible.builtin.command:
+            argv: [/bin/chmod, -R, "u+rwX,go+rX,go-w", /Applications/AeroSpace.app]
+          become: true
+          tags: [become]
+          changed_when: true
+          when: _aerospace_install_root is changed
 
         - name: Note an AeroSpace.app that needs sudo to install
           ansible.builtin.debug:
