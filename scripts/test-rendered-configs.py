@@ -1500,6 +1500,40 @@ class ClaudeTaskTests(unittest.TestCase):
 
 
 class MacTaskTests(unittest.TestCase):
+    def test_app_bundles_are_copied_with_their_symlinks(self):
+        """macOS cp -r follows symlinks: a framework's Versions/Current link would become a directory, breaking the
+        bundle's code signature. Every task copying with cp uses -R; on a Mac, the task's own options keep the link."""
+        def walk(tasks):
+            for task in tasks or []:
+                yield task
+                for key in ('block', 'rescue', 'always'):
+                    yield from walk(task.get(key))
+
+        copies = []
+        for path in sorted(ROOT.glob('roles/*/tasks/*.yml')):
+            for task in walk(yaml.safe_load(path.read_text())):
+                command = task.get('ansible.builtin.command') or task.get('ansible.builtin.shell') or {}
+                argv = command.get('argv') if isinstance(command, dict) else None
+                if argv and Path(str(argv[0])).name == 'cp':
+                    copies.append((f"{path.relative_to(ROOT)}: {task.get('name')}", argv))
+                text = command if isinstance(command, str) else command.get('cmd', '') if isinstance(command, dict) else ''
+                self.assertNotRegex(text, r'\bcp\s+-[A-Za-z]*r', f'{path}: {task.get("name")}')
+        self.assertEqual(len([c for c in copies if 'AeroSpace.app' in c[0]]), 2)  # the user and the sudo copy
+        for where, argv in copies:
+            options = [a for a in argv[1:] if str(a).startswith('-')]
+            self.assertFalse(any('r' in o.lstrip('-') for o in options), f'{where}: {argv}')
+            if os.uname().sysname == 'Darwin' and argv[0] == '/bin/cp':
+                with tempfile.TemporaryDirectory() as directory:
+                    versions = Path(directory) / 'src.app/Contents/Frameworks/F.framework/Versions'
+                    (versions / 'A').mkdir(parents=True)
+                    (versions / 'A/F').write_text('x\n')
+                    (versions / 'Current').symlink_to('A')
+                    (Path(directory) / 'dst').mkdir()
+                    subprocess.run(['/bin/cp', *options, str(Path(directory) / 'src.app'), str(Path(directory) / 'dst')],
+                                   check=True)
+                    copied = Path(directory) / 'dst/src.app/Contents/Frameworks/F.framework/Versions/Current'
+                    self.assertTrue(copied.is_symlink(), where)
+
     def test_stale_mosh_server_entries_are_removed(self):
         """Older Cellar paths of mosh-server go; the current one and other programs stay."""
         task = production_task('roles/desktop/tasks/main.yml', 'Remove stale mosh-server entries from the macOS firewall')
