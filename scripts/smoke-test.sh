@@ -1021,10 +1021,23 @@ if ! $IS_LINUX && [[ -z "$CONTAINER" ]] && ! $SYSTEM_ONLY; then
   if [[ -z "$_missing" ]]; then record "macos-zshenv-path" "PASS"
   else record "macos-zshenv-path" "FAIL" "non-interactive zsh PATH lacks (or puts after the system dirs):$_missing — run: make apply CHUNK=dotfiles"; fi
   _sock=$(launchctl getenv SSH_AUTH_SOCK 2>/dev/null || true)
-  if [[ "$_sock" == "$HOME/.ssh/ssh-agent.socket" ]]; then record "macos-launchd-ssh-auth-sock" "PASS"
+  # The play sets that variable itself, so it says nothing about the agent: ssh-add -l exits 2 only when no agent
+  # answers on the socket (1: no keys yet, which is normal). Bounded like ssh-agent-key below: a stalled agent must
+  # not hang the run, and a timeout counts as no answer.
+  _agent_rc=0
+  if command -v ssh-add >/dev/null 2>&1; then
+    SSH_AUTH_SOCK="$HOME/.ssh/ssh-agent.socket" ${_timeout_bin:+"$_timeout_bin" 10} ssh-add -l >/dev/null 2>&1 \
+      || _agent_rc=$?
+    [[ $_agent_rc -eq 124 ]] && _agent_rc=2
+  fi
   # WARN in Molecule: a CI runner's launchd session is not a login session
-  else record "macos-launchd-ssh-auth-sock" "$([[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && echo WARN || echo FAIL)" "launchd SSH_AUTH_SOCK is ${_sock:-unset}, not ~/.ssh/ssh-agent.socket, so GUI apps and launchd jobs miss the agent — run: make apply CHUNK=dotfiles"; fi
-  unset _brew _zpath _missing _sock
+  _sev=$([[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && echo WARN || echo FAIL)
+  if [[ "$_sock" != "$HOME/.ssh/ssh-agent.socket" ]]; then
+    record "macos-launchd-ssh-auth-sock" "$_sev" "launchd SSH_AUTH_SOCK is ${_sock:-unset}, not ~/.ssh/ssh-agent.socket, so GUI apps and launchd jobs miss the agent — run: make apply CHUNK=dotfiles"
+  elif [[ $_agent_rc -eq 2 ]]; then
+    record "macos-launchd-ssh-auth-sock" "$_sev" "no ssh-agent answers on ~/.ssh/ssh-agent.socket (launchctl list | grep ssh-agent shows whether its job runs) — run: make apply CHUNK=dotfiles"
+  else record "macos-launchd-ssh-auth-sock" "PASS"; fi
+  unset _brew _zpath _missing _sock _agent_rc _sev
   unset -f _first
   # GUI apps and launchd jobs get launchd's PATH, which the dotfiles LaunchAgent sets to what ~/.zshenv builds
   if $_launchd_gnu; then _want=$(env -i HOME="$HOME" PATH=/usr/bin:/bin:/usr/sbin:/sbin zsh -c 'print -r -- $PATH' 2>/dev/null || true)

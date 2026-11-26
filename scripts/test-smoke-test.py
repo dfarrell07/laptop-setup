@@ -699,13 +699,21 @@ class SmokeTests(unittest.TestCase):
             only_tools(stubs, 'env')  # env -i then finds the host zsh on the bare system PATH
             (stubs / 'launchctl').write_text('#!/bin/sh\n[ "$1 $2" = "getenv SSH_AUTH_SOCK" ] && [ -n "$SOCK" ] && echo "$SOCK"\n')
             (stubs / 'launchctl').chmod(0o755)
+            # ssh-add -l: 0 keys listed, 1 an agent with no keys, 2 no agent on the socket (also when asked about another one)
+            (stubs / 'ssh-add').write_text('#!/bin/sh\n[ "$SSH_AUTH_SOCK" = "$HOME/.ssh/ssh-agent.socket" ] || exit 2\n'
+                                           'exit "$AGENT_RC"\n')
+            (stubs / 'ssh-add').chmod(0o755)
 
-            def run(zshenv, sock, gnu='true', molecule=''):
+            # timeout 10 cmd...: runs cmd, or stands for an agent that never answers (exit 124)
+            (stubs / 'timeout').write_text('#!/bin/sh\n[ -n "$HANG" ] && exit 124\nshift\nexec "$@"\n')
+            (stubs / 'timeout').chmod(0o755)
+
+            def run(zshenv, sock, gnu='true', molecule='', agent='1', hang=''):
                 (home / '.zshenv').write_text(zshenv)
                 result = subprocess.run([BASH, '-eu', '-o', 'pipefail', '-c',
                     'record() { printf "%s %s %s\\n" "$1" "$2" "${3:-}"; };'
-                    f' _brew={brew} _macos_gnu_tools={gnu};\n' + source[start:end]],
-                    env=dict(os.environ, PATH=str(stubs), HOME=str(home), SOCK=sock,
+                    f' _brew={brew} _macos_gnu_tools={gnu} _timeout_bin={stubs}/timeout;\n' + source[start:end]],
+                    env=dict(os.environ, PATH=str(stubs), HOME=str(home), SOCK=sock, AGENT_RC=agent, HANG=hang,
                              MOLECULE_PROJECT_DIRECTORY=molecule), capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 return result.stdout.splitlines()
@@ -726,6 +734,14 @@ class SmokeTests(unittest.TestCase):
             apple = '/private/tmp/com.apple.launchd.x/Listeners'
             self.assertTrue(run(good, apple)[1].startswith('macos-launchd-ssh-auth-sock FAIL'))
             self.assertTrue(run(good, apple, molecule='/src')[1].startswith('macos-launchd-ssh-auth-sock WARN'))
+            # launchd names the socket (the play sets that itself) but no agent answers on it: the job is dead
+            self.assertTrue(run(good, sock, agent='2')[1].startswith(
+                'macos-launchd-ssh-auth-sock FAIL no ssh-agent answers on ~/.ssh/ssh-agent.socket'))
+            self.assertTrue(run(good, sock, agent='2', molecule='/src')[1].startswith('macos-launchd-ssh-auth-sock WARN'))
+            self.assertEqual(run(good, sock, agent='0')[1], 'macos-launchd-ssh-auth-sock PASS ')  # keys loaded
+            self.assertEqual(run(good, sock, agent='9')[1], 'macos-launchd-ssh-auth-sock PASS ')  # any other error
+            # an agent that never answers (waiting on a touch, wedged) is cut off after 10 s and counts as no agent
+            self.assertTrue(run(good, sock, hang='1')[1].startswith('macos-launchd-ssh-auth-sock FAIL no ssh-agent answers'))
 
     def test_aerospace_config_check_needs_the_managed_file(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
