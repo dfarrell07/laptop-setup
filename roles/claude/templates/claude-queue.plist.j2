@@ -36,8 +36,9 @@
     <key>CLAUDE_QUEUE_ALLOWED_AUTHORS</key>
     <string>{{ claude_queue_allowed_authors | map('regex_replace', '[\r\n,=].*', '') | join(',') | e }}</string>
   </dict>
+  <!-- stdout repeats poller.log line for line (log() tees it); stderr keeps what goes wrong -->
   <key>StandardOutPath</key>
-  <string>{{ claude_log_dir | e }}/claude-queue.log</string>
+  <string>/dev/null</string>
   <key>StandardErrorPath</key>
   <string>{{ claude_log_dir | e }}/claude-queue.log</string>
   <!-- on bootout: time to finish a push or gh call before SIGKILL (default 20 s) -->

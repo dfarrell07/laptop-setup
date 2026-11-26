@@ -128,6 +128,31 @@ rm -f "$_PATCHED"
 assert_eq       "no queued issues: exit 0"   "0"                     "$_exit"
 assert_contains "no queued issues: log line" "No queued issues found" "$_out"
 
+# Logs past 20000 lines keep their last 20000 (macOS has no logrotate); claude-queue.log, launchd's stderr file,
+# is rewritten in place
+_qlogs="$_TMPHOME/.local/state/claude/logs"
+seq 1 20500 > "$_qlogs/poller.log"
+seq 1 20500 > "$_qlogs/claude-queue.log"
+_inode_before=$(ls -i "$_qlogs/claude-queue.log" | awk '{print $1}')
+_PATCHED=$(mktemp)
+sed 's|LOCKFILE=.*|LOCKFILE="'"$_TMPLOCKDIR/test.lock"'"|' "$POLLER" > "$_PATCHED"
+_qpoll() { CLAUDE_QUEUE_REPO="test/q" HOME="$_TMPHOME" PATH="$_TMPBIN:$PATH" bash "$_PATCHED" >/dev/null 2>&1 || true; }
+_qpoll
+assert_eq "log trim: poller.log keeps the last 20000 lines, then this run's" "501 20500" \
+  "$(head -1 "$_qlogs/poller.log") $(sed -n 20000p "$_qlogs/poller.log")"
+assert_eq "log trim: claude-queue.log trimmed in place" "501 20000 $_inode_before" \
+  "$(head -1 "$_qlogs/claude-queue.log") $(wc -l < "$_qlogs/claude-queue.log" | tr -d ' ') $(ls -i "$_qlogs/claude-queue.log" | awk '{print $1}')"
+_tmps=("$_qlogs"/*.tmp)
+assert_eq "log trim: no temporary file left" "no" "$([[ -e "${_tmps[0]}" ]] && echo yes || echo no)"
+# At exactly 20000 lines nothing is trimmed (poller.log gets this run's lines after them)
+seq 1 20000 > "$_qlogs/poller.log"
+seq 1 20000 > "$_qlogs/claude-queue.log"
+_qpoll
+assert_eq "log trim: 20000 lines are left alone" "1 1 20000" \
+  "$(head -1 "$_qlogs/poller.log") $(head -1 "$_qlogs/claude-queue.log") $(wc -l < "$_qlogs/claude-queue.log" | tr -d ' ')"
+rm -f "$_PATCHED"
+unset -f _qpoll
+
 # --- Main-loop gh issue list failure (network error path) ---
 _ERRBIN=$(mktemp -d)
 trap 'rm -rf "$_TMPBIN" "$_TMPHOME" "$_TMPLOCKDIR" "$_ERRBIN"' EXIT
