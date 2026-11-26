@@ -44,7 +44,9 @@
   <!-- on bootout: time to finish a push or gh call before SIGKILL (default 20 s) -->
   <key>ExitTimeOut</key>
   <integer>120</integer>
+  <!-- Standard, not Background: the poller runs real agent work (claude, git, tests) under a timeout, and Background
+       throttles the whole process tree's CPU and I/O; Adaptive only differs for XPC services -->
   <key>ProcessType</key>
-  <string>Background</string>
+  <string>Standard</string>
 </dict>
 </plist>
