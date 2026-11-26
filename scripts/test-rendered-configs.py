@@ -59,6 +59,11 @@ CASES = {
     'sketchybar_status': ('roles/desktop/templates/sketchybar-status.sh.j2', {
         '_desktop_macos_bar_disks': MACOS_BAR_DISKS, 'desktop_i3status_disks': ['/', '/tmp', '/Volumes/My Disk/'],
         'desktop_i3status_vpns_extra': [{'name': 'Mullvad', 'command': ['mullvad-missing', 'status'], 'connected': '^Connected'}]}),
+    # an accented volume typed in NFC (macOS stores and df prints it in NFD), and a name with a control character
+    'sketchybar_status_unicode': ('roles/desktop/templates/sketchybar-status.sh.j2', {
+        '_desktop_macos_bar_disks': MACOS_BAR_DISKS,
+        'desktop_i3status_disks': ['/', '/Volumes/Données/', '/Volumes/Bell\x07Disk', '/Volumes/Plain',
+                                   '/Volumes/Caf\u00e9 \U0001f389']}),
     'sketchybar_workspaces': ('roles/desktop/templates/sketchybar-workspaces.sh.j2', {}),
     # AeroSpace with the bar on, before and after the packages chunk built SketchyBar
     'aerospace_bar': ('roles/desktop/templates/aerospace.toml.j2', {
@@ -564,6 +569,30 @@ class RenderedConfigTests(unittest.TestCase):
             third = self.run_sketchybar_script('sketchybar_status', stubs, {'RX': '0'})
             for item in ('bat', 'ctr', 'net'):
                 self.assertEqual(third[item], {'drawing': 'off'}, item)
+
+    def test_sketchybar_status_shows_accented_volumes(self):
+        """/Volumes/Données shows though config.yml has it in NFC and df prints the volume's NFD name; a control
+        character is dropped from a name; an ASCII name that is not a mount point still hides."""
+        self.assertNotIn('\x07', self.read('sketchybar_status_unicode'))
+        quiet = {c: 'exit 1' for c in ('iostat', 'sysctl', 'vm_stat', 'pmset', 'osascript', 'ps', 'podman', 'scutil',
+                                       'route', 'ipconfig', 'networksetup', 'netstat')}
+        # The NFD mount points df prints, each quoted for the stub's shell
+        nfd = '"$(printf \'/Volumes/Donne\\314\\201es\')"'
+        party = '"$(printf \'/Volumes/Cafe\\314\\201 \\360\\237\\216\\211\')"'  # Apple's iconv cannot convert the emoji
+        with tempfile.TemporaryDirectory() as name:
+            items = self.run_sketchybar_script('sketchybar_status_unicode', {
+                '__dir': name, **quiet,
+                'df': 'printf "Filesystem 1024-blocks Used Available Capacity Mounted on\\n"; case "$2" in'
+                      f' "$(printf \'/Volumes/Donn\\303\\251es\')"|{nfd}) printf "/dev/d2 1000000 500000 500000 50%% %s\\n" {nfd};;'
+                      ' /Volumes/BellDisk) printf "/dev/d3 1000000 500000 500000 50%% /Volumes/BellDisk\\n";;'
+                      f' "$(printf \'/Volumes/Caf\\303\\251 \\360\\237\\216\\211\')"|{party})'
+                      f' printf "/dev/d4 1000000 500000 500000 50%% %s\\n" {party};;'
+                      ' *) printf "/dev/d 1000000 500000 500000 50%% /\\n";; esac'})
+        self.assertEqual(items['disk.0']['label'], '/ 488.3M')
+        self.assertEqual(items['disk.1']['label'], '/Volumes/Données 488.3M')  # as typed, the trailing slash dropped
+        self.assertEqual(items['disk.2']['label'], '/Volumes/BellDisk 488.3M')
+        self.assertEqual(items['disk.3'], {'drawing': 'off'})  # /Volumes/Plain: df reports /, not a mount point
+        self.assertEqual(items['disk.4']['label'], '/Volumes/Café \U0001f389 488.3M')
 
     def test_sketchybar_status_edge_cases(self):
         quiet = {c: 'exit 1' for c in ('iostat', 'sysctl', 'vm_stat', 'df', 'pmset', 'osascript', 'ps', 'podman', 'scutil',
