@@ -12,6 +12,26 @@
       an unlocked desktop. Set display_timeout > lock_timeout in config.yml.
   when: desktop_environment in ['sway', 'i3']
 
+# desktop_wm_browser and desktop_terminal go into the sway/i3 exec lines and environment.d (TERMINAL=): a known name only
+# (no paths, so no shells, sudo or env), as on macOS (scripts/parse-config.py --policy checks the same).
+- name: Assert the browser and terminal are known commands (Linux)
+  ansible.builtin.assert:
+    that:
+      - desktop_wm_browser is string
+      - desktop_terminal is string
+      - >-
+        desktop_wm_browser in ['firefox', 'google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser',
+        'brave-browser', 'microsoft-edge', 'epiphany', 'librewolf', 'qutebrowser']
+      - >-
+        desktop_terminal in ['alacritty', 'ghostty', 'foot', 'kitty', 'gnome-terminal', 'ptyxis', 'konsole', 'wezterm',
+        'xterm', 'xfce4-terminal', 'tilix']
+    fail_msg: >-
+      SECURITY: desktop_wm_browser must be one browser name (a string, not a list): firefox, google-chrome,
+      google-chrome-stable, chromium, chromium-browser, brave-browser, microsoft-edge, epiphany, librewolf, qutebrowser;
+      desktop_terminal one of alacritty, ghostty, foot, kitty, gnome-terminal, ptyxis, konsole, wezterm, xterm,
+      xfce4-terminal, tilix. No paths: they run in the sway/i3 exec lines (the terminal sees sudo passwords).
+  when: is_linux
+
 - name: Install desktop packages (dnf)
   when: is_dnf
   block:
@@ -217,10 +237,27 @@
       # control characters (a YAML block scalar's trailing newline) would break the bar's JSON or match every line
       - desktop_i3status_vpns | map(attribute='name') | select('search', '[\x00-\x1f\x7f]') | list | length == 0
       - desktop_i3status_vpns | map(attribute='connected') | select('search', '[\x00-\x1f\x7f]') | list | length == 0
+      # The bar (sway/i3, and SketchyBar on macOS) runs command every 15 s: only read-only VPN status commands, every
+      # argument a plain token and the argv one of these shapes (VPN_STATUS_SHAPE in scripts/parse-config.py, kept equal
+      # by a test). No interpreters, env or other paths.
+      - >-
+        desktop_i3status_vpns | map(attribute='command') | flatten | map('string')
+        | reject('match', '^[A-Za-z0-9_.:=,-]+\Z') | list | length == 0
+      - >-
+        desktop_i3status_vpns | map(attribute='command') | map('join', ' ')
+        | reject('match', '^(' ~ 'tailscale status( (--json|--peers=(true|false)|--self(=(true|false))?|--active))*'
+        ~ '|mullvad status( (-v|--verbose|--json))*'
+        ~ '|netbird status( (-d|--detail|--json|--yaml))*'
+        ~ '|wg show( [A-Za-z0-9_.:-]+)?'
+        ~ '|nmcli( -t)?( -f [A-Za-z0-9_,.-]+)? connection show --active'
+        ~ '|(warp-cli|nordvpn|protonvpn-cli|expressvpn) status'
+        ~ '|openvpn3 sessions-list' ~ ')\Z') | list | length == 0
     fail_msg: >-
       desktop_i3status_vpns must be a list of {name, command, connected}: name 1-32 letters, digits, space, . _ -;
-      command a non-empty list of strings (argv, no shell); connected a non-empty extended regex. Example:
-      {name: Mullvad, command: [mullvad, status], connected: '^Connected'}
+      command a read-only VPN status argv (tailscale status [--json|--peers=false|...], mullvad status [-v|--json],
+      netbird status [-d|--json|--yaml], wg show [iface], nmcli [-t] [-f FIELDS] connection show --active,
+      warp-cli/nordvpn/protonvpn-cli/expressvpn status, openvpn3 sessions-list); connected a non-empty extended regex.
+      Example: {name: Mullvad, command: [mullvad, status], connected: '^Connected'}
   when:
     - desktop_i3status_vpn | bool
     - desktop_environment in ['i3', 'sway'] or (is_macos and desktop_macos_bar | bool)

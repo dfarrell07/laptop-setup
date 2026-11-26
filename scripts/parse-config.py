@@ -254,6 +254,244 @@ def policy_violations(data, root=ROOT):
                 elif SYSCTL_EXEC_KEYS.fullmatch(sysctl_name(name)):
                     found.append('%s.%s: a sysctl the kernel runs or reads as a path' % (ascii(key), ascii(name)))
     found += _control_chars(data, [])
+    found += user_level_violations(data, root)
+    return found
+
+
+# --- Commands config.yml can steer at the user level, Chrome policy and the task queue (SECURITY.md, "User-level
+# commands"). The roles check the same at the point of use (desktop, chrome, claude and system tasks).
+# $mod+Shift+b and $term in the sway/i3 configs, TERMINAL= in environment.d (Linux): names from these lists only (no
+# paths, so no shells, sudo or env); the macOS role allows its three terminals
+LINUX_BROWSERS = frozenset({'firefox', 'google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser',
+                            'brave-browser', 'microsoft-edge', 'epiphany', 'librewolf', 'qutebrowser'})
+LINUX_TERMINALS = frozenset({'alacritty', 'ghostty', 'foot', 'kitty', 'gnome-terminal', 'ptyxis', 'konsole', 'wezterm',
+                             'xterm', 'xfce4-terminal', 'tilix'})
+MACOS_TERMINALS = frozenset({'ghostty', 'terminal', 'alacritty'})
+# The status bar runs each VPN's command (an argv, no shell) every 15 s: only these read-only status commands. Every
+# argument is a plain token, and the space-joined argv must match one shape (the desktop role checks the same regex).
+VPN_TOKEN = re.compile(r'[A-Za-z0-9_.:=,-]+')
+VPN_STATUS_SHAPE = re.compile(
+    r'tailscale status( (--json|--peers=(true|false)|--self(=(true|false))?|--active))*'
+    r'|mullvad status( (-v|--verbose|--json))*'
+    r'|netbird status( (-d|--detail|--json|--yaml))*'
+    r'|wg show( [A-Za-z0-9_.:-]+)?'
+    r'|nmcli( -t)?( -f [A-Za-z0-9_,.-]+)? connection show --active'
+    r'|(warp-cli|nordvpn|protonvpn-cli|expressvpn) status'
+    r'|openvpn3 sessions-list')
+VPN_KEYS = ('desktop_i3status_vpns', 'desktop_i3status_vpns_extra')
+
+
+def vpn_status_command(command):
+    return (isinstance(command, list) and command and all(isinstance(t, str) and VPN_TOKEN.fullmatch(t) for t in command)
+            and bool(VPN_STATUS_SHAPE.fullmatch(' '.join(command))))
+
+
+# Chrome policies the role supports (docs/chrome.md, roles/desktop/defaults): written as root to /etc/opt/chrome
+CHROME_POLICIES = frozenset({'PasswordManagerEnabled', 'AutofillCreditCardEnabled', 'AutofillAddressEnabled',
+                             'BlockThirdPartyCookies', 'SafeBrowsingProtectionLevel', 'HttpsOnlyMode', 'RestoreOnStartup',
+                             'BookmarkBarEnabled', 'ExtensionInstallForcelist', 'ExtensionSettings',
+                             'ExtensionInstallAllowlist', 'ExtensionInstallBlocklist'})
+CHROME_POLICY_PATTERN = re.compile(r'DefaultSearchProvider[A-Za-z]*')
+CHROME_URL_POLICY = re.compile(r'[A-Za-z]*URLs?')  # SearchURL, SuggestURL, AlternateURLs, ...
+# Search-provider URLs: scheme, host and path exactly one of desktop_chrome_search_urls (tracked in
+# roles/desktop/defaults/main.yml, read from that file), only a query after it. No subdomains or other paths: script.google.com
+# and sites.google.com host anyone's pages, google.com/url redirects anywhere.
+CHROME_SEARCH_URLS_KEY = 'desktop_chrome_search_urls'
+CHROME_URL_KIND = {'DefaultSearchProviderSearchURL': 'search', 'DefaultSearchProviderAlternateURLs': 'search',
+                   'DefaultSearchProviderSuggestURL': 'suggest', 'DefaultSearchProviderNewTabURL': 'new_tab'}
+# Extension IDs Chrome may get from this role, as root-written external-extension files (installed silently on Linux) or
+# through policy: desktop_chrome_extensions_allowed in the tracked defaults, read from that file. desktop_chrome_extensions
+# and _extra (config.yml) may only name these.
+CHROME_EXTENSIONS_ALLOWED_KEY = 'desktop_chrome_extensions_allowed'
+CHROME_EXTENSION_LIST_KEYS = ('desktop_chrome_extensions', 'desktop_chrome_extensions_extra')
+CHROME_EXTENSION_SETTINGS = frozenset({'installation_mode', 'update_url', 'toolbar_pin', 'blocked_permissions',
+                                       'runtime_blocked_hosts', 'minimum_version_required', 'blocked_install_message'})
+# The '*' entry may only narrow: block or remove, block permissions or hosts
+CHROME_EXTENSION_DEFAULT_SETTINGS = frozenset({'installation_mode', 'blocked_permissions', 'runtime_blocked_hosts',
+                                               'blocked_install_message'})
+CHROME_POLICY_KEYS = ('desktop_chrome_policies_recommended', 'desktop_chrome_policies_recommended_extra',
+                      'desktop_chrome_policies_enforced')
+CHROME_WEB_STORE = 'https://clients2.google.com/service/update2/crx'
+CHROME_EXTENSION_ID = re.compile(r'[a-p]{32}')
+CHROME_FORCELIST_ENTRY = re.compile(r'[a-p]{32}(;' + re.escape(CHROME_WEB_STORE) + r')?')
+CLAUDE_CONFIG_DIR_KEY = re.compile(r'claude_([a-z0-9]+_)*config_dirs?')
+CLAUDE_CONFIG_DIR = re.compile(r'/(\.claude(-[a-z0-9][a-z0-9-]*)?|\.config/claude)')  # after $HOME
+# The queue poller runs claude -p on issues from this repo by these authors: the owner's own, or a tracked allowlist
+QUEUE_TRUSTED_KEYS = ('claude_queue_trusted_repo_owners', 'claude_queue_trusted_authors')
+GITHUB_REPO = re.compile(r'([A-Za-z0-9-]+)/[A-Za-z0-9._-]+')
+SYSCTL_DICTS = ('system_sysctl_extra', 'system_sysctl_extra_additional')
+# The role's _sysctl_key_re (and #236's SYSCTL_KEY): dot-separated lowercase segments, none empty, an optional leading '-'.
+# Checked before any normalization: the template would otherwise strip 'vm.mmap_min_addr!' into vm.mmap_min_addr.
+SYSCTL_KEY_STRICT = re.compile(r'-?[a-z0-9_-]+(\.[a-z0-9_-]+)*')
+MMAP_MIN_ADDR_FLOOR = 4096
+
+
+def _queue_trusted(root):
+    """The tracked queue allowlists, read from roles/claude/defaults/main.yml (config.yml cannot set them)."""
+    path = root / 'roles/claude/defaults/main.yml'
+    try:
+        data = yaml.load(path.read_text(), Loader=_VarsLoader)  # noqa: S506 - SafeLoader subclass
+    except Exception as error:
+        raise PolicySourceError('%s in %s' % (type(error).__name__, path.name)) from None
+    lists = [data.get(key) if isinstance(data, dict) else None for key in QUEUE_TRUSTED_KEYS]
+    if not all(isinstance(item, list) for item in lists):
+        raise PolicySourceError('%s not found in %s' % (' or '.join(QUEUE_TRUSTED_KEYS), path.name))
+    return [{str(name).lower() for name in item} for item in lists]
+
+
+def _chrome_policy_violations(key, policies, tracked):
+    urls, extension_ids = tracked
+    if not isinstance(policies, dict):
+        return ['%s: must be a mapping of Chrome policy names' % ascii(key)]
+    found = []
+    for name, value in policies.items():
+        name = str(name)
+        here = '%s.%s' % (ascii(key), ascii(name))
+        if name not in CHROME_POLICIES and not CHROME_POLICY_PATTERN.fullmatch(name):
+            found.append('%s: not a Chrome policy the role supports (docs/chrome.md)' % here)
+        elif name == 'ExtensionInstallForcelist' and not (isinstance(value, list) and all(
+                isinstance(e, str) and CHROME_FORCELIST_ENTRY.fullmatch(e) and e.split(';')[0] in extension_ids
+                for e in value)):
+            found.append('%s: only desktop_chrome_extensions_allowed IDs (roles/desktop/defaults), optionally ;%s'
+                         % (here, CHROME_WEB_STORE))
+        elif name == 'ExtensionSettings' and not _extension_settings_ok(value, extension_ids):
+            found.append("%s: keys desktop_chrome_extensions_allowed IDs (update_url only %s) or a '*' entry that only blocks "
+                         "(installation_mode blocked or removed, blocked_permissions, runtime_blocked_hosts)"
+                         % (here, CHROME_WEB_STORE))
+        elif name == 'ExtensionInstallAllowlist' and not (isinstance(value, list) and all(e in extension_ids
+                                                                                       for e in value)):
+            found.append('%s: only desktop_chrome_extensions_allowed IDs (roles/desktop/defaults)' % here)
+        elif name == 'ExtensionInstallBlocklist' and not (
+                isinstance(value, list) and all(e == '*' or (isinstance(e, str) and CHROME_EXTENSION_ID.fullmatch(e))
+                                                for e in value)):
+            found.append('%s: entries must be Chrome Web Store extension IDs or *' % here)
+        elif CHROME_URL_POLICY.fullmatch(name) and not (name in CHROME_URL_KIND and all(
+                _search_url(url, urls[CHROME_URL_KIND[name]], CHROME_URL_KIND[name] == 'new_tab')
+                for url in (value if isinstance(value, list) else [value]))):
+            found.append('%s: one of the %s URLs in %s (roles/desktop/defaults), followed only by a query'
+                         % (here, CHROME_URL_KIND.get(name, 'supported'), CHROME_SEARCH_URLS_KEY))
+    return found
+
+
+def _extension_settings_ok(value, extension_ids):
+    if not isinstance(value, dict):
+        return False
+    for ext, conf in value.items():
+        if not isinstance(conf, dict):
+            return False
+        if ext == '*':
+            if set(conf) - CHROME_EXTENSION_DEFAULT_SETTINGS or conf.get('installation_mode', 'blocked') not in (
+                    'blocked', 'removed'):
+                return False
+        elif ext not in extension_ids or set(conf) - CHROME_EXTENSION_SETTINGS or \
+                conf.get('update_url', CHROME_WEB_STORE) != CHROME_WEB_STORE:
+            return False
+    return True
+
+
+def _search_url(url, allowed, exact):
+    """Scheme, host and path exactly an allowed one, then only a query (no \\, which Chrome reads as /, whitespace or
+    control characters anywhere). A new-tab URL is exactly the engine's home page."""
+    if not isinstance(url, str) or '\\' in url or re.search(r'[\s\x00-\x1f\x7f]', url):
+        return False
+    base, separator, _ = url.partition('?')
+    return base in allowed and not (exact and separator) and '#' not in url
+
+
+def _chrome_tracked(root):
+    path = root / 'roles/desktop/defaults/main.yml'
+    try:
+        data = yaml.load(path.read_text(), Loader=_VarsLoader)  # noqa: S506 - SafeLoader subclass
+    except Exception as error:
+        raise PolicySourceError('%s in %s' % (type(error).__name__, path.name)) from None
+    urls = data.get(CHROME_SEARCH_URLS_KEY) if isinstance(data, dict) else None
+    allowed = data.get(CHROME_EXTENSIONS_ALLOWED_KEY) if isinstance(data, dict) else None
+    if not isinstance(urls, dict) or not all(isinstance(urls.get(kind), list) for kind in ('search', 'suggest', 'new_tab')):
+        raise PolicySourceError('%s not found in %s' % (CHROME_SEARCH_URLS_KEY, path.name))
+    if not isinstance(allowed, list) or not allowed:
+        raise PolicySourceError('%s not found in %s' % (CHROME_EXTENSIONS_ALLOWED_KEY, path.name))
+    return ({kind: set(map(str, urls[kind])) for kind in ('search', 'suggest', 'new_tab')}, set(map(str, allowed)))
+
+
+def _claude_dir_violation(value, home, root):
+    """The only shapes Claude config dirs take: ~/.claude, ~/.claude-<name> or ~/.config/claude (no git work tree, not
+    the repository checkout; the role also checks the resolved path)."""
+    if not isinstance(value, str) or not CLAUDE_CONFIG_DIR.fullmatch(value[len(home):] if value.startswith(home) else ''):
+        return '~/.claude, ~/.claude-<name> (lowercase letters, digits, -) or ~/.config/claude'
+    return None
+
+
+def user_level_violations(data, root=ROOT, home=None):
+    home = home or str(Path.home())
+    found = []
+    browser = data.get('desktop_wm_browser')
+    if browser is not None and not (isinstance(browser, str) and browser in LINUX_BROWSERS):
+        found.append("'desktop_wm_browser': one browser name (a string, not a list) from: %s" % ', '.join(sorted(LINUX_BROWSERS)))
+    terminal = data.get('desktop_terminal')
+    if terminal is not None and not (isinstance(terminal, str) and terminal in LINUX_TERMINALS | MACOS_TERMINALS):
+        found.append("'desktop_terminal': one terminal name (a string) from: %s"
+                     % ', '.join(sorted(LINUX_TERMINALS | MACOS_TERMINALS)))
+    for vpn_key in VPN_KEYS:
+        vpns = data.get(vpn_key)
+        if vpns is None:
+            continue
+        for index, vpn in enumerate(vpns if isinstance(vpns, list) else [None]):
+            if not vpn_status_command(vpn.get('command') if isinstance(vpn, dict) else None):
+                found.append("'%s.%d.command': not a read-only VPN status command (tailscale status, mullvad status, "
+                             "netbird status, wg show, nmcli connection show --active, ...)" % (vpn_key, index))
+    if CHROME_SEARCH_URLS_KEY in data:
+        found.append('%s: a tracked list (roles/desktop/defaults/main.yml); change it by PR' % ascii(CHROME_SEARCH_URLS_KEY))
+    if CHROME_EXTENSIONS_ALLOWED_KEY in data:
+        found.append('%s: a tracked list (roles/desktop/defaults/main.yml); add an extension ID there by PR'
+                     % ascii(CHROME_EXTENSIONS_ALLOWED_KEY))
+    if any(key in data for key in CHROME_POLICY_KEYS + CHROME_EXTENSION_LIST_KEYS):
+        tracked = _chrome_tracked(root)
+        for key in CHROME_POLICY_KEYS:
+            if key in data:
+                found += _chrome_policy_violations(key, data[key], tracked)
+        for key in CHROME_EXTENSION_LIST_KEYS:
+            entries = data.get(key)
+            if key in data and not (isinstance(entries, list) and all(
+                    isinstance(entry, dict) and str(entry.get('id')) in tracked[1] for entry in entries)):
+                found.append('%s: only extension IDs in %s (roles/desktop/defaults/main.yml); add a new one there by '
+                             'PR' % (ascii(key), CHROME_EXTENSIONS_ALLOWED_KEY))
+    for key in map(str, data):
+        if CLAUDE_CONFIG_DIR_KEY.fullmatch(key):
+            values = data[key] if isinstance(data[key], list) else [data[key]]
+            for value in values:
+                problem = _claude_dir_violation(value, home, root)
+                if problem:
+                    found.append('%s: must be %s' % (ascii(key), problem))
+    for key in QUEUE_TRUSTED_KEYS:
+        if key in data:
+            found.append('%s: a tracked allowlist (roles/claude/defaults/main.yml); change it by PR' % ascii(key))
+    repo, authors = data.get('claude_queue_repo'), data.get('claude_queue_allowed_authors')
+    if repo or authors or data.get('claude_queue_enabled') is True:
+        # Only the tracked allowlists: dotfiles_github_user is itself config.yml, so it cannot vouch for anything
+        owners, trusted_authors = _queue_trusted(root)
+        match = GITHUB_REPO.fullmatch(repo) if isinstance(repo, str) else None
+        if repo and not (match and match.group(1).lower() in owners and repo.split('/')[1] not in ('.', '..')):
+            found.append("'claude_queue_repo': must be owner/name with the owner in claude_queue_trusted_repo_owners "
+                         "(roles/claude/defaults/main.yml)")
+        if authors is not None and not (isinstance(authors, list) and all(str(a).lower() in trusted_authors
+                                                                          for a in authors)):
+            found.append("'claude_queue_allowed_authors': only logins in claude_queue_trusted_authors "
+                         "(roles/claude/defaults/main.yml)")
+        if data.get('claude_queue_enabled') is True and data.get('claude_sandbox_enabled') is not True:
+            found.append("'claude_queue_enabled': needs claude_sandbox_enabled: true")
+    for key in SYSCTL_DICTS:
+        values = data.get(key)
+        if isinstance(values, dict):
+            for name, value in values.items():
+                if not (isinstance(name, str) and SYSCTL_KEY_STRICT.fullmatch(name)):
+                    found.append('%s.%s: not a well-formed sysctl key (lowercase dot-separated segments)'
+                                 % (ascii(key), ascii(str(name))))
+                    continue
+                normalized = re.sub(r'\.+', '.', re.sub(r'^-+', '', str(name)).replace('/', '.')).strip('.')
+                if normalized == 'vm.mmap_min_addr' and not (
+                        re.fullmatch(r'[0-9]+', str(value)) and int(str(value)) >= MMAP_MIN_ADDR_FLOOR):
+                    found.append('%s.%s: vm.mmap_min_addr must be at least %d' % (ascii(key), ascii(str(name)),
+                                                                                 MMAP_MIN_ADDR_FLOOR))
     return found
 
 

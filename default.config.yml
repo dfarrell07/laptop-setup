@@ -398,7 +398,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   desktop_sway_keyboard_options: ''   (roles/desktop/defaults) — XKB options (e.g. 'caps:escape', 'ctrl:nocaps'); empty = none
 #   desktop_wm_repeat_delay: 200     (roles/desktop/defaults) — ms before key repeat starts
 #   desktop_wm_repeat_rate: 50       (roles/desktop/defaults) — key repeats per second
-#   desktop_wm_browser: firefox      (roles/desktop/defaults) — browser for $mod+Shift+b (firefox ships in Fedora)
+#   desktop_wm_browser: firefox      (roles/desktop/defaults) — browser for $mod+Shift+b (firefox ships in Fedora);
+#     one known browser name (firefox, google-chrome, chromium, brave-browser, ...); no paths
 #   desktop_i3status_battery_num: ''  (roles/desktop/defaults) — battery device number; empty disables
 #                                        the battery block; set '0' on ThinkPads (BAT0)
 #   desktop_i3status_cpu_temp_path: ""  (roles/desktop/defaults) — empty disables the CPU temp block; set correct
@@ -407,6 +408,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   desktop_i3status_vpn: true  (roles/desktop/defaults) — status-bar block per VPN (up, down or missing): NetBird on CSB
 #     machines, Tailscale, then desktop_i3status_vpns_extra, plus active NetworkManager VPNs. Add one with
 #     desktop_i3status_vpns_extra: [{name: Mullvad, command: [mullvad, status], connected: '^Connected'}]
+#     (read-only status commands only: tailscale/mullvad/netbird status, wg show [iface], nmcli connection show --active, ...)
 #   desktop_i3status_disks: [/, /tmp]  (roles/desktop/defaults) — status-bar free-space fields (mounted paths only)
 #   desktop_i3status_timezones: [IN Asia/Kolkata, IL Asia/Jerusalem]  (roles/desktop/defaults) — extra clocks
 #     ({label, timezone} list) after local time; [] disables
@@ -437,7 +439,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   desktop_wm_hide_edge_borders: ''       (roles/desktop/defaults) — hide edge borders; empty = omit
 #                                        (sway/i3 default: none); both/vertical/horizontal/smart/smart_no_gaps
 #   desktop_sway_focus_follows_mouse: ''  (roles/desktop/defaults) — empty omits directive, set yes/no/always to override
-#   desktop_terminal: per-OS             (roles/desktop/defaults) — default: ghostty on macOS, alacritty on Linux
+#   desktop_terminal: per-OS             (roles/desktop/defaults) — default: ghostty on macOS, alacritty on Linux; on Linux
+#     one known terminal name (alacritty, foot, kitty, gnome-terminal, ...); no paths
 #   desktop_gtk_theme: Adwaita-dark    (roles/desktop/defaults) — GTK theme for Sway (written to gtk-3.0/4.0 settings.ini)
 #   desktop_gtk_icon_theme: Adwaita    (roles/desktop/defaults) — GTK icon theme
 #   desktop_alacritty_font_family: "DejaVu Sans Mono"  (roles/desktop/defaults) — Alacritty font family
@@ -501,9 +504,10 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   claude_queue_enabled: false        (roles/claude/defaults) — enable Claude queue poller
 #     (claude-queue-poller.sh via a systemd user timer; launchd on macOS)
 #   claude_queue_repo: ""              (roles/claude/defaults) — REQUIRED when claude_queue_enabled: true;
-#     GitHub repo to poll for task issues (e.g. "myuser/claude-tasks"); role asserts non-empty when enabled
+#     GitHub repo to poll for task issues (e.g. "dfarrell07/claude-tasks"); its owner must be in
+#     claude_queue_trusted_repo_owners (roles/claude/defaults, change by PR); needs claude_sandbox_enabled: true
 #   claude_queue_allowed_authors: []   (roles/claude/defaults) — REQUIRED when claude_queue_enabled: true;
-#     GitHub logins allowed to trigger the queue (e.g. [myuser]); role asserts non-empty when enabled
+#     GitHub logins allowed to trigger the queue, each in claude_queue_trusted_authors (roles/claude/defaults, by PR)
 #   claude_queue_host_label: ""        (roles/claude/defaults) — optional label posted in issue comments to
 #     identify which host handled the task; empty = no label posted
 #   claude_queue_poll_interval_sec: 120  (roles/claude/defaults) — seconds between queue polls
@@ -670,7 +674,9 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     profile while Chrome is closed (a running Chrome gets a warning: quit it, re-run make apply CHUNK=chrome); '' leaves it alone
 #   desktop_chrome_manage: true  (roles/desktop/defaults) — personal Chrome profiles from git instead of Chrome Sync
 #     (docs/chrome.md): extensions (desktop_chrome_extensions, _extra), recommended policies (desktop_chrome_policies_recommended,
-#     _extra; null drops one), desktop_chrome_policies_enforced (Linux), desktop_chrome_color_scheme: dark, and the private
+#     _extra; null drops one), desktop_chrome_policies_enforced (Linux; only the policies docs/chrome.md lists,
+#     search URLs only desktop_chrome_search_urls), desktop_chrome_extensions_extra and extension policies only IDs in
+#     desktop_chrome_extensions_allowed (roles/desktop/defaults, add one by PR), desktop_chrome_color_scheme: dark, and the private
 #     desktop_chrome_site_settings / desktop_chrome_default_site_settings (set those here only); personal profiles are
 #     those signed in with a consumer account of desktop_chrome_personal_domains: [gmail.com, googlemail.com]
 #   desktop_gnome_dynamic_workspaces: false     (roles/desktop/defaults)

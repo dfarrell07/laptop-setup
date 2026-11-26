@@ -39,6 +39,26 @@
   when: not (system_is_container or csb_rhel)
   tags: [always]
 
+# vm.mmap_min_addr below 4096 lets a NULL-pointer dereference in the kernel map user memory at address 0. The key is
+# normalized as systemd-sysctl reads it (a leading -, / for ., repeated dots); scripts/parse-config.py --policy checks it too.
+- name: "SECURITY: Refuse vm.mmap_min_addr below 4096 in the extra sysctl dicts"
+  ansible.builtin.assert:
+    that:
+      - item.value | string is match('^[0-9]+\Z')
+      - item.value | int >= 4096
+    fail_msg: "SECURITY: vm.mmap_min_addr in system_sysctl_extra(_additional) must be a whole number of at least 4096."
+    quiet: true
+  loop: >-
+    {{ [system_sysctl_extra | default({}), system_sysctl_extra_additional | default({})] | map('dict2items') | flatten }}
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - not (system_is_container or csb_rhel)
+    - >-
+      (item.key | string | regex_replace('^-+', '') | replace('/', '.') | regex_replace('\\.+', '.')
+      | regex_replace('^\\.|\\.$', '')) == 'vm.mmap_min_addr'
+  tags: [always]
+
 # --- Gather service facts (needed for firewalld/auditd/resolved conditionals) ---
 - name: Gather service facts
   ansible.builtin.service_facts:

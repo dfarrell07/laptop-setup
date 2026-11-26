@@ -490,7 +490,17 @@ desktop_chrome_extensions:
   - {id: nngceckbapebfimnlniiiahkandclblb, name: Bitwarden}
   - {id: fcoeoabgfenejglbffodgkkbkcdhcgfn, name: Claude}
   - {id: hehggadaopoacecdllhhajmbjkdcmajg, name: ChatGPT}
-desktop_chrome_extensions_extra: []  # config.yml: more entries, same form
+desktop_chrome_extensions_extra: []  # config.yml: more entries, same form, IDs from desktop_chrome_extensions_allowed only
+# The only extension IDs this role gives Chrome, as root-written external-extension files (Chrome on Linux installs them
+# silently in every profile) or through policy (ExtensionInstallForcelist, ExtensionSettings, ExtensionInstallAllowlist).
+# desktop_chrome_extensions and _extra may only name these (to install, or install: false to allow one). Tracked: the role
+# and scripts/parse-config.py --policy read it from this file, and config.yml cannot set it; add an ID here by PR.
+desktop_chrome_extensions_allowed:
+  - ddkjiahejlhfcafbddmgiahcphecmpfh  # uBlock Origin Lite
+  - pkehgijcmpdhfbdbbnkijodmdjhbjlgp  # Privacy Badger
+  - nngceckbapebfimnlniiiahkandclblb  # Bitwarden
+  - fcoeoabgfenejglbffodgkkbkcdhcgfn  # Claude
+  - hehggadaopoacecdllhhajmbjkdcmajg  # ChatGPT
 
 # Default level: Chrome policies at the recommended level (Chrome uses them until the user changes the setting;
 # chrome://policy lists them). Where machine policy is not ours (CSB: IT owns it, and it would reach the work
@@ -507,6 +517,18 @@ desktop_chrome_policies_recommended:
 desktop_chrome_policies_recommended_extra: {}  # config.yml: more recommended policies (null drops one above)
 # Enforced level: mandatory policies (greyed out in Chrome). Linux only, and only where machine policy is ours.
 desktop_chrome_policies_enforced: {}
+# The only URLs a DefaultSearchProvider*URL(s) policy may use: scheme, host and path exactly one of these, then only a
+# query ({searchTerms} and the like). Exact hosts, no subdomains (script.google.com and sites.google.com host anyone's pages)
+# or other paths (google.com/url redirects anywhere). SearchURL and AlternateURLs: search; SuggestURL: suggest; NewTabURL:
+# exactly a new_tab entry. Tracked: config.yml cannot set it; the role and scripts/parse-config.py --policy read it from
+# this file. Add a search engine here by PR.
+desktop_chrome_search_urls:
+  search: [https://www.google.com/search, https://duckduckgo.com/, https://www.bing.com/search, https://kagi.com/search,
+           https://search.brave.com/search, https://www.startpage.com/sp/search, https://www.ecosia.org/search]
+  suggest: [https://www.google.com/complete/search, https://duckduckgo.com/ac/, https://www.bing.com/osjson.aspx,
+            https://kagi.com/api/autosuggest, https://search.brave.com/api/suggest, https://www.startpage.com/osuggestions]
+  new_tab: [https://www.google.com/, https://duckduckgo.com/, https://www.bing.com/, https://kagi.com/,
+            https://search.brave.com/, https://www.startpage.com/, https://www.ecosia.org/]
 
 # Reconciled level: personal profiles' Preferences, set again on every chrome chunk run while Chrome is closed.
 desktop_chrome_color_scheme: dark  # dark, light, system; '' leaves it alone (no Chrome policy sets it)
