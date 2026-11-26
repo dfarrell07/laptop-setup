@@ -40,16 +40,102 @@
         | reject('integer') | list | length == 0
       - _chrome_policy_items | selectattr('key', 'equalto', 'RestoreOnStartup') | map(attribute='value')
         | select('integer') | reject('in', [1, 4, 5]) | list | length == 0
+      # Written as root to /etc/opt/chrome: only the policies the role supports. Extensions only the tracked
+      # desktop_chrome_extensions_allowed IDs (read from roles/desktop/defaults/main.yml itself), from the Web Store; a '*'
+      # ExtensionSettings entry may only block. Search-provider URLs exactly a tracked engine URL plus a query.
+      # scripts/parse-config.py --policy checks the same.
+      - _chrome_policy_items | map(attribute='key') | map('string') | reject('in', _chrome_supported_policies)
+        | reject('match', '^DefaultSearchProvider[A-Za-z]*\Z') | list | length == 0
+      - _chrome_policy_items | selectattr('key', 'in', _chrome_id_lists) | map(attribute='value')
+        | reject('sequence') | list | length == 0
+      - _chrome_policy_items | selectattr('key', 'in', _chrome_id_lists) | map(attribute='value')
+        | select('string') | list | length == 0
+      - _chrome_policy_items | selectattr('key', 'in', _chrome_id_lists) | map(attribute='value')
+        | select('mapping') | list | length == 0
+      - _chrome_forcelist | map('string') | reject('match', '^[a-p]{32}(;' ~ (_chrome_web_store | regex_escape) ~ ')?\Z')
+        | list | length == 0
+      - >-
+        (_chrome_forcelist + _chrome_allowlist + _chrome_extension_settings | map(attribute='key') | reject('equalto', '*')
+        | list) | length == 0 or (_chrome_forcelist | map('string') | map('regex_replace', ';.*', '') | list
+        + _chrome_allowlist + _chrome_extension_settings | map(attribute='key') | reject('equalto', '*') | list)
+        | map('string') | reject('in', (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml')
+        | from_yaml).desktop_chrome_extensions_allowed) | list | length == 0
+      # External-extension files are written as root and Chrome on Linux installs them silently: only allowed IDs
+      - >-
+        _chrome_extensions | length == 0 or (_chrome_extensions | map(attribute='id') | map('string')
+        | reject('in', (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml')
+                        | from_yaml).desktop_chrome_extensions_allowed) | list | length == 0)
+      - _chrome_policy_items | selectattr('key', 'equalto', 'ExtensionInstallBlocklist') | map(attribute='value')
+        | flatten | map('string') | reject('match', '^([a-p]{32}|\*)\Z') | list | length == 0
+      - _chrome_policy_items | selectattr('key', 'equalto', 'ExtensionSettings') | map(attribute='value')
+        | reject('mapping') | list | length == 0
+      - _chrome_extension_settings | map(attribute='value') | reject('mapping') | list | length == 0
+      - _chrome_extension_settings | rejectattr('key', 'equalto', '*') | map(attribute='value') | map('dict2items')
+        | flatten | map(attribute='key') | reject('in', _chrome_extension_keys) | list | length == 0
+      - _chrome_extension_settings | selectattr('key', 'equalto', '*') | map(attribute='value') | map('dict2items')
+        | flatten | map(attribute='key') | reject('in', _chrome_extension_default_keys) | list | length == 0
+      - _chrome_extension_settings | selectattr('key', 'equalto', '*') | map(attribute='value')
+        | selectattr('installation_mode', 'defined') | map(attribute='installation_mode') | reject('in', ['blocked', 'removed'])
+        | list | length == 0
+      - _chrome_extension_settings | map(attribute='value') | selectattr('update_url', 'defined')
+        | map(attribute='update_url') | reject('equalto', _chrome_web_store) | list | length == 0
+      # Only these four URL policies; no \ (Chrome reads it as /), whitespace, control characters or # anywhere
+      - _chrome_policy_items | selectattr('key', 'match', '^[A-Za-z]*URLs?\Z') | map(attribute='key')
+        | reject('in', ['DefaultSearchProviderSearchURL', 'DefaultSearchProviderAlternateURLs',
+                        'DefaultSearchProviderSuggestURL', 'DefaultSearchProviderNewTabURL']) | list | length == 0
+      - _chrome_search_urls | reject('string') | list | length == 0
+      - _chrome_search_urls | select('string') | select('search', '[\\\\\\s\x00-\x1f\x7f#]') | list | length == 0
+      - >-
+        _chrome_search_urls | length == 0 or (
+        ((_chrome_policy_items
+          | selectattr('key', 'in', ['DefaultSearchProviderSearchURL', 'DefaultSearchProviderAlternateURLs'])
+          | map(attribute='value') | list | flatten) | map('string') | map('regex_replace', '\?.*\Z', '')
+         | reject('in', (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml')
+                         | from_yaml).desktop_chrome_search_urls.search) | list | length == 0)
+        and ((_chrome_policy_items | selectattr('key', 'in', ['DefaultSearchProviderSuggestURL'])
+              | map(attribute='value') | list | flatten) | map('string') | map('regex_replace', '\?.*\Z', '')
+             | reject('in', (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml')
+                             | from_yaml).desktop_chrome_search_urls.suggest) | list | length == 0)
+        and ((_chrome_policy_items | selectattr('key', 'in', ['DefaultSearchProviderNewTabURL'])
+              | map(attribute='value') | list | flatten) | map('string')
+             | reject('in', (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml')
+                             | from_yaml).desktop_chrome_search_urls.new_tab) | list | length == 0))
     fail_msg: >-
       desktop_chrome_page_zoom must be a whole percent from 25 to 500 (or ''), desktop_chrome_color_scheme dark, light,
       system or '', and every desktop_chrome_extensions(_extra) id a Chrome Web Store ID (32 letters a-p) listed once,
       with install (if given) true or false, unquoted. In the policy maps {{ _chrome_bool_policies | join(', ') }}
-      take true or false, SafeBrowsingProtectionLevel 0, 1 or 2, and RestoreOnStartup 1, 4 or 5.
+      take true or false, SafeBrowsingProtectionLevel 0, 1 or 2, and RestoreOnStartup 1, 4 or 5. SECURITY: only these
+      policies are written: {{ _chrome_supported_policies | join(', ') }} and DefaultSearchProvider*, with
+      Search/Alternate/Suggest/NewTab URLs exactly a desktop_chrome_search_urls entry (roles/desktop/defaults/main.yml) and
+      only a query after it; extensions (desktop_chrome_extensions, _extra and policy) only IDs in
+      desktop_chrome_extensions_allowed (roles/desktop/defaults/main.yml; add one there by PR), policy ones with update_url
+      {{ _chrome_web_store }}, and an ExtensionSettings '*' entry only blocking (installation_mode blocked or removed).
     quiet: true
   vars:
     _chrome_policy_items: "{{ [_chrome_policies, _chrome_policies_enforced] | map('dict2items') | flatten }}"
     _chrome_bool_policies: [PasswordManagerEnabled, AutofillCreditCardEnabled, AutofillAddressEnabled,
                             BookmarkBarEnabled, BlockThirdPartyCookies]
+    _chrome_supported_policies: [PasswordManagerEnabled, AutofillCreditCardEnabled, AutofillAddressEnabled,
+                                 BlockThirdPartyCookies, SafeBrowsingProtectionLevel, HttpsOnlyMode, RestoreOnStartup,
+                                 BookmarkBarEnabled, ExtensionInstallForcelist, ExtensionSettings,
+                                 ExtensionInstallAllowlist, ExtensionInstallBlocklist]
+    _chrome_id_lists: [ExtensionInstallForcelist, ExtensionInstallAllowlist, ExtensionInstallBlocklist]
+    _chrome_web_store: https://clients2.google.com/service/update2/crx
+    _chrome_search_urls: >-
+      {{ _chrome_policy_items | selectattr('key', 'match', '^[A-Za-z]*URLs?\Z') | map(attribute='value') | list
+         | flatten }}
+    _chrome_forcelist: >-
+      {{ _chrome_policy_items | selectattr('key', 'equalto', 'ExtensionInstallForcelist') | map(attribute='value') | list
+         | flatten }}
+    _chrome_allowlist: >-
+      {{ _chrome_policy_items | selectattr('key', 'equalto', 'ExtensionInstallAllowlist') | map(attribute='value') | list
+         | flatten }}
+    _chrome_extension_keys: [installation_mode, update_url, toolbar_pin, blocked_permissions, runtime_blocked_hosts,
+                             minimum_version_required, blocked_install_message]
+    _chrome_extension_default_keys: [installation_mode, blocked_permissions, runtime_blocked_hosts, blocked_install_message]
+    _chrome_extension_settings: >-
+      {{ _chrome_policy_items | selectattr('key', 'equalto', 'ExtensionSettings') | map(attribute='value')
+         | select('mapping') | map('dict2items') | flatten }}
 
 # --- Whose Chrome policy is this? Ours only when nobody else writes it: never on a CSB laptop, never beside another
 # party's policy files (IT's Kerberos ones on an older work laptop), never under a macOS configuration profile. Two

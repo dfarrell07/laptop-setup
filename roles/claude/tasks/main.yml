@@ -63,6 +63,47 @@
     fail_msg: Claude instance paths must contain only simple filesystem path characters.
   loop: "{{ _claude_instances }}"
 
+# The Claude config dirs hold settings Claude runs (hooks, MCP servers, permissions): only ~/.claude, ~/.claude-<name>
+# or ~/.config/claude (scripts/parse-config.py --policy checks the same), and once resolved strictly inside the home
+# directory, outside the repository checkout and any other git work tree.
+- name: SECURITY assert Claude config dirs are ~/.claude, ~/.claude-<name> or ~/.config/claude
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - >-
+        item is match('^' ~ (ansible_facts['user_dir'] | regex_escape)
+        ~ '/(\.claude(-[a-z0-9][a-z0-9-]*)?|\.config/claude)\Z')
+    fail_msg: >-
+      SECURITY: Claude config dirs must be {{ ansible_facts['user_dir'] }}/.claude, .claude-<name> (lowercase letters,
+      digits, -) or .config/claude.
+  loop: "{{ _claude_instances + [claude_queue_config_dir, claude_runtime_config_dir] }}"
+
+- name: SECURITY check Claude config dirs resolve inside the home directory, outside any git work tree
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_facts.get('python', {}).get('executable', 'python3') }}"
+      - -I
+      - -c
+      - |
+        import os, sys
+        home, repo = os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])
+        for path in map(os.path.realpath, sys.argv[3].splitlines()):
+            if path == home or os.path.commonpath([home, path]) != home or os.path.commonpath([repo, path]) in (repo, path):
+                sys.exit('Claude config dirs must resolve strictly inside the home directory, outside the repository.')
+            # no git work tree at or above it up to $HOME itself (a .git directory or file)
+            here = path
+            while os.path.commonpath([home, here]) == home:
+                if os.path.lexists(os.path.join(here, '.git')):
+                    sys.exit('Claude config dirs must not be in a git work tree: ' + here)
+                if here == home:
+                    break
+                here = os.path.dirname(here)
+      - "{{ ansible_facts['user_dir'] }}"
+      - "{{ common_project_root | default(playbook_dir) }}"
+      - "{{ (_claude_instances + [claude_queue_config_dir, claude_runtime_config_dir]) | join('\n') }}"
+  changed_when: false
+  check_mode: false
+
 # --- Install Claude Code ---
 - name: Check if Claude Code is installed
   ansible.builtin.command:
@@ -408,6 +449,30 @@
       claude_queue_allowed_authors must be set in config.yml when claude_queue_enabled=true.
       The poller refuses to run with an empty allowlist; without it any GitHub user could queue work for this machine.
       Set a list of trusted GitHub logins, e.g.: claude_queue_allowed_authors: [myuser]
+  when: claude_queue_enabled | bool
+
+# The poller runs claude -p on this repo's issues by these authors: only owners and logins in the tracked allowlists,
+# read from roles/claude/defaults/main.yml itself (config.yml cannot set them; dotfiles_github_user is config.yml).
+# scripts/parse-config.py --policy checks the same.
+- name: SECURITY assert the queue polls the owner's repo for the owner's issues
+  ansible.builtin.assert:
+    that:
+      - claude_queue_repo is match('^[A-Za-z0-9-]+/[A-Za-z0-9._-]+\Z')
+      - claude_queue_repo.split('/')[1] not in ['.', '..']
+      - >-
+        (claude_queue_repo.split('/')[0] | lower)
+        in (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml') | from_yaml).claude_queue_trusted_repo_owners
+        | map('lower') | list
+      - claude_queue_allowed_authors is sequence and claude_queue_allowed_authors is not string
+      - >-
+        claude_queue_allowed_authors | map('string') | map('lower')
+        | reject('in', (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml') | from_yaml)
+                         .claude_queue_trusted_authors | map('lower') | list)
+        | list | length == 0
+    fail_msg: >-
+      SECURITY: claude_queue_repo must be owner/name with the owner in claude_queue_trusted_repo_owners, and
+      claude_queue_allowed_authors only logins in claude_queue_trusted_authors (roles/claude/defaults/main.yml, a reviewed
+      commit; dotfiles_github_user is config.yml and does not count).
   when: claude_queue_enabled | bool
 
 - name: Assert the queue poller runs with the Bash sandbox

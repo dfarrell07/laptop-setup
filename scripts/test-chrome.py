@@ -638,11 +638,11 @@ class ShippedTaskTests(unittest.TestCase):
         import yaml
         check = self.task('Check the declared Chrome settings')
         env = dict(os.environ, ANSIBLE_STDOUT_CALLBACK='default')
-        base = {'desktop_chrome_page_zoom': 80, 'desktop_chrome_color_scheme': 'dark',
+        base = {'desktop_chrome_page_zoom': 80, 'desktop_chrome_color_scheme': 'dark', 'role_path': str(ROOT / 'roles/desktop'),
                 '_chrome_policies': self.defaults['desktop_chrome_policies_recommended'], '_chrome_policies_enforced': {}}
         ok = [{'id': UBOL}, {'id': BITWARDEN, 'install': False}]
         cases = [(ok, {}, 0), ([{'id': UBOL, 'install': 'false'}], {}, 2), ([{'id': UBOL + '\n'}], {}, 2),
-                 ([{'id': 7}], {}, 2),
+                 ([{'id': 7}], {}, 2), ([{'id': 'a' * 32}], {}, 2),  # not in desktop_chrome_extensions_allowed
                  (ok, {'_chrome_policies': {'SafeBrowsingProtectionLevel': 3}}, 2),
                  (ok, {'_chrome_policies_enforced': {'SafeBrowsingProtectionLevel': True}}, 2),
                  (ok, {'_chrome_policies_enforced': {'RestoreOnStartup': 6}}, 2),

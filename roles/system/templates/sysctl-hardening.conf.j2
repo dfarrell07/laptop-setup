@@ -1,6 +1,8 @@
 # {{ ansible_managed }}
 # Security hardening sysctl values
 # No trailing comments on value lines: text after the value would be written to /proc.
+{# A key outside the strict format fails the render (an undefined attribute of the key) instead of being stripped into a
+   different, valid key: 'vm.mmap_min_addr!' would otherwise be written as vm.mmap_min_addr. #}
 {% for key, value in system_sysctl_hardening.items() %}
-{{ key | regex_replace('[^a-zA-Z0-9._-]', '') }} = {{ (value | string | regex_replace('[`$();&<>]', '') if key == 'kernel.core_pattern' else value | string) | regex_replace('[\r\n\x00].*', '') }}
+{{ key if key is string and key is match('^-?[a-z0-9_-]+(\\.[a-z0-9_-]+)*\\Z') else key.SECURITY_sysctl_key_outside_the_strict_format }} = {{ (value | string | regex_replace('[`$();&<>]', '') if key == 'kernel.core_pattern' else value | string) | regex_replace('[\r\n\x00].*', '') }}
 {% endfor %}
