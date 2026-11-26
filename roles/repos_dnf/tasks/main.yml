@@ -4,12 +4,51 @@
 # Uses block/rescue to handle CSB restrictions gracefully.
 
 - name: Add GitHub CLI repo
-  # gh is in standard Fedora repos (F43+) — third-party repo only needed for RHEL/Rocky
+  # gh is in standard Fedora repos (F43+) — third-party repo only needed for RHEL/Rocky. On Fedora the role deliberately
+  # leaves gh to Fedora's own package and does not touch a gh-cli.repo someone added by hand (it is theirs, unpinned).
   when:
     - repo_gh_cli
     - not is_fedora
     - not csb_rhel  # CSB: external repo write succeeds silently; gh available in container
   block:
+    # A gh-cli.repo from before the key was pinned trusts an https gpgkey: remove it unless it has the pinned shape
+    # (gpgcheck on, gpgkey only the fixed local file, includepkgs set), so an abort below cannot leave it enabled.
+    - name: Read an existing GitHub CLI repo file
+      ansible.builtin.slurp:
+        src: /etc/yum.repos.d/gh-cli.repo
+      register: _repos_dnf_existing_gh_cli
+      failed_when: false
+      when: not csb_detected
+    - name: Remove a GitHub CLI repo file that does not trust only the pinned key
+      ansible.builtin.yum_repository:
+        name: gh-cli
+        state: absent
+      when:
+        - not csb_detected
+        - _repos_dnf_existing_gh_cli.content is defined
+        - >-
+          not ((_repos_dnf_existing_gh_cli.content | b64decode) is search('(?m)^gpgcheck\s*=\s*1\s*$')
+          and (_repos_dnf_existing_gh_cli.content | b64decode) is search('(?m)^gpgkey\s*=\s*'
+          ~ ('file:///etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-gh-cli' | regex_escape) ~ '\s*$')
+          and (_repos_dnf_existing_gh_cli.content | b64decode) is search('(?m)^includepkgs\s*=\s*\S'))
+    - name: Assert GitHub CLI GPG fingerprint is the tracked pin
+      ansible.builtin.assert:
+        that: >-
+          repos_dnf_gh_cli_gpg_fingerprints
+          == (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml') | from_yaml).repos_dnf_gh_cli_gpg_fingerprints
+        fail_msg: >-
+          SECURITY: repos_dnf_gh_cli_gpg_fingerprints must not be overridden (config.yml, group_vars or -e); the key
+          import uses the pin in roles/repos_dnf/defaults/main.yml. Change it there by PR.
+    - name: Import GitHub CLI GPG key
+      ansible.builtin.script: import-pinned-key.sh  # skipped in check mode
+      environment:
+        KEY_URL: https://cli.github.com/packages/githubcli-archive-keyring.asc
+        PINNED: >-
+          {{ (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml') | from_yaml).repos_dnf_gh_cli_gpg_fingerprints
+          | join(' ') }}
+        PIN_VAR: repos_dnf_gh_cli_gpg_fingerprints (roles/repos_dnf/defaults/main.yml)
+        DEST: /etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-gh-cli
+      changed_when: false
     - name: Add gh-cli repo
       ansible.builtin.yum_repository:
         name: gh-cli
@@ -17,9 +56,18 @@
         baseurl: "https://cli.github.com/packages/rpm"
         gpgcheck: true
         repo_gpgcheck: true
-        gpgkey: "https://cli.github.com/packages/githubcli-archive-keyring.gpg"
+        gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-gh-cli
+        includepkgs: [gh]
         enabled: true
   rescue:
+    - name: Abort on a GPG fingerprint override or an unpinned key
+      ansible.builtin.fail:
+        msg: >-
+          {{ ansible_failed_result.msg | default('invalid GPG fingerprint configuration') }}
+          {{ ansible_failed_result.stderr | default('') }}
+      when: >-
+        ansible_failed_task.name is match('Assert .* GPG fingerprint')
+        or 'SECURITY:' in (ansible_failed_result.stderr | default(''))
     - name: Warn gh-cli repo failed (non-CSB network error)
       ansible.builtin.debug:
         msg: >-
@@ -35,6 +83,62 @@
     # CSB: IT's cron owns google-chrome.repo / google-cloud-sdk.repo (same repo ids); RHEL CSB forbids them
     - not csb_detected
   block:
+    # Chrome's rpm postinstall (and its daily cron) rewrite /etc/yum.repos.d/google-chrome.repo with an https gpgkey and no
+    # includepkgs while /etc/default/google-chrome is missing or says repo_add_once="true". Turn that off before anything
+    # can install Chrome (packages runs after this role); this role rewrites its repo file on every run anyway.
+    - name: Stop Chrome's package scripts from rewriting the Chrome repo file
+      ansible.builtin.lineinfile:
+        path: /etc/default/google-chrome
+        regexp: '^\s*repo_add_once='
+        line: 'repo_add_once="false"'
+        create: true
+        owner: root
+        group: root
+        mode: "0644"
+    # A google-chrome.repo from before the key was pinned trusts an https gpgkey: remove it unless it has the pinned shape
+    # (gpgcheck on, gpgkey only the fixed local file, includepkgs set), so an abort below cannot leave it enabled.
+    - name: Read an existing Google Chrome repo file
+      ansible.builtin.slurp:
+        src: /etc/yum.repos.d/google-chrome.repo
+      register: _repos_dnf_existing_google_chrome
+      failed_when: false
+      when: not csb_detected
+    - name: Remove a Google Chrome repo file that does not trust only the pinned key
+      ansible.builtin.yum_repository:
+        name: google-chrome
+        state: absent
+      when:
+        - not csb_detected
+        - _repos_dnf_existing_google_chrome.content is defined
+        - >-
+          not ((_repos_dnf_existing_google_chrome.content | b64decode) is search('(?m)^gpgcheck\s*=\s*1\s*$')
+          and (_repos_dnf_existing_google_chrome.content | b64decode) is search('(?m)^gpgkey\s*=\s*'
+          ~ ('file:///etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-google-chrome' | regex_escape) ~ '\s*$')
+          and (_repos_dnf_existing_google_chrome.content | b64decode) is search('(?m)^includepkgs\s*=\s*\S'))
+    # The baseurl may come from config.yml: a plain https URL only (no comma, space or other scheme)
+    - name: Assert Google Chrome repo URL is a plain https URL
+      ansible.builtin.assert:
+        that: repos_dnf_google_chrome_repo is match('^https://[A-Za-z0-9.-]+(/[A-Za-z0-9._~/%+$-]*)?\Z')
+        fail_msg: >-
+          repos_dnf_google_chrome_repo must be a plain https:// URL (letters, digits and ._~/%+$- in the path).
+    - name: Assert Google Chrome GPG fingerprint is the tracked pin
+      ansible.builtin.assert:
+        that: >-
+          repos_dnf_google_chrome_gpg_fingerprints
+          == (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml') | from_yaml).repos_dnf_google_chrome_gpg_fingerprints
+        fail_msg: >-
+          SECURITY: repos_dnf_google_chrome_gpg_fingerprints must not be overridden (config.yml, group_vars or -e); the key
+          import uses the pin in roles/repos_dnf/defaults/main.yml. Change it there by PR.
+    - name: Import Google Chrome GPG key
+      ansible.builtin.script: import-pinned-key.sh  # skipped in check mode
+      environment:
+        KEY_URL: https://dl.google.com/linux/linux_signing_key.pub
+        PINNED: >-
+          {{ (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml') | from_yaml).repos_dnf_google_chrome_gpg_fingerprints
+          | join(' ') }}
+        PIN_VAR: repos_dnf_google_chrome_gpg_fingerprints (roles/repos_dnf/defaults/main.yml)
+        DEST: /etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-google-chrome
+      changed_when: false
     - name: Add google-chrome repo
       ansible.builtin.yum_repository:
         name: google-chrome
@@ -42,10 +146,18 @@
         baseurl: "{{ repos_dnf_google_chrome_repo }}"
         gpgcheck: true
         repo_gpgcheck: true
-        gpgkey: "https://dl.google.com/linux/linux_signing_key.pub"
+        gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-google-chrome
         includepkgs: [google-chrome-*]  # the baseurl may come from config.yml: it can supply Chrome and nothing else
         enabled: true
   rescue:
+    - name: Abort on a GPG fingerprint override or an unpinned key
+      ansible.builtin.fail:
+        msg: >-
+          {{ ansible_failed_result.msg | default('invalid GPG fingerprint configuration') }}
+          {{ ansible_failed_result.stderr | default('') }}
+      when: >-
+        ansible_failed_task.name is match('Assert .* (GPG fingerprint|repo URL)')
+        or 'SECURITY:' in (ansible_failed_result.stderr | default(''))
     - name: Warn Google Chrome repo failed (non-CSB network error)
       ansible.builtin.debug:
         msg: >-
@@ -62,6 +174,46 @@
     - not csb_detected
   block:
     # The el9/el10 choice is computed inline (no block or task var: config.yml values, set as facts, outrank those)
+    # A google-cloud-cli.repo from before the key was pinned trusts an https gpgkey: remove it unless it has the pinned shape
+    # (gpgcheck on, gpgkey only the fixed local file, includepkgs set), so an abort below cannot leave it enabled.
+    - name: Read an existing Google Cloud CLI repo file
+      ansible.builtin.slurp:
+        src: /etc/yum.repos.d/google-cloud-cli.repo
+      register: _repos_dnf_existing_google_cloud_cli
+      failed_when: false
+      when: not csb_detected
+    - name: Remove a Google Cloud CLI repo file that does not trust only the pinned key
+      ansible.builtin.yum_repository:
+        name: google-cloud-cli
+        state: absent
+      when:
+        - not csb_detected
+        - _repos_dnf_existing_google_cloud_cli.content is defined
+        - >-
+          not ((_repos_dnf_existing_google_cloud_cli.content | b64decode) is search('(?m)^gpgcheck\s*=\s*1\s*$')
+          and (_repos_dnf_existing_google_cloud_cli.content | b64decode) is search('(?m)^gpgkey\s*=\s*'
+          ~ ('file:///etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-google-cloud-cli' | regex_escape) ~ '\s*$')
+          and (_repos_dnf_existing_google_cloud_cli.content | b64decode) is search('(?m)^includepkgs\s*=\s*\S'))
+    - name: Assert Google Cloud CLI GPG fingerprint is the tracked pin
+      ansible.builtin.assert:
+        that: >-
+          repos_dnf_gcloud_gpg_fingerprints
+          == (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml') | from_yaml).repos_dnf_gcloud_gpg_fingerprints
+        fail_msg: >-
+          SECURITY: repos_dnf_gcloud_gpg_fingerprints must not be overridden (config.yml, group_vars or -e); the key
+          import uses the pin in roles/repos_dnf/defaults/main.yml. Change it there by PR.
+    - name: Import Google Cloud CLI GPG key
+      ansible.builtin.script: import-pinned-key.sh  # skipped in check mode
+      environment:
+        KEY_URL: >-
+          https://packages.cloud.google.com/yum/doc/{{ 'rpm-package-key-v10.gpg' if ansible_facts['distribution_major_version']
+          | int >= (40 if is_fedora else 10) else 'rpm-package-key.gpg' }}
+        PINNED: >-
+          {{ (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml') | from_yaml).repos_dnf_gcloud_gpg_fingerprints[
+          'el10' if ansible_facts['distribution_major_version'] | int >= (40 if is_fedora else 10) else 'el9'] | join(' ') }}
+        PIN_VAR: repos_dnf_gcloud_gpg_fingerprints (roles/repos_dnf/defaults/main.yml)
+        DEST: /etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-google-cloud-cli
+      changed_when: false
     - name: Add google-cloud-cli repo
       ansible.builtin.yum_repository:
         name: google-cloud-cli
@@ -76,9 +228,8 @@
           # RPM-level gpgcheck above remains the effective guard against malicious
           # payload delivery. Mitigated by the version floor and, after first install,
           # versionlock (see tasks below).
-        gpgkey: >-
-          https://packages.cloud.google.com/yum/doc/{{ 'rpm-package-key-v10.gpg' if ansible_facts['distribution_major_version']
-          | int >= (40 if is_fedora else 10) else 'rpm-package-key.gpg' }}
+        gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-google-cloud-cli
+        includepkgs: [google-cloud-cli*]  # not the repo's kubectl or others: the packages role pins those
         enabled: true
     - name: Install dnf versionlock plugin for google-cloud-cli pin
       ansible.builtin.dnf:
@@ -114,6 +265,14 @@
         state: present
       ignore_errors: "{{ ansible_check_mode }}"  # package may be absent in check mode
   rescue:
+    - name: Abort on a GPG fingerprint override or an unpinned key
+      ansible.builtin.fail:
+        msg: >-
+          {{ ansible_failed_result.msg | default('invalid GPG fingerprint configuration') }}
+          {{ ansible_failed_result.stderr | default('') }}
+      when: >-
+        ansible_failed_task.name is match('Assert .* GPG fingerprint')
+        or 'SECURITY:' in (ansible_failed_result.stderr | default(''))
     - name: Abort on google-cloud-cli version floor integrity failure
       ansible.builtin.fail:
         msg: "{{ ansible_failed_result.msg | default('integrity check failed') }}"
@@ -136,6 +295,44 @@
     - profile == 'personal'
     - not csb_detected
   block:
+    # A mullvad.repo from before the key was pinned trusts an https gpgkey: remove it unless it has the pinned shape
+    # (gpgcheck on, gpgkey only the fixed local file, includepkgs set), so an abort below cannot leave it enabled.
+    - name: Read an existing Mullvad repo file
+      ansible.builtin.slurp:
+        src: /etc/yum.repos.d/mullvad.repo
+      register: _repos_dnf_existing_mullvad
+      failed_when: false
+      when: not csb_detected
+    - name: Remove a Mullvad repo file that does not trust only the pinned key
+      ansible.builtin.yum_repository:
+        name: mullvad
+        state: absent
+      when:
+        - not csb_detected
+        - _repos_dnf_existing_mullvad.content is defined
+        - >-
+          not ((_repos_dnf_existing_mullvad.content | b64decode) is search('(?m)^gpgcheck\s*=\s*1\s*$')
+          and (_repos_dnf_existing_mullvad.content | b64decode) is search('(?m)^gpgkey\s*=\s*'
+          ~ ('file:///etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-mullvad' | regex_escape) ~ '\s*$')
+          and (_repos_dnf_existing_mullvad.content | b64decode) is search('(?m)^includepkgs\s*=\s*\S'))
+    - name: Assert Mullvad GPG fingerprint is the tracked pin
+      ansible.builtin.assert:
+        that: >-
+          repos_dnf_mullvad_gpg_fingerprints
+          == (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml') | from_yaml).repos_dnf_mullvad_gpg_fingerprints
+        fail_msg: >-
+          SECURITY: repos_dnf_mullvad_gpg_fingerprints must not be overridden (config.yml, group_vars or -e); the key
+          import uses the pin in roles/repos_dnf/defaults/main.yml. Change it there by PR.
+    - name: Import Mullvad GPG key
+      ansible.builtin.script: import-pinned-key.sh  # skipped in check mode
+      environment:
+        KEY_URL: https://repository.mullvad.net/rpm/mullvad-keyring.asc
+        PINNED: >-
+          {{ (lookup('ansible.builtin.file', role_path ~ '/defaults/main.yml') | from_yaml).repos_dnf_mullvad_gpg_fingerprints
+          | join(' ') }}
+        PIN_VAR: repos_dnf_mullvad_gpg_fingerprints (roles/repos_dnf/defaults/main.yml)
+        DEST: /etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-mullvad
+      changed_when: false
     - name: Add mullvad repo
       ansible.builtin.yum_repository:
         name: mullvad
@@ -143,9 +340,18 @@
         baseurl: "https://repository.mullvad.net/rpm/stable/$basearch"
         gpgcheck: true
         repo_gpgcheck: true
-        gpgkey: "https://repository.mullvad.net/rpm/mullvad-keyring.asc"
+        gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-mullvad
+        includepkgs: [mullvad-vpn]  # the only Mullvad package any role installs (roles/system/tasks/services.yml)
         enabled: true
   rescue:
+    - name: Abort on a GPG fingerprint override or an unpinned key
+      ansible.builtin.fail:
+        msg: >-
+          {{ ansible_failed_result.msg | default('invalid GPG fingerprint configuration') }}
+          {{ ansible_failed_result.stderr | default('') }}
+      when: >-
+        ansible_failed_task.name is match('Assert .* GPG fingerprint')
+        or 'SECURITY:' in (ansible_failed_result.stderr | default(''))
     # Block-level 'when' (not csb_detected) excludes CSB machines,
     # so csb_detected is always false when rescue runs.
     - name: Warn Mullvad VPN repo failed (network error)
@@ -444,6 +650,26 @@
   # The repo path is computed inline from facts at each use, never through a block var (config.yml values, set as
   # facts, outrank block and task vars: a comma in it would give dnf a second baseurl on another host).
   block:
+    # A tailscale-stable.repo from before the key was pinned trusts an https gpgkey: remove it unless it has the pinned shape
+    # (gpgcheck on, gpgkey only the fixed local file, includepkgs set), so an abort below cannot leave it enabled.
+    - name: Read an existing Tailscale repo file
+      ansible.builtin.slurp:
+        src: /etc/yum.repos.d/tailscale-stable.repo
+      register: _repos_dnf_existing_tailscale_stable
+      failed_when: false
+      when: not csb_detected
+    - name: Remove a Tailscale repo file that does not trust only the pinned key
+      ansible.builtin.yum_repository:
+        name: tailscale-stable
+        state: absent
+      when:
+        - not csb_detected
+        - _repos_dnf_existing_tailscale_stable.content is defined
+        - >-
+          not ((_repos_dnf_existing_tailscale_stable.content | b64decode) is search('(?m)^gpgcheck\s*=\s*1\s*$')
+          and (_repos_dnf_existing_tailscale_stable.content | b64decode) is search('(?m)^gpgkey\s*=\s*'
+          ~ ('file:///etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-tailscale' | regex_escape) ~ '\s*$')
+          and (_repos_dnf_existing_tailscale_stable.content | b64decode) is search('(?m)^includepkgs\s*=\s*\S'))
     - name: Assert Tailscale GPG fingerprint is the tracked pin
       ansible.builtin.assert:
         that: >-
@@ -480,6 +706,7 @@
         repo_gpgcheck: true
         # the checked key bytes, not the URL: dnf would import whatever key that URL served later, unchecked
         gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-tailscale
+        includepkgs: [tailscale]
         enabled: true
   rescue:
     - name: Abort on a GPG fingerprint override, an unpinned key or a bad repo path
@@ -502,7 +729,9 @@
 # Cleanup: remove stale .repo files for repos whose boolean was flipped to false.
 # yum_repository state: absent deletes /etc/yum.repos.d/<name>.repo idempotently.
 # A repo whose package is installed is kept: removing it silently stops that package's
-# security updates (e.g. a browser installed outside this playbook).
+# security updates (e.g. a browser installed outside this playbook). A kept file this role wrote stays pinned; one the
+# vendor's package wrote (Chrome's postinstall, while its toggle was off) keeps the vendor's https gpgkey: with a
+# toggle off the role does not own that repo. Turn the toggle on to have the role pin it.
 # Exception: redhat-internal is removed whenever it is not configured (its packages are not tracked), except on CSB (IT-managed repo file).
 - name: Gather installed packages before third-party repo cleanup
   ansible.builtin.package_facts:

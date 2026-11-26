@@ -81,18 +81,41 @@ all_imported() {
   done
 }
 
-# Already imported (and written): skip the network fetch so an offline rerun does not fail
-if [ -z "$DEST" ]; then
-  if all_imported "$pins"; then exit 0; fi
-elif [ -f "$DEST" ] && (verify "$DEST" && all_imported "$VERIFIED") 2>/dev/null; then
-  exit 0
+# Without DEST: skip the network fetch when the pinned keys are imported, so an offline rerun does not fail
+if [ -z "$DEST" ] && all_imported "$pins"; then exit 0; fi
+# With DEST: fetch on every run, so a vendor's new signing subkeys (Google rotates them under the same primary key)
+# reach the keyring; offline, a DEST that still checks out and is imported is kept
+have_dest=0
+if [ -n "$DEST" ] && [ -f "$DEST" ] && (verify "$DEST" && all_imported "$VERIFIED") 2>/dev/null; then have_dest=1; fi
+if ! curl --proto '=https' --tlsv1.2 -fsSL "$KEY_URL" -o "$WORKDIR/key.asc"; then
+  if [ "$have_dest" = 1 ]; then
+    echo "WARNING: could not fetch $KEY_URL; keeping the checked key in $DEST" >&2
+    exit 0
+  fi
+  exit 1
 fi
-
-curl --proto '=https' --tlsv1.2 -fsSL "$KEY_URL" -o "$WORKDIR/key.asc"
 verify "$WORKDIR/key.asc"
 if [ -n "$DEST" ]; then
-  install -m 0644 "$WORKDIR/key.asc" "$DEST"
-  rpm --import "$DEST"
+  # sha256sum (coreutils, in every image) rather than cmp (diffutils, absent from minimal ones: every run would re-import)
+  if [ "$have_dest" = 1 ] && [ "$(sha256sum < "$WORKDIR/key.asc")" = "$(sha256sum < "$DEST")" ]; then exit 0; fi
+  # rpm 6 merges new subkeys into an installed key on import; older rpm (4.16 on EL9, 4.19 on EL10) silently keeps the
+  # installed copy, so a rotated signing subkey would never land. There, remove the installed copy of exactly these
+  # primary keys (by their own gpg-pubkey version: the full fingerprint or its last 8 hex digits) before importing.
+  rpm_major=$(rpm --version 2>/dev/null | sed -n 's/^RPM version \([0-9][0-9]*\)\..*/\1/p')
+  if [ -n "$rpm_major" ] && [ "$rpm_major" -lt 6 ]; then
+    installed=$(rpm -q gpg-pubkey --qf '%{VERSION}-%{RELEASE}\n' 2>/dev/null) || true
+    for fp in $VERIFIED; do
+      short=$(printf '%s' "${fp: -8}" | tr 'A-F' 'a-f')
+      full=$(printf '%s' "$fp" | tr 'A-F' 'a-f')
+      while IFS= read -r nvr; do
+        case "${nvr%-*}" in
+          "$short" | "$full") rpm -e "gpg-pubkey-$nvr" ;;
+        esac
+      done <<<"$installed"
+    done
+  fi
+  rpm --import "$WORKDIR/key.asc"
+  install -m 0644 "$WORKDIR/key.asc" "$DEST"  # only after rpm accepted it
 else
   rpm --import "$WORKDIR/key.asc"
 fi

@@ -237,8 +237,15 @@ from `config.yml`) only narrows the repo; the pinned key is the control. A `redh
 the pins) is removed before any check can stop the run (not on CSB, where the file may be IT's). The RPM Fusion and Tailscale
 pins are read from the same tracked file the same way. `tailscale-stable.repo` also points `gpgkey` at the checked key file
 (`/etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-tailscale`), not the URL. RPM Fusion's repo files come from its release package, whose
-signature is checked against the pinned key, and already use package-owned `file://` keys. `config.yml` values are set as
-facts (precedence 19), which outrank block and task `vars:`, so in `roles/repos_dnf` and the acli tasks no block or task var feeds a
+signature is checked against the pinned key, and already use package-owned `file://` keys. The gh-cli, google-chrome,
+google-cloud-cli and mullvad repos work the same way: pinned primary fingerprints, the checked key in
+`/etc/pki/rpm-gpg/RPM-GPG-KEY-laptop-setup-<repo>`, refetched each run so rotated signing subkeys arrive (Chrome's package
+scripts are kept from rewriting its repo file by `repo_add_once="false"` in `/etc/default/google-chrome`). The rpm keyring is
+shared across repos (a key imported for one repo verifies packages from any repo), so `includepkgs` is what scopes each key to its
+vendor's packages. The role pins only repo files it owns: with a repo toggle off (or gh-cli on Fedora, where gh comes from
+Fedora's own repos) a repo file that a vendor package or a person added is left as it is, with its own gpgkey; turning the
+toggle on replaces it with the pinned one. `config.yml` values are set as facts (precedence
+19), which outrank block and task `vars:`, so in `roles/repos_dnf` and the acli tasks no block or task var feeds a
 URL, path or shell: each value is computed inline or checked against its inline value before use. acli installs only from
 Atlassian's SHA256-pinned rpm; the unsigned internal-mirror repo (`repos_dnf_acli_baseurl`) is retired and its repo file removed.
 
