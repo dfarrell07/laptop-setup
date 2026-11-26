@@ -99,14 +99,24 @@ esac
 # Free space per disk, red below 10% free (i3status low_threshold). A path shows only while it is a mount point, as
 # i3status shows only mounted paths (on macOS /tmp is a directory of the data volume). df runs under limit: a hung
 # network mount must not stall the bar. The line is read around its capacity field ("95%"), so a filesystem name
-# (an SMB share) or mount point with spaces still parses.
+# (an SMB share) or mount point with spaces still parses. A volume's name is stored decomposed (NFD), as df prints it,
+# while config.yml has it as typed (usually NFC): an accented name is compared in one form (iconv's UTF-8-MAC reads
+# either; -c drops what it cannot convert, such as an emoji, alike on both sides), and an ASCII one needs no
+# extra process.
+nonascii() { local LC_ALL=C; [[ $1 == *[$'\x80'-$'\xff']* ]]; }
+nfc() { printf %s "$1" | /usr/bin/iconv -c -f UTF-8-MAC -t UTF-8 2>/dev/null; }
 for i in "${!disks[@]}"; do
   size=
   avail=
   mnt=
   read -r size avail mnt < <(limit df -kP "${disks[i]}" 2>/dev/null | awk 'NR == 2 && match($0, / [0-9]+% /) {
     n = split(substr($0, 1, RSTART - 1), f, " "); print f[n - 2], f[n], substr($0, RSTART + RLENGTH)}')
-  if [[ -z $avail || $mnt != "${disks[i]}" ]]; then hide "disk.$i"; continue; fi
+  want=${disks[i]}
+  if nonascii "$mnt$want"; then
+    mnt=$(nfc "$mnt")
+    want=$(nfc "$want")
+  fi
+  if [[ -z $avail || $mnt != "$want" ]]; then hide "disk.$i"; continue; fi
   text=$(awk -v a="$avail" 'BEGIN {if (a >= 2^30) printf "%.1fT", a / 2^30; else if (a >= 2^20) printf "%.1fG", a / 2^20; else printf "%.1fM", a / 2^10}')
   set_field "disk.$i" "${disks[i]} $text" "$( ((avail * 10 < size)) && echo "$red")"
 done
