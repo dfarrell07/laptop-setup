@@ -463,12 +463,13 @@ class MigrationTests(unittest.TestCase):
 
     def test_smoke_reads_config_values_before_dropping_the_config_path(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        helpers = source[source.index('_cfg_read() { # mode key'):source.index('\nprofile="work"\n') + 1]
         start = source.index('_codex_work=$(awk')
-        end = source.index('unset _cfg', start)
+        end = source.index('unset _cfg\n', start)
         with tempfile.TemporaryDirectory() as name:
             config = Path(name) / 'config.yml'
             config.write_text("codex_work_config_dir: '/x/work home'   # custom\npackages_user_updates_enabled: false\n")
-            result = subprocess.run(['bash', '-c', f'_cfg={config}\n' + source[start:end]
+            result = subprocess.run(['bash', '-c', f'_cfg={config}\n' + helpers + source[start:end]
                                      + 'printf "%s|%s" "$_codex_work" "$_user_updates_off"'],
                                     capture_output=True, text=True, timeout=30)
         self.assertEqual(result.stdout, '/x/work home|true', result.stderr)
