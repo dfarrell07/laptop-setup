@@ -190,6 +190,17 @@ if ! flock -n 200; then
   exit 0
 fi
 
+# The poller's own logs keep their last 20000 lines, about two weeks of idle polls: macOS has no logrotate (Linux
+# rotates poller.log daily, so this rarely applies there), and launchd appends the job's stderr to claude-queue.log.
+# Rewritten in place, not replaced: launchd opened claude-queue.log for this run's stderr.
+for _log in "$LOG_DIR/poller.log" "$LOG_DIR/claude-queue.log"; do
+  if [[ -f "$_log" ]] && (( $(wc -l < "$_log") > 20000 )); then
+    tail -n 20000 "$_log" > "$_log.tmp" && cat "$_log.tmp" > "$_log"
+    rm -f "$_log.tmp"
+  fi
+done
+unset _log
+
 STALE_THRESHOLD=$(( TIMEOUT_SECONDS + 300 ))
 STALE_ISSUES=$(gh issue list --repo "$TASK_QUEUE_REPO" \
   --label processing --state open \
