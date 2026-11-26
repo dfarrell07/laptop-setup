@@ -346,5 +346,36 @@ class InputGuardTests(unittest.TestCase):
                 self.check(tasks, {'system_is_container': container, 'ansible_facts': {'services': services}}, True)
 
 
+class WrapperBashTests(unittest.TestCase):
+    """verify-ansible-args.sh sets IFS=$'\\n\\t'; under bash 3.2 "${arr[@]:N}" then joins into one word."""
+
+    source = (ROOT / 'scripts/verify-ansible-args.sh').read_text()
+
+    def test_no_array_slices(self):
+        self.assertNotIn('[@]:', ''.join(l.split('#')[0] for l in self.source.splitlines()))
+
+    def test_run_log_keeps_every_argument_separate(self):
+        begin = self.source.index('args=("$@")')
+        end = self.source.index('    if [[ ! "$_run_log_name"', begin)
+        body = self.source[begin:end] + 'fi\nprintf "[%s]" "${args[@]}"\n'
+        out = subprocess.run(['bash', '-c', "set -euo pipefail; IFS=$'\\n\\t'\n" + body, 'w',
+                              '--run-log=x', 'ansible-playbook', '--syntax-check', '-i', 'y'],
+                             capture_output=True, text=True, timeout=30)
+        self.assertEqual(out.stdout, '[ansible-playbook][--syntax-check][-i][y]', out.stderr)
+
+    def test_old_or_non_bash_shells_are_refused_before_any_scan(self):
+        gate = self.source.index('BASH_VERSINFO')
+        self.assertLess(gate, self.source.index('IFS='))
+        self.assertLess(gate, self.source.index('args=("$@")'))
+        old_bash = Path('/bin/bash')
+        version = subprocess.run([str(old_bash), '-c', 'echo ${BASH_VERSINFO[0]}'], capture_output=True,
+                                 text=True).stdout.strip() if old_bash.exists() else ''
+        if version.isdigit() and int(version) < 4:  # macOS: the real wrapper under the system bash
+            out = subprocess.run([str(old_bash), str(ROOT / 'scripts/verify-ansible-args.sh'), 'ansible-playbook',
+                                  '--syntax-check', '-i', 'x', 'site.yml'], capture_output=True, text=True, timeout=30)
+            self.assertEqual(out.returncode, 1)
+            self.assertIn('needs bash 4 or later', out.stderr)
+
+
 if __name__ == '__main__':
     unittest.main()
