@@ -1,0 +1,48 @@
+---
+# Validators for the distrobox values add_host hands to Play 3 (container-provision.yml). Imported by
+# main.yml (Play 2) and included by site.yml's Play 3 after it loads the checked config.
+- name: SECURITY assert distrobox provisioning variables are injection-safe
+  # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always.
+  # Do NOT add tags: [always] as that allows --skip-tags always to bypass this check.
+  ansible.builtin.assert:
+    that:
+      - distrobox_packages | default([]) | map('string') | select('search', '[^a-zA-Z0-9_.+-]') | list | length == 0
+      - distrobox_packages | default([]) | map('string') | select('match', '^-') | list | length == 0
+      - distrobox_oc_version | string is match('^[0-9]+[.][0-9]+[.][0-9]+([-.][a-zA-Z0-9.]+)*$')
+      - distrobox_oc_mirror_url | string is match('^https://[a-zA-Z0-9._-]+(:[0-9]+)?(/[a-zA-Z0-9._-]+)*$')
+      - "'..' not in distrobox_oc_mirror_url | string"
+      # a pinned release, never latest or a branch: go install fetches this module version
+      - distrobox_golangci_lint_version | string is match('^v?[0-9]+[.][0-9]+[.][0-9]+$')
+      - distrobox_oc_fetch_timeout | string is match('^[0-9]+$')
+      - distrobox_oc_fetch_timeout | int >= 1 and distrobox_oc_fetch_timeout | int <= 600
+      - distrobox_oc_fetch_retries | string is match('^[0-9]+$')
+      - distrobox_oc_fetch_retries | int >= 1 and distrobox_oc_fetch_retries | int <= 20
+      - distrobox_oc_fetch_delay | string is match('^[0-9]+$')
+      - distrobox_oc_fetch_delay | int >= 1 and distrobox_oc_fetch_delay | int <= 300
+    fail_msg: >-
+      SECURITY: distrobox variable contains unsafe value.
+      distrobox_packages={{ distrobox_packages | default([]) }} --
+        entries must be alphanumeric/dot/underscore/plus/hyphen; a newline in any entry injects
+        an arbitrary INI key into distrobox.ini (arbitrary container create options or init_hooks commands).
+      distrobox_oc_version={{ distrobox_oc_version }} distrobox_oc_mirror_url={{ distrobox_oc_mirror_url }} --
+        version must be dotted numeric; mirror must be a plain https URL (no query, no '..' path
+        segments, no userinfo) because both build the download URLs for the oc tarball and checksum.
+      distrobox_golangci_lint_version={{ distrobox_golangci_lint_version }} -- a pinned vX.Y.Z release, not latest;
+      distrobox_oc_fetch_timeout/retries/delay={{ distrobox_oc_fetch_timeout }}/{{ distrobox_oc_fetch_retries }}/{{
+      distrobox_oc_fetch_delay }} -- plain integers, 1-600 s, 1-20 and 1-300 s.
+
+- name: SECURITY assert distrobox_host_exec_commands allowlist
+  # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always.
+  # Defense-in-depth against --start-at-task.
+  vars:
+    _pf_allowed_exec_commands: [podman, flatpak, kind, docker]
+    _pf_unlisted_exec: "{{ distrobox_host_exec_commands | default([]) | map('string') | difference(_pf_allowed_exec_commands) | list }}"
+  ansible.builtin.assert:
+    that:
+      - _pf_unlisted_exec | length == 0
+    fail_msg: >-
+      SECURITY: distrobox_host_exec_commands contains commands outside the known-safe allowlist.
+      Allowed: podman, flatpak, kind, docker.
+      Unlisted: {{ _pf_unlisted_exec }}.
+      A shell name (bash, sh, zsh) creates a trivial host-shell escape from the container.
+      Fix: remove unlisted entries from distrobox_host_exec_commands in config.yml.

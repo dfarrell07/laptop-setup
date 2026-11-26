@@ -12,8 +12,36 @@
       ansible.builtin.set_fact:
         _pf_is_molecule: "{{ lookup('env', 'MOLECULE_SCENARIO_NAME') != '' }}"
 
+    # Container play or not, decided from ansible_play_hosts and groups, which -e cannot override
+    # (it can override inventory_hostname and group_names).
+    - name: Decide whether this play provisions dev containers only
+      ansible.builtin.set_fact:
+        _pf_container_play: >-
+          {{ ansible_play_hosts | length > 0
+          and ansible_play_hosts | difference(groups['containers'] | default([])) | length == 0 }}
+
     - name: Scan user config for template injection
       ansible.builtin.include_tasks: config_ssti_guard.yml
+      when: not _pf_container_play | bool
+
+    # Play 3 (the dev container host) reuses the dict Play 0 checked on localhost instead of reading
+    # config.yml again: a file rewritten between plays could otherwise override the distrobox values
+    # Play 2 validated and handed over with add_host. Without Play 0 there is nothing to reuse.
+    - name: Assert the config.yml checked on localhost is available to this host
+      when: _pf_container_play | bool
+      ansible.builtin.assert:
+        that:
+          - hostvars['localhost']['_pf_config_raw'] is defined
+          - hostvars['localhost']['_pf_config_yml_stat'] is defined
+        fail_msg: >-
+          SECURITY: {{ inventory_hostname }} has no config.yml checked on localhost in this run. Run it through
+          site.yml (make container), whose Play 0 checks config.yml first.
+
+    - name: Reuse the config.yml dict checked on localhost
+      when: _pf_container_play | bool
+      ansible.builtin.set_fact:
+        _pf_config_raw: "{{ hostvars['localhost']['_pf_config_raw'] }}"
+        _pf_config_yml_stat: "{{ hostvars['localhost']['_pf_config_yml_stat'] }}"
 
     # A relative include_vars path is searched for in common/tasks/vars/, common/tasks/ and vars/ before
     # the project root, so a planted copy there would load unscanned. Both loads use absolute paths;

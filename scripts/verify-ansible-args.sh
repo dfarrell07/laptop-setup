@@ -151,19 +151,22 @@ done
 # -ecsb_rhel=true). Extra-vars (precedence 22) beat set_fact (18), so a protected key set here
 # would override the pre-flight facts. Normalise every extra-vars spelling (attached or
 # separate value) and test the value against every protected key.
-# _pf_* covers _pf_vault_asserted: pre-defining it via extra-vars would target vault_* key detection,
-# secret-key shadowing checks, claude security-policy checks, and the
-# redhat_splunk_nologin_shell assertion in pre_flight_checks.yml.
-_protected_keys='csb_rhel|_csb_molecule_force|_pf_[A-Za-z0-9_]*|system_sysctl_hardening|common_project_root|rollout_enable|rollout_catalog|_rollout_[A-Za-z0-9_]*'
+# Every underscore-prefixed name is internal (_pf_*, _csb_*, _rollout_* and the computed results that
+# assert tasks hold in vars:, such as _unlisted_exec): -e outranks task vars, register and set_fact, so
+# pre-defining one would let an assertion pass. Matched at a name boundary, so foo_bar stays allowed.
+# ansible_* and the magic variables are refused too: -e overrides inventory_hostname, group_names and the
+# connection and become variables (ansible_python_interpreter, ansible_become_exe, ...).
+_protected_keys='csb_rhel|(^|[^A-Za-z0-9_])_[A-Za-z0-9_]+|(^|[^A-Za-z0-9_])ansible_[A-Za-z0-9_]+|(^|[^A-Za-z0-9_])(inventory_hostname|inventory_hostname_short|inventory_dir|inventory_file|group_names|groups|hostvars|play_hosts|role_name|role_names|role_path|playbook_dir|omit|environment)([^A-Za-z0-9_]|$)|system_sysctl_hardening|common_project_root|rollout_enable|rollout_catalog'
 _check_extra_value() {
     local v="$1"
     if [[ "$v" == @* ]]; then
         echo "ERROR: @file extra-vars rejected by VERIFY_AND_RUN" >&2
         exit 1
     fi
-    # Escapes ("\x63sb_rhel") decode to protected key names after the literal-substring test below.
-    if [[ "$v" == [\{\[]* && "$v" == *\\* ]]; then
-        echo "ERROR: backslash escapes in structured extra-vars rejected by VERIFY_AND_RUN (could hide protected variable names)" >&2
+    # Escapes decode to protected key names after the literal-substring test below: in structured values
+    # ("\x63sb_rhel") and in key=value keys too, where Ansible's parse_kv decodes \x5f, \u005f and \N{...}.
+    if [[ "$v" == *\\* ]]; then
+        echo "ERROR: backslashes in extra-vars rejected by VERIFY_AND_RUN (escapes could hide protected variable names)" >&2
         exit 1
     fi
     if [[ "$v" =~ ($_protected_keys) ]]; then

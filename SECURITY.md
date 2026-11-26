@@ -203,8 +203,9 @@ key is handled the same way: revoke it, remove it from GitHub, and re-sign.
 The wrapper (`VERIFY_AND_RUN` in the Makefile):
 
 - rejects `--start-at-task` (and abbreviations), `--vault-id`, `--vault-password-file`, `--skip-tags always`, `@file` extra-vars,
-  backslash-escaped structured extra-vars, and `-e` overrides of the protected variables (`_protected_keys` in
-  `scripts/verify-ansible-args.sh`)
+  any backslash in extra-vars (Ansible decodes `\x5f`-style escapes in keys, which could hide protected names), and `-e`
+  overrides of the protected variables (`_protected_keys` in `scripts/verify-ansible-args.sh`): underscore-prefixed and `ansible_*`
+  names, and magic variables `-e` would override, such as `inventory_hostname`, `group_names` and `omit`
 - canonicalizes abbreviated long options before scanning
 - turns shell tracing off and clears `BASH_XTRACEFD`, `PS4`, `SHELLOPTS`, `BASHOPTS` and 90+ other environment variables
   (`ANSIBLE_*`, `LD_*`, `PYTHON*`, `GIT_*`, Go, container and registry variables), pins `ANSIBLE_VAULT_PASSWORD_FILE`, and checks `HOME`
@@ -212,14 +213,16 @@ The wrapper (`VERIFY_AND_RUN` in the Makefile):
 
 Pre-flight reads `config.yml` once (slurp) and sets its values with `set_fact` (precedence 19, above inventory, `ansible.cfg`,
 `group_vars` and `default.config.yml`) from the dict the guard parsed and checked, so nothing re-reads the file after the check and the
-values are data, not templates. Before that, `common/tasks/config_ssti_guard.yml` (`scripts/parse-config.py --policy`) rejects keys that
-change what runs or how: `ansible_*` (`ansible_python_interpreter`, `ansible_become_exe`, ...), every underscore-prefixed internal key,
-magic variables such as `omit`, facts Play 0 sets before the load (`real_user_home`, ...), the wrapper's `_protected_keys` except
-`rollout_enable`, and names mapped from `vault_*` values (derived from `group_vars/all` and the role defaults). It also rejects C0 and C1
-control characters (tab and newline included), DEL and U+2028/U+2029 in every key and value: a NUL reaches `/etc/sysctl.d`, where
-systemd reads it as a line break. `default.config.yml` is loaded by absolute path, and pre-flight refuses to run while a copy of either
-file exists in `vars/`, `common/tasks/` or `common/tasks/vars/` (Ansible's relative include search tries those first). Every variable
-the guard and pre-flight register or set starts with `_pf_`, which the wrapper protects from `-e`.
+values are data, not templates. The dev container play (Play 3) reuses that dict from localhost, fails closed without it, and re-runs the
+distrobox validators on the values it provisions with. Before that, `common/tasks/config_ssti_guard.yml` (`scripts/parse-config.py
+--policy`) rejects keys that change what runs or how: `ansible_*` (`ansible_python_interpreter`, `ansible_become_exe`, ...), every
+underscore-prefixed internal key, magic variables such as `omit`, facts Play 0 sets before the load (`real_user_home`, ...), the wrapper's
+`_protected_keys` except `rollout_enable`, and names mapped from `vault_*` values (derived from `group_vars/all` and the role defaults).
+It also rejects C0 and C1 control characters (tab and newline included), DEL and U+2028/U+2029 in every key and value: a NUL reaches
+`/etc/sysctl.d`, where systemd reads it as a line break. `default.config.yml` is loaded by absolute path, and pre-flight refuses to run
+while a copy of either file exists in `vars/`, `common/tasks/` or `common/tasks/vars/` (Ansible's relative include search tries those
+first). The wrapper refuses every underscore-prefixed name in `-e`: the guard's and pre-flight's own variables (`_pf_*`) and the
+computed results assert tasks hold in `vars:`, which `-e` would otherwise outrank.
 
 Each role also re-validates its critical inputs at the start of `main.yml` (for example, `roles/claude/tasks/main.yml` constrains
 `claude_install_url` to `claude.ai` or `anthropic.com`), so a skipped `pre_tasks` does not reach the installer.
@@ -528,7 +531,8 @@ their bytes depend on the local toolchain and flags, so no upstream binary hash 
    golangci-lint, subctl; controller-gen and the code generators are not checked); this does not catch stealthy payloads
 6. **Isolation** — `make container` provisions the dev tier in a distrobox, which bind-mounts `$HOME` (same UID) and is not a credential
    boundary: host `~/.ssh`, `~/.gnupg`, and `scripts/vault-pass.sh` (when the checkout is under `$HOME`) are readable inside it. Mount-level
-   isolation is not configured by this repo.
+   isolation is not configured by this repo. The host-exec allowlist (`distrobox_host_exec_commands`) keeps shells out, but host
+   `podman` (allowed) can run a privileged container on the host, so it is effectively a host shell.
 
 **Hardening options by risk:**
 
