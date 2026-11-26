@@ -1445,5 +1445,56 @@ class ConfigReaderTests(unittest.TestCase):
                         self.assertEqual(got[i], expected(data.get(key), allowed))
 
 
+@unittest.skipIf(platform.system() == 'Darwin', 'the Linux desktop_environment values')
+class PreflightConfigTagTests(unittest.TestCase):
+    """preflight.sh reads config.yml as text: every YAML form the play accepts, !unsafe-tagged values included, must be
+    read the same way. curl, sudo and ykman are stubbed so the runs are fast and never touch the network."""
+
+    def checks(self, config):
+        with tempfile.TemporaryDirectory() as tmp:
+            stubs = Path(tmp) / 'stubs'
+            stubs.mkdir()
+            for tool in ('curl', 'sudo', 'ykman'):
+                (stubs / tool).write_text('#!/bin/sh\nexit 1\n')
+                (stubs / tool).chmod(0o755)
+            (Path(tmp) / 'scripts').mkdir()
+            script = Path(tmp) / 'scripts/preflight.sh'
+            script.write_bytes((Path(__file__).resolve().parent / 'preflight.sh').read_bytes())
+            (Path(tmp) / 'config.yml').write_text(config + '\n')
+            result = subprocess.run(['bash', str(script), '--json'], capture_output=True, text=True, timeout=120,
+                                    env=dict(os.environ, PATH=f"{stubs}:{os.environ['PATH']}"))
+            try:
+                data = json.loads(result.stdout)
+            except ValueError:
+                self.fail(f'preflight.sh --json printed no JSON: {result.stdout[-300:]} {result.stderr[-300:]}')
+            return data['profile'], {c['name']: c['status'] for c in data['checks']}
+
+    def test_desktop_environment_plain_quoted_and_tagged_pass(self):
+        for line in ('desktop_environment: sway', 'desktop_environment: "i3"', "desktop_environment: 'gnome'",
+                     "desktop_environment: !unsafe 'sway'", 'desktop_environment: !unsafe gnome  # note'):
+            with self.subTest(line=line):
+                self.assertEqual(self.checks(line)[1]['config_yml'], 'pass')
+
+    def test_desktop_environment_other_values_fail(self):
+        for line in ('desktop_environment: kde', 'desktop_environment: !unsafe swayfx', 'desktop_environment: CHANGE_ME'):
+            with self.subTest(line=line):
+                self.assertEqual(self.checks(line)[1]['config_yml'], 'fail')
+
+    def test_tagged_profile_is_read(self):
+        for line, profile in (('profile: !unsafe personal', 'personal'), ("profile: !unsafe 'work'", 'work')):
+            with self.subTest(line=line):
+                got_profile, checks = self.checks(line)
+                self.assertEqual((got_profile, checks['config_profile']), (profile, 'pass'))
+
+    def test_tagged_sway_hidpi_scale_is_read(self):
+        sway = "desktop_environment: !unsafe 'sway'\n"
+        self.assertEqual(self.checks(sway + "desktop_sway_hidpi_scale: !unsafe '1.0'")[1]['config_sway_hidpi'], 'warn')
+        self.assertEqual(self.checks(sway + "desktop_sway_hidpi_scale: !unsafe '1.5'")[1]['config_sway_hidpi'], 'pass')
+
+    def test_tagged_trackpoint_id_is_checked_by_its_value(self):
+        self.assertEqual(self.checks("desktop_sway_trackpoint_id: !unsafe '2:10:TPPS/2 Elan TrackPoint'")[1]
+                         ['config_trackpoint_id'], 'pass')
+        self.assertEqual(self.checks("desktop_sway_trackpoint_id: !unsafe 'x;y'")[1]['config_trackpoint_id'], 'fail')
+
 if __name__ == '__main__':
     unittest.main()
