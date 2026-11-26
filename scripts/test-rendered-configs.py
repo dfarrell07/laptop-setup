@@ -1659,6 +1659,20 @@ class MacTaskTests(unittest.TestCase):
                                      'Contents/MacOS/AeroSpace': 0o755, 'Contents/Info.plist': 0o644})
             self.assertEqual(outside.stat().st_mode & 0o777, 0o600)  # the link's target is untouched
 
+    def test_claude_queue_job_is_not_throttled_as_background(self):
+        """The queue poller runs real agent work under a timeout: launchd's Background type would throttle it."""
+        import plistlib
+        env = jinja2.Environment(undefined=jinja2.StrictUndefined, autoescape=False)
+        env.filters['regex_replace'] = lambda value, pattern, repl='': re.sub(pattern, repl, value)
+        text = env.from_string((ROOT / 'roles/claude/templates/claude-queue.plist.j2').read_text()).render(
+            ansible_facts={'user_dir': '/Users/u'}, ansible_managed='test', claude_bin_path='/Users/u/.local/bin/claude',
+            claude_log_dir='/Users/u/.local/state/claude/logs', claude_queue_allowed_authors=['u'],
+            claude_queue_config_dir='/Users/u/.config/claude', claude_queue_host_label='mac',
+            claude_queue_max_issues_per_run=5, claude_queue_max_turns=50, claude_queue_poll_interval_sec=120,
+            claude_queue_poller_path='/Users/u/.local/bin/claude-queue-poller', claude_queue_repo='u/tasks',
+            claude_queue_timeout=1800, dotfiles_github_user='u', dotfiles_homebrew_prefix='/opt/homebrew')
+        self.assertEqual(plistlib.loads(text.encode())['ProcessType'], 'Standard')
+
     def test_stale_mosh_server_entries_are_removed(self):
         """Older Cellar paths of mosh-server go; the current one and other programs stay."""
         task = production_task('roles/desktop/tasks/main.yml', 'Remove stale mosh-server entries from the macOS firewall')
