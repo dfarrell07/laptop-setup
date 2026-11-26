@@ -2,6 +2,12 @@
 # claude-queue-poller.sh — Poll GitHub Issues task queue, dispatch Claude Code.
 # Runs as a systemd user timer (Linux) or launchd agent (macOS). flock makes a
 # second concurrent instance exit.
+# Bash 4 or later (associative arrays). macOS's /bin/bash is 3.2: the launchd PATH puts Homebrew's bash first, and a
+# PATH that does not fails here plainly instead of at the first declare -A.
+if ((BASH_VERSINFO[0] < 4)); then
+  echo "claude-queue: needs bash 4 or later, found $BASH_VERSION ($BASH); put a newer bash first on PATH" >&2
+  exit 1
+fi
 set -euo pipefail
 umask 077  # logs, prompt temp files and state are owner-only
 
