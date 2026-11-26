@@ -57,9 +57,9 @@ csb_ca_cert_paths:
   - /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem
   - /etc/pki/ca-trust/source/anchors/Eng-CA.crt
   - /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem
-needs_container_tier: "host-only"  # runtime set_fact by csb_detect.yml (after config.yml); override via -e needs_container_tier=<tier>
-network_proxied: false  # runtime set_fact in csb_detect.yml; config.yml cannot override — set HTTPS_PROXY/HTTP_PROXY env vars
-proxy_url: ''           # runtime set_fact in csb_detect.yml; config.yml cannot override — set HTTPS_PROXY env var
+needs_container_tier: "host-only"  # runtime set_fact by csb_detect.yml; config.yml refuses it; override via -e needs_container_tier=<tier>
+network_proxied: false  # runtime set_fact in csb_detect.yml; config.yml refuses it — set HTTPS_PROXY/HTTP_PROXY env vars
+proxy_url: ''           # runtime set_fact in csb_detect.yml, handed to the dev container by add_host; config.yml refuses it
 
 # Cross-role variable baselines — allow standalone invocation of roles that consume
 # variables defined in other roles' defaults or default.config.yml (which only loads

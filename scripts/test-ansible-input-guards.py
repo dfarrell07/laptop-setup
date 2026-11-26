@@ -301,6 +301,42 @@ class InputGuardTests(unittest.TestCase):
                 self.check(task, {'system_usbguard_whitelist': defaults, 'system_usbguard_extra_rules': [rule]},
                            accepted)
 
+    def test_distrobox_container_name_is_not_an_inventory_host(self):
+        """add_host with an inventory host's name would put that host (localhost) in the containers group."""
+        task = guard('roles/distrobox/tasks/main.yml', 'SECURITY assert distrobox variables are injection-safe')
+        image = 'quay.io/toolbx/fedora-toolbox:44@sha256:' + '0' * 64
+        for name, accepted in [('fedora-dev', True), ('', True), ('localhost', False)]:
+            with self.subTest(name=name):
+                self.check(task, {'distrobox_container_image': image, 'distrobox_container_name': name}, accepted)
+        # A second pass of the role in one run (molecule distrobox-role) finds its own container registered.
+        for name, accepted in [('fedora-dev', True), ('localhost', False)]:
+            with self.subTest(registered=name):
+                register = {'name': 'Register the container', 'ansible.builtin.add_host': {'name': name, 'groups': 'containers'}}
+                self.check([register, task], {'distrobox_container_image': image, 'distrobox_container_name': name}, accepted)
+
+    def test_distrobox_provisioning_values(self):
+        """The validators Play 2 and Play 3 both run on the values add_host hands to the container play."""
+        tasks = yaml.safe_load((ROOT / 'roles/distrobox/tasks/validate-provision.yml').read_text())
+        good = {'distrobox_packages': ['git', 'python3-pip'], 'distrobox_oc_version': '4.18.1',
+                'distrobox_oc_mirror_url': 'https://mirror.openshift.com/pub/openshift-v4/clients/ocp',
+                'distrobox_host_exec_commands': ['podman', 'kind'], 'distrobox_golangci_lint_version': 'v2.12.2',
+                'distrobox_oc_fetch_timeout': 30, 'distrobox_oc_fetch_retries': 3, 'distrobox_oc_fetch_delay': 10}
+        cases = [({}, True), ({'distrobox_host_exec_commands': ['podman', 'bash']}, False),
+                 ({'distrobox_oc_mirror_url': 'http://mirror.example/x'}, False),
+                 ({'distrobox_oc_mirror_url': 'https://mirror.example/../x'}, False),
+                 ({'distrobox_oc_version': '4.18;id'}, False), ({'distrobox_packages': ['--privileged']}, False),
+                 ({'distrobox_packages': ['git\ninit_hooks=x']}, False),
+                 ({'distrobox_golangci_lint_version': '2.12.2'}, True), ({'distrobox_oc_fetch_timeout': '600'}, True),
+                 ({'distrobox_golangci_lint_version': 'latest'}, False), ({'distrobox_golangci_lint_version': 'v2.1'}, False),
+                 ({'distrobox_golangci_lint_version': 'v2.12.2@main'}, False),
+                 ({'distrobox_oc_fetch_timeout': 0}, False), ({'distrobox_oc_fetch_timeout': 601}, False),
+                 ({'distrobox_oc_fetch_timeout': '30s'}, False), ({'distrobox_oc_fetch_timeout': True}, False),
+                 ({'distrobox_oc_fetch_retries': 0}, False), ({'distrobox_oc_fetch_retries': 21}, False),
+                 ({'distrobox_oc_fetch_delay': -1}, False), ({'distrobox_oc_fetch_delay': 301}, False)]
+        for override, accepted in cases:
+            with self.subTest(override=override):
+                self.check(tasks, dict(good, **override), accepted)
+
     def test_container_integer_limits(self):
         for variable in ['containers_pids_limit', 'containers_nofile_limit']:
             task = guard('roles/containers/tasks/main.yml', f'Assert {variable} is a non-negative integer')

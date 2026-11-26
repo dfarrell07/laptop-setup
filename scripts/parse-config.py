@@ -22,12 +22,20 @@ MAGIC_KEYS = frozenset({
     'omit', 'hostvars', 'groups', 'group_names', 'inventory_hostname', 'inventory_hostname_short',
     'inventory_dir', 'inventory_file', 'playbook_dir', 'play_hosts', 'role_name', 'role_names',
     'role_path', 'environment',
+    # vars is reserved, item the default loop variable, cacheable a set_fact option
+    'vars', 'item', 'cacheable',
     # Jinja and Ansible template globals: a key named lookup makes every later lookup() call fail
     'cycler', 'dict', 'joiner', 'lipsum', 'lookup', 'namespace', 'now', 'q', 'query', 'range', 'undef', 'zip',
 })
 # Facts Play 0 sets before pre-flight loads config.yml (pre-flight.yml). config.yml values are set
 # with set_fact, so they would overwrite these; include_vars used to lose to them.
 FACTS_SET_BEFORE_CONFIG = frozenset({'real_user_home', 'real_user_id', 'is_linux', 'is_macos'})
+# Facts common/tasks/csb_detect.yml derives on localhost after the load, which Play 2's add_host hands
+# to the dev container (proxy_url): on the container host a config.yml value would win over them.
+DERIVED_FACTS = frozenset({
+    'csb_detected', 'fapolicyd_enforcing', 'fapolicyd_installed', 'internal_ca_present', 'is_apt', 'is_dnf',
+    'is_dnf5', 'is_fedora', 'is_rhel', 'needs_container_tier', 'network_proxied', 'proxy_url',
+})
 # The wrapper protects rollout_enable from -e only; config.yml is where it is set.
 CONFIG_SETTABLE_PROTECTED = frozenset({'rollout_enable'})
 # C0 controls (tab and newline included: no option takes them), DEL, C1 controls and the Unicode
@@ -146,8 +154,8 @@ def policy_violations(data, root=ROOT):
             found.append('%s: internal (underscore) variables cannot be set in config.yml' % ascii(key))
         elif key in MAGIC_KEYS:
             found.append('%s: Ansible magic variable' % ascii(key))
-        elif key in FACTS_SET_BEFORE_CONFIG:
-            found.append('%s: set at run time before config.yml loads' % ascii(key))
+        elif key in FACTS_SET_BEFORE_CONFIG or key in DERIVED_FACTS:
+            found.append('%s: derived at run time, not configuration' % ascii(key))
         elif protected.fullmatch(key) and key not in CONFIG_SETTABLE_PROTECTED:
             found.append('%s: protected variable (_protected_keys in scripts/verify-ansible-args.sh)' % ascii(key))
         elif key in vault_mapped:

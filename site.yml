@@ -276,8 +276,8 @@
       tags: [always]
 
     - name: SECURITY CRITICAL — Validate config integrity before container provisioning
-      # Also loads default.config.yml/config.yml into the container host's vars
-      # (facts are per inventory host; Play 3 runs on the container, not localhost).
+      # Also loads default.config.yml and the config.yml dict Play 0 checked on localhost (never the file
+      # again) into the container host's vars (facts are per inventory host; Play 3 runs on the container).
       delegate_to: localhost
       become: false
       tags: [always]
@@ -294,6 +294,12 @@
       delegate_to: localhost
       when: not _pf_is_molecule
       tags: [always]
+
+    # Play 2 validated the distrobox values it handed over with add_host; validate the values this play
+    # resolves (add_host vars, overridden by the checked config.yml) before anything runs in the container.
+    # No tags of its own, like the role's copy: it inherits the play's distrobox tag.
+    - name: SECURITY validate the distrobox values this play provisions with
+      ansible.builtin.include_tasks: "{{ common_project_root }}/roles/distrobox/tasks/validate-provision.yml"
 
     # The podman connection runs raw commands without a shell (shlex.split, then podman exec), so
     # the || fallback needs an explicit sh -c.

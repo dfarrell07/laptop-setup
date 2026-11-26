@@ -15,11 +15,11 @@
         match('^(registry\.fedoraproject\.org/|quay\.io/|registry\.access\.redhat\.com/|registry\.redhat\.io/)')
       - "'@sha256:' in distrobox_container_image"
       - distrobox_container_name | default('') | string is match('^[a-zA-Z0-9_-]*$|^$')
-      - distrobox_packages | default([]) | map('string') | select('search', '[^a-zA-Z0-9_.+-]') | list | length == 0
-      - distrobox_packages | default([]) | map('string') | select('match', '^-') | list | length == 0
-      - distrobox_oc_version | string is match('^[0-9]+[.][0-9]+[.][0-9]+([-.][a-zA-Z0-9.]+)*$')
-      - distrobox_oc_mirror_url | string is match('^https://[a-zA-Z0-9._-]+(:[0-9]+)?(/[a-zA-Z0-9._-]+)*$')
-      - "'..' not in distrobox_oc_mirror_url | string"
+      # add_host would put an inventory host (localhost) in the containers group; a container this run
+      # already registered (a second pass of the role) keeps its name
+      - >-
+        distrobox_container_name | default('') | string not in
+        (groups['all'] | default([])) | difference(groups['containers'] | default([])) + ['localhost']
     fail_msg: >-
       SECURITY: distrobox variable contains unsafe value. This check protects against
       --start-at-task bypassing play-level pre_tasks.
@@ -30,29 +30,12 @@
       container_name={{ container_name | default('') }} --
         must be alphanumeric/underscore/hyphen (space injects extra argument to the create command);
       distrobox_container_name={{ distrobox_container_name | default('') }} --
-        must be alphanumeric/underscore/hyphen; validated here; it is normally derived from container_name;
-      distrobox_packages={{ distrobox_packages | default([]) }} --
-        entries must be alphanumeric/dot/underscore/plus/hyphen; a newline in any entry injects
-        an arbitrary INI key into distrobox.ini (arbitrary container create options or init_hooks commands).
-      distrobox_oc_version={{ distrobox_oc_version }} distrobox_oc_mirror_url={{ distrobox_oc_mirror_url }} --
-        version must be dotted numeric; mirror must be a plain https URL (no query, no '..' path
-        segments, no userinfo) because both build the download URLs for the oc tarball and checksum.
+        must be alphanumeric/underscore/hyphen and not an inventory host name such as localhost; it is normally derived
+        from container_name.
 
-- name: SECURITY assert distrobox_host_exec_commands allowlist
-  # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always.
-  # Defense-in-depth against --start-at-task.
-  vars:
-    _allowed_exec_commands: [podman, flatpak, kind, docker]
-    _unlisted_exec: "{{ distrobox_host_exec_commands | default([]) | map('string') | difference(_allowed_exec_commands) | list }}"
-  ansible.builtin.assert:
-    that:
-      - _unlisted_exec | length == 0
-    fail_msg: >-
-      SECURITY: distrobox_host_exec_commands contains commands outside the known-safe allowlist.
-      Allowed: podman, flatpak, kind, docker.
-      Unlisted: {{ _unlisted_exec }}.
-      A shell name (bash, sh, zsh) creates a trivial host-shell escape from the container.
-      Fix: remove unlisted entries from distrobox_host_exec_commands in config.yml.
+# The values add_host hands to Play 3; site.yml's Play 3 runs the same file against what it uses.
+- name: SECURITY validate the values Play 3 provisions with
+  ansible.builtin.import_tasks: validate-provision.yml
 
 # Runs here (role context) rather than in container-provision.yml: Play 3 includes that file by
 # path, so this role's filter_plugins are not loaded there. Placed before any container work so a

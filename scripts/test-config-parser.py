@@ -131,7 +131,7 @@ class ConfigPolicyTests(unittest.TestCase):
 
     def test_rejects_magic_variables(self):
         for key in ['omit', 'inventory_hostname', 'group_names', 'inventory_dir', 'role_path', 'hostvars',
-                    'playbook_dir', 'environment']:
+                    'playbook_dir', 'environment', 'vars', 'item', 'cacheable']:
             with self.subTest(key=key):
                 self.assertRejected(key + ': "0777"\n', repr(key))
 
@@ -215,7 +215,10 @@ def pre_flight_tasks(*prefixes):
 
 SHADOW_PATHS = ['vars/config.yml', 'common/tasks/config.yml', 'common/tasks/vars/config.yml',
                 'vars/default.config.yml', 'common/tasks/default.config.yml', 'common/tasks/vars/default.config.yml']
-LOAD_PREFIXES = ('Load configuration', 'Load user overrides')
+# Pre-flight's config tasks: the guard (localhost only), the reuse of localhost's checked dict on other hosts, the load
+LOAD_PREFIXES = ('Decide whether this play', 'Scan user config', 'Assert the config.yml checked on localhost',
+                 'Reuse the config.yml dict',
+                 'Load configuration', 'Load user overrides')
 SHADOW_PREFIX = ('Assert no copy of config.yml or default.config.yml shadows',)
 
 
@@ -233,20 +236,20 @@ class Project:
         (self.root / 'config.yml').write_text(config)
         (self.root / 'common/tasks').mkdir(parents=True)
         (self.root / 'common/tasks/load.yml').write_text(yaml.safe_dump(pre_flight_tasks(*prefixes)))
+        shutil.copy(ROOT / 'common/tasks/config_ssti_guard.yml', self.root / 'common/tasks/config_ssti_guard.yml')
 
-    load = [{'name': 'Guard', 'ansible.builtin.include_tasks': str(ROOT / 'common/tasks/config_ssti_guard.yml')},
-            {'name': 'Load as pre-flight does', 'ansible.builtin.include_tasks': 'common/tasks/load.yml'}]
+    load = [{'name': 'Load as pre-flight does', 'ansible.builtin.include_tasks': 'common/tasks/load.yml'}]
 
     def plant(self, paths):
         for path in paths:
             (self.root / path).parent.mkdir(parents=True, exist_ok=True)
             (self.root / path).write_text(self.evil)
 
-    def run(self, plays, inventory='localhost,', env=None):
+    def run(self, plays, inventory='localhost,', env=None, args=()):
         env = dict(os.environ, MOLECULE_PROJECT_DIRECTORY=str(ROOT), ANSIBLE_NOCOLOR='1',
                    ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh'), **(env or {}))
         (self.root / 'play.yml').write_text(yaml.safe_dump(plays))
-        return subprocess.run([str(ANSIBLE), '-i', inventory, '-c', 'local', 'play.yml'], cwd=self.root,
+        return subprocess.run([str(ANSIBLE), '-i', inventory, '-c', 'local', 'play.yml', *args], cwd=self.root,
                               env=env, capture_output=True, text=True, timeout=TEST_TIMEOUT)
 
     def run_probe(self, env=None):
@@ -291,7 +294,7 @@ class ConfigLoadTests(unittest.TestCase):
             project = Project(directory, config='probe_source: checked\nprofile: personal\nssh_port: 2222\n'
                                                 'probe_list: [a, 1]\n')
             inventory = project.root / 'inventory'
-            inventory.write_text('localhost ansible_connection=local\ncontainer1 ansible_connection=local '
+            inventory.write_text('localhost ansible_connection=local\n[containers]\ncontainer1 ansible_connection=local '
                                  'ansible_python_interpreter=' + str(Path(ANSIBLE).parent / 'python3') + '\n')
             report = {'name': 'Report', 'ansible.builtin.debug': {
                 'msg': "{{ play }}|{{ probe_source }}|{{ profile }}|{{ ssh_port | type_debug }}|{{ probe_list | join(',') }}|"
@@ -308,6 +311,92 @@ class ConfigLoadTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             for play in ('PLAY2', 'PLAY3'):  # config.yml beats default.config.yml (profile: work) and keeps types
                 self.assertIn(play + '|checked|personal|int|a,1|int', result.stdout)
+
+    def container_run(self, project, plays, args=()):
+        inventory = project.root / 'inventory'
+        inventory.write_text('localhost ansible_connection=local\n[containers]\ncontainer1 ansible_connection=local '
+                             'ansible_python_interpreter=' + str(Path(ANSIBLE).parent / 'python3') + '\n')
+        return project.run(plays, inventory=str(inventory), args=args)
+
+    def play3(self, project):
+        return {'name': 'Play 3', 'hosts': 'container1', 'gather_facts': False,
+                'vars': {'common_project_root': str(project.root)},
+                'pre_tasks': [{'name': 'Validate config like site.yml Play 3', 'delegate_to': 'localhost', 'block': project.load}],
+                'tasks': [{'name': 'Report', 'ansible.builtin.debug': {
+                    'msg': "PLAY3={{ probe_source }}|{{ distrobox_host_exec_commands | default('unset') }}"}}]}
+
+    def test_container_play_reuses_the_config_checked_in_play_0(self):
+        """A config.yml rewritten between plays must not reach the container play, even if -e renames the host."""
+        for args in [(), ('-e', 'inventory_hostname=localhost'), ('-e', '{"group_names": []}')]:
+            with self.subTest(args=args):
+                self.rewrite_between_plays(args)
+
+    def rewrite_between_plays(self, args):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Project(directory)
+            rewritten = 'probe_source: rewritten\ndistrobox_host_exec_commands: [bash]\n'
+            result = self.container_run(project, [
+                {'name': 'Play 0', 'hosts': 'localhost', 'gather_facts': False,
+                 'vars': {'common_project_root': str(project.root)}, 'tasks': project.load},
+                {'name': 'Play 2 window', 'hosts': 'localhost', 'gather_facts': False, 'tasks': [
+                    {'name': 'Rewrite config.yml', 'ansible.builtin.copy': {
+                        'dest': str(project.root / 'config.yml'), 'content': rewritten, 'mode': '0600'}}]},
+                self.play3(project)], args=args)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn('PLAY3=checked|unset', result.stdout)
+
+    def test_localhost_in_the_containers_group_reuses_the_checked_config(self):
+        """container_name: localhost would put localhost in containers: it must still not reread config.yml."""
+        with tempfile.TemporaryDirectory() as directory:
+            project = Project(directory)
+            result = self.container_run(project, [
+                {'name': 'Play 0', 'hosts': 'localhost', 'gather_facts': False,
+                 'vars': {'common_project_root': str(project.root)}, 'tasks': project.load},
+                {'name': 'Play 2', 'hosts': 'localhost', 'gather_facts': False, 'tasks': [
+                    {'name': 'Rewrite config.yml', 'ansible.builtin.copy': {
+                        'dest': str(project.root / 'config.yml'), 'content': 'probe_source: rewritten\n', 'mode': '0600'}},
+                    {'name': 'Register localhost as the container', 'ansible.builtin.add_host': {
+                        'name': 'localhost', 'groups': 'containers'}}]},
+                dict(self.play3(project), hosts='containers:&localhost')])
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn('PLAY3=checked|unset', result.stdout)
+
+    def test_runtime_facts_handed_to_the_container_are_refused(self):
+        """csb_detect.yml's facts and add_host's non-config values would beat Play 2's values on the container host."""
+        names = set()
+
+        def walk(tasks):
+            for task in tasks or []:
+                names.update(task.get('ansible.builtin.set_fact') or {})
+                for key in ('block', 'rescue', 'always'):
+                    walk(task.get(key))
+        walk(yaml.safe_load((ROOT / 'common/tasks/csb_detect.yml').read_text()))
+        distrobox = yaml.safe_load((ROOT / 'roles/distrobox/tasks/main.yml').read_text())
+        handover = next(task for task in distrobox if 'ansible.builtin.add_host' in task)['ansible.builtin.add_host']
+        names.update(key for key in handover if key not in ('name', 'groups') and not key.startswith('distrobox_'))
+        names.discard('cacheable')
+        self.assertTrue({'proxy_url', 'network_proxied', 'real_user_home', 'ansible_user'} <= names)
+        for name in sorted(names):
+            with self.subTest(name=name):
+                self.assertTrue(parser.policy_violations({name: 'x'}), name)
+
+    def test_container_play_without_play_0_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Project(directory)
+            result = self.container_run(project, [self.play3(project)])
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            self.assertIn('has no config.yml checked on localhost', result.stdout)
+
+    def test_container_play_validates_the_distrobox_values_it_uses(self):
+        """site.yml's Play 3 runs the distrobox validators before anything runs in the container."""
+        play3 = next(play for play in yaml.safe_load((ROOT / 'site.yml').read_text()) if play.get('hosts') == 'containers')
+        names = [task.get('name', '') for task in play3['pre_tasks']]
+        validate = names.index('SECURITY validate the distrobox values this play provisions with')
+        self.assertGreater(validate, names.index('SECURITY CRITICAL — Validate config integrity before container provisioning'))
+        self.assertLess(validate, names.index('Bootstrap Python inside container'))
+        self.assertTrue(play3['pre_tasks'][validate]['ansible.builtin.include_tasks'].endswith(
+            '/roles/distrobox/tasks/validate-provision.yml'))
+        self.assertNotIn('tags', play3['pre_tasks'][validate])
 
     def test_facts_set_before_the_config_load_are_refused(self):
         """set_fact ties go to the last writer: a fact set before the load must not be settable from config.yml."""
@@ -370,7 +459,8 @@ class ConfigLoadTests(unittest.TestCase):
             self.assertEqual(len(set(swaps)), 0, 'config.yml copies were written to TMPDIR')  # nothing to swap
 
 
-GUARD_FILES = ['common/tasks/config_ssti_guard.yml', 'common/tasks/pre_flight_checks.yml']
+GUARD_FILES = ['common/tasks/config_ssti_guard.yml', 'common/tasks/pre_flight_checks.yml',
+               'roles/distrobox/tasks/validate-provision.yml']
 
 
 def guard_variables():
@@ -402,6 +492,30 @@ class GuardVariableTests(unittest.TestCase):
                 # the wrapper searches every -e value, in both key=value and JSON form
                 self.assertRegex(name + '=1', protected)
                 self.assertRegex(json.dumps({name: {}}), protected)
+
+    def test_every_assertion_result_var_is_protected_from_extra_vars(self):
+        """An assert or fail task's vars: hold its computed result; -e outranks task vars, so -e must not set them."""
+        protected = parser.protected_keys_pattern()
+        files = ['site.yml', 'pre-flight.yml'] + sorted(str(path.relative_to(ROOT)) for pattern in
+                                                       ('roles/*/tasks/*.yml', 'common/tasks/*.yml')
+                                                       for path in ROOT.glob(pattern))
+        found = set()
+
+        def walk(tasks, path):
+            for task in tasks if isinstance(tasks, list) else []:
+                if not isinstance(task, dict):
+                    continue
+                for key in ('tasks', 'pre_tasks', 'post_tasks', 'block', 'rescue', 'always'):
+                    walk(task.get(key), path)
+                if any(module in task for module in ('ansible.builtin.assert', 'ansible.builtin.fail')):
+                    found.update((path, name) for name in task.get('vars') or {})
+        for path in files:
+            walk(yaml.safe_load((ROOT / path).read_text()), path)
+        self.assertIn(('roles/distrobox/tasks/validate-provision.yml', '_pf_unlisted_exec'), found)
+        for path, name in sorted(found):
+            with self.subTest(path=path, name=name):
+                self.assertRegex(name + '=1', protected)
+                self.assertRegex(json.dumps({name: []}), protected)
 
     def test_undecodable_input_reports_the_error_type_only(self):
         result = subprocess.run([sys.executable, str(ROOT / 'scripts/parse-config.py')],

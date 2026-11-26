@@ -33,6 +33,12 @@ bypass_cases=(
   '-erollout_enable=all' '-e_rollout_disabled=[]' '--extra-vars=rollout_catalog={}'
   '-vecsb_rhel=true' '-vvecommon_project_root=/x' '-Ke_pf_vault_asserted=true' '-verollout_enable=all'
   '-e=@/x.yml' '-e={"\x63sb_rhel":true}' '-ve=@/x' '-ve{"\x63sb_rhel":true}'
+  '-e_unlisted_exec=[]' '--extra-vars={"_sysctl_values_invalid":[]}' '--extra-vars=a=1 _x=2'
+  '-e\x5fpf_unlisted_exec=' '--extra-vars=\x63sb_rhel=true' '-ve\u005fpf_x=1' '-e\N{LOW LINE}pf_x=1'
+  '--extra=a=1 \x5fx=2' '-Ke\U0000005fpf_x=1'
+  '-einventory_hostname=localhost' '--extra-vars={"inventory_hostname":"localhost"}' '-egroup_names=[]'
+  '-eansible_play_hosts=[]' '-ve ansible_python_interpreter=/x' '-ehostvars={}' '-egroups={}' '-eplaybook_dir=/x'
+  '-eomit=0777' '-erole_path=/x' '-einventory_hostname_short=x' '-eansible_check_mode=true'
 )
 for flag in "${bypass_cases[@]}"; do
   if scripts/verify-ansible-args.sh true "$flag" >/dev/null 2>&1; then
@@ -57,6 +63,10 @@ for cluster in -ve -vve -Ke; do
     echo "FAIL: wrapper accepted $cluster csb_rhel=true" >&2
     exit 1
   fi
+  if scripts/verify-ansible-args.sh true "$cluster" '\x5fpf_unlisted_exec=' >/dev/null 2>&1; then
+    echo "FAIL: wrapper accepted $cluster with an escaped key=value name" >&2
+    exit 1
+  fi
   if scripts/verify-ansible-args.sh true "$cluster" '{"\x63sb_rhel":true}' >/dev/null 2>&1; then
     echo "FAIL: wrapper accepted $cluster with escaped structured value" >&2
     exit 1
@@ -70,6 +80,9 @@ for bare in --vault-password-file --vault-id --vault-pass-file; do
 done
 scripts/verify-ansible-args.sh true -ve foo=bar || { echo 'FAIL: wrapper rejected a benign -ve' >&2; exit 1; }
 scripts/verify-ansible-args.sh true -e foo=bar || { echo 'FAIL: wrapper rejected benign -e' >&2; exit 1; }
+scripts/verify-ansible-args.sh true -e container_replace=true -e x=a_b -e repo_category=ovnk -e git_repos_pull=true \
+  -e profile=personal -e packages_install_binaries=false -e x=my_groups \
+  || { echo 'FAIL: wrapper rejected an underscore inside a benign name or value' >&2; exit 1; }
 
 # Chunk selection: for site.yml runs the wrapper appends --skip-tags from scripts/rollout.py (nothing
 # when every chunk is enabled); other playbooks and commands are left alone.
