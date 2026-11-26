@@ -98,3 +98,9 @@ hide_edge_borders {{ desktop_wm_hide_edge_borders | regex_replace('[^a-zA-Z_]', 
 
 # Status bar
 {% include '_bar_colors.j2' %}
+
+# Hand edits go in ~/.config/i3/config.local, which laptop-setup never creates or changes (a missing file is
+# ignored). This file is rewritten when its template changes; the previous one is kept as config.<timestamp>~.
+# i3 rejects a redefined binding as a duplicate (it has no unbindsym): add new bindings there; existing ones change
+# only where config.yml has a variable for them.
+include ~/.config/i3/config.local

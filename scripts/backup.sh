@@ -178,6 +178,8 @@ fi
 # Machine-specific overrides and secrets (gitignored — not in the repo)
 OPTIONAL_FILES=(
   .ssh/config.local
+  .config/i3/config.local
+  .config/sway/config.local
   .config/claude/work-env
   .config/claude-code-vertex/env.sh
   .config/claude/queue-repos.conf
